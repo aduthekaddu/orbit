@@ -11,7 +11,9 @@ import {
   type TextMessagePartComponent,
 } from "@assistant-ui/react";
 import { ArrowClockwiseIcon, CheckIcon, CopyIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import { cn } from "@/lib/utils";
 import { OrbitMark } from "@/components/orbit-mark";
+import { Button } from "@/components/ui/button";
 import { IconAction, iconActionClass } from "./icon-action";
 import { MarkdownText } from "./markdown-text";
 import { Reasoning } from "./reasoning";
@@ -50,24 +52,35 @@ function CopyAction() {
 
 function AssistantMessage() {
   const running = useAuiState((s) => s.message.status?.type === "running");
+  const failed = useAuiState((s) => s.message.status?.type === "incomplete" && s.message.status.reason === "error");
+  const hasText = useAuiState((s) => s.message.content.some((part) => part.type === "text" && part.text.length > 0));
   return (
     <MessagePrimitive.Root className="relative mx-auto w-full max-w-widget animate-rise">
-      <OrbitMark busy={running} className="absolute top-0.5 -left-9 hidden size-5 @3xl:block" />
+      <OrbitMark busy={running} tone={running ? "accent" : "mono"} className="absolute top-0.5 -left-9 hidden size-5 @3xl:block" />
       <MessagePrimitive.Parts components={assistantParts} />
       <MessagePrimitive.Error>
-        <ErrorPrimitive.Root className="mt-3 flex items-start gap-2 rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          <WarningCircleIcon weight="regular" className="mt-px size-3.5 shrink-0" />
+        <ErrorPrimitive.Root className="mt-3 flex items-start gap-2 text-sm leading-6 text-destructive first:mt-0">
+          <WarningCircleIcon weight="regular" className="mt-1 size-4 shrink-0" />
           <ErrorPrimitive.Message className="min-w-0 break-words" />
         </ErrorPrimitive.Root>
       </MessagePrimitive.Error>
-      <div className="mt-1 -ml-1.5 h-7">
-        <ActionBarPrimitive.Root hideWhenRunning autohide="not-last" className="flex gap-0.5">
-          <CopyAction />
-          <IconAction label="Regenerate">
-            <ActionBarPrimitive.Reload className={iconActionClass}>
-              <ArrowClockwiseIcon />
+      <div className={cn("mt-1 -ml-1.5 h-7", failed && "mt-2 ml-0")}>
+        <ActionBarPrimitive.Root hideWhenRunning autohide={failed ? "never" : "not-last"} className="flex gap-0.5">
+          {hasText && <CopyAction />}
+          {failed ? (
+            <ActionBarPrimitive.Reload asChild>
+              <Button variant="outline" size="xs">
+                <ArrowClockwiseIcon weight="regular" />
+                Retry
+              </Button>
             </ActionBarPrimitive.Reload>
-          </IconAction>
+          ) : (
+            <IconAction label="Regenerate">
+              <ActionBarPrimitive.Reload className={iconActionClass}>
+                <ArrowClockwiseIcon />
+              </ActionBarPrimitive.Reload>
+            </IconAction>
+          )}
         </ActionBarPrimitive.Root>
       </div>
     </MessagePrimitive.Root>
