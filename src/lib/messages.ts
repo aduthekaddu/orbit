@@ -1,4 +1,4 @@
-import { asc, eq, sql } from "drizzle-orm";
+import { asc, desc, eq, sql } from "drizzle-orm";
 import type { UIMessage } from "ai";
 import { db } from "./db";
 import { chats, messages } from "./db/schema";
@@ -43,6 +43,22 @@ export function upsertMessage(chatId: string, message: { id: string; role: strin
   if (existing) {
     db.update(messages).set({ role: message.role, content, parts }).where(eq(messages.id, message.id)).run();
     return;
+  }
+  if (message.role === "assistant") {
+    const latest = db
+      .select({ id: messages.id, role: messages.role, parts: messages.parts })
+      .from(messages)
+      .where(eq(messages.chatId, chatId))
+      .orderBy(desc(messages.position))
+      .limit(1)
+      .get();
+    // A follow-up send carries the client's id for the assistant reply the
+    // server already stored under its own id. Reuse that row instead of
+    // writing the same reply twice.
+    if (latest?.role === "assistant" && latest.parts === parts) {
+      db.update(messages).set({ id: message.id, role: message.role, content, parts }).where(eq(messages.id, latest.id)).run();
+      return;
+    }
   }
   const row = db
     .select({ position: sql<number>`coalesce(max(${messages.position}), -1)` })

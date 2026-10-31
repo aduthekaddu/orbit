@@ -11,7 +11,19 @@ export function ChatPanel({ chatId, initialMessages }: { chatId: string; initial
   const runtime = useChatRuntime({
     id: chatId,
     messages: initialMessages,
-    transport: new AssistantChatTransport({ api: "/api/chat" }),
+    transport: new AssistantChatTransport({
+      api: "/api/chat",
+      prepareSendMessagesRequest: ({ body, messages, trigger, messageId, requestMetadata }) => ({
+        body: {
+          ...body,
+          id: chatId,
+          messages,
+          trigger,
+          messageId,
+          metadata: requestMetadata,
+        },
+      }),
+    }),
     onFinish: () => {
       router.refresh();
     },
