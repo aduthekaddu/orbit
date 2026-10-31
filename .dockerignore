@@ -1,9 +1,9 @@
 node_modules
 .next
-data
+data/
 .git
 npm-debug.log*
-.env
-.env.local
+.env*
+!.env.example
 *.md
 !docs/**
