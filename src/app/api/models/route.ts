@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { listModels } from "@/lib/provider";
+import { credentialsForModelList, listModels } from "@/lib/provider";
 import { getSettings } from "@/lib/settings";
 import { getSession, unauthorized } from "@/lib/session";
 
@@ -30,11 +30,15 @@ export async function POST(request: Request) {
   const parsed = postSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return Response.json({ error: "Invalid model request" }, { status: 400 });
   const settings = getSettings();
-  const baseUrl = parsed.data.baseUrl || settings?.baseUrl || "";
-  const apiKey = parsed.data.apiKey?.trim() || settings?.apiKey || "";
-  if (!baseUrl || !apiKey) return Response.json({ models: [] });
+  const credentials = credentialsForModelList({
+    requestedBaseUrl: parsed.data.baseUrl,
+    requestedApiKey: parsed.data.apiKey,
+    savedBaseUrl: settings?.baseUrl,
+    savedApiKey: settings?.apiKey,
+  });
+  if (!credentials) return Response.json({ models: [] });
   try {
-    const models = await listModels(baseUrl, apiKey);
+    const models = await listModels(credentials.baseUrl, credentials.apiKey);
     return Response.json({ models });
   } catch {
     return Response.json({ models: [] });

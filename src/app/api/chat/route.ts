@@ -59,7 +59,7 @@ export async function POST(request: Request) {
   })) as UIMessage[];
 
   try {
-    const allowReasoning = await modelAllowsReasoning(settings.baseUrl, settings.apiKey, settings.model);
+    const allowReasoning = modelAllowsReasoning(settings.baseUrl, settings.model);
     const result = streamText({
       model: orbitModel({
         baseUrl: settings.baseUrl,

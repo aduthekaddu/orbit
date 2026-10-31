@@ -48,25 +48,30 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
     setPending(true);
     setError("");
     setSaved(false);
-    const response = await fetch("/api/settings", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        baseUrl,
-        apiKey: apiKey || undefined,
-        model,
-        reasoningEffort: effort,
-      }),
-    });
-    const body = (await response.json()) as PublicSettings & { error?: string };
-    setPending(false);
-    if (!response.ok) {
-      setError(body.error ?? "Could not save");
-      return;
+    try {
+      const response = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          baseUrl,
+          apiKey: apiKey || undefined,
+          model,
+          reasoningEffort: effort,
+        }),
+      });
+      const body = (await response.json()) as PublicSettings & { error?: string };
+      if (!response.ok) {
+        setError(body.error ?? "Could not save");
+        return;
+      }
+      setKeySet(body.keySet);
+      setApiKey("");
+      setSaved(true);
+    } catch {
+      setError("Could not save");
+    } finally {
+      setPending(false);
     }
-    setKeySet(body.keySet);
-    setApiKey("");
-    setSaved(true);
   }
 
   const inList = models.some((item) => item.id === model);
