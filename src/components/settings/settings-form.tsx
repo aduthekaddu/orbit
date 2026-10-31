@@ -129,7 +129,10 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
             <Input
               id="baseUrl"
               value={baseUrl}
-              onChange={(event) => setBaseUrl(event.target.value)}
+              onChange={(event) => {
+                setError("");
+                setBaseUrl(event.target.value);
+              }}
               onBlur={() => void loadModels()}
               autoComplete="off"
               required
@@ -141,7 +144,10 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
               type="password"
               value={apiKey}
               placeholder={keySet ? "Key set" : ""}
-              onChange={(event) => setApiKey(event.target.value)}
+              onChange={(event) => {
+                setError("");
+                setApiKey(event.target.value);
+              }}
               onBlur={() => void loadModels()}
               autoComplete="off"
             />
@@ -152,6 +158,7 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
                 <Select
                   value={inList ? model : CUSTOM}
                   onValueChange={(value) => {
+                    setError("");
                     if (value === CUSTOM) {
                       if (inList) setModel("");
                       return;
@@ -177,7 +184,10 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
                   id={models.length === 0 ? "model" : "model-custom"}
                   aria-label={models.length === 0 ? undefined : "Custom model"}
                   value={model}
-                  onChange={(event) => setModel(event.target.value)}
+                  onChange={(event) => {
+                    setError("");
+                    setModel(event.target.value);
+                  }}
                   autoComplete="off"
                   required
                 />
@@ -192,6 +202,7 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
                 size="sm"
                 value={effort}
                 onValueChange={(value) => {
+                  setError("");
                   const next = EFFORTS.find((item) => item.value === value);
                   if (next) setEffort(next.value);
                 }}
