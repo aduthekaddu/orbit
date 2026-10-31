@@ -101,3 +101,75 @@ Chrome on `/c/fef162ad-d85a-4842-8279-ab544685a86b` posted that same id. Reload 
 `npm run typecheck` and `npm run build` (Next.js 16.4.3) exited 0. `npm start -- -p 3210 -H 127.0.0.1` was ready in 111ms. Smoke against that server exited 0 with the same passing lines. The server log did not contain the provider key. The process was stopped. Port 3210 was free afterward.
 
 `node .cursor/skills/verify-orbit/verify.mjs launch` printed `ready` and `signupOpen=yes` on an empty sandbox. `doctor` printed `doctor ok`. `drive chat` printed `drive chat passed` and `smoke passed`, including `first message chat id matches open chat: yes`. A second sandbox ran `drive signup`, `drive signin`, and `drive settings`. Each printed passed. Cleanup removed `.verify/sandbox` and left `.verify/evidence/`.
+
+## Greptile fixes
+
+All four findings reproduced in the code before the change.
+
+P1. `saveSettings` reused `current.apiKey` when the submitted key was blank, even after the base URL changed. The settings route now compares the normalized new base URL with the saved one and returns 400 `Base URL changed. Enter the API key for the new provider.` when the key is blank. `saveSettings` also stops carrying the old key across a base URL change.
+
+P2. `upsertMessage` looked up a message by id only, then updated by id. A message id reused under chat B could change chat A. The lookup now reads `chatId`, returns false on a mismatch, and `POST /api/chat` answers 409 `A message id belongs to a different chat.`
+
+P3. `verify.mjs cleanup` killed the process group but waited only for the recorded npm pid. It now waits for that pid and port 3210 to be free, sends SIGKILL after five seconds, and leaves the sandbox in place if the port is still held.
+
+P4. `driveSettings` now requests `/settings` and checks status 200 plus the labels `Base URL`, `API key`, `Model`, and `Save`. It checks the save and read status, `keySet`, `baseUrl`, `model`, and `reasoningEffort`, then checks that a base URL change with no key returns 400.
+
+Commands run from `~/orbit`:
+
+- `npm run typecheck` exited 0.
+- `npm run build` (Next.js 16.4.3) exited 0 with the same route list as above.
+- `npx tsx scripts/smoke.ts` against `npm start -- -p 3210 -H 127.0.0.1` exited 0:
+
+```
+reasoning gate: yes
+opencode session header on request: yes
+signed in
+settings before save keySet=yes
+settings saved model=deepseek-v4.1-flash keySet=yes
+models=28 deepseek-v4.1-flash reasoning=yes
+streamed chars=4 preview="pong"
+first message chat id matches open chat: yes
+reload messages=2
+db chat=1 messages=2 roles=assistant,user
+smoke passed
+```
+
+- A temporary database called `upsertMessage` with chat A's message id from chat B. It returned false, chat A kept its content, and the same-chat update still saved. Output: `message chat guard passed`.
+- verify-orbit ran two sandboxes. The first ran `launch`, `doctor`, and `drive chat`; the second ran `launch`, `doctor`, `drive signup`, `drive signin`, and `drive settings`. Every command exited 0:
+
+```
+ready origin=http://127.0.0.1:3210 pid=3498080 signupOpen=yes
+doctor ok
+drive chat passed
+cleanup done. evidence remains at /home/ubuntu/orbit/.verify/evidence
+ready origin=http://127.0.0.1:3210 pid=3498290 signupOpen=yes
+doctor ok
+drive signup passed
+drive signin passed
+drive settings passed
+cleanup done. evidence remains at /home/ubuntu/orbit/.verify/evidence
+```
+
+The settings evidence records the page and payload checks:
+
+```
+settings page status 200
+settings page has labels yes
+save status 200
+save has apiKey no
+save keySet yes
+save baseUrl https://example.com/v1
+save model example-model
+save reasoningEffort low
+read status 200
+read has apiKey no
+read keySet yes
+read baseUrl https://example.com/v1
+read model example-model
+read reasoningEffort low
+read contains key text no
+base change without key status 400
+base change without key error Base URL changed. Enter the API key for the new provider.
+```
+
+The smoke server log did not contain the provider key. Cleanup removed `.verify/sandbox`, left `.verify/evidence/`, and port 3210 was free after each phase.
