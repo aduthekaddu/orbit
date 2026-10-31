@@ -5,9 +5,10 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { eq } from "drizzle-orm";
 import { readEnv } from "../env";
+import { dataDirectory } from "../paths";
 import * as schema from "./schema";
 
-const dataDir = path.join(process.cwd(), "data");
+const dataDir = dataDirectory();
 fs.mkdirSync(dataDir, { recursive: true });
 
 const dbPath = path.join(dataDir, "orbit.db");
@@ -18,7 +19,7 @@ sqlite.pragma("busy_timeout = 5000");
 
 function restrictDbFile(name: "orbit.db" | "orbit.db-wal" | "orbit.db-shm") {
   try {
-    fs.chmodSync(path.join(process.cwd(), "data", name), 0o600);
+    fs.chmodSync(path.join(dataDir, name), 0o600);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
@@ -31,8 +32,45 @@ restrictDbFile("orbit.db-shm");
 export const db = drizzle(sqlite, { schema });
 
 const migrationsFolder = path.join(process.cwd(), "drizzle");
+
+function sleep(ms: number) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function withMigrationLock<T>(run: () => T): T {
+  const lockPath = path.join(dataDir, ".migrate.lock");
+  const deadline = Date.now() + 60_000;
+  while (true) {
+    try {
+      const fd = fs.openSync(lockPath, "wx");
+      try {
+        return run();
+      } finally {
+        fs.closeSync(fd);
+        try {
+          fs.unlinkSync(lockPath);
+        } catch {
+          // Another process already removed a stale lock.
+        }
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      try {
+        if (Date.now() - fs.statSync(lockPath).mtimeMs > 30_000) {
+          fs.unlinkSync(lockPath);
+          continue;
+        }
+      } catch {
+        continue;
+      }
+      if (Date.now() > deadline) throw new Error("Timed out waiting for the database migration lock");
+      sleep(50);
+    }
+  }
+}
+
 if (fs.existsSync(migrationsFolder)) {
-  migrate(db, { migrationsFolder });
+  withMigrationLock(() => migrate(db, { migrationsFolder }));
 }
 
 sqlite.exec(`
