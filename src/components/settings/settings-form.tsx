@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,27 +21,41 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [pending, setPending] = useState(false);
+  const modelLoad = useRef<{ id: number; controller: AbortController | null }>({ id: 0, controller: null });
 
-  async function loadModels(nextBase = baseUrl, nextKey = apiKey) {
-    const response = await fetch("/api/models", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        baseUrl: nextBase || undefined,
-        apiKey: nextKey || undefined,
-      }),
-    });
-    const body = (await response.json().catch(() => ({}))) as { models?: ListedModel[] };
-    setModels(response.ok ? (body.models ?? []) : []);
-  }
+  const loadModels = useCallback(async (nextBase: string, nextKey: string) => {
+    const id = ++modelLoad.current.id;
+    modelLoad.current.controller?.abort();
+    const controller = new AbortController();
+    modelLoad.current.controller = controller;
+    try {
+      const response = await fetch("/api/models", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          baseUrl: nextBase || undefined,
+          apiKey: nextKey || undefined,
+        }),
+      });
+      if (id !== modelLoad.current.id) return;
+      const body = (await response.json().catch(() => ({}))) as { models?: ListedModel[] };
+      if (id !== modelLoad.current.id) return;
+      setModels(response.ok ? (body.models ?? []) : []);
+    } catch (error) {
+      if (id !== modelLoad.current.id) return;
+      if (error instanceof Error && error.name === "AbortError") return;
+    }
+  }, []);
 
   useEffect(() => {
     if (initial.keySet && initial.baseUrl) {
       void loadModels(initial.baseUrl, "");
     }
-    // Load once from the stored provider.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return () => {
+      modelLoad.current.controller?.abort();
+    };
+  }, [initial.baseUrl, initial.keySet, loadModels]);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -87,7 +101,7 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
           id="baseUrl"
           value={baseUrl}
           onChange={(event) => setBaseUrl(event.target.value)}
-          onBlur={() => void loadModels()}
+          onBlur={() => void loadModels(baseUrl, apiKey)}
           autoComplete="off"
           required
         />
@@ -100,7 +114,7 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
           value={apiKey}
           placeholder={keySet ? "Key set" : ""}
           onChange={(event) => setApiKey(event.target.value)}
-          onBlur={() => void loadModels()}
+          onBlur={() => void loadModels(baseUrl, apiKey)}
           autoComplete="off"
         />
       </div>
