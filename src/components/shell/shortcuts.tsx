@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
+import { cn } from "@/lib/utils";
 import { Kbd } from "@/components/ui/kbd";
 
 const shortcuts = {
@@ -50,5 +51,5 @@ export function ShortcutKbd({ name, className }: { name: ShortcutName; className
   const label = isMac
     ? `⌘${shift ? "⇧" : ""}${key.toUpperCase()}`
     : `Ctrl ${shift ? "Shift " : ""}${key.toUpperCase()}`;
-  return <Kbd className={className}>{label}</Kbd>;
+  return <Kbd className={cn("pointer-coarse:hidden", className)}>{label}</Kbd>;
 }

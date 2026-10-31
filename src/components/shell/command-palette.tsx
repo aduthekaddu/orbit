@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Command, defaultFilter } from "cmdk";
 import { ChatCircleIcon, GearSixIcon, MagnifyingGlassIcon, NotePencilIcon } from "@phosphor-icons/react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { ScrollFade } from "@/components/ui/scroll-fade";
 import type { ChatSummary } from "@/components/chat/sidebar";
 import { ShortcutKbd } from "./shortcuts";
 
@@ -47,36 +48,38 @@ export function CommandPalette({
             <MagnifyingGlassIcon weight="light" className="size-4 shrink-0 text-muted-foreground" />
             <Command.Input placeholder="Search" className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground" />
           </div>
-          <Command.List className="scrollbar-thin max-h-[min(24rem,60vh)] overflow-y-auto p-1.5">
-            <Command.Empty className="py-8 text-center text-sm text-muted-foreground">No results</Command.Empty>
-            <Command.Group className={groupClass}>
-              <Command.Item value="New chat" onSelect={() => run(onNewChat)} className={itemClass}>
-                <NotePencilIcon weight="light" className="size-4" />
-                <span className="flex-1">New chat</span>
-                <ShortcutKbd name="newChat" />
-              </Command.Item>
-              <Command.Item value="Settings" onSelect={() => run(() => router.push("/settings"))} className={itemClass}>
-                <GearSixIcon weight="light" className="size-4" />
-                Settings
-              </Command.Item>
-            </Command.Group>
-            {chats.length > 0 && (
-              <Command.Group heading="Chats" className={groupClass}>
-                {chats.map((chat) => (
-                  <Command.Item
-                    key={chat.id}
-                    value={chat.id}
-                    keywords={[chat.title]}
-                    onSelect={() => run(() => router.push(`/c/${chat.id}`))}
-                    className={itemClass}
-                  >
-                    <ChatCircleIcon weight="light" className="size-4 shrink-0" />
-                    <span className="truncate">{chat.title}</span>
-                  </Command.Item>
-                ))}
+          <ScrollFade axis="y" fade="var(--popover)" scrollerClassName="max-h-[min(24rem,60vh)]">
+            <Command.List className="p-1.5">
+              <Command.Empty className="py-8 text-center text-sm text-muted-foreground">No results</Command.Empty>
+              <Command.Group className={groupClass}>
+                <Command.Item value="New chat" onSelect={() => run(onNewChat)} className={itemClass}>
+                  <NotePencilIcon weight="light" className="size-4" />
+                  <span className="flex-1">New chat</span>
+                  <ShortcutKbd name="newChat" />
+                </Command.Item>
+                <Command.Item value="Settings" onSelect={() => run(() => router.push("/settings"))} className={itemClass}>
+                  <GearSixIcon weight="light" className="size-4" />
+                  Settings
+                </Command.Item>
               </Command.Group>
-            )}
-          </Command.List>
+              {chats.length > 0 && (
+                <Command.Group heading="Chats" className={groupClass}>
+                  {chats.map((chat) => (
+                    <Command.Item
+                      key={chat.id}
+                      value={chat.id}
+                      keywords={[chat.title]}
+                      onSelect={() => run(() => router.push(`/c/${chat.id}`))}
+                      className={itemClass}
+                    >
+                      <ChatCircleIcon weight="light" className="size-4 shrink-0" />
+                      <span className="truncate">{chat.title}</span>
+                    </Command.Item>
+                  ))}
+                </Command.Group>
+              )}
+            </Command.List>
+          </ScrollFade>
         </Command>
       </DialogContent>
     </Dialog>

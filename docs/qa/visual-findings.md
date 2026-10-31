@@ -91,3 +91,19 @@ Editing a reply drops the rendered markdown for a 12px mono textarea with no syn
 `inline-user-edit.png`
 
 While editing, the user bubble becomes a full width raised card with Cancel and Send at the lower right. It reads as a new composer rather than an edit of the bubble above it, and the copy action is gone during the edit. A quieter in-bubble treatment may fit the thread better.
+
+## Status after the design pass
+
+Screenshots are `after-*.png` in the same folder. V12 to V15 cover inline editing and are handled on `feat/inline-editing`.
+
+| # | Change | After |
+| --- | --- | --- |
+| V1, V7 | Code and tables scroll under an edge fade. Table headers stay on one line. Code longer than 20 lines opens capped with a "N more lines" control. | `after-desktop-chat-long`, `after-desktop-code-collapsed`, `after-mobile-chat-long-code` |
+| V2 | The palette list fades its bottom edge while more rows are below. | `after-desktop-command-palette`, `after-mobile-command-palette` |
+| V3 | With no provider and no messages the composer is gone and only "Open settings" remains. In a thread it turns dashed and the send button goes grey. | `after-desktop-empty-no-provider` |
+| V4, V10 | A failure is one red line and a labeled Retry button. Copy is hidden when there is nothing to copy. | `after-desktop-chat-error` |
+| V5 | Reasoning is a bordered chip with an icon. | `after-desktop-chat-reasoning` |
+| V6 | The mobile and collapsed headers show the chat title and a new chat button. | `after-mobile-chat-long-code`, `after-desktop-sidebar-collapsed` |
+| V8 | New titles drop code fences, markdown markers, and line breaks, and cut at a word. Existing titles are unchanged. | `after-desktop-chat-long` |
+| V9 | An empty chat centers the figure and the composer as one group. | `after-desktop-empty-chat`, `after-mobile-empty-chat` |
+| V11 | The status reads "No key" until a key is entered or stored. | `after-desktop-settings-empty` |

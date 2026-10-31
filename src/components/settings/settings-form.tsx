@@ -122,7 +122,7 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
       <form onSubmit={onSubmit} className="rounded-xl border bg-card shadow-card">
         <div className="flex items-center justify-between gap-3 border-b px-5 py-3.5">
           <h2 className="text-sm font-medium">Provider</h2>
-          <ConnectionStatus connection={connection} />
+          <ConnectionStatus connection={connection} hasKey={keySet || apiKey.trim().length > 0} />
         </div>
         <div className="divide-y">
           <Row id="baseUrl" label="Base URL">
@@ -280,11 +280,11 @@ const STATUS_DOT: Record<Connection["status"], string> = {
   failed: "bg-destructive",
 };
 
-function ConnectionStatus({ connection }: { connection: Connection }) {
+function ConnectionStatus({ connection, hasKey }: { connection: Connection; hasKey: boolean }) {
   return (
     <span aria-live="polite" className="flex items-center gap-2 text-xs text-muted-foreground">
       <span className={cn("size-1.5 rounded-full", STATUS_DOT[connection.status])} />
-      <ConnectionLabel connection={connection} />
+      {connection.status === "idle" && !hasKey ? "No key" : <ConnectionLabel connection={connection} />}
     </span>
   );
 }

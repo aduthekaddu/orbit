@@ -33,6 +33,7 @@ export function Sidebar({
   onNewChat,
   onSearch,
   onCollapse,
+  onNavigate,
 }: {
   chats: ChatSummary[];
   email: string;
@@ -40,6 +41,8 @@ export function Sidebar({
   onNewChat: () => void;
   onSearch: () => void;
   onCollapse?: () => void;
+  /** Called when a link is followed, including the current page's, which changes no route. */
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -55,7 +58,7 @@ export function Sidebar({
   return (
     <div className="flex h-full w-64 flex-col">
       <div className="flex h-12 shrink-0 items-center gap-1 pr-2 pl-3">
-        <Link href="/" className="mr-auto flex items-center gap-2 rounded-md px-1 py-1 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+        <Link href="/" onClick={onNavigate} className="mr-auto flex items-center gap-2 rounded-md px-1 py-1 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
           <OrbitMark className="size-5" />
           <span className="text-sm font-medium tracking-tight">orbit</span>
         </Link>
@@ -104,6 +107,7 @@ export function Sidebar({
                 <Link
                   key={chat.id}
                   href={href}
+                  onClick={onNavigate}
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "relative truncate rounded-md px-2.5 py-1.5 text-sm transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
@@ -123,6 +127,7 @@ export function Sidebar({
       <div className="flex shrink-0 items-center gap-1 border-t p-2">
         <Link
           href="/settings"
+          onClick={onNavigate}
           aria-current={pathname === "/settings" ? "page" : undefined}
           className={cn(
             "flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1.5 text-sm transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",

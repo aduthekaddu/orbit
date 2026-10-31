@@ -5,6 +5,7 @@ import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import { useAuiState } from "@assistant-ui/react";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
+import { ScrollFade } from "@/components/ui/scroll-fade";
 import { CodeEditContext } from "./code-edit-context";
 import { CodeHeader, SyntaxHighlighter } from "./code-block";
 import { useSaveMessageText } from "./use-save-message";
@@ -37,7 +38,7 @@ const elementClasses = {
   code: "rounded-sm border bg-surface-sunken px-1 py-px font-mono text-[0.85em]",
   thead: "border-b border-border-strong",
   tr: "border-b last:border-b-0",
-  th: "px-3 py-2 text-left font-medium text-muted-foreground",
+  th: "px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground",
   td: "px-3 py-2 align-top tabular-nums",
 } as const satisfies Partial<Record<Tag, string>>;
 
@@ -58,8 +59,10 @@ function Link({ node: _node, className, ...props }: ComponentProps<"a"> & { node
 
 function Table({ node: _node, className, ...props }: ComponentProps<"table"> & { node?: unknown }) {
   return (
-    <div className="my-4 overflow-x-auto rounded-lg border scrollbar-thin">
-      <table className={cn("w-full border-collapse text-sm", className)} {...props} />
+    <div className="my-4 overflow-hidden rounded-lg border">
+      <ScrollFade axis="x" fade="var(--background)">
+        <table className={cn("w-full border-collapse text-sm", className)} {...props} />
+      </ScrollFade>
     </div>
   );
 }

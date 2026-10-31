@@ -3,11 +3,17 @@
 import { useState, type KeyboardEvent } from "react";
 import { Highlight, type PrismTheme } from "prism-react-renderer";
 import type { CodeHeaderProps, SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
-import { CheckIcon, CopyIcon, PencilSimpleIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, CheckIcon, CopyIcon, PencilSimpleIcon } from "@phosphor-icons/react";
 import { replaceCode } from "@/lib/chat-parts";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { ScrollFade } from "@/components/ui/scroll-fade";
 import { useCodeEdit } from "./code-edit-context";
 import { useCopy } from "./use-copy";
+
+// Past this many lines a block opens capped at COLLAPSED_LINES, so one answer cannot become a wall of code.
+const COLLAPSE_AFTER = 20;
+const COLLAPSED_LINES = 14;
 
 const orbitCodeTheme: PrismTheme = {
   plain: { color: "var(--foreground)", backgroundColor: "transparent" },
@@ -125,26 +131,56 @@ function CodeEditor({ code, start, language }: { code: string; start: number; la
 
 export function SyntaxHighlighter({ code, language, node }: SyntaxHighlighterProps) {
   const edit = useCodeEdit();
+  const [expanded, setExpanded] = useState(false);
   const start = edit ? codeStart(node, edit.text, code) : -1;
   const active = edit?.enabled && edit.active === start;
 
   if (active) return <CodeEditor code={code} start={start} language={language} />;
 
+  const source = code.replace(/\n$/, "");
+  const lines = source.split("\n").length;
+  const collapsible = lines > COLLAPSE_AFTER;
+  const capped = collapsible && !expanded;
   return (
-    <Highlight code={code.replace(/\n$/, "")} language={language} theme={orbitCodeTheme}>
-      {({ tokens, getLineProps, getTokenProps }) => (
-        <pre className="mb-4 overflow-x-auto rounded-b-lg border bg-surface-sunken px-3 py-3 font-mono text-xs leading-5 scrollbar-thin">
-          <code>
-            {tokens.map((line, i) => (
-              <div key={i} {...getLineProps({ line })}>
-                {line.map((token, key) => (
-                  <span key={key} {...getTokenProps({ token })} />
-                ))}
-              </div>
-            ))}
-          </code>
-        </pre>
+    <div className="mb-4 overflow-hidden rounded-b-lg border bg-surface-sunken">
+      <div className="relative">
+        <ScrollFade
+          axis="x"
+          fade="var(--surface-sunken)"
+          className={cn(capped && "overflow-hidden")}
+          style={capped ? { maxHeight: `calc(${COLLAPSED_LINES} * 1.25rem + 0.75rem)` } : undefined}
+        >
+          <Highlight code={source} language={language} theme={orbitCodeTheme}>
+            {({ tokens, getLineProps, getTokenProps }) => (
+              <pre className="w-max min-w-full px-3 py-3 font-mono text-xs leading-5">
+                <code>
+                  {tokens.map((line, i) => (
+                    <div key={i} {...getLineProps({ line })}>
+                      {line.map((token, key) => (
+                        <span key={key} {...getTokenProps({ token })} />
+                      ))}
+                    </div>
+                  ))}
+                </code>
+              </pre>
+            )}
+          </Highlight>
+        </ScrollFade>
+        {capped && (
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-surface-sunken" />
+        )}
+      </div>
+      {collapsible && (
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          aria-expanded={expanded}
+          className="flex h-8 w-full cursor-pointer items-center justify-center gap-1.5 border-t text-2xs text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset"
+        >
+          {expanded ? "Show less" : <span><span className="num">{lines - COLLAPSED_LINES}</span> more lines</span>}
+          <CaretDownIcon weight="regular" className={cn("size-3 transition-transform duration-200 ease-orbit", expanded && "rotate-180")} />
+        </button>
       )}
-    </Highlight>
+    </div>
   );
 }

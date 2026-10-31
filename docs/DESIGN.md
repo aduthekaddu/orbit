@@ -56,7 +56,7 @@ Utilities: `num` (Geist Mono, tabular figures), `shimmer`, `scrollbar-none`, `sc
 - **Type.** Geist Sans and Geist Mono from the `geist` package, self-hosted. No font CDN, no runtime requests. Numbers use tabular figures (`num` or `tabular-nums`). Sentence case everywhere.
 - **Copy.** Short labels only. No taglines, helper text, or secondary labels. If a screen needs explaining, fix the layout.
 - **Lines, not shadows.** 1px `border`, `shadow-card` on raised surfaces, `shadow-float` only on things that float (menus, dialogs, tooltips).
-- **Accent.** Violet appears once or twice per screen: the primary action, focus, the mark.
+- **Accent.** Violet appears once or twice per screen: the primary action, focus, the sidebar mark. Marks repeated down the thread use `tone="mono"` and turn violet only while busy.
 - **Icons.** `@phosphor-icons/react`, weight `light` by default, `regular` at 14px and below. Import the `*Icon` names (`XIcon`, not the deprecated `X`). In a server component import from `@phosphor-icons/react/ssr`.
 - **Motion.** 150 to 250ms, `ease-orbit`. Messages enter with `animate-rise`. No bouncing. `prefers-reduced-motion` cuts every animation and transition to near zero, and the mark's satellite stops.
 - **Width.** The chat column and every json-render widget are capped at `max-w-widget`.
@@ -65,10 +65,21 @@ Utilities: `num` (Geist Mono, tabular figures), `shimmer`, `scrollbar-none`, `sc
 
 `src/components/ui/` holds shadcn-style primitives on individual `@radix-ui/react-*` packages: `Button`, `Input`, `Label`, `Slider`, `Tooltip`, `ToggleGroup`, `Select`, `Dialog`, `Skeleton`, `Kbd`. Each sets `data-slot` for styling from a parent.
 
-`OrbitMark` (`src/components/orbit-mark.tsx`) is the app's only loading indicator. Pass `busy` while the assistant is thinking or streaming and the satellite travels the ring. It is `aria-hidden`, so pair it with a status label where the state matters to a screen reader.
+`OrbitMark` (`src/components/orbit-mark.tsx`) is the app's only loading indicator. Pass `busy` while the assistant is thinking or streaming and the moon travels the ring, passing behind the planet on the far side. `tone` is `"accent"` (violet ring and moon) or `"mono"` (muted). It is `aria-hidden`, so pair it with a status label where the state matters to a screen reader.
+
+`ScrollFade` (`src/components/ui/scroll-fade.tsx`) wraps anything that scrolls on one axis and fades the edge that has more content behind it. Pass `fade` as the color of the surface behind the content. Code blocks, markdown tables, and the command palette use it. A cut line or row without a fade reads as a layout bug.
+
+Code blocks longer than 20 lines open capped at 14 with a "N more lines" control. Lines never wrap; they scroll sideways under a fade.
 
 `Figure` (`src/components/figure.tsx`) renders a hairline figure by name, `"dish"` for an empty chat, `"padlock"` on sign-in, `"plug"` when no provider is configured. It fills its parent's width at a 5:4 ratio, so size the parent. Plates are filled with `--hairline-plate`, which is the page color. On any other surface, set `--hairline-plate` on the parent to that surface's color. To add a figure, import it from `@lucasmarkes/hairline/react` and add it to the `figures` record.
 
 ## json-render widgets (slice 2)
 
 Widgets are cards on the chat column: `bg-card`, `border`, `shadow-card`, `rounded-lg`, at most `max-w-widget`. Series take `--chart-1` onward in order. Code takes the `--syntax-*` tokens. Loading states use `Skeleton` in the shape of the content they replace.
+
+- **Numbers.** Format with `Intl.NumberFormat` and set them in `num`. `42000` renders as `42,000`.
+- **Long content.** Code goes through the markdown code block, so it gets the cap and the sideways scroll. Long text clamps with a "more" control. A wide table sits in `ScrollFade` with `fade="var(--card)"`.
+- **Editable text.** Shows it is editable at rest: a dashed hairline border and a 14px pencil at the end of the line. Hover and focus solidify the border.
+- **Actions.** Use `Button`, so focus gets the ring instead of the browser outline.
+- **One place per value.** A value bound to state renders once. If a callout shows a note, the button does not repeat it.
+- **Failures.** A spec that fails validation renders one line in `text-destructive` with a disclosure for the raw JSON, collapsed by default.
