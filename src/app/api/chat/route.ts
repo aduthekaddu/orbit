@@ -45,7 +45,9 @@ export async function POST(request: Request) {
 
   const incoming = parsed.data.messages;
   for (const message of incoming) {
-    if (message.parts) upsertMessage(chat.id, { id: message.id, role: message.role, parts: message.parts });
+    if (message.parts && !upsertMessage(chat.id, { id: message.id, role: message.role, parts: message.parts })) {
+      return Response.json({ error: "A message id belongs to a different chat." }, { status: 409 });
+    }
   }
   const firstUser = incoming.find((message) => message.role === "user");
   const title = textFromParts(firstUser?.parts).trim();

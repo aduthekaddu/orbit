@@ -36,13 +36,14 @@ export function touchChat(id: string, title?: string) {
 }
 
 export function upsertMessage(chatId: string, message: { id: string; role: string; parts: unknown }) {
-  if (message.role !== "user" && message.role !== "assistant") return;
+  if (message.role !== "user" && message.role !== "assistant") return true;
   const content = textFromParts(message.parts);
   const parts = JSON.stringify(message.parts ?? []);
-  const existing = db.select({ id: messages.id }).from(messages).where(eq(messages.id, message.id)).get();
+  const existing = db.select({ chatId: messages.chatId }).from(messages).where(eq(messages.id, message.id)).get();
   if (existing) {
+    if (existing.chatId !== chatId) return false;
     db.update(messages).set({ role: message.role, content, parts }).where(eq(messages.id, message.id)).run();
-    return;
+    return true;
   }
   const row = db
     .select({ position: sql<number>`coalesce(max(${messages.position}), -1)` })
@@ -60,6 +61,7 @@ export function upsertMessage(chatId: string, message: { id: string; role: strin
       createdAt: new Date(),
     })
     .run();
+  return true;
 }
 
 export function listMessages(chatId: string): UIMessage[] {
