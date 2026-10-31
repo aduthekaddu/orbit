@@ -17,7 +17,7 @@ export const Reasoning: ReasoningMessagePartComponent = ({ status }) => {
         />
       </Collapsible.Trigger>
       <Collapsible.Content className="mt-2 border-l pl-3 text-muted-foreground">
-        <MarkdownText className="text-xs leading-5" />
+        <MarkdownText className="text-xs leading-5" editable={false} />
       </Collapsible.Content>
     </Collapsible.Root>
   );

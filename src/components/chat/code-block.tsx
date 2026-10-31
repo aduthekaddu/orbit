@@ -1,8 +1,12 @@
 "use client";
 
+import { useState, type KeyboardEvent } from "react";
 import { Highlight, type PrismTheme } from "prism-react-renderer";
 import type { CodeHeaderProps, SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
-import { CheckIcon, CopyIcon } from "@phosphor-icons/react";
+import { CheckIcon, CopyIcon, PencilSimpleIcon } from "@phosphor-icons/react";
+import { replaceCode } from "@/lib/chat-parts";
+import { Button } from "@/components/ui/button";
+import { useCodeEdit } from "./code-edit-context";
 import { useCopy } from "./use-copy";
 
 const orbitCodeTheme: PrismTheme = {
@@ -24,24 +28,108 @@ const orbitCodeTheme: PrismTheme = {
   ],
 };
 
-export function CodeHeader({ language, code }: CodeHeaderProps) {
+function codeStart(node: CodeHeaderProps["node"], text: string, code: string) {
+  const offset = node?.position?.start?.offset;
+  if (typeof offset === "number") return offset;
+  return text.indexOf(code);
+}
+
+export function CodeHeader({ language, code, node }: CodeHeaderProps) {
   const { copied, copy } = useCopy();
+  const edit = useCodeEdit();
+  const start = edit ? codeStart(node, edit.text, code) : -1;
+  const active = edit?.active === start;
+
   return (
     <div className="mt-4 flex h-8 items-center justify-between rounded-t-lg border border-b-0 bg-surface-sunken pr-1 pl-3">
       <span className="font-mono text-2xs text-muted-foreground">{language || "text"}</span>
-      <button
-        type="button"
-        onClick={() => copy(code)}
-        aria-label={copied ? "Copied" : "Copy code"}
-        className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 ease-orbit hover:bg-accent hover:text-foreground"
-      >
-        {copied ? <CheckIcon weight="regular" className="size-3.5" /> : <CopyIcon weight="regular" className="size-3.5" />}
-      </button>
+      <div className="flex items-center gap-0.5">
+        {edit?.enabled ? (
+          <button
+            type="button"
+            onClick={() => edit.setActive(active ? null : start)}
+            aria-label={active ? "Stop editing code" : "Edit code"}
+            className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            <PencilSimpleIcon weight="regular" className="size-3.5" />
+          </button>
+        ) : null}
+        {active ? null : (
+          <button
+            type="button"
+            onClick={() => copy(code)}
+            aria-label={copied ? "Copied" : "Copy code"}
+            className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            {copied ? <CheckIcon weight="regular" className="size-3.5" /> : <CopyIcon weight="regular" className="size-3.5" />}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
-export function SyntaxHighlighter({ code, language }: SyntaxHighlighterProps) {
+function CodeEditor({ code, start, language }: { code: string; start: number; language: string }) {
+  const edit = useCodeEdit();
+  const [draft, setDraft] = useState(code);
+  const rows = Math.min(18, Math.max(4, code.split("\n").length));
+
+  async function commit() {
+    if (!edit) return;
+    const next = replaceCode(edit.text, code, draft, start, start + code.length);
+    if (next === edit.text) {
+      edit.setActive(null);
+      return;
+    }
+    if (await edit.save(edit.messageId, next)) edit.setActive(null);
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      edit?.setActive(null);
+    }
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      void commit();
+    }
+  }
+
+  return (
+    <div className="mb-4 overflow-hidden rounded-b-lg border bg-surface-sunken">
+      <textarea
+        autoFocus
+        rows={rows}
+        value={draft}
+        aria-label={`Edit ${language || "code"} block`}
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={onKeyDown}
+        className="block max-h-96 w-full resize-y bg-transparent px-3 py-3 font-mono text-xs leading-5 outline-none scrollbar-thin"
+      />
+      <div className="flex items-center justify-end gap-1 border-t px-2 py-1.5">
+        {edit?.error ? (
+          <p role="alert" className="mr-auto text-xs text-destructive">
+            {edit.error}
+          </p>
+        ) : null}
+        <Button type="button" variant="ghost" size="xs" onClick={() => edit?.setActive(null)} disabled={edit?.saving}>
+          Cancel
+        </Button>
+        <Button type="button" size="xs" onClick={() => void commit()} disabled={edit?.saving}>
+          Save
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function SyntaxHighlighter({ code, language, node }: SyntaxHighlighterProps) {
+  const edit = useCodeEdit();
+  const start = edit ? codeStart(node, edit.text, code) : -1;
+  const active = edit?.enabled && edit.active === start;
+
+  if (active) return <CodeEditor code={code} start={start} language={language} />;
+
   return (
     <Highlight code={code.replace(/\n$/, "")} language={language} theme={orbitCodeTheme}>
       {({ tokens, getLineProps, getTokenProps }) => (
