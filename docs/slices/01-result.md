@@ -28,7 +28,7 @@ The same three names are set in `~/kodus/.env` for the provider that is already 
 
 Base URL used for the run: `https://opencode.ai/inference/go/openai/v1`. Model saved by smoke: `deepseek-v4.1-flash`. Reasoning effort saved by smoke: `low`.
 
-`GET {baseURL}/models` on that host returns 404, so the settings model control stays a text field. `POST {baseURL}/chat/completions` with the key and `reasoning_effort` returns text. A direct probe (status and length only) got HTTP 200 and a 4-character reply before the app smoke.
+`GET {baseURL}/models` on that host returns 404. `POST {baseURL}/chat/completions` with the key and `reasoning_effort` returns text. A direct probe (status and length only) got HTTP 200 and a 4-character reply before the app smoke. The model list used after the follow-up is `https://opencode.ai/zen/go/v1/models`.
 
 ## Smoke
 
@@ -54,3 +54,24 @@ After the server stopped, SQLite had 1 user, 1 chat, and 2 messages (user conten
 - `json-render@0.21.3` is not on npm. Later generative UI will use `@json-render/core@0.21.3` and `@json-render/react@0.21.3`. They are not installed in this slice.
 - `@ai-sdk/react` 4.0.163 is installed because `@assistant-ui/react-ai-sdk` 1.4.21 needs it. It was not in the original pin list.
 - The chat UI was not clicked in a browser. Reload was checked with `GET /api/chats/:id` and by reading `data/orbit.db`.
+
+## Follow-up
+
+`npm run typecheck` and `npm run build` exited 0 again. Smoke against the same server and the same key mapping exited 0:
+
+```
+reasoning gate: yes
+opencode session header on request: yes
+signed in
+settings before save keySet=yes
+settings saved model=deepseek-v4.1-flash keySet=yes
+models=28 deepseek-v4.1-flash reasoning=yes
+streamed chars=4 preview="pong"
+reload messages=2
+db chat=1 messages=2 roles=assistant,user
+smoke passed
+```
+
+The session-header line is from a captured chat request: for the OpenCode Go base URL the outgoing fetch carried `x-opencode-session: chat-1`, and the same call against `https://example.com/v1` did not. The model list tries `{baseURL}/models` first, then the Zen URL, and returns all 28 models. `deepseek-v4.1-flash` has reasoning metadata, so the effort slider stays available. A model whose metadata says reasoning is unsupported hides the slider. Missing metadata leaves it available. The settings dropdown lists every model and keeps a Custom text field.
+
+The server log did not contain the provider key. The process was stopped after smoke. Port 3210 was left free. The container was not started.

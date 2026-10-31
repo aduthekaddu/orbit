@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { openCodeSessionHeader } from "../src/lib/provider";
+import { OPENCODE_GO_BASE_URL, outboundSessionHeader, reasoningAllowed } from "../src/lib/provider";
 
 const origin = "http://127.0.0.1:3210";
 const email = "smoke@orbit.local";
@@ -21,13 +21,14 @@ const baseUrl = process.env.ORBIT_BASE_URL?.trim();
 const apiKey = process.env.ORBIT_API_KEY?.trim();
 if (!baseUrl || !apiKey) fail("ORBIT_BASE_URL and ORBIT_API_KEY are required");
 
-const sessionHeader = openCodeSessionHeader(baseUrl, "chat-1");
-if (baseUrl.replace(/\/+$/, "") === "https://opencode.ai/inference/go/openai/v1") {
-  if (sessionHeader?.["x-opencode-session"] !== "chat-1") fail("opencode session header missing");
-  console.log("opencode session header: yes");
-} else if (sessionHeader) {
-  fail("opencode session header set for a different base URL");
+if (reasoningAllowed({ capabilities: { reasoning: { supported: false } } }) !== false) {
+  fail("reasoning gate allowed an unsupported model");
 }
+if (!reasoningAllowed({ id: "plain" })) fail("missing reasoning metadata should allow the slider");
+if (!reasoningAllowed({ capabilities: { reasoning: { supported: true, effort: ["max"] } } })) {
+  fail("reasoning gate blocked a model that supports reasoning");
+}
+console.log("reasoning gate: yes");
 
 const cookies = new Map<string, string>();
 
@@ -96,6 +97,13 @@ async function main() {
   if (!baseUrl || !apiKey) fail("ORBIT_BASE_URL and ORBIT_API_KEY are required");
   const providerBase = baseUrl;
   const providerKey = apiKey;
+  const opencode = providerBase.replace(/\/+$/, "") === OPENCODE_GO_BASE_URL;
+  const sent = await outboundSessionHeader(providerBase, "chat-1");
+  const other = await outboundSessionHeader("https://example.com/v1", "chat-1");
+  if (other) fail("opencode session header set for a different base URL");
+  if (opencode && sent !== "chat-1") fail(`opencode session header missing on request value=${sent ?? "none"}`);
+  if (!opencode && sent) fail("opencode session header set for a different base URL");
+  console.log(`opencode session header on request: ${sent === "chat-1" ? "yes" : "no"}`);
   const ready = await request("/api/setup");
   if (!ready.ok) fail(`server not ready ${ready.status}`);
 
@@ -123,6 +131,18 @@ async function main() {
   const serialized = JSON.stringify(savedBody);
   if (serialized.includes(providerKey)) fail("settings response contained the key");
   console.log(`settings saved model=${savedBody.model} keySet=yes`);
+
+  const listed = await request("/api/models", {
+    method: "POST",
+    body: JSON.stringify({ baseUrl: providerBase }),
+  });
+  const listedBody = (await listed.json()) as { models?: Array<{ id?: string; reasoning?: boolean | null }> };
+  const ids = (listedBody.models ?? []).map((item) => item.id).filter((id): id is string => Boolean(id));
+  const chosen = listedBody.models?.find((item) => item.id === model);
+  if (!listed.ok || !ids.includes(model) || ids.length < 2) {
+    fail(`model list incomplete status=${listed.status} count=${ids.length}`);
+  }
+  console.log(`models=${ids.length} ${model} reasoning=${chosen?.reasoning === true ? "yes" : chosen?.reasoning === false ? "no" : "unknown"}`);
 
   const created = await request("/api/chats", { method: "POST" });
   const createdBody = (await created.json()) as { id?: string };

@@ -1,7 +1,7 @@
 import { convertToModelMessages, createUIMessageStreamResponse, streamText, toUIMessageStream, type UIMessage } from "ai";
 import { z } from "zod";
 import { ensureChat, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
-import { orbitModel, reasoningOptions } from "@/lib/provider";
+import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { getSettings } from "@/lib/settings";
 import { getSession, unauthorized } from "@/lib/session";
 
@@ -59,6 +59,7 @@ export async function POST(request: Request) {
   })) as UIMessage[];
 
   try {
+    const allowReasoning = await modelAllowsReasoning(settings.baseUrl, settings.apiKey, settings.model);
     const result = streamText({
       model: orbitModel({
         baseUrl: settings.baseUrl,
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
       }),
       messages: await convertToModelMessages(uiMessages),
       abortSignal: request.signal,
-      ...reasoningOptions(settings.reasoningEffort),
+      ...(allowReasoning ? reasoningOptions(settings.reasoningEffort) : {}),
     });
 
     const stream = toUIMessageStream({
@@ -79,11 +80,21 @@ export async function POST(request: Request) {
         console.error("chat stream error", sanitize(message, settings.apiKey));
         return "The model request failed";
       },
-      onEnd: async ({ responseMessage, isAborted }) => {
-        if (isAborted) return;
+      onEnd: async ({ responseMessage, isAborted, outcome }) => {
+        const text = textFromParts(responseMessage.parts).trim();
+        if (!text) {
+          const types = Array.isArray(responseMessage.parts)
+            ? responseMessage.parts
+                .map((part) => (part && typeof part === "object" && "type" in part ? String(part.type) : "?"))
+                .slice(0, 8)
+            : [];
+          const status = outcome && typeof outcome === "object" && "status" in outcome ? String(outcome.status) : "";
+          console.error("chat end without text", isAborted ? "aborted" : "finished", status, types.join(",") || "none");
+          return;
+        }
         upsertMessage(chat.id, {
-          id: responseMessage.id,
-          role: responseMessage.role,
+          id: responseMessage.id || crypto.randomUUID(),
+          role: "assistant",
           parts: responseMessage.parts,
         });
         touchChat(chat.id);
