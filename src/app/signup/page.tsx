@@ -1,22 +1,22 @@
-import Link from "next/link";
-import { SignupForm } from "@/components/auth/auth-form";
+import { AuthShell } from "@/components/auth/auth-shell";
+import { QuietLink, SignupForm } from "@/components/auth/auth-form";
 import { signupOpen } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 export default function SignupPage() {
-  return (
-    <main className="flex h-dvh items-center justify-center p-6">
-      {signupOpen() ? (
-        <SignupForm />
-      ) : (
-        <div className="flex flex-col gap-3">
-          <h1 className="text-lg font-semibold">Signup is closed</h1>
-          <Link href="/login" className="text-sm underline">
-            Sign in
-          </Link>
+  if (!signupOpen()) {
+    return (
+      <AuthShell title="Signup is closed">
+        <div className="flex flex-col">
+          <QuietLink href="/login">Sign in</QuietLink>
         </div>
-      )}
-    </main>
+      </AuthShell>
+    );
+  }
+  return (
+    <AuthShell title="Create account">
+      <SignupForm />
+    </AuthShell>
   );
 }
