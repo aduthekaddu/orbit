@@ -24,7 +24,12 @@ const baseURL = readEnv("BETTER_AUTH_URL") ?? "http://127.0.0.1:3210";
 export const auth = betterAuth({
   baseURL,
   secret: authSecret(),
-  trustedOrigins: ["http://127.0.0.1:3210", "http://localhost:3210"],
+  trustedOrigins: [
+    "http://127.0.0.1:3210",
+    "http://localhost:3210",
+    "http://127.0.0.1:3211",
+    "http://localhost:3211",
+  ],
   database: drizzleAdapter(db, {
     provider: "sqlite",
     schema: { user, session, account, verification },

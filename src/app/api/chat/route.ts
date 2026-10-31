@@ -1,5 +1,8 @@
-import { convertToModelMessages, createUIMessageStreamResponse, streamText, toUIMessageStream, type UIMessage } from "ai";
+import { convertToModelMessages, createUIMessageStreamResponse, stepCountIs, streamText, toUIMessageStream, type UIMessage } from "ai";
 import { z } from "zod";
+import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
+import { assistantHasVisiblePart } from "@/lib/genui/spec";
+import { chatTools } from "@/lib/genui/tool";
 import { ensureChat, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { getSettings } from "@/lib/settings";
@@ -67,13 +70,17 @@ export async function POST(request: Request) {
         model: settings.model,
         chatId: chat.id,
       }),
-      messages: await convertToModelMessages(uiMessages),
+      instructions: RENDER_UI_SYSTEM,
+      messages: await convertToModelMessages(uiMessages, { tools: chatTools }),
+      tools: chatTools,
+      stopWhen: stepCountIs(1),
       abortSignal: request.signal,
       ...(allowReasoning ? reasoningOptions(settings.reasoningEffort) : {}),
     });
 
     const stream = toUIMessageStream({
       stream: result.stream,
+      tools: chatTools,
       originalMessages: uiMessages,
       onError: (error) => {
         const message = error instanceof Error ? error.message : "The model request failed";
@@ -81,15 +88,14 @@ export async function POST(request: Request) {
         return "The model request failed";
       },
       onEnd: async ({ responseMessage, isAborted, outcome }) => {
-        const text = textFromParts(responseMessage.parts).trim();
-        if (!text) {
+        if (!assistantHasVisiblePart(responseMessage.parts)) {
           const types = Array.isArray(responseMessage.parts)
             ? responseMessage.parts
                 .map((part) => (part && typeof part === "object" && "type" in part ? String(part.type) : "?"))
                 .slice(0, 8)
             : [];
           const status = outcome && typeof outcome === "object" && "status" in outcome ? String(outcome.status) : "";
-          console.error("chat end without text", isAborted ? "aborted" : "finished", status, types.join(",") || "none");
+          console.error("chat end without a visible part", isAborted ? "aborted" : "finished", status, types.join(",") || "none");
           return;
         }
         upsertMessage(chat.id, {

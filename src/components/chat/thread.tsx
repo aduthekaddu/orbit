@@ -2,6 +2,8 @@
 
 import { AuiIf, ComposerPrimitive, MessagePrimitive, ThreadPrimitive } from "@assistant-ui/react";
 import { ArrowUpIcon, SquareIcon } from "lucide-react";
+import { RenderUiPart } from "@/components/genui/render-ui";
+import { RENDER_UI_TOOL } from "@/lib/genui/catalog";
 
 export function Thread() {
   return (
@@ -53,7 +55,11 @@ function UserMessage() {
 function AssistantMessage() {
   return (
     <MessagePrimitive.Root className="mx-auto w-full max-w-3xl text-sm">
-      <MessagePrimitive.Parts />
+      <MessagePrimitive.Parts
+        components={{
+          tools: { by_name: { [RENDER_UI_TOOL]: RenderUiPart } },
+        }}
+      />
       <MessagePrimitive.Error />
     </MessagePrimitive.Root>
   );
