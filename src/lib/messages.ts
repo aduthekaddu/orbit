@@ -37,6 +37,7 @@ export function touchChat(id: string, title?: string) {
 
 export function upsertMessage(chatId: string, message: { id: string; role: string; parts: unknown }) {
   if (message.role !== "user" && message.role !== "assistant") return;
+  if (message.role === "assistant" && Array.isArray(message.parts) && message.parts.length === 0) return;
   const content = textFromParts(message.parts);
   const parts = JSON.stringify(message.parts ?? []);
   const existing = db.select({ id: messages.id }).from(messages).where(eq(messages.id, message.id)).get();
