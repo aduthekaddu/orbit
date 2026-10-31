@@ -1,0 +1,16 @@
+node_modules
+.next
+out
+dist
+*.tsbuildinfo
+
+data/*.db
+data/*.db-*
+data/auth-secret
+.env
+.env.local
+.env.*.local
+
+npm-debug.log*
+.DS_Store
+coverage

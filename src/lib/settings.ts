@@ -1,0 +1,65 @@
+import { eq } from "drizzle-orm";
+import { db } from "./db";
+import { settings } from "./db/schema";
+
+export const REASONING_EFFORTS = ["low", "medium", "high"] as const;
+export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
+
+export type SettingsRecord = {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  reasoningEffort: ReasoningEffort;
+};
+
+export type PublicSettings = {
+  baseUrl: string;
+  model: string;
+  reasoningEffort: ReasoningEffort;
+  keySet: boolean;
+};
+
+function asEffort(value: string): ReasoningEffort {
+  if (value === "low" || value === "high" || value === "medium") return value;
+  return "medium";
+}
+
+export function getSettings(): SettingsRecord | null {
+  const row = db.select().from(settings).where(eq(settings.id, 1)).get();
+  if (!row) return null;
+  return {
+    baseUrl: row.baseUrl,
+    apiKey: row.apiKey,
+    model: row.model,
+    reasoningEffort: asEffort(row.reasoningEffort),
+  };
+}
+
+export function toPublicSettings(row: SettingsRecord | null): PublicSettings {
+  return {
+    baseUrl: row?.baseUrl ?? "",
+    model: row?.model ?? "",
+    reasoningEffort: row?.reasoningEffort ?? "medium",
+    keySet: Boolean(row?.apiKey),
+  };
+}
+
+export function saveSettings(input: {
+  baseUrl: string;
+  apiKey?: string;
+  model: string;
+  reasoningEffort: ReasoningEffort;
+}) {
+  const current = getSettings();
+  const apiKey = input.apiKey && input.apiKey.trim().length > 0 ? input.apiKey.trim() : (current?.apiKey ?? "");
+  const values = {
+    id: 1,
+    baseUrl: input.baseUrl.trim().replace(/\/+$/, ""),
+    apiKey,
+    model: input.model.trim(),
+    reasoningEffort: input.reasoningEffort,
+    updatedAt: new Date(),
+  };
+  db.insert(settings).values(values).onConflictDoUpdate({ target: settings.id, set: values }).run();
+  return toPublicSettings(values);
+}
