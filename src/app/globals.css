@@ -140,9 +140,11 @@
   /*
    * The mark's satellite: two sine-eased axes a quarter period apart trace the
    * ring's 10 x 4 ellipse, so it runs on plain transforms in every browser.
+   * orbit-z shares orbit-y's timing and shrinks and dims the moon on the far side.
    */
   --animate-orbit-x: orbit-x 1.1s cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
   --animate-orbit-y: orbit-y 1.1s cubic-bezier(0.37, 0, 0.63, 1) -0.55s infinite alternate;
+  --animate-orbit-z: orbit-z 1.1s cubic-bezier(0.37, 0, 0.63, 1) -0.55s infinite alternate;
 
   @keyframes shimmer {
     0% {
@@ -190,6 +192,17 @@
     }
     to {
       transform: translateY(4px);
+    }
+  }
+
+  @keyframes orbit-z {
+    from {
+      transform: scale(0.65);
+      opacity: 0.55;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
     }
   }
 }
