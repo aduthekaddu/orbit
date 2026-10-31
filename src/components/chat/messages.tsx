@@ -19,6 +19,7 @@ import { IconAction, iconActionClass } from "./icon-action";
 import { MarkdownText } from "./markdown-text";
 import { MessageTextEditor } from "./message-editor";
 import { Reasoning } from "./reasoning";
+import { useCoarsePointer } from "./use-coarse-pointer";
 import { COPIED_MS } from "./use-copy";
 
 type PartComponents = NonNullable<MessagePrimitiveTypes.Parts.Props["components"]>;
@@ -73,6 +74,7 @@ function AssistantMessage() {
       .join("\n\n"),
   );
   const [editing, setEditing] = useState(false);
+  const touch = useCoarsePointer();
 
   return (
     <MessagePrimitive.Root className="relative mx-auto w-full max-w-widget animate-rise">
@@ -92,7 +94,7 @@ function AssistantMessage() {
       )}
       {!editing && (
         <div className={cn("mt-1 -ml-1.5 h-7", failed && "mt-2 ml-0")}>
-          <ActionBarPrimitive.Root hideWhenRunning autohide={failed ? "never" : "not-last"} className="flex gap-0.5">
+          <ActionBarPrimitive.Root hideWhenRunning autohide={failed || touch ? "never" : "not-last"} className="flex gap-0.5">
             {text && <CopyAction />}
             {text && !failed && <EditAction onClick={() => setEditing(true)} />}
             {failed ? (
@@ -118,10 +120,11 @@ function AssistantMessage() {
 
 function UserMessage() {
   const editing = useAuiState((s) => s.message.composer.isEditing);
+  const touch = useCoarsePointer();
   if (editing) return <UserEditComposer />;
   return (
     <MessagePrimitive.Root className="mx-auto flex w-full max-w-widget animate-rise items-end justify-end gap-1.5">
-      <ActionBarPrimitive.Root autohide="always">
+      <ActionBarPrimitive.Root autohide={touch ? "never" : "always"} className="flex">
         <CopyAction />
         <IconAction label="Edit">
           <ActionBarPrimitive.Edit className={iconActionClass}>
@@ -136,19 +139,20 @@ function UserMessage() {
   );
 }
 
+// The edit keeps the bubble's shape and place, so it reads as changing this message, not writing a new one.
 function UserEditComposer() {
   return (
     <MessagePrimitive.Root className="mx-auto flex w-full max-w-widget animate-rise justify-end">
-      <ComposerPrimitive.Root className="w-full max-w-[85%] rounded-2xl border bg-surface-raised p-2 shadow-card transition-[border-color,box-shadow] duration-200 ease-orbit focus-within:border-border-strong focus-within:ring-[3px] focus-within:ring-primary/10">
+      <ComposerPrimitive.Root className="flex max-w-[85%] min-w-64 flex-col overflow-hidden rounded-2xl border border-primary/40 bg-surface-raised">
         <ComposerPrimitive.Input
           autoFocus
-          rows={3}
+          rows={1}
           aria-label="Edit message"
-          className="block max-h-60 w-full resize-none bg-transparent px-2 py-1.5 text-sm leading-6 outline-none scrollbar-thin"
+          className="block max-h-60 max-w-full resize-none bg-transparent px-3.5 pt-2 text-sm leading-6 outline-none field-sizing-content scrollbar-thin"
         />
-        <div className="mt-1 flex items-center justify-end gap-1">
-          <ComposerPrimitive.Cancel className={buttonVariants({ variant: "ghost", size: "sm" })}>Cancel</ComposerPrimitive.Cancel>
-          <ComposerPrimitive.Send className={buttonVariants({ size: "sm" })}>Send</ComposerPrimitive.Send>
+        <div className="flex items-center justify-end gap-1 px-2 py-2">
+          <ComposerPrimitive.Cancel className={buttonVariants({ variant: "ghost", size: "xs" })}>Cancel</ComposerPrimitive.Cancel>
+          <ComposerPrimitive.Send className={buttonVariants({ size: "xs" })}>Send</ComposerPrimitive.Send>
         </div>
       </ComposerPrimitive.Root>
     </MessagePrimitive.Root>

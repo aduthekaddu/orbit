@@ -3,12 +3,12 @@
 import { useState, type KeyboardEvent } from "react";
 import { Highlight, type PrismTheme } from "prism-react-renderer";
 import type { CodeHeaderProps, SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
-import { CaretDownIcon, CheckIcon, CopyIcon, PencilSimpleIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, CheckIcon, CopyIcon } from "@phosphor-icons/react";
 import { replaceCode } from "@/lib/chat-parts";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { ScrollFade } from "@/components/ui/scroll-fade";
 import { useCodeEdit } from "./code-edit-context";
+import { EditorFooter } from "./editor-footer";
 import { useCopy } from "./use-copy";
 
 // Past this many lines a block opens capped at COLLAPSED_LINES, so one answer cannot become a wall of code.
@@ -47,20 +47,25 @@ export function CodeHeader({ language, code, node }: CodeHeaderProps) {
   const active = edit?.active === start;
 
   return (
-    <div className="mt-4 flex h-8 items-center justify-between rounded-t-lg border border-b-0 bg-surface-sunken pr-1 pl-3">
+    <div
+      className={cn(
+        "mt-4 flex h-8 items-center justify-between rounded-t-lg border border-b-0 bg-surface-sunken pr-1 pl-3 transition-colors duration-150 ease-orbit",
+        active && "border-primary/40",
+      )}
+    >
       <span className="font-mono text-2xs text-muted-foreground">{language || "text"}</span>
-      <div className="flex items-center gap-0.5">
-        {edit?.enabled ? (
-          <button
-            type="button"
-            onClick={() => edit.setActive(active ? null : start)}
-            aria-label={active ? "Stop editing code" : "Edit code"}
-            className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
-          >
-            <PencilSimpleIcon weight="regular" className="size-3.5" />
-          </button>
-        ) : null}
-        {active ? null : (
+      {active ? null : (
+        <div className="flex items-center gap-0.5">
+          {edit?.enabled ? (
+            <button
+              type="button"
+              onClick={() => edit.setActive(start)}
+              aria-label="Edit code"
+              className="flex h-6 items-center rounded-md px-2 text-2xs text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              Edit
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => copy(code)}
@@ -69,8 +74,8 @@ export function CodeHeader({ language, code, node }: CodeHeaderProps) {
           >
             {copied ? <CheckIcon weight="regular" className="size-3.5" /> : <CopyIcon weight="regular" className="size-3.5" />}
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -78,7 +83,6 @@ export function CodeHeader({ language, code, node }: CodeHeaderProps) {
 function CodeEditor({ code, start, language }: { code: string; start: number; language: string }) {
   const edit = useCodeEdit();
   const [draft, setDraft] = useState(code);
-  const rows = Math.min(18, Math.max(4, code.split("\n").length));
 
   async function commit() {
     if (!edit) return;
@@ -102,29 +106,17 @@ function CodeEditor({ code, start, language }: { code: string; start: number; la
   }
 
   return (
-    <div className="mb-4 overflow-hidden rounded-b-lg border bg-surface-sunken">
+    <div className="mb-4 overflow-hidden rounded-b-lg border border-primary/40 bg-surface-sunken">
       <textarea
         autoFocus
-        rows={rows}
+        spellCheck={false}
         value={draft}
         aria-label={`Edit ${language || "code"} block`}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={onKeyDown}
-        className="block max-h-96 w-full resize-y bg-transparent px-3 py-3 font-mono text-xs leading-5 outline-none scrollbar-thin"
+        className="block max-h-[60vh] min-h-20 w-full resize-none bg-transparent px-3 py-3 font-mono text-xs leading-5 whitespace-pre outline-none field-sizing-content scrollbar-thin"
       />
-      <div className="flex items-center justify-end gap-1 border-t px-2 py-1.5">
-        {edit?.error ? (
-          <p role="alert" className="mr-auto text-xs text-destructive">
-            {edit.error}
-          </p>
-        ) : null}
-        <Button type="button" variant="ghost" size="xs" onClick={() => edit?.setActive(null)} disabled={edit?.saving}>
-          Cancel
-        </Button>
-        <Button type="button" size="xs" onClick={() => void commit()} disabled={edit?.saving}>
-          Save
-        </Button>
-      </div>
+      <EditorFooter error={edit?.error} saving={edit?.saving} onCancel={() => edit?.setActive(null)} onSave={() => void commit()} />
     </div>
   );
 }

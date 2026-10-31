@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { WarningCircleIcon } from "@phosphor-icons/react";
-import { Button } from "@/components/ui/button";
+import { EditorFooter } from "./editor-footer";
 import { useSaveMessageText } from "./use-save-message";
 
 export function MessageTextEditor({
@@ -18,7 +17,6 @@ export function MessageTextEditor({
 }) {
   const { save, saving, error } = useSaveMessageText();
   const [text, setText] = useState(initialText);
-  const rows = Math.min(18, Math.max(4, initialText.split("\n").length + 1));
 
   async function commit() {
     if (text === initialText) {
@@ -29,10 +27,9 @@ export function MessageTextEditor({
   }
 
   return (
-    <div className="my-2 rounded-xl border bg-surface-sunken p-2 shadow-card focus-within:border-border-strong">
+    <div className="overflow-hidden rounded-xl border border-primary/40 bg-card shadow-card">
       <textarea
         autoFocus
-        rows={rows}
         value={text}
         aria-label={label}
         onChange={(event) => setText(event.target.value)}
@@ -46,22 +43,9 @@ export function MessageTextEditor({
             void commit();
           }
         }}
-        className="block max-h-96 w-full resize-y bg-transparent px-2 py-1 font-mono text-xs leading-5 outline-none scrollbar-thin"
+        className="block max-h-[60vh] min-h-24 w-full resize-none bg-transparent px-4 py-3 text-sm leading-6 outline-none field-sizing-content scrollbar-thin"
       />
-      <div className="mt-2 flex items-center justify-end gap-2">
-        {error ? (
-          <p role="alert" className="mr-auto flex items-center gap-1.5 text-xs text-destructive">
-            <WarningCircleIcon weight="regular" className="size-3.5" />
-            {error}
-          </p>
-        ) : null}
-        <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={saving}>
-          Cancel
-        </Button>
-        <Button type="button" size="sm" onClick={() => void commit()} disabled={saving}>
-          Save
-        </Button>
-      </div>
+      <EditorFooter error={error} saving={saving} onCancel={onClose} onSave={() => void commit()} />
     </div>
   );
 }
