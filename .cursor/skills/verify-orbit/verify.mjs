@@ -244,27 +244,46 @@ function doctor() {
   });
 }
 
+function portFree() {
+  return listenerPids().length === 0;
+}
+
+async function waitForStopped(pid, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!alive(pid) && portFree()) return true;
+    await sleep(100);
+  }
+  return !alive(pid) && portFree();
+}
+
 async function stopServer() {
   const state = readState();
   if (!state) return;
   if (alive(state.pid) && procCwd(state.pid) !== sandbox) {
     fail(`pid ${state.pid} is not the sandbox server. Not killing it.`);
   }
-  if (alive(state.pid)) {
+  if (alive(state.pid) || sandboxListening()) {
     try {
       process.kill(-state.pid, "SIGTERM");
     } catch (error) {
       if (error?.code !== "ESRCH") throw error;
     }
-    const deadline = Date.now() + 5_000;
-    while (Date.now() < deadline && alive(state.pid)) await sleep(100);
-    if (alive(state.pid)) {
-      try {
-        process.kill(-state.pid, "SIGKILL");
-      } catch {
-        // Already gone.
-      }
+  }
+  let stopped = await waitForStopped(state.pid, 5_000);
+  if (!stopped) {
+    try {
+      process.kill(-state.pid, "SIGKILL");
+    } catch {
+      // Already gone.
     }
+    stopped = await waitForStopped(state.pid, 5_000);
+  }
+  if (!stopped) {
+    const listeners = listenerPids().map((pid) => `${pid} cwd ${procCwd(pid) || "unknown"}`);
+    fail(
+      `server did not stop. pid ${state.pid} alive=${alive(state.pid) ? "yes" : "no"} listeners ${listeners.join(", ") || "none"}. Sandbox left in place.`,
+    );
   }
 }
 
@@ -376,6 +395,7 @@ async function driveSignup() {
 async function driveSettings() {
   assertOurServer();
   const cookies = await signInVerify();
+  const page = await request("/settings", { cookies });
   const saved = await request("/api/settings", {
     method: "PUT",
     cookies,
@@ -389,19 +409,66 @@ async function driveSettings() {
   const savedBody = JSON.parse(saved.text);
   const read = await request("/api/settings", { cookies });
   const readBody = JSON.parse(read.text);
+  const changed = await request("/api/settings", {
+    method: "PUT",
+    cookies,
+    json: {
+      baseUrl: "https://other.example/v1",
+      model: "example-model",
+      reasoningEffort: "low",
+    },
+  });
+  let changedError = "";
+  try {
+    changedError = JSON.parse(changed.text).error ?? "";
+  } catch {
+    changedError = "";
+  }
+  const labels = ["Base URL", "API key", "Model", "Save"];
+  const pageHasLabels = labels.every((label) => page.text.includes(label));
   const lines = [
-    `settings page status ${(await request("/settings", { cookies })).status}`,
+    `settings page status ${page.status}`,
+    `settings page has labels ${pageHasLabels ? "yes" : "no"}`,
     `save status ${saved.status}`,
     `save has apiKey ${Object.prototype.hasOwnProperty.call(savedBody, "apiKey") ? "yes" : "no"}`,
     `save keySet ${savedBody.keySet === true ? "yes" : "no"}`,
+    `save baseUrl ${savedBody.baseUrl ?? "none"}`,
     `save model ${savedBody.model ?? "none"}`,
+    `save reasoningEffort ${savedBody.reasoningEffort ?? "none"}`,
     `read status ${read.status}`,
     `read has apiKey ${Object.prototype.hasOwnProperty.call(readBody, "apiKey") ? "yes" : "no"}`,
+    `read keySet ${readBody.keySet === true ? "yes" : "no"}`,
+    `read baseUrl ${readBody.baseUrl ?? "none"}`,
+    `read model ${readBody.model ?? "none"}`,
+    `read reasoningEffort ${readBody.reasoningEffort ?? "none"}`,
     `read contains key text ${read.text.includes(FAKE_KEY) ? "yes" : "no"}`,
+    `base change without key status ${changed.status}`,
+    `base change without key error ${changedError || "none"}`,
   ];
   writeEvidence("settings", lines);
-  if (saved.status !== 200 || savedBody.keySet !== true || savedBody.model !== "example-model") fail("settings save failed");
+  if (page.status !== 200 || !pageHasLabels) fail("settings page missing status or labels");
+  if (
+    saved.status !== 200 ||
+    savedBody.keySet !== true ||
+    savedBody.baseUrl !== "https://example.com/v1" ||
+    savedBody.model !== "example-model" ||
+    savedBody.reasoningEffort !== "low"
+  ) {
+    fail("settings save did not return the saved public values");
+  }
+  if (
+    read.status !== 200 ||
+    readBody.keySet !== true ||
+    readBody.baseUrl !== "https://example.com/v1" ||
+    readBody.model !== "example-model" ||
+    readBody.reasoningEffort !== "low"
+  ) {
+    fail("settings read did not return the saved public values");
+  }
   if ("apiKey" in savedBody || "apiKey" in readBody || read.text.includes(FAKE_KEY)) fail("settings leaked the key");
+  if (changed.status !== 400 || !changedError.toLowerCase().includes("api key")) {
+    fail(`base URL change without a key returned ${changed.status}`);
+  }
   console.log("drive settings passed");
 }
 
