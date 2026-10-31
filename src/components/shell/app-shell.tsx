@@ -3,32 +3,37 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { SidebarSimpleIcon } from "@phosphor-icons/react";
+import { NotePencilIcon, SidebarSimpleIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogOverlay, DialogPortal, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { OrbitMark } from "@/components/orbit-mark";
 import { Sidebar, type ChatSummary } from "@/components/chat/sidebar";
 import { CommandPalette } from "./command-palette";
 import { ShortcutKbd, useShortcuts } from "./shortcuts";
+import { SIDEBAR_COOKIE } from "./sidebar-cookie";
 
-const COLLAPSED_KEY = "orbit:sidebar-collapsed";
 const DESKTOP_QUERY = "(min-width: 48rem)";
 
-export function AppShell({ chats, email, children }: { chats: ChatSummary[]; email: string; children: React.ReactNode }) {
+export function AppShell({
+  chats,
+  email,
+  initialCollapsed,
+  children,
+}: {
+  chats: ChatSummary[];
+  email: string;
+  initialCollapsed: boolean;
+  children: React.ReactNode;
+}) {
   const router = useRouter();
   const pathname = usePathname();
-  // `animate` stays false for the value restored from storage so a collapsed sidebar does not slide shut on load.
-  const [sidebar, setSidebar] = useState({ collapsed: false, animate: false });
+  // `animate` turns on at the first toggle, so the server-rendered state never slides on load.
+  const [sidebar, setSidebar] = useState({ collapsed: initialCollapsed, animate: false });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const paletteReturnFocus = useRef<HTMLElement | null>(null);
   const [newChatPending, setNewChatPending] = useState(false);
-
-  useEffect(() => {
-    setSidebar({ collapsed: localStorage.getItem(COLLAPSED_KEY) === "1", animate: false });
-  }, []);
 
   useEffect(() => {
     setDrawerOpen(false);
@@ -54,7 +59,7 @@ export function AppShell({ chats, email, children }: { chats: ChatSummary[]; ema
   }, [paletteOpen]);
 
   function setCollapsed(collapsed: boolean) {
-    localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
+    document.cookie = `${SIDEBAR_COOKIE}=${collapsed ? "collapsed" : "open"}; path=/; max-age=31536000; samesite=lax`;
     setSidebar({ collapsed, animate: true });
   }
 
@@ -82,6 +87,8 @@ export function AppShell({ chats, email, children }: { chats: ChatSummary[]; ema
     newChat,
     sidebar: () => setCollapsed(!sidebar.collapsed),
   });
+
+  const title = pathname === "/settings" ? "Settings" : chats.find((chat) => pathname === `/c/${chat.id}`)?.title;
 
   const sidebarProps = {
     chats,
@@ -117,7 +124,7 @@ export function AppShell({ chats, email, children }: { chats: ChatSummary[]; ema
             className="fixed inset-y-0 left-0 z-50 border-r bg-background shadow-float outline-none duration-200 ease-orbit data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left data-[state=open]:animate-in data-[state=open]:slide-in-from-left md:hidden"
           >
             <DialogTitle className="sr-only">Chats</DialogTitle>
-            <Sidebar {...sidebarProps} />
+            <Sidebar {...sidebarProps} onNavigate={() => setDrawerOpen(false)} />
           </DialogPrimitive.Content>
         </DialogPortal>
       </Dialog>
@@ -134,7 +141,17 @@ export function AppShell({ chats, email, children }: { chats: ChatSummary[]; ema
               Open sidebar <ShortcutKbd name="sidebar" />
             </TooltipContent>
           </Tooltip>
-          <OrbitMark className="size-5" />
+          <h1 className="min-w-0 flex-1 truncate text-sm font-medium">{title}</h1>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon-sm" onClick={newChat} disabled={newChatPending} aria-label="New chat" className="text-muted-foreground hover:text-foreground">
+                <NotePencilIcon weight="light" className="size-[18px]" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="flex items-center gap-2">
+              New chat <ShortcutKbd name="newChat" />
+            </TooltipContent>
+          </Tooltip>
         </header>
         {children}
       </div>
