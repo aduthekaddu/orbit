@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { SidebarSimpleIcon } from "@phosphor-icons/react";
@@ -23,6 +23,7 @@ export function AppShell({ chats, email, children }: { chats: ChatSummary[]; ema
   const [sidebar, setSidebar] = useState({ collapsed: false, animate: false });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const paletteReturnFocus = useRef<HTMLElement | null>(null);
   const [newChatPending, setNewChatPending] = useState(false);
 
   useEffect(() => {
@@ -32,6 +33,25 @@ export function AppShell({ chats, email, children }: { chats: ChatSummary[]; ema
   useEffect(() => {
     setDrawerOpen(false);
   }, [pathname]);
+
+  // The palette opens from a shortcut, so Dialog has no trigger to restore focus to.
+  function setPalette(next: boolean) {
+    if (next) {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active !== document.body) paletteReturnFocus.current = active;
+    }
+    setPaletteOpen(next);
+  }
+
+  useEffect(() => {
+    if (paletteOpen) return;
+    const target = paletteReturnFocus.current;
+    paletteReturnFocus.current = null;
+    if (!target?.isConnected) return;
+    // Radix restores focus to the body on close; run after it.
+    const timer = setTimeout(() => target.focus(), 0);
+    return () => clearTimeout(timer);
+  }, [paletteOpen]);
 
   function setCollapsed(collapsed: boolean) {
     localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
@@ -58,7 +78,7 @@ export function AppShell({ chats, email, children }: { chats: ChatSummary[]; ema
   }
 
   useShortcuts({
-    palette: () => setPaletteOpen((open) => !open),
+    palette: () => setPalette(!paletteOpen),
     newChat,
     sidebar: () => setCollapsed(!sidebar.collapsed),
   });
@@ -68,7 +88,7 @@ export function AppShell({ chats, email, children }: { chats: ChatSummary[]; ema
     email,
     newChatPending,
     onNewChat: newChat,
-    onSearch: () => setPaletteOpen(true),
+    onSearch: () => setPalette(true),
   };
 
   return (
@@ -119,7 +139,7 @@ export function AppShell({ chats, email, children }: { chats: ChatSummary[]; ema
         {children}
       </div>
 
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} chats={chats} onNewChat={newChat} />
+      <CommandPalette open={paletteOpen} onOpenChange={setPalette} chats={chats} onNewChat={newChat} />
     </div>
   );
 }
