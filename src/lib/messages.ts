@@ -1,4 +1,4 @@
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, notInArray, sql } from "drizzle-orm";
 import type { UIMessage } from "ai";
 import { db } from "./db";
 import { chats, messages } from "./db/schema";
@@ -62,8 +62,15 @@ export function upsertMessage(chatId: string, message: { id: string; role: strin
     .run();
 }
 
-export function listMessages(chatId: string): UIMessage[] {
-  const rows = db.select().from(messages).where(eq(messages.chatId, chatId)).orderBy(asc(messages.position)).all();
+/** Drop stored messages the client did not resend, so a regenerated or edited turn replaces the old one. */
+export function keepOnlyMessages(chatId: string, ids: string[]) {
+  if (ids.length === 0) return;
+  db.delete(messages)
+    .where(and(eq(messages.chatId, chatId), notInArray(messages.id, ids)))
+    .run();
+}
+
+export function listMessages(chatId: string): UIMessage[] {  const rows = db.select().from(messages).where(eq(messages.chatId, chatId)).orderBy(asc(messages.position)).all();
   return rows.map((row) => ({
     id: row.id,
     role: row.role as "user" | "assistant",

@@ -1,6 +1,6 @@
 import { convertToModelMessages, createUIMessageStreamResponse, streamText, toUIMessageStream, type UIMessage } from "ai";
 import { z } from "zod";
-import { ensureChat, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
+import { ensureChat, keepOnlyMessages, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { getSettings } from "@/lib/settings";
 import { getSession, unauthorized } from "@/lib/session";
@@ -44,9 +44,14 @@ export async function POST(request: Request) {
   if (!chat) return Response.json({ error: "Not found" }, { status: 404 });
 
   const incoming = parsed.data.messages;
+  const keptIds: string[] = [];
   for (const message of incoming) {
-    if (message.parts) upsertMessage(chat.id, { id: message.id, role: message.role, parts: message.parts });
+    if (message.parts) {
+      upsertMessage(chat.id, { id: message.id, role: message.role, parts: message.parts });
+      keptIds.push(message.id);
+    }
   }
+  keepOnlyMessages(chat.id, keptIds);
   const firstUser = incoming.find((message) => message.role === "user");
   const title = textFromParts(firstUser?.parts).trim();
   if (title) touchChat(chat.id, title);
