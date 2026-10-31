@@ -68,6 +68,32 @@ test("a dangling child fails", () => {
   assert.match(outcome.error, /missing/);
 });
 
+test("editable text passes and keeps its format", () => {
+  const outcome = parseRenderSpec({
+    root: "text",
+    elements: {
+      text: {
+        type: "Text",
+        props: { label: "Snippet", content: "const value = 1;", format: "code" },
+        children: [],
+      },
+    },
+  });
+  assert.equal(outcome.ok, true);
+  if (!outcome.ok) return;
+  assert.equal(outcome.spec.elements.text.props.format, "code");
+});
+
+test("a text format outside plain and code fails", () => {
+  const outcome = parseRenderSpec({
+    root: "text",
+    elements: {
+      text: { type: "Text", props: { content: "x", format: "markdown" }, children: [] },
+    },
+  });
+  assert.equal(outcome.ok, false);
+});
+
 test("a tool-only assistant part is worth saving", () => {
   assert.equal(assistantHasVisiblePart([]), false);
   assert.equal(

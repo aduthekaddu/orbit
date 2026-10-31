@@ -29,3 +29,18 @@ test("a valid card renders its title and metric", () => {
   assert.match(html, /Checks/);
   assert.match(html, />1</);
 });
+
+test("editable text renders its content in a textbox", () => {
+  const outcome = parseRenderSpec({
+    root: "text",
+    elements: {
+      text: { type: "Text", props: { content: "const value = 1 < 2;" }, children: [] },
+    },
+  });
+  assert.equal(outcome.ok, true);
+  if (!outcome.ok) return;
+  const html = renderToStaticMarkup(<SpecView spec={outcome.spec} />);
+  assert.match(html, /contenteditable="true"/i);
+  assert.match(html, /role="textbox"/);
+  assert.match(html, /const value = 1 &lt; 2;/);
+});

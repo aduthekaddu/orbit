@@ -44,6 +44,14 @@ export const catalog = defineCatalog(schema, {
       }),
       description: "A bullet list of strings.",
     },
+    Text: {
+      props: z.object({
+        content: text(),
+        format: z.enum(["plain", "code"]).nullable().optional(),
+        label: text().nullable().optional(),
+      }),
+      description: "Text or code. content is shown in place and can be edited by the user.",
+    },
     Callout: {
       props: z.object({
         tone: z.enum(["info", "warning", "success"]),
@@ -114,7 +122,8 @@ export const RENDER_UI_SYSTEM = [
   "When the user wants a card, table, list, metric, key-value pairs, or a callout, call render_ui once.",
   "The tool arguments are one spec object with root and elements, not a JSON patch stream.",
   "Each element has type, props, and children. children is an array of element keys, or an empty array.",
-  "Use only Card, Metric, KeyValue, Table, List, Callout, and Button.",
+  "Use only Card, Metric, KeyValue, Table, List, Text, Callout, and Button.",
+  "Text holds plain text or code. format is plain or code.",
   "Button action is the string note, and note is the text the click stores.",
   "Metric, list, table, and key-value values may be strings or numbers.",
   "Pass null for an optional string you are not using.",

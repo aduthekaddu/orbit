@@ -69,10 +69,54 @@ export const { registry } = defineRegistry(catalog, {
         ))}
       </ul>
     ),
+    Text: ({ props }) => <EditableText {...props} />,
     Callout: ({ props }) => <CalloutView {...props} />,
     Button: ({ props }) => <ButtonView {...props} />,
   },
 });
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function EditableText({
+  label,
+  content,
+  format,
+}: {
+  label?: string | null;
+  content: string;
+  format?: "plain" | "code" | null;
+}) {
+  const code = format === "code";
+  return (
+    <div className="flex flex-col gap-1 text-sm">
+      {label ? <p className="text-xs text-muted-foreground">{label}</p> : null}
+      <div
+        className={
+          code
+            ? "overflow-x-auto whitespace-pre-wrap break-words rounded-xl border bg-muted/40 p-3 font-mono text-xs"
+            : "whitespace-pre-wrap break-words rounded-xl border border-transparent px-1 py-0.5 hover:border-border focus:border-border focus:outline-none"
+        }
+        contentEditable
+        role="textbox"
+        aria-label={label || (code ? "Generated code" : "Generated text")}
+        aria-multiline
+        spellCheck={!code}
+        suppressContentEditableWarning
+        onKeyDown={(event) => {
+          if (event.key === "Escape") event.currentTarget.blur();
+        }}
+        dangerouslySetInnerHTML={{ __html: escapeHtml(content) }}
+      />
+    </div>
+  );
+}
 
 function CalloutView({
   tone,
