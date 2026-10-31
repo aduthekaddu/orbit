@@ -72,9 +72,13 @@ export async function POST(request: Request) {
       ...(allowReasoning ? reasoningOptions(settings.reasoningEffort) : {}),
     });
 
-    const stream = toUIMessageStream({
+    // Send the response id so the client reuses it. Without it the client mints
+    // its own id and the next turn stores the assistant reply a second time.
+    const responseId = crypto.randomUUID();
+    const uiStream = toUIMessageStream({
       stream: result.stream,
       originalMessages: uiMessages,
+      generateMessageId: () => responseId,
       onError: (error) => {
         const message = error instanceof Error ? error.message : "The model request failed";
         console.error("chat stream error", sanitize(message, settings.apiKey));
@@ -101,7 +105,7 @@ export async function POST(request: Request) {
       },
     });
 
-    return createUIMessageStreamResponse({ stream });
+    return createUIMessageStreamResponse({ stream: uiStream });
   } catch (error) {
     const message = error instanceof Error ? error.message : "The model request failed";
     console.error("chat request error", sanitize(message, settings.apiKey));
