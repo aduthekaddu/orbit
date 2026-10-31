@@ -16,12 +16,9 @@ export async function GET() {
   if (!session) return unauthorized();
   const settings = getSettings();
   if (!settings?.baseUrl || !settings.apiKey) return Response.json({ models: [] });
-  try {
-    const models = await listModels(settings.baseUrl, settings.apiKey);
-    return Response.json({ models });
-  } catch {
-    return Response.json({ models: [] });
-  }
+  const models = await listModels(settings.baseUrl, settings.apiKey);
+  if (!models) return Response.json({ error: "Could not reach the provider.", models: [] }, { status: 502 });
+  return Response.json({ models });
 }
 
 export async function POST(request: Request) {
@@ -33,10 +30,7 @@ export async function POST(request: Request) {
   const baseUrl = parsed.data.baseUrl || settings?.baseUrl || "";
   const apiKey = parsed.data.apiKey?.trim() || settings?.apiKey || "";
   if (!baseUrl || !apiKey) return Response.json({ models: [] });
-  try {
-    const models = await listModels(baseUrl, apiKey);
-    return Response.json({ models });
-  } catch {
-    return Response.json({ models: [] });
-  }
+  const models = await listModels(baseUrl, apiKey);
+  if (!models) return Response.json({ error: "Could not reach the provider.", models: [] }, { status: 502 });
+  return Response.json({ models });
 }

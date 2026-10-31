@@ -45,6 +45,11 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
   const latestLoad = useRef(0);
 
   async function loadModels(nextBase = baseUrl, nextKey = apiKey) {
+    const key = nextKey.trim();
+    if (!key && !keySet) {
+      setConnection({ status: "idle" });
+      return;
+    }
     const load = ++latestLoad.current;
     setConnection({ status: "checking" });
     let next: Connection;

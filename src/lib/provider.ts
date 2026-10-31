@@ -141,20 +141,25 @@ function modelsFromPayload(payload: unknown): ListedModel[] {
 }
 
 async function fetchModels(url: string, apiKey: string, extraHeaders?: Record<string, string>): Promise<ListedModel[] | null> {
-  const response = await fetch(url, {
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      accept: "application/json",
-      "user-agent": "orbit/0.1",
-      ...extraHeaders,
-    },
-    signal: AbortSignal.timeout(20_000),
-  });
-  if (!response.ok) return null;
-  return modelsFromPayload(await response.json());
+  try {
+    const response = await fetch(url, {
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        accept: "application/json",
+        "user-agent": "orbit/0.1",
+        ...extraHeaders,
+      },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) return null;
+    return modelsFromPayload(await response.json());
+  } catch {
+    return null;
+  }
 }
 
-export async function listModels(baseUrl: string, apiKey: string): Promise<ListedModel[]> {
+/** Null means no endpoint answered. An empty array means the provider has no models. */
+export async function listModels(baseUrl: string, apiKey: string): Promise<ListedModel[] | null> {
   const base = normalizeBaseUrl(baseUrl);
   const session = openCodeSessionHeader(base, "models");
   const primary = await fetchModels(`${base}/models`, apiKey, session);
@@ -163,13 +168,13 @@ export async function listModels(baseUrl: string, apiKey: string): Promise<Liste
     const fallback = await fetchModels(OPENCODE_GO_MODELS_URL, apiKey, { "x-opencode-session": "models" });
     if (fallback) return fallback;
   }
-  return primary ?? [];
+  return primary;
 }
 
 export async function modelAllowsReasoning(baseUrl: string, apiKey: string, modelId: string): Promise<boolean> {
   try {
     const models = await listModels(baseUrl, apiKey);
-    const match = models.find((model) => model.id === modelId);
+    const match = models?.find((model) => model.id === modelId);
     if (!match || match.reasoning == null) return true;
     return match.reasoning;
   } catch {
