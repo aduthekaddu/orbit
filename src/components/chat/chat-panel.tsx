@@ -6,7 +6,17 @@ import { AssistantChatTransport, useChatRuntime } from "@assistant-ui/react-ai-s
 import type { UIMessage } from "ai";
 import { Thread } from "./thread";
 
-export function ChatPanel({ chatId, initialMessages }: { chatId: string; initialMessages: UIMessage[] }) {
+export function ChatPanel({
+  chatId,
+  initialMessages,
+  ready,
+  model,
+}: {
+  chatId: string;
+  initialMessages: UIMessage[];
+  ready: boolean;
+  model: string;
+}) {
   const router = useRouter();
   const runtime = useChatRuntime({
     id: chatId,
@@ -19,7 +29,7 @@ export function ChatPanel({ chatId, initialMessages }: { chatId: string; initial
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <Thread />
+      <Thread ready={ready} model={model} />
     </AssistantRuntimeProvider>
   );
 }
