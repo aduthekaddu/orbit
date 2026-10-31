@@ -36,7 +36,17 @@ Run these from the repo root. Each one is done when it exits 0.
 3. Verify with typecheck, build, and the checks the spec names. Done when those commands exit 0.
 4. Write the result at `docs/slices/NN-result.md`. Done when it records the commands, the exit status, and any failure.
 5. Review the branch with Greptile and CodeAnt.
-6. Open a draft pull request. Done when the draft exists and is still a draft.
+6. Open a draft pull request while the slice is in progress. Done when the draft exists. Mark it ready only under Pull requests below.
+
+## Branches
+
+Prefix a branch with `feat/`, `fix/`, `chore/`, or `docs/`.
+
+Slice branches are `feat/walking-skeleton`, `feat/design-system`, `feat/generative-ui`, `feat/search`, `feat/sandbox`, `feat/github-mcp`, `feat/memory`, and `feat/deploy`.
+
+## Pull requests
+
+Keep the pull request a draft while work on that slice continues. Run `gh pr ready` only when the slice is complete. Complete means the checks passed, the bot review fixes are applied, and the docs are done. After it is ready, leave that branch alone unless Aditya asks for another commit. Put later fixes on a `fix/...` branch or the next slice.
 
 ## Models
 

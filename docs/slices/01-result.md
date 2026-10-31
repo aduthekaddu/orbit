@@ -1,6 +1,6 @@
 # Slice 1 result
 
-Walking skeleton is on branch `slice-1`. A local user can sign up, store a provider on the server, and stream a chat that is still there after reload.
+Walking skeleton is on branch `feat/walking-skeleton`. A local user can sign up, store a provider on the server, and stream a chat that is still there after reload.
 
 ## What was verified
 
@@ -75,3 +75,29 @@ smoke passed
 The session-header line is from a captured chat request: for the OpenCode Go base URL the outgoing fetch carried `x-opencode-session: chat-1`, and the same call against `https://example.com/v1` did not. The model list tries `{baseURL}/models` first, then the Zen URL, and returns all 28 models. `deepseek-v4.1-flash` has reasoning metadata, so the effort slider stays available. A model whose metadata says reasoning is unsupported hides the slider. Missing metadata leaves it available. The settings dropdown lists every model and keeps a Custom text field.
 
 The server log did not contain the provider key. The process was stopped after smoke. Port 3210 was left free. The container was not started.
+
+## Open chat
+
+assistant-ui replaced the first message's request id with a `__LOCALID_` thread id. The server stored that turn on a new chat. The open chat stayed empty. Chrome on `/c/06912e11-8862-4329-8b9f-724ff1e39a37` posted `__LOCALID_goc1iwqd026`. Reload of the open chat returned 0 messages.
+
+`npx tsx scripts/smoke.ts` against the dev server exited 1 before the fix:
+
+```
+first message used id=__LOCALID_18ac68adb8b6 open=d321a1f5-72b7-4fbd-8dcf-2f6bbd222c40
+```
+
+`orbitChatTransport` sets the request id back to the open chat. The same smoke then exited 0:
+
+```
+streamed chars=4 preview="pong"
+first message chat id matches open chat: yes
+reload messages=2
+db chat=1 messages=2 roles=assistant,user
+smoke passed
+```
+
+Chrome on `/c/fef162ad-d85a-4842-8279-ab544685a86b` posted that same id. Reload returned 2 messages. The sidebar New chat button was not clicked. The chat came from `POST /api/chats`, then the page was opened.
+
+`npm run typecheck` and `npm run build` (Next.js 16.4.3) exited 0. `npm start -- -p 3210 -H 127.0.0.1` was ready in 111ms. Smoke against that server exited 0 with the same passing lines. The server log did not contain the provider key. The process was stopped. Port 3210 was free afterward.
+
+`node .cursor/skills/verify-orbit/verify.mjs launch` printed `ready` and `signupOpen=yes` on an empty sandbox. `doctor` printed `doctor ok`. `drive chat` printed `drive chat passed` and `smoke passed`, including `first message chat id matches open chat: yes`. A second sandbox ran `drive signup`, `drive signin`, and `drive settings`. Each printed passed. Cleanup removed `.verify/sandbox` and left `.verify/evidence/`.
