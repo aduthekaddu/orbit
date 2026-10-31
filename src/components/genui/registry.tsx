@@ -1,6 +1,7 @@
 "use client";
 
 import { defineRegistry, useStateStore, useStateValue } from "@json-render/react";
+import { useState } from "react";
 import { catalog } from "@/lib/genui/catalog";
 
 const toneClass = {
@@ -97,17 +98,21 @@ function CalloutView({
 
 function ButtonView({ label, note }: { label: string; action: "note"; note: string }) {
   const { set } = useStateStore();
-  const shown = useStateValue<string>("/note");
+  const [shown, setShown] = useState("");
   return (
     <div className="flex flex-col items-start gap-2">
       <button
         className="inline-flex rounded-full bg-primary px-3 py-1.5 text-sm text-primary-foreground"
         type="button"
-        onClick={() => set("/note", note)}
+        onClick={() => {
+          setShown(note);
+          // Callouts may watch /note, so the click also updates the shared value.
+          set("/note", note);
+        }}
       >
         {label}
       </button>
-      {typeof shown === "string" && shown.trim() ? <p className="text-sm text-muted-foreground">{shown}</p> : null}
+      {shown.trim() ? <p className="text-sm text-muted-foreground">{shown}</p> : null}
     </div>
   );
 }

@@ -1,9 +1,9 @@
 import { tool } from "ai";
-import { catalog, RENDER_UI_TOOL } from "./catalog";
+import { catalog, RENDER_UI_TOOL, RENDER_UI_TOOL_DESCRIPTION } from "./catalog";
 import { parseRenderSpec } from "./spec";
 
 export const renderUiTool = tool({
-  description: "Render one UI spec. Arguments are one object with root and elements, not a patch stream.",
+  description: RENDER_UI_TOOL_DESCRIPTION,
   inputSchema: catalog.zodSchema(),
   inputExamples: [
     {

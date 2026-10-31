@@ -65,6 +65,50 @@ export const catalog = defineCatalog(schema, {
   actions: {},
 });
 
+type JsonSchema = {
+  type?: string | string[];
+  const?: unknown;
+  enum?: unknown[];
+  anyOf?: JsonSchema[];
+  properties?: Record<string, JsonSchema>;
+  required?: string[];
+  items?: JsonSchema;
+};
+
+function literal(value: unknown) {
+  return JSON.stringify(value);
+}
+
+function typeName(schema: JsonSchema): string {
+  if (schema.const !== undefined) return literal(schema.const);
+  if (schema.enum) return schema.enum.map(literal).join(" | ");
+  if (schema.anyOf) return schema.anyOf.map(typeName).join(" or ");
+  if (Array.isArray(schema.type)) return schema.type.join(" or ");
+  if (schema.type === "array") return `array of ${schema.items ? typeName(schema.items) : "values"}`;
+  if (schema.type === "object" && schema.properties) {
+    const required = new Set(schema.required ?? []);
+    const fields = Object.entries(schema.properties).map(
+      ([name, prop]) => `${name} (${typeName(prop)}, ${required.has(name) ? "required" : "optional"})`,
+    );
+    return `{ ${fields.join("; ")} }`;
+  }
+  return schema.type ?? "value";
+}
+
+function componentProps(schema: z.ZodType): string {
+  const json = z.toJSONSchema(schema, { io: "input", unrepresentable: "any" }) as JsonSchema;
+  const required = new Set(json.required ?? []);
+  return Object.entries(json.properties ?? {})
+    .map(([name, prop]) => `${name} (${typeName(prop)}, ${required.has(name) ? "required" : "optional"})`)
+    .join("; ");
+}
+
+export function componentPropDocs() {
+  return Object.entries(catalog.data.components)
+    .map(([name, component]) => `${name}: ${componentProps(component.props as z.ZodType)}.`)
+    .join(" ");
+}
+
 export const RENDER_UI_SYSTEM = [
   "Answer in plain text.",
   "When the user wants a card, table, list, metric, key-value pairs, or a callout, call render_ui once.",
@@ -74,4 +118,10 @@ export const RENDER_UI_SYSTEM = [
   "Button action is the string note, and note is the text the click stores.",
   "Metric, list, table, and key-value values may be strings or numbers.",
   "Pass null for an optional string you are not using.",
+  `Component props. ${componentPropDocs()}`,
+].join(" ");
+
+export const RENDER_UI_TOOL_DESCRIPTION = [
+  "Render one UI spec. Arguments are one object with root and elements, not a patch stream.",
+  `Component props. ${componentPropDocs()}`,
 ].join(" ");
