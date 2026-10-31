@@ -21,7 +21,13 @@ export function ChatPanel({
   const runtime = useChatRuntime({
     id: chatId,
     messages: initialMessages,
-    transport: new AssistantChatTransport({ api: "/api/chat" }),
+    transport: new AssistantChatTransport({
+      api: "/api/chat",
+      // assistant-ui swaps the request id for its own local thread id, which would file the reply under a new chat.
+      prepareSendMessagesRequest: ({ body, messages, trigger, messageId }) => ({
+        body: { ...body, id: chatId, messages, trigger, messageId },
+      }),
+    }),
     onFinish: () => {
       router.refresh();
     },
