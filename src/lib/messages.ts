@@ -28,10 +28,26 @@ export function ensureChat(id: string, userId: string) {
   return db.select().from(chats).where(eq(chats.id, id)).get() ?? null;
 }
 
+/** A one-line sidebar title from the first message: code, markdown markers, and line breaks dropped. */
+export function chatTitle(text: string): string {
+  const plain = text
+    .replace(/```[^\n]*\n?([\s\S]*?)(```|$)/g, " $1 ")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+[.)])\s+/gm, "")
+    .replace(/(\*\*|__|~~|[*_`])/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (plain.length <= 80) return plain;
+  const cut = plain.slice(0, 80);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > 50 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
 export function touchChat(id: string, title?: string) {
   const existing = db.select().from(chats).where(eq(chats.id, id)).get();
   if (!existing) return;
-  const nextTitle = title && existing.title === "New chat" ? title.slice(0, 80) : existing.title;
+  const clean = title ? chatTitle(title) : "";
+  const nextTitle = clean && existing.title === "New chat" ? clean : existing.title;
   db.update(chats).set({ title: nextTitle, updatedAt: new Date() }).where(eq(chats.id, id)).run();
 }
 
