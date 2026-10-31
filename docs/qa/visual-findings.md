@@ -67,3 +67,27 @@ The error banner spans the full column and uses the destructive tint at full wid
 `desktop-settings-empty.png`, `desktop-settings-missing-key.png`
 
 "Not checked" and "0 models" are clear enough, but the dot colors carry the state. When there is no key the row could say so directly, since that is the action the screen wants.
+
+## V12. Edit actions are hidden until hover
+
+`inline-user-edit.png`, `inline-reply-edit-after.png`
+
+Copy, Edit, and Edit reply live in action bars that appear on hover. On a touch screen the user has to tap a message once to reveal the bar, then tap Edit. Nothing on the message says it is editable. A small always-visible affordance, or a message menu, would make this discoverable.
+
+## V13. Code header now holds two icons
+
+`inline-code-edit.png`
+
+The header has a pencil and a copy button. They are 24px targets in a 32px strip and read as equal weight even though copy is used more. The pencil also looks like an annotation action rather than an editor toggle.
+
+## V14. The reply editor is a raw markdown textarea
+
+`inline-reply-edit.png`
+
+Editing a reply drops the rendered markdown for a 12px mono textarea with no syntax highlighting and no line numbers. The jump in typography is large for a small copy edit. The code editor uses the same treatment inside the code card.
+
+## V15. The edit composer loses the message copy
+
+`inline-user-edit.png`
+
+While editing, the user bubble becomes a full width raised card with Cancel and Send at the lower right. It reads as a new composer rather than an edit of the bubble above it, and the copy action is gone during the edit. A quieter in-bubble treatment may fit the thread better.
