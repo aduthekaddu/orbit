@@ -1,5 +1,6 @@
 import { and, asc, eq, notInArray, sql } from "drizzle-orm";
 import type { UIMessage } from "ai";
+import { replaceTextParts } from "./chat-parts";
 import { db } from "./db";
 import { chats, messages } from "./db/schema";
 
@@ -69,6 +70,21 @@ export function keepOnlyMessages(chatId: string, ids: string[]) {
   db.delete(messages)
     .where(and(eq(messages.chatId, chatId), notInArray(messages.id, ids)))
     .run();
+}
+
+export function updateMessageText(chatId: string, messageId: string, text: string) {
+  const row = db
+    .select()
+    .from(messages)
+    .where(and(eq(messages.id, messageId), eq(messages.chatId, chatId)))
+    .get();
+  if (!row) return false;
+  const parts = replaceTextParts(JSON.parse(row.parts) as UIMessage["parts"], text);
+  db.update(messages)
+    .set({ content: text, parts: JSON.stringify(parts) })
+    .where(eq(messages.id, messageId))
+    .run();
+  return true;
 }
 
 export function listMessages(chatId: string): UIMessage[] {  const rows = db.select().from(messages).where(eq(messages.chatId, chatId)).orderBy(asc(messages.position)).all();

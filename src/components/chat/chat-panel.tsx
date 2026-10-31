@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { AssistantChatTransport, useChatRuntime } from "@assistant-ui/react-ai-sdk";
 import type { UIMessage } from "ai";
+import { ChatIdProvider } from "./chat-id";
 import { Thread } from "./thread";
 
 export function ChatPanel({
@@ -35,7 +36,9 @@ export function ChatPanel({
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <Thread ready={ready} model={model} />
+      <ChatIdProvider chatId={chatId}>
+        <Thread ready={ready} model={model} />
+      </ChatIdProvider>
     </AssistantRuntimeProvider>
   );
 }
