@@ -14,3 +14,4 @@ data/auth-secret
 npm-debug.log*
 .DS_Store
 coverage
+.verify/
