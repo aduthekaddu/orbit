@@ -28,6 +28,20 @@ function sanitize(message: string, secret: string) {
   return message.split(secret).join("[redacted]");
 }
 
+function cleanErrorText(text: string) {
+  return text.replace(/AI_[A-Za-z]+Error:\s*/g, "").trim();
+}
+
+function streamErrorMessage(error: unknown, secret: string) {
+  if (typeof error === "string") return sanitize(cleanErrorText(error), secret);
+  const message = error instanceof Error ? error.message : "The model request failed";
+  console.error("chat stream error", sanitize(message, secret));
+  if (error instanceof Error && error.name === "AI_InvalidToolInputError") {
+    return sanitize(cleanErrorText(message), secret);
+  }
+  return "The model request failed";
+}
+
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session) return unauthorized();
@@ -82,11 +96,7 @@ export async function POST(request: Request) {
       stream: result.stream,
       tools: chatTools,
       originalMessages: uiMessages,
-      onError: (error) => {
-        const message = error instanceof Error ? error.message : "The model request failed";
-        console.error("chat stream error", sanitize(message, settings.apiKey));
-        return "The model request failed";
-      },
+      onError: (error) => streamErrorMessage(error, settings.apiKey),
       onEnd: async ({ responseMessage, isAborted, outcome }) => {
         if (!assistantHasVisiblePart(responseMessage.parts)) {
           const types = Array.isArray(responseMessage.parts)
