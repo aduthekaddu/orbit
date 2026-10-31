@@ -1,17 +1,16 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { normalizeBaseUrl } from "./base-url";
 import type { ReasoningEffort } from "./settings";
 
 export const OPENCODE_GO_BASE_URL = "https://opencode.ai/inference/go/openai/v1";
 export const OPENCODE_GO_MODELS_URL = "https://opencode.ai/zen/go/v1/models";
 
+export { normalizeBaseUrl };
+
 export type ListedModel = {
   id: string;
   reasoning: boolean | null;
 };
-
-export function normalizeBaseUrl(baseUrl: string) {
-  return baseUrl.trim().replace(/\/+$/, "");
-}
 
 function nonempty(value: string | undefined) {
   const trimmed = value?.trim();
