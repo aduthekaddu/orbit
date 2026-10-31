@@ -94,7 +94,7 @@ While editing, the user bubble becomes a full width raised card with Cancel and 
 
 ## Status after the design pass
 
-Screenshots are `after-*.png` in the same folder. V12 to V15 cover inline editing and are handled on `feat/inline-editing`.
+Screenshots are `after-*.png` in the same folder.
 
 | # | Change | After |
 | --- | --- | --- |
@@ -107,3 +107,7 @@ Screenshots are `after-*.png` in the same folder. V12 to V15 cover inline editin
 | V8 | New titles drop code fences, markdown markers, and line breaks, and cut at a word. Existing titles are unchanged. | `after-desktop-chat-long` |
 | V9 | An empty chat centers the figure and the composer as one group. | `after-desktop-empty-chat`, `after-mobile-empty-chat` |
 | V11 | The status reads "No key" until a key is entered or stored. | `after-desktop-settings-empty` |
+| V12 | On touch screens the action bars stay visible, so Edit is one tap. Desktop keeps them on hover. | `after-inline-mobile-actions` |
+| V13 | The code header shows a text "Edit" next to the copy icon. While editing, both go away and the card border turns violet. | `after-inline-code-edit`, `after-inline-code-edit-mobile` |
+| V14 | The reply editor uses the reply's 14px sans type and grows with its content. The code editor stays mono inside the code card. Both share one Cancel and Save footer. | `after-inline-reply-edit` |
+| V15 | The user edit stays a bubble: same fill, right aligned, sized to its text, with a violet border and small Cancel and Send buttons. | `after-inline-user-edit`, `after-inline-user-edit-mobile` |

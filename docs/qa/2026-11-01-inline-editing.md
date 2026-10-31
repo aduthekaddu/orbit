@@ -52,3 +52,7 @@ Playwright on `127.0.0.1:3212` at 1440x900 and 390x844, with the local mock prov
 - `inline-code-edit-after.png`: saved code.
 - `inline-code-edit-mobile.png`: code editor at 390px.
 - `inline-persisted.png`: reply and code edits after reload.
+
+## Design pass
+
+`feat/design-system` is merged in. The editing UI was then restyled for V12 to V15 in `docs/qa/visual-findings.md`. After screenshots are `after-inline-*.png`. `src/components/chat/editor-footer.tsx` holds the shared Cancel and Save row, and `use-coarse-pointer.ts` keeps action bars visible on touch screens.
