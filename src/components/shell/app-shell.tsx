@@ -39,6 +39,16 @@ export function AppShell({
     setDrawerOpen(false);
   }, [pathname]);
 
+  // CSS hides the drawer on desktop, but an open modal would still block every click.
+  useEffect(() => {
+    const query = window.matchMedia(DESKTOP_QUERY);
+    const close = () => {
+      if (query.matches) setDrawerOpen(false);
+    };
+    query.addEventListener("change", close);
+    return () => query.removeEventListener("change", close);
+  }, []);
+
   // The palette opens from a shortcut, so Dialog has no trigger to restore focus to.
   function setPalette(next: boolean) {
     if (next) {
