@@ -3,7 +3,7 @@ import { z } from "zod";
 import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
 import { assistantHasVisiblePart, settleInterruptedParts } from "@/lib/genui/spec";
 import { chatTools } from "@/lib/genui/tool";
-import { ensureChat, planChatWrite, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
+import { ensureChat, planChatWrite, textFromParts, touchChat, upsertMessage, listMessages } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { getSettings } from "@/lib/settings";
 import { getSession, unauthorized } from "@/lib/session";
@@ -22,6 +22,7 @@ const bodySchema = z.object({
   id: z.string().min(1).max(100),
   messages: z.array(messageSchema).min(1),
   trigger: z.enum(["submit-message", "regenerate-message", "resume-stream"]).optional(),
+  editMessageId: z.string().min(1).max(100).optional(),
   messageId: z.string().min(1).max(100).optional(),
 });
 
@@ -63,9 +64,15 @@ export async function POST(request: Request) {
   if (!chat) return Response.json({ error: "Not found" }, { status: 404 });
 
   const incoming = parsed.data.messages;
-  const write = planChatWrite(chat.id, incoming, parsed.data.trigger, parsed.data.messageId);
-  if (!write) {
-    return Response.json({ error: "A message id belongs to a different chat." }, { status: 409 });
+  const write = planChatWrite(chat.id, incoming, parsed.data.trigger, parsed.data.messageId, parsed.data.editMessageId);
+  if ("error" in write) {
+    if (write.error === "invalid-edit") {
+      return Response.json({ error: "Invalid edit request" }, { status: 400 });
+    }
+    if (write.error === "cross-chat") {
+      return Response.json({ error: "A message id belongs to a different chat." }, { status: 409 });
+    }
+    return Response.json({ error: "The chat changed. Reload and try again." }, { status: 409 });
   }
   const firstUser = incoming.find((message) => message.role === "user");
   const lastUser = incoming.findLast((message) => message.role === "user");
@@ -73,10 +80,16 @@ export async function POST(request: Request) {
   if (title) touchChat(chat.id, title);
   else touchChat(chat.id);
 
+  const stored = new Map(listMessages(chat.id).map((message) => [message.id, message]));
+  const expectedId = write.regenerate ? write.responseId : lastUser?.id;
+  const expectedRow = expectedId ? stored.get(expectedId) : undefined;
+  const expected = expectedRow
+    ? { id: expectedRow.id, content: textFromParts(expectedRow.parts), parts: JSON.stringify(expectedRow.parts) }
+    : undefined;
   const uiMessages = incoming.map((message) => ({
     id: message.id,
     role: message.role,
-    parts: (message.parts ?? []) as UIMessage["parts"],
+    parts: (message.role === "assistant" ? stored.get(message.id)?.parts ?? message.parts ?? [] : message.parts ?? []) as UIMessage["parts"],
   })) as UIMessage[];
 
   try {
@@ -126,6 +139,7 @@ export async function POST(request: Request) {
             parts,
           },
           lastUser?.id,
+          expected,
         );
         touchChat(chat.id);
       },

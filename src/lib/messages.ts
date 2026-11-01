@@ -1,6 +1,8 @@
 import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { UIMessage } from "ai";
+import { replaceTextPart, replaceTextParts } from "./chat-parts";
 import { db } from "./db";
+import { assistantHasVisiblePart } from "./genui/spec";
 import { chats, messages } from "./db/schema";
 
 export function textFromParts(parts: unknown): string {
@@ -51,13 +53,25 @@ export function touchChat(id: string, title?: string) {
   db.update(chats).set({ title: nextTitle, updatedAt: new Date() }).where(eq(chats.id, id)).run();
 }
 
+export type ExpectedMessage = { id: string; content: string; parts: string };
+
 export function upsertMessage(
   chatId: string,
   message: { id: string; role: string; parts: unknown },
   replyTo?: string,
+  expected?: ExpectedMessage,
 ) {
   if (message.role !== "user" && message.role !== "assistant") return true;
-  if (message.role === "assistant" && Array.isArray(message.parts) && message.parts.length === 0) return true;
+  if (message.role === "assistant" && !assistantHasVisiblePart(message.parts)) return true;
+  if (expected) {
+    // The write is only valid while the row it was planned against is still current.
+    const current = db
+      .select({ content: messages.content, parts: messages.parts })
+      .from(messages)
+      .where(and(eq(messages.id, expected.id), eq(messages.chatId, chatId)))
+      .get();
+    if (!current || current.content !== expected.content || current.parts !== expected.parts) return false;
+  }
   const content = textFromParts(message.parts);
   const parts = JSON.stringify(message.parts ?? []);
   const existing = db.select({ chatId: messages.chatId }).from(messages).where(eq(messages.id, message.id)).get();
@@ -74,6 +88,7 @@ export function upsertMessage(
           .where(and(eq(messages.id, replyTo), eq(messages.chatId, chatId)))
           .get()
       : undefined;
+    if (replyTo && !prompt) return false;
     const row = tx
       .select({ position: sql<number>`coalesce(max(${messages.position}), -1)` })
       .from(messages)
@@ -102,21 +117,41 @@ export function upsertMessage(
 }
 
 export type IncomingMessage = { id: string; role: string; parts?: unknown };
+export type WriteResult = "ok" | "cross-chat" | "stale";
 
-export function persistIncoming(chatId: string, incoming: IncomingMessage[]) {
+export function persistIncoming(chatId: string, incoming: IncomingMessage[]): WriteResult {
   const withParts = incoming.filter(
     (message): message is IncomingMessage & { parts: unknown } => Boolean(message.parts),
   );
-  if (withParts.length === 0) return true;
+  if (withParts.length === 0) return "ok";
   const saved = db
     .select({ id: messages.id, chatId: messages.chatId, role: messages.role, content: messages.content, parts: messages.parts })
     .from(messages)
     .where(inArray(messages.id, withParts.map((message) => message.id)))
     .all();
   const byId = new Map(saved.map((row) => [row.id, row]));
+  const tail = withParts.at(-1);
+  // Validate the whole list first so a refused request writes nothing.
   for (const message of withParts) {
     const existing = byId.get(message.id);
-    if (existing && existing.chatId === chatId) {
+    if (!existing) {
+      // A reply with nothing visible is never stored, so the client holds it and resends it. Ignore it.
+      if (message.role === "assistant" && !assistantHasVisiblePart(message.parts)) continue;
+      // Only the tab's new tail prompt may be unknown. Any other unknown id was replaced by an edit.
+      if (message !== tail || message.role !== "user") return "stale";
+      continue;
+    }
+    if (existing.chatId !== chatId) return "cross-chat";
+    if (
+      existing.role === "user" &&
+      (existing.content !== textFromParts(message.parts) || existing.parts !== JSON.stringify(message.parts ?? []))
+    ) {
+      return "stale";
+    }
+  }
+  for (const message of withParts) {
+    const existing = byId.get(message.id);
+    if (existing) {
       // The server owns answers. A stale tab echoes the pre-regenerate text under the same id.
       if (existing.role === "assistant" && message.role === "assistant") continue;
       const content = textFromParts(message.parts);
@@ -124,9 +159,9 @@ export function persistIncoming(chatId: string, incoming: IncomingMessage[]) {
         continue;
       }
     }
-    if (!upsertMessage(chatId, message)) return false;
+    if (!upsertMessage(chatId, message)) return "cross-chat";
   }
-  return true;
+  return "ok";
 }
 
 /** The id this response stores under. A regenerate reuses the answer it replaces, so a failed one leaves that answer alone. */
@@ -150,18 +185,64 @@ function responseIdFor(chatId: string, incoming: IncomingMessage[], trigger?: st
   return crypto.randomUUID();
 }
 
-/** Persist the client list and pick the id the response stores under. Null means an id belongs to another chat. */
+export type ChatWritePlan =
+  | { regenerate: boolean; responseId: string }
+  | { error: "invalid-edit" | "cross-chat" | "stale" };
+
+/** Persist the client list and pick the id the response stores under. */
 export function planChatWrite(
   chatId: string,
   incoming: IncomingMessage[],
   trigger?: string,
   messageId?: string,
-): { regenerate: boolean; responseId: string } | null {
-  if (!persistIncoming(chatId, incoming)) return null;
+  editMessageId?: string,
+): ChatWritePlan {
+  if (editMessageId) {
+    const rows = db.select().from(messages).where(eq(messages.chatId, chatId)).orderBy(asc(messages.position)).all();
+    const index = rows.findIndex((row) => row.id === editMessageId && row.role === "user");
+    const target = rows[index];
+    const edited = incoming.at(-1);
+    if (trigger !== "submit-message" || !target || edited?.role !== "user" || !Array.isArray(edited.parts)) {
+      return { error: "invalid-edit" };
+    }
+    const prefix = rows.slice(0, index);
+    if (incoming.length !== prefix.length + 1 || prefix.some((row, i) => incoming[i]?.id !== row.id)) {
+      return { error: "invalid-edit" };
+    }
+    const ids = incoming.map((message) => message.id);
+    const existing = db.select().from(messages).where(inArray(messages.id, ids)).all();
+    if (existing.some((row) => row.chatId !== chatId || (row.id === edited.id && row.id !== editMessageId))) {
+      return { error: "cross-chat" };
+    }
+    return db.transaction(() => {
+      db.delete(messages).where(and(eq(messages.chatId, chatId), gte(messages.position, target.position))).run();
+      if (persistIncoming(chatId, incoming) !== "ok") throw new Error("Edited history could not be saved");
+      return { regenerate: false, responseId: crypto.randomUUID() };
+    });
+  }
+  const result = persistIncoming(chatId, incoming);
+  if (result !== "ok") return { error: result };
   return {
     regenerate: trigger === "regenerate-message",
     responseId: responseIdFor(chatId, incoming, trigger, messageId),
   };
+}
+
+export function updateMessageText(chatId: string, messageId: string, text: string, partIndex?: number) {
+  const row = db
+    .select()
+    .from(messages)
+    .where(and(eq(messages.id, messageId), eq(messages.chatId, chatId)))
+    .get();
+  if (!row || row.role !== "assistant") return false;
+  const current = JSON.parse(row.parts) as UIMessage["parts"];
+  const parts = partIndex == null ? replaceTextParts(current, text) : replaceTextPart(current, partIndex, text);
+  if (!parts) return false;
+  db.update(messages)
+    .set({ content: textFromParts(parts), parts: JSON.stringify(parts) })
+    .where(eq(messages.id, messageId))
+    .run();
+  return true;
 }
 
 export function listMessages(chatId: string): UIMessage[] {
