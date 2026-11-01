@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 const RING_TILT = "rotate(-28 12 12)";
 
 const tones = {
-  accent: { ring: "stroke-primary/45", arc: "stroke-primary", moon: "fill-primary" },
+  accent: { ring: "stroke-sun/45", arc: "stroke-sun", moon: "fill-sun" },
   mono: { ring: "stroke-muted-foreground/40", arc: "stroke-muted-foreground", moon: "fill-muted-foreground" },
 } as const;
 

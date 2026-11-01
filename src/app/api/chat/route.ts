@@ -1,6 +1,9 @@
-import { convertToModelMessages, createUIMessageStreamResponse, streamText, toUIMessageStream, type UIMessage } from "ai";
+import { convertToModelMessages, createUIMessageStreamResponse, stepCountIs, streamText, toUIMessageStream, type UIMessage } from "ai";
 import { z } from "zod";
-import { ensureChat, keepOnlyMessages, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
+import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
+import { assistantHasVisiblePart, settleInterruptedParts } from "@/lib/genui/spec";
+import { chatTools } from "@/lib/genui/tool";
+import { ensureChat, planChatWrite, textFromParts, touchChat, upsertMessage, listMessages } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { getSettings } from "@/lib/settings";
 import { getSession, unauthorized } from "@/lib/session";
@@ -18,11 +21,28 @@ const messageSchema = z.object({
 const bodySchema = z.object({
   id: z.string().min(1).max(100),
   messages: z.array(messageSchema).min(1),
+  trigger: z.enum(["submit-message", "regenerate-message", "resume-stream"]).optional(),
+  editMessageId: z.string().min(1).max(100).optional(),
+  messageId: z.string().min(1).max(100).optional(),
 });
 
 function sanitize(message: string, secret: string) {
   if (!secret) return message;
   return message.split(secret).join("[redacted]");
+}
+
+function cleanErrorText(text: string) {
+  return text.replace(/AI_[A-Za-z]+Error:\s*/g, "").trim();
+}
+
+function streamErrorMessage(error: unknown, secret: string) {
+  if (typeof error === "string") return sanitize(cleanErrorText(error), secret);
+  const message = error instanceof Error ? error.message : "The model request failed";
+  console.error("chat stream error", sanitize(message, secret));
+  if (error instanceof Error && error.name === "AI_InvalidToolInputError") {
+    return sanitize(cleanErrorText(message), secret);
+  }
+  return "The model request failed";
 }
 
 export async function POST(request: Request) {
@@ -44,27 +64,25 @@ export async function POST(request: Request) {
   if (!chat) return Response.json({ error: "Not found" }, { status: 404 });
 
   const incoming = parsed.data.messages;
-  const keptIds: string[] = [];
-  for (const message of incoming) {
-    if (message.parts) {
-      upsertMessage(chat.id, { id: message.id, role: message.role, parts: message.parts });
-      keptIds.push(message.id);
-    }
+  const write = planChatWrite(chat.id, incoming, parsed.data.trigger, parsed.data.messageId, parsed.data.editMessageId);
+  if (!write) {
+    return Response.json({ error: "A message id belongs to a different chat." }, { status: 409 });
   }
-  keepOnlyMessages(chat.id, keptIds);
   const firstUser = incoming.find((message) => message.role === "user");
+  const lastUser = incoming.findLast((message) => message.role === "user");
   const title = textFromParts(firstUser?.parts).trim();
   if (title) touchChat(chat.id, title);
   else touchChat(chat.id);
 
+  const stored = new Map(listMessages(chat.id).map((message) => [message.id, message]));
   const uiMessages = incoming.map((message) => ({
     id: message.id,
     role: message.role,
-    parts: (message.parts ?? []) as UIMessage["parts"],
+    parts: (message.role === "assistant" ? stored.get(message.id)?.parts ?? message.parts ?? [] : message.parts ?? []) as UIMessage["parts"],
   })) as UIMessage[];
 
   try {
-    const allowReasoning = await modelAllowsReasoning(settings.baseUrl, settings.apiKey, settings.model);
+    const allowReasoning = modelAllowsReasoning(settings.baseUrl, settings.model);
     const result = streamText({
       model: orbitModel({
         baseUrl: settings.baseUrl,
@@ -72,26 +90,26 @@ export async function POST(request: Request) {
         model: settings.model,
         chatId: chat.id,
       }),
-      messages: await convertToModelMessages(uiMessages),
+      instructions: RENDER_UI_SYSTEM,
+      messages: await convertToModelMessages(uiMessages, { tools: chatTools }),
+      tools: chatTools,
+      stopWhen: stepCountIs(1),
       abortSignal: request.signal,
       ...(allowReasoning ? reasoningOptions(settings.reasoningEffort) : {}),
     });
 
     // Send the response id so the client reuses it. Without it the client mints
     // its own id and the next turn stores the assistant reply a second time.
-    const responseId = crypto.randomUUID();
     const uiStream = toUIMessageStream({
       stream: result.stream,
+      tools: chatTools,
       originalMessages: uiMessages,
-      generateMessageId: () => responseId,
-      onError: (error) => {
-        const message = error instanceof Error ? error.message : "The model request failed";
-        console.error("chat stream error", sanitize(message, settings.apiKey));
-        return "The model request failed";
-      },
+      generateMessageId: () => write.responseId,
+      onError: (error) => streamErrorMessage(error, settings.apiKey),
       onEnd: async ({ responseMessage, isAborted, outcome }) => {
-        const text = textFromParts(responseMessage.parts).trim();
-        if (!text) {
+        const interrupted = isAborted || outcome.status !== "completed";
+        const parts = settleInterruptedParts(responseMessage.parts, interrupted);
+        if (!assistantHasVisiblePart(parts)) {
           const types = Array.isArray(responseMessage.parts)
             ? responseMessage.parts
                 .map((part) => (part && typeof part === "object" && "type" in part ? String(part.type) : "?"))
@@ -101,11 +119,16 @@ export async function POST(request: Request) {
           console.error("chat end without text", isAborted ? "aborted" : "finished", status, types.join(",") || "none");
           return;
         }
-        upsertMessage(chat.id, {
-          id: responseMessage.id || crypto.randomUUID(),
-          role: "assistant",
-          parts: responseMessage.parts,
-        });
+        if (write.regenerate && interrupted) return;
+        upsertMessage(
+          chat.id,
+          {
+            id: responseMessage.id || write.responseId,
+            role: "assistant",
+            parts,
+          },
+          lastUser?.id,
+        );
         touchChat(chat.id);
       },
     });

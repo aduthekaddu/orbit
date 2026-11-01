@@ -1,0 +1,117 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import test, { before } from "node:test";
+
+type Modules = {
+  db: typeof import("./db").db;
+  schema: typeof import("./db/schema");
+  persistIncoming: typeof import("./messages").persistIncoming;
+  listMessages: typeof import("./messages").listMessages;
+  planChatWrite: typeof import("./messages").planChatWrite;
+  updateMessageText: typeof import("./messages").updateMessageText;
+  upsertMessage: typeof import("./messages").upsertMessage;
+};
+
+let mods: Modules;
+
+before(async () => {
+  const repo = process.cwd();
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-messages-"));
+  fs.mkdirSync(path.join(sandbox, "data"));
+  fs.cpSync(path.join(repo, "drizzle"), path.join(sandbox, "drizzle"), { recursive: true });
+  process.chdir(sandbox);
+
+  const dbModule = await import("./db");
+  const schema = await import("./db/schema");
+  const messageModule = await import("./messages");
+  mods = {
+    db: dbModule.db,
+    schema,
+    persistIncoming: messageModule.persistIncoming,
+    listMessages: messageModule.listMessages,
+    upsertMessage: messageModule.upsertMessage,
+    planChatWrite: messageModule.planChatWrite,
+    updateMessageText: messageModule.updateMessageText,
+  };
+
+  const now = new Date();
+  mods.db.insert(mods.schema.user).values({ id: "u1", name: "Test", email: "test@orbit.local" }).run();
+  mods.db.insert(mods.schema.chats).values({ id: "c1", userId: "u1", title: "One", createdAt: now, updatedAt: now }).run();
+  mods.db.insert(mods.schema.chats).values({ id: "c2", userId: "u1", title: "Two", createdAt: now, updatedAt: now }).run();
+});
+
+function changes() {
+  return (mods.db.$client.prepare("select total_changes() as n").get() as { n: number }).n;
+}
+
+function message(id: string, role: "user" | "assistant", text: string) {
+  return { id, role, parts: [{ type: "text", text }] };
+}
+
+test("resending a full history writes nothing", () => {
+  const history = [
+    message("m1", "user", "one"),
+    message("m2", "assistant", "two"),
+    message("m3", "user", "three"),
+  ];
+  assert.equal(mods.persistIncoming("c1", history), true);
+  const before = changes();
+  assert.equal(mods.persistIncoming("c1", history), true);
+  assert.equal(changes() - before, 0);
+});
+
+test("a new message is written once", () => {
+  const history = [message("m1", "user", "one"), message("m4", "user", "four")];
+  const before = changes();
+  assert.equal(mods.persistIncoming("c1", history), true);
+  assert.equal(changes() - before, 1);
+});
+
+test("a message id from another chat is rejected", () => {
+  mods.db
+    .insert(mods.schema.messages)
+    .values({ id: "m9", chatId: "c2", role: "user", content: "x", parts: "[]", position: 0, createdAt: new Date() })
+    .run();
+  assert.equal(mods.persistIncoming("c1", [message("m9", "user", "x")]), false);
+});
+
+test("a reply keeps its prompt's place when two requests finish out of order", () => {
+  const now = new Date();
+  mods.db.insert(mods.schema.chats).values({ id: "c3", userId: "u1", title: "Three", createdAt: now, updatedAt: now }).run();
+  assert.equal(mods.persistIncoming("c3", [message("p-a", "user", "prompt a")]), true);
+  assert.equal(
+    mods.persistIncoming("c3", [message("p-a", "user", "prompt a"), message("p-b", "user", "prompt b")]),
+    true,
+  );
+
+  assert.equal(mods.upsertMessage("c3", message("r-b", "assistant", "reply b"), "p-b"), true);
+  assert.equal(mods.upsertMessage("c3", message("r-a", "assistant", "reply a"), "p-a"), true);
+
+  assert.deepEqual(
+    mods.listMessages("c3").map((entry) => entry.id),
+    ["p-a", "r-a", "p-b", "r-b"],
+  );
+});
+
+
+test("explicit user editing replaces later turns and invalid targets leave history intact", () => {
+  const chat = "edit-chat";
+  mods.db.insert(mods.schema.chats).values({ id: chat, userId: "u1", title: "Edit", createdAt: new Date(), updatedAt: new Date() }).run();
+  const history = [message("eu", "user", "old"), message("ea", "assistant", "answer"), message("eu2", "user", "later")];
+  mods.persistIncoming(chat, history);
+  assert.equal(mods.planChatWrite(chat, [message("new", "assistant", "bad")], "submit-message", undefined, "eu"), null);
+  assert.equal(mods.listMessages(chat).length, 3);
+  assert.ok(mods.planChatWrite(chat, [message("new", "user", "edited")], "submit-message", undefined, "eu"));
+  assert.deepEqual(mods.listMessages(chat).map((row) => row.id), ["new"]);
+});
+
+test("reply text editing keeps tool parts and stale echoes cannot overwrite it", () => {
+  const parts = [{ type: "text", text: "before" }, { type: "tool-render_ui", toolCallId: "t1", state: "output-available", input: {}, output: { ok: true } }];
+  mods.upsertMessage("c2", { id: "edited-answer", role: "assistant", parts });
+  assert.equal(mods.updateMessageText("c2", "edited-answer", "after"), true);
+  mods.persistIncoming("c2", [{ id: "edited-answer", role: "assistant", parts }]);
+  const saved = mods.listMessages("c2").find((row) => row.id === "edited-answer")!;
+  assert.deepEqual(saved.parts, [{ type: "text", text: "after" }, parts[1]]);
+});

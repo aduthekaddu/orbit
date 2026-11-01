@@ -1,6 +1,6 @@
 # Design
 
-orbit is a night-sky instrument. Dark only, quiet, fine lines. Personality comes from three things, used sparingly: the orbit mark, hairline figures in empty and blocked states, and 1px borders with an inset highlight instead of heavy shadows.
+orbit is a night-sky instrument. Dark only, quiet, fine lines, lit by one warm color: sunrise on the planet's limb. Personality comes from four things, used sparingly: the orbit mark, the sun color, hairline figures in empty and blocked states, and 1px borders with an inset highlight instead of heavy shadows. No purple. It reads as the stock AI color.
 
 ## Tokens
 
@@ -8,30 +8,32 @@ Every token is a CSS custom property in `src/app/globals.css`. `@theme inline` e
 
 | Token | Value | Tailwind | Use |
 | --- | --- | --- | --- |
-| `--orbit-bg` | `#0b0b10` | | Brand primitive behind `--background` |
-| `--orbit-surface` | `#14141b` | | Brand primitive behind `--card` |
-| `--orbit-border` | `#24242e` | | Brand primitive behind `--border`, `--input` |
-| `--orbit-text` | `#ededf2` | | Brand primitive behind `--foreground` |
-| `--orbit-muted` | `#8a8a99` | | Brand primitive behind `--muted-foreground` |
-| `--orbit-accent` | `#8b7cff` | | Brand primitive behind `--primary`, `--ring` |
+| `--orbit-bg` | `#0b0c0f` | | Brand primitive behind `--background` |
+| `--orbit-surface` | `#131418` | | Brand primitive behind `--card` |
+| `--orbit-border` | `#23252b` | | Brand primitive behind `--border`, `--input` |
+| `--orbit-text` | `#ecebe6` | | Brand primitive behind `--foreground` |
+| `--orbit-muted` | `#8c8d94` | | Brand primitive behind `--muted-foreground` |
+| `--orbit-ivory` | `#f1ece1` | | Brand primitive behind `--primary` |
+| `--orbit-sun` | `#ff9e5e` | | Brand primitive behind `--sun`, `--ring` |
 | `--background` | `--orbit-bg` | `bg-background` | Page |
 | `--foreground` | `--orbit-text` | `text-foreground` | Body text |
 | `--card`, `--card-foreground` | `--orbit-surface`, `--orbit-text` | `bg-card` | Cards, dialogs |
-| `--popover`, `--popover-foreground` | `#191921`, `--orbit-text` | `bg-popover` | Menus, tooltips, select lists |
-| `--primary`, `--primary-foreground` | `--orbit-accent`, `#0b0b10` | `bg-primary` | The one accent. Primary actions, focus, the mark |
-| `--secondary`, `--muted` | `#1b1b24` | `bg-secondary`, `bg-muted` | Quiet fills |
+| `--popover`, `--popover-foreground` | `#18191e`, `--orbit-text` | `bg-popover` | Menus, tooltips, select lists |
+| `--primary`, `--primary-foreground` | `--orbit-ivory`, `#0b0c0f` | `bg-primary` | Primary actions: Save, Send |
+| `--sun` | `--orbit-sun` | `bg-sun`, `text-sun` | The one lit color. The mark, the active chat, the current prompt in the thread map, links' underline, focus |
+| `--secondary`, `--muted` | `#1a1b20` | `bg-secondary`, `bg-muted` | Quiet fills |
 | `--muted-foreground` | `--orbit-muted` | `text-muted-foreground` | Secondary text |
-| `--accent` | `#1f1f29` | `bg-accent` | Hover fill |
-| `--destructive`, `--negative` | `#ff6b7a` | `text-destructive` | Errors |
+| `--accent` | `#1e1f25` | `bg-accent` | Hover fill |
+| `--destructive`, `--negative` | `#ff6259` | `text-destructive` | Errors |
 | `--border`, `--input` | `--orbit-border` | `border` (default color) | Hairline borders |
-| `--border-strong` | `#30303c` | `border-border-strong` | Hover and selected borders |
-| `--ring` | `--orbit-accent` | `ring-ring` | Focus rings |
-| `--canvas` | `#07070a` | `bg-canvas` | Darker than the page, for wells |
-| `--surface-sunken` | `#0f0f15` | `bg-surface-sunken` | Inputs, code blocks |
-| `--surface-raised` | `#1b1b24` | `bg-surface-raised` | Kbd, slider track |
-| `--positive`, `--warning`, `--info` | `#3dd68c`, `#f5b451`, `#5ec8f2` | `text-positive` | Status |
-| `--skeleton`, `--skeleton-highlight` | `#1b1b24`, `#2a2a36` | `shimmer` | Loading placeholders |
-| `--chart-1` to `--chart-5` | violet, sky, green, amber, pink | `fill-chart-1` | Data series, in order |
+| `--border-strong` | `#33353d` | `border-border-strong` | Hover and selected borders |
+| `--ring` | `--orbit-sun` | `ring-ring` | Focus rings |
+| `--canvas` | `#07080a` | `bg-canvas` | Darker than the page, for wells |
+| `--surface-sunken` | `#0e0f12` | `bg-surface-sunken` | Inputs, code blocks |
+| `--surface-raised` | `#1d1e24` | `bg-surface-raised` | Kbd, slider track |
+| `--positive`, `--warning`, `--info` | `#4fd18b`, `#f2cf4a`, `#5ec8f2` | `text-positive` | Status |
+| `--skeleton`, `--skeleton-highlight` | `#1a1b20`, `#282a31` | `shimmer` | Loading placeholders |
+| `--chart-1` to `--chart-5` | sun, sky, green, yellow, pink | `fill-chart-1` | Data series, in order |
 | `--syntax-*` | keyword, string, number, function, comment, punctuation, builtin, class, operator | | Code highlighting |
 | `--hairline-plate/hi/edge/mid/lo/stroke` | page, text, muted, muted mix, border, `0.9` | | Hairline figure theme |
 | `--radius` | `0.625rem` | `rounded-sm` to `rounded-xl` | Corner radius scale |
@@ -56,7 +58,9 @@ Utilities: `num` (Geist Mono, tabular figures), `shimmer`, `scrollbar-none`, `sc
 - **Type.** Geist Sans and Geist Mono from the `geist` package, self-hosted. No font CDN, no runtime requests. Numbers use tabular figures (`num` or `tabular-nums`). Sentence case everywhere.
 - **Copy.** Short labels only. No taglines, helper text, or secondary labels. If a screen needs explaining, fix the layout.
 - **Lines, not shadows.** 1px `border`, `shadow-card` on raised surfaces, `shadow-float` only on things that float (menus, dialogs, tooltips).
-- **Accent.** Violet appears once or twice per screen: the primary action, focus, the sidebar mark. Marks repeated down the thread use `tone="mono"` and turn violet only while busy.
+- **Accent.** Primary actions are ivory. Sun appears once or twice per screen: the mark, the active chat, the current prompt. Marks repeated down the thread use `tone="mono"` and turn sun only while busy. A selected toggle is a raised surface, not a tint.
+- **Depth.** On dark, depth comes from a lighter surface. The composer lifts to `bg-popover` on focus instead of drawing a ring.
+- **Touch.** On `pointer: coarse` every control has a 44px hit area. `globals.css` grows buttons and links with a pseudo-element. A control whose parent clips it grows its own box with `pointer-coarse:`.
 - **Icons.** `@phosphor-icons/react`, weight `light` by default, `regular` at 14px and below. Import the `*Icon` names (`XIcon`, not the deprecated `X`). In a server component import from `@phosphor-icons/react/ssr`.
 - **Motion.** 150 to 250ms, `ease-orbit`. Messages enter with `animate-rise`. No bouncing. `prefers-reduced-motion` cuts every animation and transition to near zero, and the mark's satellite stops.
 - **Width.** The chat column and every json-render widget are capped at `max-w-widget`.
@@ -66,6 +70,10 @@ Utilities: `num` (Geist Mono, tabular figures), `shimmer`, `scrollbar-none`, `sc
 `src/components/ui/` holds shadcn-style primitives on individual `@radix-ui/react-*` packages: `Button`, `Input`, `Label`, `Slider`, `Tooltip`, `ToggleGroup`, `Select`, `Dialog`, `Skeleton`, `Kbd`. Each sets `data-slot` for styling from a parent.
 
 `OrbitMark` (`src/components/orbit-mark.tsx`) is the app's only loading indicator. Pass `busy` while the assistant is thinking or streaming and the moon travels the ring, passing behind the planet on the far side. `tone` is `"accent"` (violet ring and moon) or `"mono"` (muted). It is `aria-hidden`, so pair it with a status label where the state matters to a screen reader.
+
+`ThreadMap` (`src/components/chat/thread-map.tsx`) is a rail of ticks on the thread's right edge, one per prompt, shown from three prompts when the thread is at least 52rem wide. Ticks for turns in view are brighter and the current turn is sun. Hovering or focusing the rail opens the prompt list. A row jumps to its prompt and moves focus there. `Alt+Up` and `Alt+Down` step between prompts. The current-turn math lives in `src/lib/thread-map.ts`.
+
+A chat with no provider and no messages shows the provider form in place, so the first run never leaves the chat. Saving refreshes the route and the composer appears.
 
 `ScrollFade` (`src/components/ui/scroll-fade.tsx`) wraps anything that scrolls on one axis and fades the edge that has more content behind it. Pass `fade` as the color of the surface behind the content. Code blocks, markdown tables, and the command palette use it. A cut line or row without a fade reads as a layout bug.
 

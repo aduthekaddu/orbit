@@ -39,6 +39,16 @@ export function AppShell({
     setDrawerOpen(false);
   }, [pathname]);
 
+  // CSS hides the drawer on desktop, but an open modal would still block every click.
+  useEffect(() => {
+    const query = window.matchMedia(DESKTOP_QUERY);
+    const close = () => {
+      if (query.matches) setDrawerOpen(false);
+    };
+    query.addEventListener("change", close);
+    return () => query.removeEventListener("change", close);
+  }, []);
+
   // The palette opens from a shortcut, so Dialog has no trigger to restore focus to.
   function setPalette(next: boolean) {
     if (next) {
@@ -68,6 +78,11 @@ export function AppShell({
     else setDrawerOpen(true);
   }
 
+  function toggleSidebar() {
+    if (window.matchMedia(DESKTOP_QUERY).matches) setCollapsed(!sidebar.collapsed);
+    else setDrawerOpen((open) => !open);
+  }
+
   async function newChat() {
     if (newChatPending) return;
     setNewChatPending(true);
@@ -85,7 +100,7 @@ export function AppShell({
   useShortcuts({
     palette: () => setPalette(!paletteOpen),
     newChat,
-    sidebar: () => setCollapsed(!sidebar.collapsed),
+    sidebar: toggleSidebar,
   });
 
   const title = pathname === "/settings" ? "Settings" : chats.find((chat) => pathname === `/c/${chat.id}`)?.title;
@@ -156,7 +171,13 @@ export function AppShell({
         {children}
       </div>
 
-      <CommandPalette open={paletteOpen} onOpenChange={setPalette} chats={chats} onNewChat={newChat} />
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPalette}
+        chats={chats}
+        onNewChat={newChat}
+        onAction={() => setDrawerOpen(false)}
+      />
     </div>
   );
 }

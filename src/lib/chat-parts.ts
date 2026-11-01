@@ -36,3 +36,7 @@ export function replaceCode(text: string, code: string, next: string, start?: nu
   if (index === -1) return text;
   return text.slice(0, index) + next + keepNewline + text.slice(index + code.length);
 }
+
+export function editedMessageText(parts: readonly { type: string; text?: string }[], index: number, text: string): string {
+  return parts.flatMap((part, current) => part.type === "text" ? [current === index ? text : part.text ?? ""] : []).join("\n\n");
+}

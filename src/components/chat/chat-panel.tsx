@@ -1,9 +1,11 @@
 "use client";
 
+import { useRef } from "react";
 import { useRouter } from "next/navigation";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
-import { AssistantChatTransport, useChatRuntime } from "@assistant-ui/react-ai-sdk";
+import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
 import type { UIMessage } from "ai";
+import { orbitChatTransport } from "@/lib/chat-transport";
 import { ChatIdProvider } from "./chat-id";
 import { Thread } from "./thread";
 
@@ -19,16 +21,11 @@ export function ChatPanel({
   model: string;
 }) {
   const router = useRouter();
+  const editMessageId = useRef<string | null>(null);
   const runtime = useChatRuntime({
     id: chatId,
     messages: initialMessages,
-    transport: new AssistantChatTransport({
-      api: "/api/chat",
-      // assistant-ui swaps the request id for its own local thread id, which would file the reply under a new chat.
-      prepareSendMessagesRequest: ({ body, messages, trigger, messageId }) => ({
-        body: { ...body, id: chatId, messages, trigger, messageId },
-      }),
-    }),
+    transport: orbitChatTransport(chatId, { editMessageId: () => { const id = editMessageId.current; editMessageId.current = null; return id; } }),
     onFinish: () => {
       router.refresh();
     },
@@ -36,7 +33,7 @@ export function ChatPanel({
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <ChatIdProvider chatId={chatId}>
+      <ChatIdProvider chatId={chatId} onEdit={(id) => { editMessageId.current = id; }}>
         <Thread ready={ready} model={model} />
       </ChatIdProvider>
     </AssistantRuntimeProvider>

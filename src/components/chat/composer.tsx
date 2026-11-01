@@ -6,13 +6,13 @@ import { ArrowUpIcon, StopIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 
 const roundAction =
-  "flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors duration-150 ease-orbit hover:bg-primary/90 disabled:bg-surface-raised disabled:text-muted-foreground/60";
+  "flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground transition-[background-color,color,scale] duration-150 ease-orbit hover:bg-primary/90 enabled:active:scale-90 disabled:bg-surface-raised disabled:text-muted-foreground/60";
 
 export function Composer({ ready, model }: { ready: boolean; model: string }) {
   return (
     <ComposerPrimitive.Root
       className={cn(
-        "rounded-2xl border bg-card shadow-card transition-[border-color,box-shadow] duration-200 ease-orbit focus-within:border-border-strong focus-within:ring-[3px] focus-within:ring-primary/10",
+        "rounded-2xl border bg-card shadow-card transition-[border-color,background-color] duration-200 ease-orbit focus-within:border-border-strong focus-within:bg-popover",
         !ready && "border-dashed bg-transparent shadow-none",
       )}
     >
@@ -27,9 +27,9 @@ export function Composer({ ready, model }: { ready: boolean; model: string }) {
         {model ? (
           <Link
             href="/settings"
-            className="min-w-0 truncate rounded-full border px-2 py-0.5 font-mono text-2xs text-muted-foreground transition-colors duration-150 ease-orbit hover:border-border-strong hover:text-foreground"
+            className="min-w-0 rounded-full border px-2 py-0.5 font-mono text-2xs text-muted-foreground transition-colors duration-150 ease-orbit hover:border-border-strong hover:text-foreground"
           >
-            {model}
+            <span className="block truncate">{model}</span>
           </Link>
         ) : (
           <span />

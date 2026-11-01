@@ -1,0 +1,396 @@
+import http from "node:http";
+
+const PORT = Number(process.env.MOCK_PORT ?? 3299);
+const MODEL = process.env.MOCK_MODEL ?? "mock-genui";
+
+function allSpec() {
+  return {
+    root: "card",
+    elements: {
+      card: {
+        type: "Card",
+        props: { title: "Quarterly report", description: "A generated view with every catalog component." },
+        children: ["metric", "kv", "table", "list", "callout", "text", "button"],
+      },
+      metric: {
+        type: "Metric",
+        props: { label: "Active users", value: 1234, hint: "Up 12% from last week" },
+        children: [],
+      },
+      kv: {
+        type: "KeyValue",
+        props: {
+          items: [
+            { label: "Owner", value: "Ada" },
+            { label: "Region", value: "EU" },
+            { label: "Budget", value: 42000 },
+          ],
+        },
+        children: [],
+      },
+      table: {
+        type: "Table",
+        props: {
+          columns: ["Name", "Role", "Score"],
+          rows: [
+            ["Ada", "Engineer", 98],
+            ["Grace", "Admiral", 91],
+            ["Linus", "Maintainer", 87],
+          ],
+        },
+        children: [],
+      },
+      list: {
+        type: "List",
+        props: { items: ["Ship the renderer", "Review the specs", "Update the docs"] },
+        children: [],
+      },
+      callout: {
+        type: "Callout",
+        props: {
+          tone: "info",
+          title: "Heads up",
+          text: "The note button writes to shared state.",
+          statePath: "/note",
+        },
+        children: [],
+      },
+      text: {
+        type: "Text",
+        props: { label: "Editable text", content: "Click this sentence to edit it in place.", format: "plain" },
+        children: [],
+      },
+      button: {
+        type: "Button",
+        props: { label: "Save note", action: "note", note: "Saved from the generated button." },
+        children: [],
+      },
+    },
+  };
+}
+
+function hugeTableSpec() {
+  const columns = ["Row", "Team", "Owner", "Status", "Score", "Budget", "Region", "Updated"];
+  const rows = Array.from({ length: 220 }, (_, index) => [
+    index + 1,
+    `Team ${(index % 12) + 1}`,
+    `Owner ${index + 1}`,
+    index % 3 === 0 ? "Blocked" : "Active",
+    (index * 7) % 100,
+    (index + 1) * 1000,
+    index % 2 === 0 ? "EU" : "US",
+    `2026-10-${String((index % 28) + 1).padStart(2, "0")}`,
+  ]);
+  return {
+    root: "card",
+    elements: {
+      card: {
+        type: "Card",
+        props: { title: "Huge table", description: "A 220 by 8 table." },
+        children: ["table"],
+      },
+      table: { type: "Table", props: { columns, rows }, children: [] },
+    },
+  };
+}
+
+function longTextSpec() {
+  const longWord = "supercalifragilisticexpialidocious".repeat(80);
+  const paragraph = Array.from(
+    { length: 40 },
+    (_, index) => `Sentence ${index + 1} carries enough words to wrap across lines in a narrow column.`,
+  ).join(" ");
+  return {
+    root: "card",
+    elements: {
+      card: {
+        type: "Card",
+        props: { title: `Long text ${longWord.slice(0, 120)}`, description: paragraph },
+        children: ["list", "callout", "table", "text"],
+      },
+      list: {
+        type: "List",
+        props: { items: [longWord, `${paragraph} ${paragraph}`, "https://example.com/" + "segment/".repeat(80)] },
+        children: [],
+      },
+      callout: {
+        type: "Callout",
+        props: { tone: "warning", title: "Long callout", text: `${paragraph} ${paragraph}` },
+        children: [],
+      },
+      table: {
+        type: "Table",
+        props: {
+          columns: ["Long value", "Note"],
+          rows: [[longWord, paragraph], ["short", `${paragraph} ${paragraph}`]],
+        },
+        children: [],
+      },
+      text: {
+        type: "Text",
+        props: { label: "Long code", content: longWord, format: "code" },
+        children: [],
+      },
+    },
+  };
+}
+
+function invalidPropsSpec() {
+  return {
+    root: "card",
+    elements: {
+      card: { type: "Card", props: { title: 42, description: null }, children: ["metric"] },
+      metric: { type: "Metric", props: { label: "Checks", value: "1", hint: null }, children: [] },
+    },
+  };
+}
+
+function missingPropsSpec() {
+  return {
+    root: "card",
+    elements: {
+      card: { type: "Card", props: { title: "Missing props" }, children: ["metric", "callout"] },
+      metric: { type: "Metric", props: { label: "No value here" }, children: [] },
+      callout: { type: "Callout", props: { text: "No tone here" }, children: [] },
+    },
+  };
+}
+
+function unknownTypeSpec() {
+  return {
+    root: "chart",
+    elements: {
+      chart: { type: "Chart", props: { series: [1, 2, 3] }, children: [] },
+    },
+  };
+}
+
+function danglingChildSpec() {
+  return {
+    root: "card",
+    elements: {
+      card: { type: "Card", props: { title: "Dangling child" }, children: ["ghost"] },
+    },
+  };
+}
+
+function textSpec() {
+  return {
+    root: "card",
+    elements: {
+      card: { type: "Card", props: { title: "Text only" }, children: ["text"] },
+      text: { type: "Text", props: { content: "A short note." }, children: [] },
+    },
+  };
+}
+
+function specFor(scenario) {
+  switch (scenario) {
+    case "all":
+    case "reload":
+      return allSpec();
+    case "huge":
+      return hugeTableSpec();
+    case "long":
+      return longTextSpec();
+    case "invalid":
+      return invalidPropsSpec();
+    case "missing":
+      return missingPropsSpec();
+    case "unknown":
+      return unknownTypeSpec();
+    case "dangling":
+      return danglingChildSpec();
+    case "text":
+      return textSpec();
+    default:
+      return null;
+  }
+}
+
+function lastUserText(body) {
+  const messages = Array.isArray(body?.messages) ? body.messages : [];
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || message.role !== "user") continue;
+    if (typeof message.content === "string") return message.content;
+    if (Array.isArray(message.content)) {
+      return message.content
+        .map((part) => (part && typeof part === "object" && typeof part.text === "string" ? part.text : ""))
+        .join("");
+    }
+  }
+  return "";
+}
+
+function scenarioOf(text) {
+  const match = /\[qa:([a-z-]+)\]/.exec(text);
+  return match?.[1] ?? "text";
+}
+
+function chunk(choices, extra = {}) {
+  return {
+    id: "chatcmpl-mock",
+    object: "chat.completion.chunk",
+    created: Math.floor(Date.now() / 1000),
+    model: MODEL,
+    choices,
+    ...extra,
+  };
+}
+
+function send(res, payload) {
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+function start(res) {
+  res.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-cache, no-transform",
+    connection: "keep-alive",
+  });
+  send(res, chunk([{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: null }]));
+}
+
+function textResponse(res, text) {
+  start(res);
+  for (const part of text.match(/.{1,24}/gs) ?? []) {
+    send(res, chunk([{ index: 0, delta: { content: part }, finish_reason: null }]));
+  }
+  send(res, chunk([{ index: 0, delta: {}, finish_reason: "stop" }]));
+  res.write("data: [DONE]\n\n");
+  res.end();
+}
+
+function toolResponse(res, scenario, spec) {
+  const args = JSON.stringify(spec);
+  const id = `call_${scenario}_${Date.now()}`;
+  start(res);
+  send(
+    res,
+    chunk([
+      {
+        index: 0,
+        delta: {
+          tool_calls: [{ index: 0, id, type: "function", function: { name: "render_ui", arguments: "" } }],
+        },
+        finish_reason: null,
+      },
+    ]),
+  );
+  const cut = scenario === "truncated" ? Math.floor(args.length * 0.45) : args.length;
+  const payload = args.slice(0, cut);
+  const step = scenario === "huge" ? 160 : 48;
+  let offset = 0;
+  const write = () => {
+    if (offset >= payload.length) {
+      if (scenario === "truncated") {
+        setTimeout(() => res.destroy(), 60);
+        return;
+      }
+      send(res, chunk([{ index: 0, delta: {}, finish_reason: "tool_calls" }]));
+      res.write("data: [DONE]\n\n");
+      res.end();
+      return;
+    }
+    const part = payload.slice(offset, offset + step);
+    offset += step;
+    send(
+      res,
+      chunk([
+        {
+          index: 0,
+          delta: { tool_calls: [{ index: 0, function: { arguments: part } }] },
+          finish_reason: null,
+        },
+      ]),
+    );
+    setTimeout(write, 1);
+  };
+  write();
+}
+
+function malformedResponse(res) {
+  start(res);
+  send(
+    res,
+    chunk([
+      {
+        index: 0,
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              id: `call_malformed_${Date.now()}`,
+              type: "function",
+              function: { name: "render_ui", arguments: '{"root":"card","elements":{' },
+            },
+          ],
+        },
+        finish_reason: null,
+      },
+    ]),
+  );
+  send(res, chunk([{ index: 0, delta: {}, finish_reason: "tool_calls" }]));
+  res.write("data: [DONE]\n\n");
+  res.end();
+}
+
+const server = http.createServer((req, res) => {
+  if (!req.url) {
+    res.writeHead(404).end();
+    return;
+  }
+  if (req.method === "GET" && req.url.endsWith("/models")) {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ object: "list", data: [{ id: MODEL, object: "model", capabilities: { reasoning: false } }] }));
+    return;
+  }
+  if (req.method !== "POST" || !req.url.endsWith("/chat/completions")) {
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: "not found" }));
+    return;
+  }
+  let raw = "";
+  req.on("data", (part) => {
+    raw += part;
+  });
+  req.on("end", () => {
+    let body = {};
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      body = {};
+    }
+    const scenario = scenarioOf(lastUserText(body));
+    console.log(`mock request scenario=${scenario}`);
+    if (scenario === "truncated") {
+      toolResponse(res, scenario, allSpec());
+      return;
+    }
+    if (scenario === "malformed") {
+      malformedResponse(res);
+      return;
+    }
+    if (scenario === "plain" || scenario === "recover") {
+      textResponse(res, scenario === "recover" ? "Recovered after the failed stream." : "pong");
+      return;
+    }
+    const spec = specFor(scenario);
+    if (!spec) {
+      textResponse(res, "pong");
+      return;
+    }
+    toolResponse(res, scenario, spec);
+  });
+});
+
+server.listen(PORT, "127.0.0.1", () => {
+  console.log(`mock provider on http://127.0.0.1:${PORT}/v1 model=${MODEL}`);
+});
+
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.on(signal, () => {
+    server.close(() => process.exit(0));
+  });
+}

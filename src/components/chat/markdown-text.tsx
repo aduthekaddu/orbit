@@ -2,8 +2,9 @@
 
 import { useMemo, useState, type ComponentProps, type ElementType, type JSX } from "react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
-import { useAuiState } from "@assistant-ui/react";
+import { useAui, useAuiState } from "@assistant-ui/react";
 import remarkGfm from "remark-gfm";
+import { editedMessageText } from "@/lib/chat-parts";
 import { cn } from "@/lib/utils";
 import { ScrollFade } from "@/components/ui/scroll-fade";
 import { CodeEditContext } from "./code-edit-context";
@@ -51,7 +52,7 @@ function Link({ node: _node, className, ...props }: ComponentProps<"a"> & { node
     <a
       target="_blank"
       rel="noreferrer noopener"
-      className={cn("text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary", className)}
+      className={cn("text-foreground underline decoration-sun/50 underline-offset-2 hover:decoration-sun", className)}
       {...props}
     />
   );
@@ -71,6 +72,8 @@ const components = { ...styledElements, a: Link, table: Table, CodeHeader, Synta
 const remarkPlugins = [remarkGfm];
 
 export function MarkdownText({ className, editable = false }: { className?: string; editable?: boolean }) {
+  const aui = useAui();
+  const parts = useAuiState((s) => s.message.parts);
   const partText = useAuiState((s) => (s.part.type === "text" ? s.part.text : ""));
   const messageId = useAuiState((s) => s.message.id);
   const running = useAuiState((s) => s.message.status?.type === "running");
@@ -78,8 +81,16 @@ export function MarkdownText({ className, editable = false }: { className?: stri
   const { save, saving, error } = useSaveMessageText();
 
   const codeEdit = useMemo(
-    () => ({ enabled: editable && Boolean(messageId) && !running, text: partText, active, setActive, save, messageId, saving, error }),
-    [editable, messageId, running, partText, active, save, saving, error],
+    () => ({
+      enabled: editable && Boolean(messageId) && !running,
+      text: partText, active, setActive, messageId, saving, error,
+      save: (id: string, text: string) => {
+        const query = aui.part.query;
+        if (!query || !("index" in query) || typeof query.index !== "number") return Promise.resolve(false);
+        return save(id, editedMessageText(parts, query.index, text));
+      },
+    }),
+    [aui, parts, editable, messageId, running, partText, active, save, saving, error],
   );
 
   return (

@@ -3,7 +3,7 @@
 import { useState, type KeyboardEvent } from "react";
 import { Highlight, type PrismTheme } from "prism-react-renderer";
 import type { CodeHeaderProps, SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
-import { CaretDownIcon, CheckIcon, CopyIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, CheckIcon, CopyIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { replaceCode } from "@/lib/chat-parts";
 import { cn } from "@/lib/utils";
 import { ScrollFade } from "@/components/ui/scroll-fade";
@@ -41,7 +41,7 @@ function codeStart(node: CodeHeaderProps["node"], text: string, code: string) {
 }
 
 export function CodeHeader({ language, code, node }: CodeHeaderProps) {
-  const { copied, copy } = useCopy();
+  const { copied, failed, copy } = useCopy();
   const edit = useCodeEdit();
   const start = edit ? codeStart(node, edit.text, code) : -1;
   const active = edit?.active === start;
@@ -49,11 +49,12 @@ export function CodeHeader({ language, code, node }: CodeHeaderProps) {
   return (
     <div
       className={cn(
-        "mt-4 flex h-8 items-center justify-between rounded-t-lg border border-b-0 bg-surface-sunken pr-1 pl-3 transition-colors duration-150 ease-orbit",
+        "mt-4 flex h-8 pointer-coarse:h-11 items-center justify-between rounded-t-lg border border-b-0 bg-surface-sunken pr-1 pl-3 transition-colors duration-150 ease-orbit",
         active && "border-primary/40",
       )}
     >
       <span className="font-mono text-2xs text-muted-foreground">{language || "text"}</span>
+      <span aria-live="polite" className="sr-only">{copied ? "Copied" : failed ? "Copy failed" : ""}</span>
       {active ? null : (
         <div className="flex items-center gap-0.5">
           {edit?.enabled ? (
@@ -61,7 +62,7 @@ export function CodeHeader({ language, code, node }: CodeHeaderProps) {
               type="button"
               onClick={() => edit.setActive(start)}
               aria-label="Edit code"
-              className="flex h-6 items-center rounded-md px-2 text-2xs text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className="flex h-6 pointer-coarse:h-11 items-center rounded-md px-2 text-2xs text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
               Edit
             </button>
@@ -69,10 +70,10 @@ export function CodeHeader({ language, code, node }: CodeHeaderProps) {
           <button
             type="button"
             onClick={() => copy(code)}
-            aria-label={copied ? "Copied" : "Copy code"}
-            className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            aria-label={copied ? "Copied" : failed ? "Copy failed" : "Copy code"}
+            className="flex size-6 pointer-coarse:size-11 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
-            {copied ? <CheckIcon weight="regular" className="size-3.5" /> : <CopyIcon weight="regular" className="size-3.5" />}
+            {copied ? <CheckIcon weight="regular" className="size-3.5" /> : failed ? <WarningCircleIcon className="size-3.5 text-destructive" /> : <CopyIcon weight="regular" className="size-3.5" />}
           </button>
         </div>
       )}

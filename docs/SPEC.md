@@ -34,3 +34,4 @@ Self-hosted chat, shaped like ChatGPT or Claude, running on your machine.
 4. **Sandbox tool.** `dockerode` container with no network, CPU and memory limits, a read-only root filesystem, and a non-root user.
 5. **GitHub.** GitHub's MCP server through `@ai-sdk/mcp`.
 6. **Memory.** FTS5, `sqlite-vec`, and Ollama `nomic-embed-text`. A nightly job consolidates memory ("dreaming").
+7. **Deploy.** Expose the app through a Cloudflare tunnel at orbit.aduthekaddu.in, behind Cloudflare Access on the free tier. better-auth stays inside.

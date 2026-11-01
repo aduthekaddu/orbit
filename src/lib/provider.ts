@@ -1,16 +1,38 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { normalizeBaseUrl } from "./base-url";
 import type { ReasoningEffort } from "./settings";
 
 export const OPENCODE_GO_BASE_URL = "https://opencode.ai/inference/go/openai/v1";
 export const OPENCODE_GO_MODELS_URL = "https://opencode.ai/zen/go/v1/models";
+
+export { normalizeBaseUrl };
 
 export type ListedModel = {
   id: string;
   reasoning: boolean | null;
 };
 
-export function normalizeBaseUrl(baseUrl: string) {
-  return baseUrl.trim().replace(/\/+$/, "");
+function nonempty(value: string | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+export function credentialsForModelList(input: {
+  requestedBaseUrl?: string;
+  requestedApiKey?: string;
+  savedBaseUrl?: string;
+  savedApiKey?: string;
+}): { baseUrl: string; apiKey: string } | null {
+  const requestedBaseUrl = nonempty(input.requestedBaseUrl);
+  const requestedApiKey = nonempty(input.requestedApiKey);
+  const savedBaseUrl = nonempty(input.savedBaseUrl);
+  const savedApiKey = nonempty(input.savedApiKey);
+  const baseUrl = requestedBaseUrl ?? savedBaseUrl;
+  if (!baseUrl) return null;
+  const sameSavedBase = savedBaseUrl !== undefined && normalizeBaseUrl(baseUrl) === normalizeBaseUrl(savedBaseUrl);
+  const apiKey = requestedApiKey ?? (sameSavedBase ? savedApiKey : undefined);
+  if (!apiKey) return null;
+  return { baseUrl, apiKey };
 }
 
 export function openCodeSessionHeader(baseUrl: string, chatId: string): Record<string, string> | undefined {
@@ -158,26 +180,61 @@ async function fetchModels(url: string, apiKey: string, extraHeaders?: Record<st
   }
 }
 
+export const MODEL_META_TTL_MS = 5 * 60 * 1000;
+
+type ModelMeta = { reasoning: boolean | null; expiresAt: number };
+
+const modelMeta = new Map<string, ModelMeta>();
+
+function metaKey(baseUrl: string, modelId: string) {
+  return `${normalizeBaseUrl(baseUrl)}\0${modelId}`;
+}
+
+function rememberModels(baseUrl: string, models: ListedModel[], now = Date.now()) {
+  const prefix = `${normalizeBaseUrl(baseUrl)}\0`;
+  for (const key of modelMeta.keys()) {
+    if (key.startsWith(prefix)) modelMeta.delete(key);
+  }
+  const expiresAt = now + MODEL_META_TTL_MS;
+  for (const model of models) {
+    modelMeta.set(metaKey(baseUrl, model.id), { reasoning: model.reasoning, expiresAt });
+  }
+}
+
 /** Null means no endpoint answered. An empty array means the provider has no models. */
 export async function listModels(baseUrl: string, apiKey: string): Promise<ListedModel[] | null> {
   const base = normalizeBaseUrl(baseUrl);
   const session = openCodeSessionHeader(base, "models");
-  const primary = await fetchModels(`${base}/models`, apiKey, session);
-  if (primary && primary.length > 0) return primary;
+  let primary: ListedModel[] | null = null;
+  try {
+    primary = await fetchModels(`${base}/models`, apiKey, session);
+  } catch {
+    primary = null;
+  }
+  if (primary && primary.length > 0) {
+    rememberModels(base, primary);
+    return primary;
+  }
   if (base === OPENCODE_GO_BASE_URL) {
     const fallback = await fetchModels(OPENCODE_GO_MODELS_URL, apiKey, { "x-opencode-session": "models" });
-    if (fallback) return fallback;
+    if (fallback) {
+      rememberModels(base, fallback);
+      return fallback;
+    }
   }
-  return primary;
+  if (primary) {
+    rememberModels(base, primary);
+    return primary;
+  }
+  return null;
 }
 
-export async function modelAllowsReasoning(baseUrl: string, apiKey: string, modelId: string): Promise<boolean> {
-  try {
-    const models = await listModels(baseUrl, apiKey);
-    const match = models?.find((model) => model.id === modelId);
-    if (!match || match.reasoning == null) return true;
-    return match.reasoning;
-  } catch {
+export function modelAllowsReasoning(baseUrl: string, modelId: string, now = Date.now()): boolean {
+  const key = metaKey(baseUrl, modelId);
+  const hit = modelMeta.get(key);
+  if (!hit || hit.expiresAt <= now) {
+    if (hit) modelMeta.delete(key);
     return true;
   }
+  return hit.reasoning !== false;
 }

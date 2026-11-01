@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { normalizeBaseUrl } from "./base-url";
 import { db } from "./db";
 import { settings } from "./db/schema";
 
@@ -51,10 +52,13 @@ export function saveSettings(input: {
   reasoningEffort: ReasoningEffort;
 }) {
   const current = getSettings();
-  const apiKey = input.apiKey && input.apiKey.trim().length > 0 ? input.apiKey.trim() : (current?.apiKey ?? "");
+  const baseUrl = normalizeBaseUrl(input.baseUrl);
+  const sameSavedBase = current !== null && normalizeBaseUrl(current.baseUrl) === baseUrl;
+  const requestedKey = input.apiKey?.trim() ?? "";
+  const apiKey = requestedKey || (sameSavedBase ? current.apiKey : "");
   const values = {
     id: 1,
-    baseUrl: input.baseUrl.trim().replace(/\/+$/, ""),
+    baseUrl,
     apiKey,
     model: input.model.trim(),
     reasoningEffort: input.reasoningEffort,

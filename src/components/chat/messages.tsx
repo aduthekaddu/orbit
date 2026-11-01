@@ -19,7 +19,10 @@ import { IconAction, iconActionClass } from "./icon-action";
 import { MarkdownText } from "./markdown-text";
 import { MessageTextEditor } from "./message-editor";
 import { Reasoning } from "./reasoning";
+import { RenderUiPart } from "@/components/genui/render-ui";
+import { RENDER_UI_TOOL } from "@/lib/genui/catalog";
 import { useCoarsePointer } from "./use-coarse-pointer";
+import { useEditTarget } from "./chat-id";
 import { COPIED_MS } from "./use-copy";
 
 type PartComponents = NonNullable<MessagePrimitiveTypes.Parts.Props["components"]>;
@@ -38,7 +41,7 @@ const Pending: EmptyMessagePartComponent = ({ status }) => {
 
 const PlainText: TextMessagePartComponent = ({ text }) => <>{text}</>;
 
-const assistantParts: PartComponents = { Text: () => <MarkdownText editable />, Reasoning, Empty: Pending };
+const assistantParts: PartComponents = { Text: () => <MarkdownText editable />, Reasoning, Empty: Pending, tools: { by_name: { [RENDER_UI_TOOL]: RenderUiPart } } };
 
 const userParts: PartComponents = { Text: PlainText };
 
@@ -77,7 +80,7 @@ function AssistantMessage() {
   const touch = useCoarsePointer();
 
   return (
-    <MessagePrimitive.Root className="relative mx-auto w-full max-w-widget animate-rise">
+    <MessagePrimitive.Root data-message-role="assistant" className="relative mx-auto w-full max-w-widget animate-rise">
       <OrbitMark busy={running} tone={running ? "accent" : "mono"} className="absolute top-0.5 -left-9 hidden size-5 @3xl:block" />
       {editing ? (
         <MessageTextEditor messageId={messageId} initialText={text} onClose={() => setEditing(false)} label="Edit reply" />
@@ -119,11 +122,12 @@ function AssistantMessage() {
 }
 
 function UserMessage() {
+  const id = useAuiState((s) => s.message.id);
   const editing = useAuiState((s) => s.message.composer.isEditing);
   const touch = useCoarsePointer();
   if (editing) return <UserEditComposer />;
   return (
-    <MessagePrimitive.Root className="mx-auto flex w-full max-w-widget animate-rise items-end justify-end gap-1.5">
+    <MessagePrimitive.Root data-turn-id={id} tabIndex={-1} className="mx-auto flex w-full scroll-mt-6 outline-none max-w-widget animate-rise items-end justify-end gap-1.5">
       <ActionBarPrimitive.Root autohide={touch ? "never" : "always"} className="flex">
         <CopyAction />
         <IconAction label="Edit">
@@ -141,17 +145,20 @@ function UserMessage() {
 
 // The edit keeps the bubble's shape and place, so it reads as changing this message, not writing a new one.
 function UserEditComposer() {
+  const id = useAuiState((s) => s.message.id);
+  const editTarget = useEditTarget();
   return (
     <MessagePrimitive.Root className="mx-auto flex w-full max-w-widget animate-rise justify-end">
-      <ComposerPrimitive.Root className="flex max-w-[85%] min-w-64 flex-col overflow-hidden rounded-2xl border border-primary/40 bg-surface-raised">
+      <ComposerPrimitive.Root onSubmit={() => editTarget(id)} className="flex max-w-[85%] min-w-64 flex-col overflow-hidden rounded-2xl border border-primary/40 bg-surface-raised">
         <ComposerPrimitive.Input
           autoFocus
           rows={1}
+          cancelOnEscape
           aria-label="Edit message"
           className="block max-h-60 max-w-full resize-none bg-transparent px-3.5 pt-2 text-sm leading-6 outline-none field-sizing-content scrollbar-thin"
         />
         <div className="flex items-center justify-end gap-1 px-2 py-2">
-          <ComposerPrimitive.Cancel className={buttonVariants({ variant: "ghost", size: "xs" })}>Cancel</ComposerPrimitive.Cancel>
+          <ComposerPrimitive.Cancel onClick={() => editTarget(null)} className={buttonVariants({ variant: "ghost", size: "xs" })}>Cancel</ComposerPrimitive.Cancel>
           <ComposerPrimitive.Send className={buttonVariants({ size: "xs" })}>Send</ComposerPrimitive.Send>
         </div>
       </ComposerPrimitive.Root>

@@ -1,4 +1,6 @@
 import Database from "better-sqlite3";
+import type { UIMessage, UIMessageChunk } from "ai";
+import { orbitChatTransport } from "../src/lib/chat-transport";
 import { OPENCODE_GO_BASE_URL, outboundSessionHeader, reasoningAllowed } from "../src/lib/provider";
 
 const origin = "http://127.0.0.1:3210";
@@ -75,24 +77,6 @@ async function auth() {
   console.log("signed in");
 }
 
-function streamedText(raw: string) {
-  let text = "";
-  for (const line of raw.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("data:")) continue;
-    const data = trimmed.slice(5).trim();
-    if (!data || data === "[DONE]") continue;
-    try {
-      const event = JSON.parse(data) as { type?: string; delta?: string; textDelta?: string };
-      if (event.type === "text-delta" && typeof event.delta === "string") text += event.delta;
-      if (typeof event.textDelta === "string") text += event.textDelta;
-    } catch {
-      // ignore keepalives
-    }
-  }
-  return text;
-}
-
 async function main() {
   if (!baseUrl || !apiKey) fail("ORBIT_BASE_URL and ORBIT_API_KEY are required");
   const providerBase = baseUrl;
@@ -151,32 +135,58 @@ async function main() {
 
   const prompt = "Reply with the single word pong";
   const userMessageId = crypto.randomUUID();
-  const chat = await request("/api/chat", {
-    method: "POST",
-    body: JSON.stringify({
-      id: chatId,
+  const localId = `__LOCALID_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  let sentId = "";
+  const transport = orbitChatTransport(chatId, {
+    api: `${origin}/api/chat`,
+    headers: { cookie: cookieHeader(), origin },
+    fetch: async (input, init) => {
+      if (typeof init?.body === "string") {
+        const body = JSON.parse(init.body) as { id?: string };
+        sentId = body.id ?? "";
+      }
+      return fetch(input, init);
+    },
+  });
+  transport.setRuntime({
+    thread: { getModelContext: () => undefined },
+    threads: { mainItem: { initialize: async () => ({ remoteId: localId }) } },
+  } as never);
+  const message: UIMessage = {
+    id: userMessageId,
+    role: "user",
+    parts: [{ type: "text", text: prompt }],
+  };
+  let stream: ReadableStream<UIMessageChunk>;
+  try {
+    stream = await transport.sendMessages({
+      chatId,
+      messages: [message],
+      abortSignal: AbortSignal.timeout(120_000),
       trigger: "submit-message",
       messageId: userMessageId,
-      messages: [
-        {
-          id: userMessageId,
-          role: "user",
-          parts: [{ type: "text", text: prompt }],
-        },
-      ],
-    }),
-  });
-  if (!chat.ok || !chat.body) {
-    const errorBody = await chat.text();
-    fail(`chat failed ${chat.status} ${errorBody.slice(0, 240)}`);
+    });
+  } catch (error) {
+    const messageText = error instanceof Error ? error.message : "chat failed";
+    fail(`chat failed ${messageText.slice(0, 240)}`);
   }
-  const raw = await chat.text();
-  const text = streamedText(raw).trim();
-  if (!text) {
-    const types = [...raw.matchAll(/"type":"([^"]+)"/g)].map((match) => match[1]).slice(0, 12);
-    fail(`no streamed text bytes=${raw.length} types=${types.join(",") || "none"}`);
+  let text = "";
+  const types: string[] = [];
+  const reader = stream.getReader();
+  while (true) {
+    const next = await reader.read();
+    if (next.done) break;
+    const chunk = next.value;
+    if (chunk && typeof chunk === "object" && "type" in chunk && typeof chunk.type === "string") {
+      if (types.length < 12) types.push(chunk.type);
+      if (chunk.type === "text-delta" && "delta" in chunk && typeof chunk.delta === "string") text += chunk.delta;
+    }
   }
+  text = text.trim();
+  if (sentId !== chatId) fail(`first message used id=${sentId || "none"} open=${chatId}`);
+  if (!text) fail(`no streamed text types=${types.join(",") || "none"}`);
   console.log(`streamed chars=${text.length} preview=${JSON.stringify(redact(text.slice(0, 80)))}`);
+  console.log("first message chat id matches open chat: yes");
 
   const reloaded = await request(`/api/chats/${chatId}`);
   const reloadedBody = (await reloaded.json()) as { messages?: Array<{ role: string; parts?: unknown }> };
