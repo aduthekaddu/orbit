@@ -27,7 +27,7 @@ Orbit is a self-hosted chat app for one user: Next.js App Router, the AI SDK, as
 ## Git and pull requests
 
 - Branch names are `<type>/<kebab-topic>` with type `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`, or `ci`. Slice branches are named in `docs/slices/README.md`.
-- Commit subjects use Conventional Commits: `feat:`, `fix:`, `test:`, `docs:`, `chore:`. No AI or tool credit in commits, PRs, or comments.
+- Commit subjects use Conventional Commits: `feat:`, `fix:`, `test:`, `docs:`, `chore:`.
 - Push only when asked, with a plain `git push`. Ask before `git reset --hard` or any force-push.
 - Keep a PR as a draft while its slice is in progress. Run `gh pr ready` once the checks pass, every Greptile and CodeAnt finding is fixed or answered with a reason, and the changelog is updated. After that, add commits only when the maintainer asks. Later fixes go on a new `fix/` branch.
 - Proof goes in PR comments: real command output, plus screenshots when something visible changed. Never commit logs, screenshots, or QA reports.
