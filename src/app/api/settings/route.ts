@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeBaseUrl } from "@/lib/base-url";
 import { REASONING_EFFORTS, getSettings, saveSettings, toPublicSettings } from "@/lib/settings";
 import { getSession, unauthorized } from "@/lib/session";
 
@@ -29,6 +30,9 @@ export async function PUT(request: Request) {
   const nextKey = parsed.data.apiKey?.trim() ?? "";
   if (!nextKey && !current?.apiKey) {
     return Response.json({ error: "An API key is required." }, { status: 400 });
+  }
+  if (!nextKey && current && normalizeBaseUrl(current.baseUrl) !== normalizeBaseUrl(parsed.data.baseUrl)) {
+    return Response.json({ error: "Base URL changed. Enter the API key for the new provider." }, { status: 400 });
   }
   const saved = saveSettings(parsed.data);
   return Response.json(saved);

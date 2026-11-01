@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
-import { AssistantChatTransport, useChatRuntime } from "@assistant-ui/react-ai-sdk";
+import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
 import type { UIMessage } from "ai";
+import { orbitChatTransport } from "@/lib/chat-transport";
 import { Thread } from "./thread";
 
 export function ChatPanel({
@@ -21,13 +22,7 @@ export function ChatPanel({
   const runtime = useChatRuntime({
     id: chatId,
     messages: initialMessages,
-    transport: new AssistantChatTransport({
-      api: "/api/chat",
-      // assistant-ui swaps the request id for its own local thread id, which would file the reply under a new chat.
-      prepareSendMessagesRequest: ({ body, messages, trigger, messageId }) => ({
-        body: { ...body, id: chatId, messages, trigger, messageId },
-      }),
-    }),
+    transport: orbitChatTransport(chatId),
     onFinish: () => {
       router.refresh();
     },

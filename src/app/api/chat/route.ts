@@ -1,6 +1,6 @@
 import { convertToModelMessages, createUIMessageStreamResponse, streamText, toUIMessageStream, type UIMessage } from "ai";
 import { z } from "zod";
-import { ensureChat, keepOnlyMessages, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
+import { ensureChat, keepOnlyMessages, persistIncoming, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { getSettings } from "@/lib/settings";
 import { getSession, unauthorized } from "@/lib/session";
@@ -44,15 +44,13 @@ export async function POST(request: Request) {
   if (!chat) return Response.json({ error: "Not found" }, { status: 404 });
 
   const incoming = parsed.data.messages;
-  const keptIds: string[] = [];
-  for (const message of incoming) {
-    if (message.parts) {
-      upsertMessage(chat.id, { id: message.id, role: message.role, parts: message.parts });
-      keptIds.push(message.id);
-    }
+  const keptIds = incoming.filter((message) => message.parts).map((message) => message.id);
+  if (!persistIncoming(chat.id, incoming)) {
+    return Response.json({ error: "A message id belongs to a different chat." }, { status: 409 });
   }
   keepOnlyMessages(chat.id, keptIds);
   const firstUser = incoming.find((message) => message.role === "user");
+  const lastUser = incoming.findLast((message) => message.role === "user");
   const title = textFromParts(firstUser?.parts).trim();
   if (title) touchChat(chat.id, title);
   else touchChat(chat.id);
@@ -64,7 +62,7 @@ export async function POST(request: Request) {
   })) as UIMessage[];
 
   try {
-    const allowReasoning = await modelAllowsReasoning(settings.baseUrl, settings.apiKey, settings.model);
+    const allowReasoning = modelAllowsReasoning(settings.baseUrl, settings.model);
     const result = streamText({
       model: orbitModel({
         baseUrl: settings.baseUrl,
@@ -101,11 +99,15 @@ export async function POST(request: Request) {
           console.error("chat end without text", isAborted ? "aborted" : "finished", status, types.join(",") || "none");
           return;
         }
-        upsertMessage(chat.id, {
-          id: responseMessage.id || crypto.randomUUID(),
-          role: "assistant",
-          parts: responseMessage.parts,
-        });
+        upsertMessage(
+          chat.id,
+          {
+            id: responseMessage.id || crypto.randomUUID(),
+            role: "assistant",
+            parts: responseMessage.parts,
+          },
+          lastUser?.id,
+        );
         touchChat(chat.id);
       },
     });

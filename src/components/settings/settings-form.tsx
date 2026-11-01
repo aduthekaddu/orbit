@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
+import { CUSTOM_OPTION, selectedOptionIndex, showsModelInput } from "@/lib/model-picker";
+import { appliedSave, type SettingsSnapshot } from "@/lib/settings-form";
 import type { PublicSettings, ReasoningEffort } from "@/lib/settings";
 
 const EFFORTS: { value: ReasoningEffort; label: string }[] = [
@@ -16,7 +18,6 @@ const EFFORTS: { value: ReasoningEffort; label: string }[] = [
   { value: "high", label: "High" },
 ];
 
-const CUSTOM = "__custom__";
 
 type ListedModel = { id: string; reasoning: boolean | null };
 
@@ -36,48 +37,51 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
   const [model, setModel] = useState(initial.model);
   const [effort, setEffort] = useState<ReasoningEffort>(initial.reasoningEffort);
   const [keySet, setKeySet] = useState(initial.keySet);
-  const [connection, setConnection] = useState<Connection>(() =>
-    canLoadStored(initial) ? { status: "checking" } : { status: "idle" },
-  );
+  const [connection, setConnection] = useState<Connection>(() => canLoadStored(initial) ? { status: "checking" } : { status: "idle" });
+  const [customMode, setCustomMode] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [pending, setPending] = useState(false);
-  const latestLoad = useRef(0);
+  const modelLoad = useRef<{ id: number; controller: AbortController | null }>({ id: 0, controller: null });
+  const formValues: SettingsSnapshot = { baseUrl, apiKey, model, effort };
+  const latestValues = useRef(formValues);
+  latestValues.current = formValues;
 
-  async function loadModels(nextBase = baseUrl, nextKey = apiKey) {
-    const key = nextKey.trim();
-    if (!key && !keySet) {
-      setConnection({ status: "idle" });
-      return;
-    }
-    const load = ++latestLoad.current;
+  const loadModels = useCallback(async (nextBase: string, nextKey: string) => {
+    const id = ++modelLoad.current.id;
+    modelLoad.current.controller?.abort();
+    const controller = new AbortController();
+    modelLoad.current.controller = controller;
     setConnection({ status: "checking" });
-    let next: Connection;
     try {
       const response = await fetch("/api/models", {
         method: "POST",
         headers: { "content-type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           baseUrl: nextBase || undefined,
           apiKey: nextKey || undefined,
         }),
       });
+      if (id !== modelLoad.current.id) return;
       const body = (await response.json().catch(() => ({}))) as { models?: ListedModel[] };
-      next = response.ok ? { status: "connected", models: body.models ?? [] } : { status: "failed" };
-    } catch {
-      next = { status: "failed" };
+      if (id !== modelLoad.current.id) return;
+      setConnection(response.ok ? { status: "connected", models: body.models ?? [] } : { status: "failed" });
+    } catch (error) {
+      if (id !== modelLoad.current.id) return;
+      if (error instanceof Error && error.name === "AbortError") return;
+      setConnection({ status: "failed" });
     }
-    // Blur on two fields can race; only the newest request may settle the state.
-    if (load === latestLoad.current) setConnection(next);
-  }
+  }, []);
 
   useEffect(() => {
     if (canLoadStored(initial)) {
       void loadModels(initial.baseUrl, "");
     }
-    // Load once from the stored provider.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return () => {
+      modelLoad.current.controller?.abort();
+    };
+  }, [initial.baseUrl, initial.keySet, loadModels]);
 
   useEffect(() => {
     if (!saved) return;
@@ -90,29 +94,35 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
     setPending(true);
     setError("");
     setSaved(false);
-    const response = await fetch("/api/settings", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        baseUrl,
-        apiKey: apiKey || undefined,
-        model,
-        reasoningEffort: effort,
-      }),
-    });
-    const body = (await response.json()) as PublicSettings & { error?: string };
-    setPending(false);
-    if (!response.ok) {
-      setError(body.error ?? "Could not save");
-      return;
+    try {
+      const response = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          baseUrl: formValues.baseUrl,
+          apiKey: formValues.apiKey || undefined,
+          model: formValues.model,
+          reasoningEffort: formValues.effort,
+        }),
+      });
+      const body = (await response.json()) as PublicSettings & { error?: string };
+      if (!response.ok) {
+        setError(body.error ?? "Could not save");
+        return;
+      }
+      const applied = appliedSave(formValues, latestValues.current);
+      if (applied.applyKeySet) setKeySet(body.keySet);
+      if (applied.clearKey) setApiKey("");
+      if (applied.saved) setSaved(true);
+    } catch {
+      setError("Could not save");
+    } finally {
+      setPending(false);
     }
-    setKeySet(body.keySet);
-    setApiKey("");
-    setSaved(true);
   }
 
   const models = connection.status === "connected" ? connection.models : [];
-  const inList = models.some((item) => item.id === model);
+  const selectedIndex = selectedOptionIndex(models, model, customMode);
   const selected = models.find((item) => item.id === model);
   const allowReasoning = !selected || selected.reasoning !== false;
 
@@ -133,7 +143,7 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
                 setError("");
                 setBaseUrl(event.target.value);
               }}
-              onBlur={() => void loadModels()}
+              onBlur={() => void loadModels(baseUrl, apiKey)}
               autoComplete="off"
               required
             />
@@ -148,7 +158,7 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
                 setError("");
                 setApiKey(event.target.value);
               }}
-              onBlur={() => void loadModels()}
+              onBlur={() => void loadModels(baseUrl, apiKey)}
               autoComplete="off"
             />
           </Row>
@@ -156,36 +166,40 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
             <div className="flex flex-col gap-2">
               {models.length > 0 ? (
                 <Select
-                  value={inList ? model : CUSTOM}
+                  value={String(selectedIndex)}
                   onValueChange={(value) => {
                     setError("");
-                    if (value === CUSTOM) {
-                      if (inList) setModel("");
+                    const option = models[Number(value)];
+                    if (!option) {
+                      setCustomMode(true);
+                      if (selectedIndex !== CUSTOM_OPTION) setModel("");
                       return;
                     }
-                    setModel(value);
+                    setCustomMode(false);
+                    setModel(option.id);
                   }}
                 >
                   <SelectTrigger id="model" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {models.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>
+                    {models.map((item, index) => (
+                      <SelectItem key={item.id} value={String(index)}>
                         {item.id}
                       </SelectItem>
                     ))}
-                    <SelectItem value={CUSTOM}>Custom</SelectItem>
+                    <SelectItem value={String(CUSTOM_OPTION)}>Custom</SelectItem>
                   </SelectContent>
                 </Select>
               ) : null}
-              {models.length === 0 || !inList ? (
+              {showsModelInput(models, model, customMode) ? (
                 <Input
                   id={models.length === 0 ? "model" : "model-custom"}
                   aria-label={models.length === 0 ? undefined : "Custom model"}
                   value={model}
                   onChange={(event) => {
                     setError("");
+                    setCustomMode(true);
                     setModel(event.target.value);
                   }}
                   autoComplete="off"

@@ -21,14 +21,19 @@ export function LoginForm({ signupOpen }: { signupOpen: boolean }) {
     event.preventDefault();
     setPending(true);
     setError("");
-    const result = await authClient.signIn.email({ email, password });
-    setPending(false);
-    if (result.error) {
-      setError(result.error.message ?? "Could not sign in");
-      return;
+    try {
+      const result = await authClient.signIn.email({ email, password });
+      if (result.error) {
+        setError(result.error.message ?? "Could not sign in");
+        return;
+      }
+      router.push("/");
+      router.refresh();
+    } catch {
+      setError("Network error");
+    } finally {
+      setPending(false);
     }
-    router.push("/");
-    router.refresh();
   }
 
   return (
@@ -65,14 +70,19 @@ export function SignupForm() {
     event.preventDefault();
     setPending(true);
     setError("");
-    const result = await authClient.signUp.email({ name, email, password });
-    setPending(false);
-    if (result.error) {
-      setError(result.error.message ?? "Could not create account");
-      return;
+    try {
+      const result = await authClient.signUp.email({ name, email, password });
+      if (result.error) {
+        setError(result.error.message ?? "Could not create account");
+        return;
+      }
+      router.push("/");
+      router.refresh();
+    } catch {
+      setError("Network error");
+    } finally {
+      setPending(false);
     }
-    router.push("/");
-    router.refresh();
   }
 
   return (
