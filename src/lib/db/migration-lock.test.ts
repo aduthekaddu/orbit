@@ -58,6 +58,57 @@ import("./src/lib/db/migration-lock.ts").then((mod) => {
 });
 `;
 
+const waiterSource = `
+import fs from "node:fs";
+import("./src/lib/db/migration-lock.ts").then((mod) => {
+  const withMigrationLock = mod.withMigrationLock ?? mod.default.withMigrationLock;
+  const log = (line) => fs.appendFileSync(process.env.LOG_PATH, line + "\\n");
+  withMigrationLock(() => {
+    log("enter waiter " + Date.now());
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(process.env.HOLD_MS ?? 100));
+    log("exit waiter " + Date.now());
+  }, { dir: process.env.LOCK_DIR, timeoutMs: 20000 });
+});
+`;
+
+const legacyOwnerSource = `
+import fs from "node:fs";
+const lockPath = process.env.LOCK_DIR + "/.migrate.lock";
+const log = (line) => fs.appendFileSync(process.env.LOG_PATH, line + "\\n");
+const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+const fd = fs.openSync(lockPath, "wx");
+console.log("PUBLISHED " + Date.now());
+pause(2500);
+fs.writeSync(fd, process.pid + ":00000000-0000-4000-8000-000000000000");
+fs.closeSync(fd);
+log("enter old " + Date.now());
+pause(600);
+log("exit old " + Date.now());
+try { fs.unlinkSync(lockPath); } catch {}
+`;
+
+const linkedOwnerSource = `
+import fs from "node:fs";
+const realLink = fs.linkSync;
+fs.linkSync = (from, to) => {
+  const result = realLink.call(fs, from, to);
+  if (to === process.env.LOCK_PATH) {
+    console.log("PUBLISHED " + Date.now());
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(process.env.PAUSE_MS));
+  }
+  return result;
+};
+import("./src/lib/db/migration-lock.ts").then((mod) => {
+  const withMigrationLock = mod.withMigrationLock ?? mod.default.withMigrationLock;
+  const log = (line) => fs.appendFileSync(process.env.LOG_PATH, line + "\\n");
+  withMigrationLock(() => {
+    log("enter owner " + Date.now());
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 600);
+    log("exit owner " + Date.now());
+  }, { dir: process.env.LOCK_DIR, timeoutMs: 20000 });
+});
+`;
+
 function start(source: string, env: Record<string, string>) {
   const proc = spawn(process.execPath, ["--import", "tsx", "-e", source], {
     cwd: repo,
@@ -101,6 +152,18 @@ function readLock(lockPath: string) {
   }
 }
 
+function readEvents(logPath: string) {
+  return fs
+    .readFileSync(logPath, "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => line.replace(/ \d+$/, ""));
+}
+
+function alternates(events: string[]) {
+  return events.every((event, index) => event.startsWith(index % 2 === 0 ? "enter" : "exit"));
+}
+
 test("a directory at the lock path fails fast with a clear error", () => {
   const dir = tempDir("directory");
   const lockPath = path.join(dir, ".migrate.lock");
@@ -133,7 +196,7 @@ test(
     try {
       assert.throws(
         () => withMigrationLock(() => undefined, { dir, timeoutMs: 60_000 }),
-        /database migration lock claim .*EACCES/,
+        /database migration lock.*EACCES/,
       );
     } finally {
       fs.chmodSync(dir, 0o700);
@@ -152,6 +215,7 @@ test("a lock left by a dead process is taken over and released", () => {
   assert.equal(result, "migrated");
   assert.equal(fs.existsSync(lockPath), false);
   assert.equal(fs.existsSync(path.join(dir, ".migrate.lock.claim")), false);
+  assert.deepEqual(fs.readdirSync(dir).filter((name) => name.endsWith(".tmp")), []);
 });
 
 test("a live lock times out at the deadline instead of entering", () => {
@@ -230,4 +294,43 @@ test("only one of six processes enters at a time when they race for a stale lock
   const expected = events.flatMap((_, index) => [index % 2 === 0 ? "enter" : "exit"]);
   assert.deepEqual(events, expected, `two processes were inside the lock at once:\n${events.join("\n")}`);
   assert.equal(fs.existsSync(lockPath), false);
+});
+
+test("the old create-then-write lock overlaps when its owner pauses", { timeout: 30_000 }, async () => {
+  const dir = tempDir("legacy-pause");
+  const logPath = path.join(dir, "sections.log");
+  const owner = start(legacyOwnerSource, { LOCK_DIR: dir, LOG_PATH: logPath });
+  await waitFor(() => owner.output().includes("PUBLISHED"), "the old owner to create the empty lock");
+
+  const waiter = start(waiterSource, { LOCK_DIR: dir, LOG_PATH: logPath, HOLD_MS: "3000" });
+  const [oldOwner, newWaiter] = await Promise.all([owner.done, waiter.done]);
+
+  assert.equal(oldOwner.code, 0, oldOwner.stderr);
+  assert.equal(newWaiter.code, 0, newWaiter.stderr);
+  const events = readEvents(logPath);
+  assert.equal(alternates(events), false, `expected the old shape to overlap:\n${events.join("\n")}`);
+});
+
+test("a lock published by link is not taken over while its owner pauses", { timeout: 30_000 }, async () => {
+  const dir = tempDir("linked-pause");
+  const logPath = path.join(dir, "sections.log");
+  const owner = start(linkedOwnerSource, {
+    LOCK_DIR: dir,
+    LOCK_PATH: path.join(dir, ".migrate.lock"),
+    LOG_PATH: logPath,
+    PAUSE_MS: "2500",
+  });
+  await waitFor(() => owner.output().includes("PUBLISHED"), "the owner to publish its lock");
+
+  const waiter = start(waiterSource, { LOCK_DIR: dir, LOG_PATH: logPath, HOLD_MS: "100" });
+  const [held, waited] = await Promise.all([owner.done, waiter.done]);
+
+  assert.equal(held.code, 0, held.stderr);
+  assert.equal(waited.code, 0, waited.stderr);
+  const events = readEvents(logPath);
+  assert.equal(alternates(events), true, `two owners were inside:\n${events.join("\n")}`);
+  assert.ok(
+    events.indexOf("enter waiter") > events.indexOf("exit owner"),
+    `the waiter entered before the owner left:\n${events.join("\n")}`,
+  );
 });

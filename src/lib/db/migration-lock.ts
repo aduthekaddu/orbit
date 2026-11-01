@@ -7,9 +7,11 @@ const LOCK_NAME = ".migrate.lock";
 const CLAIM_NAME = ".migrate.lock.claim";
 const DEFAULT_TIMEOUT_MS = 60_000;
 const POLL_MS = 50;
-// A lock file whose owner died between open and write is taken over after this
-// long. A live owner writes its token in the same tick it creates the file.
-const UNWRITTEN_GRACE_MS = 1_000;
+// The lock and claim paths are published by hard link, so a new owner never
+// exposes an empty file. Only a leftover from the old create-then-write lock
+// (or an external writer) can be empty or truncated; give that a short grace
+// before treating it as dead.
+const LEGACY_EMPTY_GRACE_MS = 1_000;
 const TOKEN = /^(\d+):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export type MigrationLockOptions = {
@@ -30,12 +32,15 @@ type LockPaths = {
 /**
  * Runs `run` while holding an exclusive lock in `dir`.
  *
- * The lock file holds the owner's pid and a random token. A waiter takes over
- * only when the owner pid is gone, so a migration of any length keeps its
- * lock, and a takeover happens under a claim file so exactly one waiter can
- * delete a dead lock. Liveness is the owner pid, which assumes one host (or
- * pid namespace) per data directory. Release unlinks only a file that still
- * carries the caller's token, so an owner never deletes its successor's lock.
+ * The lock file holds the owner's pid and a random token. The token is written
+ * to a temp file that is hard-linked into place, so the path appears complete
+ * and a paused owner is never seen as an empty, stale lock. A waiter takes
+ * over only when the owner pid is gone, so a migration of any length keeps
+ * its lock, and a takeover happens under a claim file so exactly one waiter
+ * can delete a dead lock. Liveness is the owner pid, which assumes one host
+ * (or pid namespace) per data directory. Release unlinks only a file that
+ * still carries the caller's token, so an owner never deletes its
+ * successor's lock.
  */
 export function withMigrationLock<T>(run: () => T, options: MigrationLockOptions = {}): T {
   const dir = options.dir ?? dataDirectory();
@@ -55,12 +60,7 @@ function acquire(paths: LockPaths, timeoutMs: number): string {
   for (;;) {
     checkDeadline(deadline, timeoutMs, paths.lock);
     try {
-      const fd = fs.openSync(paths.lock, "wx", 0o600);
-      try {
-        fs.writeSync(fd, token);
-      } finally {
-        fs.closeSync(fd);
-      }
+      publish(paths.lock, token);
       return token;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
@@ -99,12 +99,7 @@ function claim(paths: LockPaths, timeoutMs: number, deadline: number): string {
   for (;;) {
     checkDeadline(deadline, timeoutMs, paths.lock);
     try {
-      const fd = fs.openSync(paths.claim, "wx", 0o600);
-      try {
-        fs.writeSync(fd, token);
-      } finally {
-        fs.closeSync(fd);
-      }
+      publish(paths.claim, token);
       return token;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
@@ -118,6 +113,34 @@ function claim(paths: LockPaths, timeoutMs: number, deadline: number): string {
       continue;
     }
     unlinkOrThrow("Cannot remove the stale database migration lock claim", paths.claim);
+  }
+}
+
+/**
+ * Writes `token` to a temp file and hard-links it to `target`. The link fails
+ * with EEXIST when the target exists, and succeeds atomically with the token
+ * already readable, so a reader never sees an empty live lock.
+ */
+function publish(target: string, token: string): void {
+  const temp = `${target}.${process.pid}.${randomUUID()}.tmp`;
+  let created = false;
+  try {
+    const fd = fs.openSync(temp, "wx", 0o600);
+    created = true;
+    try {
+      fs.writeSync(fd, token);
+    } finally {
+      fs.closeSync(fd);
+    }
+    fs.linkSync(temp, target);
+  } finally {
+    if (created) {
+      try {
+        fs.unlinkSync(temp);
+      } catch {
+        // A crash here leaves one temp name; the target still has the token.
+      }
+    }
   }
 }
 
@@ -142,7 +165,7 @@ function inspect(target: string): LockState {
 
 function isStale(state: Exclude<LockState, { kind: "absent" }>): boolean {
   if (state.kind === "held") return !isProcessAlive(state.pid);
-  return state.ageMs >= UNWRITTEN_GRACE_MS;
+  return state.ageMs >= LEGACY_EMPTY_GRACE_MS;
 }
 
 function isProcessAlive(pid: number): boolean {
