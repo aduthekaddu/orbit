@@ -175,8 +175,8 @@ function assertOurServer() {
 
 async function launch() {
   const state = readState();
-  if (state && alive(state.pid) && procCwd(state.pid) === sandbox && sandboxListening()) {
-    console.log(`already running pid=${state.pid} origin=${ORIGIN}`);
+  if (state && alive(state.pid) && procCwd(state.pid) === sandbox) {
+    console.log(`already starting or running pid=${state.pid} origin=${ORIGIN}`);
     return;
   }
   const listeners = listenerPids();
