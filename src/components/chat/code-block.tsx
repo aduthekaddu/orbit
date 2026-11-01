@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Highlight, type PrismTheme } from "prism-react-renderer";
 import type { CodeHeaderProps, SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
-import { CaretDownIcon, CheckIcon, CopyIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, CheckIcon, CopyIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { ScrollFade } from "@/components/ui/scroll-fade";
 import { useCopy } from "./use-copy";
@@ -32,18 +32,26 @@ const orbitCodeTheme: PrismTheme = {
 };
 
 export function CodeHeader({ language, code }: CodeHeaderProps) {
-  const { copied, copy } = useCopy();
+  const { copied, failed, copy } = useCopy();
+  const status = copied ? "Copied" : failed ? "Copy failed" : "";
   return (
     <div className="mt-4 flex h-8 pointer-coarse:h-11 items-center justify-between rounded-t-lg border border-b-0 bg-surface-sunken pr-1 pl-3">
       <span className="font-mono text-2xs text-muted-foreground">{language || "text"}</span>
       <button
         type="button"
         onClick={() => copy(code)}
-        aria-label={copied ? "Copied" : "Copy code"}
+        aria-label={status || "Copy code"}
         className="flex size-6 pointer-coarse:size-11 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 ease-orbit hover:bg-accent hover:text-foreground"
       >
-        {copied ? <CheckIcon weight="regular" className="size-3.5" /> : <CopyIcon weight="regular" className="size-3.5" />}
+        {copied ? (
+          <CheckIcon weight="regular" className="size-3.5" />
+        ) : failed ? (
+          <WarningCircleIcon weight="regular" className="size-3.5 text-destructive" />
+        ) : (
+          <CopyIcon weight="regular" className="size-3.5" />
+        )}
       </button>
+      <span aria-live="polite" className="sr-only">{status}</span>
     </div>
   );
 }

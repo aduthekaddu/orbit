@@ -12,7 +12,7 @@ function Slider({
   max = 100,
   ...props
 }: React.ComponentProps<typeof SliderPrimitive.Root>) {
-  const thumbs = (value ?? defaultValue ?? [min]).length;
+  const thumbs = Math.max(1, (value ?? defaultValue ?? [min]).length);
 
   return (
     <SliderPrimitive.Root
