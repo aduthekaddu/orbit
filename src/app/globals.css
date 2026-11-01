@@ -3,11 +3,88 @@
 
 @custom-variant dark (&:is(.dark *));
 
+:root {
+  color-scheme: dark;
+
+  /* Brand primitives */
+  --orbit-bg: #0b0c0f;
+  --orbit-surface: #131418;
+  --orbit-border: #23252b;
+  --orbit-text: #ecebe6;
+  --orbit-muted: #8c8d94;
+  --orbit-ivory: #f1ece1;
+  /* Sunrise on the planet's limb. The one lit color: the moon, the active chat, the thread map. */
+  --orbit-sun: #ff9e5e;
+
+  /* shadcn/ui semantic tokens */
+  --background: var(--orbit-bg);
+  --foreground: var(--orbit-text);
+  --card: var(--orbit-surface);
+  --card-foreground: var(--orbit-text);
+  --popover: #18191e;
+  --popover-foreground: var(--orbit-text);
+  --primary: var(--orbit-ivory);
+  --primary-foreground: #0b0c0f;
+  --secondary: #1a1b20;
+  --secondary-foreground: var(--orbit-text);
+  --muted: #1a1b20;
+  --muted-foreground: var(--orbit-muted);
+  --accent: #1e1f25;
+  --accent-foreground: var(--orbit-text);
+  --destructive: #ff6259;
+  --border: var(--orbit-border);
+  --input: var(--orbit-border);
+  --ring: var(--orbit-sun);
+  --sun: var(--orbit-sun);
+
+  /* orbit extensions */
+  --canvas: #07080a;
+  --surface-sunken: #0e0f12;
+  --surface-raised: #1d1e24;
+  --border-strong: #33353d;
+  --positive: #4fd18b;
+  --negative: #ff6259;
+  --warning: #f2cf4a;
+  --info: #5ec8f2;
+  --skeleton: #1a1b20;
+  --skeleton-highlight: #282a31;
+
+  /* Data visualisation */
+  --chart-1: #ff9e5e;
+  --chart-2: #5ec8f2;
+  --chart-3: #3dd68c;
+  --chart-4: #f2cf4a;
+  --chart-5: #ff7ab6;
+
+  /* Syntax highlighting */
+  --syntax-keyword: #ff9e5e;
+  --syntax-string: #7ee0a8;
+  --syntax-number: #f2cf4a;
+  --syntax-function: #7cc8f8;
+  --syntax-comment: #5d5f68;
+  --syntax-punctuation: #8c8d94;
+  --syntax-builtin: #ff9ec4;
+  --syntax-class: #f5d58a;
+  --syntax-operator: #c9c8c2;
+
+  /* Hairline figures. Plates are filled, so the plate must match the surface the figure sits on. */
+  --hairline-plate: var(--background);
+  --hairline-hi: var(--orbit-text);
+  --hairline-edge: var(--orbit-muted);
+  --hairline-mid: color-mix(in oklab, var(--orbit-muted) 55%, var(--orbit-bg));
+  --hairline-lo: var(--orbit-border);
+  --hairline-stroke: 0.9;
+
+  --radius: 0.625rem;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
@@ -20,58 +97,186 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-sun: var(--sun);
+
+  --color-canvas: var(--canvas);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-raised: var(--surface-raised);
+  --color-border-strong: var(--border-strong);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-skeleton: var(--skeleton);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --font-sans: ui-sans-serif, system-ui, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-:root {
-  --radius: 0.75rem;
-  --background: oklch(0.985 0 0);
-  --foreground: oklch(0.18 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.18 0 0);
-  --primary: oklch(0.22 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.96 0 0);
-  --secondary-foreground: oklch(0.22 0 0);
-  --muted: oklch(0.96 0 0);
-  --muted-foreground: oklch(0.5 0 0);
-  --accent: oklch(0.96 0 0);
-  --accent-foreground: oklch(0.22 0 0);
-  --destructive: oklch(0.55 0.2 25);
-  --border: oklch(0.9 0 0);
-  --input: oklch(0.9 0 0);
-  --ring: oklch(0.65 0 0);
+@theme {
+  /* The chat column width; json-render widgets never grow beyond it. */
+  --container-widget: 42.5rem;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-3xs: 0.5625rem;
+  --text-3xs--line-height: 0.75rem;
+
+  --shadow-card: inset 0 1px 0 0 rgb(255 255 255 / 0.03), 0 1px 2px 0 rgb(0 0 0 / 0.35);
+  --shadow-float: 0 24px 64px -16px rgb(0 0 0 / 0.75), 0 2px 8px -2px rgb(0 0 0 / 0.5);
+
+  --ease-orbit: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-pulse-ring: pulse-ring 1.8s cubic-bezier(0.2, 0.6, 0.35, 1) infinite;
+  --animate-rise: rise 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  /*
+   * The mark's satellite: two sine-eased axes a quarter period apart trace the
+   * ring's 10 x 4 ellipse, so it runs on plain transforms in every browser.
+   * orbit-z shares orbit-y's timing and shrinks and dims the moon on the far side.
+   */
+  --animate-orbit-x: orbit-x 1.1s cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
+  --animate-orbit-y: orbit-y 1.1s cubic-bezier(0.37, 0, 0.63, 1) -0.55s infinite alternate;
+  --animate-orbit-z: orbit-z 1.1s cubic-bezier(0.37, 0, 0.63, 1) -0.55s infinite alternate;
+
+  @keyframes shimmer {
+    0% {
+      background-position: 150% 0;
+    }
+    100% {
+      background-position: -50% 0;
+    }
+  }
+
+  @keyframes pulse-ring {
+    0% {
+      transform: scale(0.6);
+      opacity: 0.7;
+    }
+    100% {
+      transform: scale(2.4);
+      opacity: 0;
+    }
+  }
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes orbit-x {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-20px);
+    }
+  }
+
+  @keyframes orbit-y {
+    from {
+      transform: translateY(-4px);
+    }
+    to {
+      transform: translateY(4px);
+    }
+  }
+
+  @keyframes orbit-z {
+    from {
+      transform: scale(0.65);
+      opacity: 0.55;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
 }
 
-.dark {
-  --background: oklch(0.16 0 0);
-  --foreground: oklch(0.96 0 0);
-  --card: oklch(0.2 0 0);
-  --card-foreground: oklch(0.96 0 0);
-  --primary: oklch(0.96 0 0);
-  --primary-foreground: oklch(0.18 0 0);
-  --secondary: oklch(0.26 0 0);
-  --secondary-foreground: oklch(0.96 0 0);
-  --muted: oklch(0.26 0 0);
-  --muted-foreground: oklch(0.7 0 0);
-  --accent: oklch(0.26 0 0);
-  --accent-foreground: oklch(0.96 0 0);
-  --destructive: oklch(0.7 0.18 22);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.55 0 0);
+@utility shimmer {
+  background-color: var(--skeleton);
+  background-image: linear-gradient(
+    100deg,
+    transparent 30%,
+    var(--skeleton-highlight) 50%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: var(--animate-shimmer);
+}
+
+@utility num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 @layer base {
   * {
-    @apply border-border;
+    @apply border-border outline-ring/50;
   }
+
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+
+  /* Touch needs a 44px hit area; grow it without changing what the control looks like. */
+  @media (pointer: coarse) {
+    :where(button, a, [role="combobox"], [role="radio"], [role="option"], [role="menuitem"]):not(:where(.sr-only)) {
+      position: relative;
+    }
+    :where(button, a, [role="combobox"], [role="radio"], [role="option"], [role="menuitem"])::after {
+      content: "";
+      position: absolute;
+      inset: min(0px, (100% - 44px) / 2);
+    }
+    :where(input:not([type="checkbox"], [type="radio"], [type="hidden"]), select) {
+      min-height: 44px;
+    }
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--primary) 35%, transparent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }

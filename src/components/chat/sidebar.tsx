@@ -1,36 +1,48 @@
 "use client";
 
-import { useState } from "react";
+import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOutIcon, PlusIcon, SettingsIcon } from "lucide-react";
+import { MagnifyingGlassIcon, NotePencilIcon, SidebarSimpleIcon, SignOutIcon } from "@phosphor-icons/react";
+import type { listChats } from "@/lib/messages";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { OrbitMark } from "@/components/orbit-mark";
+import { groupChatsByRecency } from "@/components/shell/chat-groups";
+import { serverTodaySnapshot, subscribeToday, todaySnapshot } from "@/components/shell/today";
+import { ShortcutKbd } from "@/components/shell/shortcuts";
+
+export type ChatSummary = ReturnType<typeof listChats>[number];
+
+// Null on the server: its timezone is not the reader's, so buckets are computed only in the browser.
+function useToday() {
+  return useSyncExternalStore(subscribeToday, todaySnapshot, serverTodaySnapshot);
+}
 
 export function Sidebar({
   chats,
   email,
+  newChatPending,
+  onNewChat,
+  onSearch,
+  onCollapse,
+  onNavigate,
 }: {
-  chats: { id: string; title: string }[];
+  chats: ChatSummary[];
   email: string;
+  newChatPending: boolean;
+  onNewChat: () => void;
+  onSearch: () => void;
+  onCollapse?: () => void;
+  /** Called when a link is followed, including the current page's, which changes no route. */
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [pending, setPending] = useState(false);
-
-  async function newChat() {
-    setPending(true);
-    try {
-      const response = await fetch("/api/chats", { method: "POST" });
-      if (!response.ok) return;
-      const body = (await response.json()) as { id: string };
-      router.push(`/c/${body.id}`);
-      router.refresh();
-    } finally {
-      setPending(false);
-    }
-  }
+  const today = useToday();
+  const groups = today === null ? [{ label: null, chats }] : groupChatsByRecency(chats, today);
 
   async function signOut() {
     await authClient.signOut();
@@ -39,48 +51,99 @@ export function Sidebar({
   }
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r bg-card">
-      <div className="flex items-center justify-between px-3 py-3">
-        <Link href="/" className="px-2 text-sm font-semibold">
-          Orbit
+    <div className="flex h-full w-64 flex-col">
+      <div className="flex h-12 shrink-0 items-center gap-1 pr-2 pl-3 pointer-coarse:h-14">
+        <Link href="/" onClick={onNavigate} className="mr-auto flex items-center gap-2 rounded-md px-1 py-1 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+          <OrbitMark className="size-5" />
+          <span className="text-sm font-medium tracking-tight">orbit</span>
         </Link>
-        <Button variant="ghost" size="icon" onClick={newChat} disabled={pending} aria-label="New chat">
-          <PlusIcon className="size-4" />
-        </Button>
+        {onCollapse && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon-sm" onClick={onCollapse} aria-label="Close sidebar" className="text-muted-foreground hover:text-foreground">
+                <SidebarSimpleIcon weight="light" className="size-[18px]" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="flex items-center gap-2">
+              Close sidebar <ShortcutKbd name="sidebar" />
+            </TooltipContent>
+          </Tooltip>
+        )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon-sm" onClick={onNewChat} disabled={newChatPending} aria-label="New chat" className="text-muted-foreground hover:text-foreground">
+              <NotePencilIcon weight="light" className="size-[18px]" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="flex items-center gap-2">
+            New chat <ShortcutKbd name="newChat" />
+          </TooltipContent>
+        </Tooltip>
       </div>
-      <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2">
-        {chats.map((chat) => {
-          const href = `/c/${chat.id}`;
-          const active = pathname === href;
-          return (
-            <Link
-              key={chat.id}
-              href={href}
-              className={cn(
-                "truncate rounded-md px-2 py-1.5 text-sm",
-                active ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
-              )}
-            >
-              {chat.title}
-            </Link>
-          );
-        })}
+
+      <button
+        type="button"
+        onClick={onSearch}
+        className="mx-2 flex h-8 pointer-coarse:h-11 shrink-0 cursor-pointer items-center gap-2 rounded-md border bg-surface-sunken pr-1.5 pl-2.5 text-sm text-muted-foreground transition-colors outline-none hover:border-border-strong hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        <MagnifyingGlassIcon weight="regular" className="size-3.5" />
+        <span className="flex-1 text-left">Search</span>
+        <ShortcutKbd name="palette" />
+      </button>
+
+      <nav className="scrollbar-thin mt-3 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-2 pb-3">
+        {groups.map((group) => (
+          <div key={group.label ?? "all"} className="flex flex-col gap-px">
+            {group.label && <h2 className="px-2.5 pb-1 text-2xs font-medium text-muted-foreground">{group.label}</h2>}
+            {group.chats.map((chat) => {
+              const href = `/c/${chat.id}`;
+              const active = pathname === href;
+              return (
+                <Link
+                  key={chat.id}
+                  href={href}
+                  onClick={onNavigate}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "relative truncate rounded-md px-2.5 py-1.5 text-sm pointer-coarse:py-3 transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                    active
+                      ? "bg-accent text-foreground before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-sun"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  )}
+                >
+                  {chat.title}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
-      <div className="flex items-center gap-1 border-t p-2">
+
+      <div className="flex shrink-0 items-center gap-1 border-t p-2">
         <Link
           href="/settings"
+          onClick={onNavigate}
+          aria-current={pathname === "/settings" ? "page" : undefined}
           className={cn(
-            "flex flex-1 items-center gap-2 truncate rounded-md px-2 py-1.5 text-sm",
-            pathname === "/settings" ? "bg-accent" : "hover:bg-accent/60",
+            "flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1.5 text-sm transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+            pathname === "/settings" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
           )}
         >
-          <SettingsIcon className="size-4 shrink-0" />
+          <span className="sr-only">Settings</span>
+          <span aria-hidden className="grid size-6 shrink-0 place-items-center rounded-full border bg-surface-raised text-2xs font-medium text-foreground uppercase">
+            {email.charAt(0)}
+          </span>
           <span className="truncate">{email}</span>
         </Link>
-        <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sign out">
-          <LogOutIcon className="size-4" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon-sm" onClick={signOut} aria-label="Sign out" className="text-muted-foreground hover:text-foreground">
+              <SignOutIcon weight="light" className="size-[18px]" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top">Sign out</TooltipContent>
+        </Tooltip>
       </div>
-    </aside>
+    </div>
   );
 }

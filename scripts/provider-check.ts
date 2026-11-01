@@ -75,7 +75,7 @@ async function main() {
   }
 
   const listed = await listModels("https://cache.example/v1/", savedKey);
-  if (listed.map((model) => model.id).join(",") !== "plain,thinker") fail("model list did not return the provider models");
+  if ((listed ?? []).map((model) => model.id).join(",") !== "plain,thinker") fail("model list did not return the provider models");
   const afterList = calls;
   const warmStarted = Date.now();
   const plain = modelAllowsReasoning("https://cache.example/v1", "plain");
@@ -110,7 +110,7 @@ async function main() {
     const message = error instanceof Error ? error.message : "throw";
     fail(`primary throw skipped fallback: ${message}`);
   }
-  if (fallback.map((model) => model.id).join(",") !== "from-fallback") fail("fallback models missing");
+  if ((fallback ?? []).map((model) => model.id).join(",") !== "from-fallback") fail("fallback models missing");
   if (!seen.includes(`${OPENCODE_GO_BASE_URL}/models`) || !seen.includes(OPENCODE_GO_MODELS_URL)) {
     fail(`fallback urls missing ${seen.join(" ")}`);
   }
@@ -122,7 +122,7 @@ async function main() {
   };
   try {
     const empty = await listModels("https://other.example/v1", savedKey);
-    if (empty.length !== 0) fail("non-opencode failure returned models");
+    if ((empty ?? []).length !== 0) fail("non-opencode failure returned models");
   } catch {
     fail("non-opencode primary throw escaped listModels");
   }

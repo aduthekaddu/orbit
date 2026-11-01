@@ -1,81 +1,85 @@
-# Generative UI visual findings
+# Visual findings, 2026-11-01
 
-Date: 2026-11-01. Branch `feat/generative-ui`. Worktree `~/orbit/.worktrees/genui`.
+For a later design pass. Functional bugs and their fixes are in `docs/qa/2026-11-01-ui-qa.md`. No visual change was made on this branch. Screenshot paths are under `docs/qa/screenshots/`.
 
-These are visual and design issues from the browser QA pass. No design or polish changes were made on this branch. The functional report is `docs/qa/2026-11-01-genui-qa.md`.
+## V1. Code blocks clip long lines without a scroll cue
 
-## High
+`desktop-chat-long.png`, `mobile-chat-long-code.png`
 
-### Mobile layout does not fit 390x844
+A long line stops at the border with no fade, no scrollbar, and no wrap toggle. On mobile most of the line is off screen. The block scrolls, but nothing says so.
 
-The sidebar is a fixed `w-60` (240px). At 390px wide it leaves about 150px for the chat. Cards, tables, and code blocks clip at the edge. Table columns disappear behind a narrow horizontal scroller. The composer is about 120px wide and the placeholder wraps to two lines.
+## V2. Command palette clips the last visible row
 
-The layout still accepts input, so this is a design problem, not a dead end. A phone layout likely needs a collapsible sidebar or a drawer, and a chat column that uses the full width.
+`desktop-command-palette.png`, `mobile-command-palette.png`
 
-Screenshots:
-- `docs/qa/screenshots/genui-all-mobile.png`
-- `docs/qa/screenshots/genui-huge-mobile.png`
-- `docs/qa/screenshots/genui-long-mobile.png`
-- `docs/qa/screenshots/genui-text-mobile.png`
-- `docs/qa/screenshots/genui-real-mobile.png`
+The list ends mid-row at its max height. The clipped row reads as a layout break rather than a scroll. A gradient or a visible scrollbar would make the cut intentional.
 
-## Medium
+## V3. Disabled composer still looks active
 
-### Generated long text and code make very tall blocks
+`desktop-empty-no-provider.png`
 
-A long paragraph, a long unbroken word, and a long code string all render without a max height or collapse control. The code block becomes a wall of wrapped monospace text that fills the viewport. The table rows grow tall for the same reason.
+Before a provider is configured the send circle still has the primary fill and the field looks editable. Only the cursor changes. The empty state offers "Open settings", but the composer competes with it for attention.
 
-A design pass could cap the height and add an expand control, or keep code on one line with horizontal scroll instead of wrapping.
+## V4. Action icons are very low contrast
 
-Screenshots:
-- `docs/qa/screenshots/genui-long-desktop.png`
-- `docs/qa/screenshots/genui-long-mobile.png`
+`desktop-chat-reply.png`, `desktop-chat-long.png`, `desktop-chat-error.png`
 
-### Editable text has no resting affordance
+Copy and regenerate sit at muted color on the page background and are hard to find, especially after a reply with a lot of text. On an error message the regenerate control is the useful action and reads as disabled.
 
-The generated `Text` component looks like plain text until the pointer hovers it. The only hint is a border on hover and focus. There is no edit icon, label, or short helper text, so a reader may not know the text can be changed. The label field is optional and the model often leaves it out.
+## V5. Reasoning disclosure is quiet to the point of missing
 
-A design pass could add a small edit control or a persistent subtle surface that says the text is editable.
+`desktop-chat-reply.png`, `desktop-chat-streaming.png`
 
-Screenshots:
-- `docs/qa/screenshots/genui-text-desktop.png`
-- `docs/qa/screenshots/genui-all-desktop.png`
-- `docs/qa/screenshots/genui-all-text-edited.png`
+"Thought" with a small caret is the only indication that reasoning exists. It sits at the same weight as body metadata and is easy to skip.
 
-### The unknown-type fallback is a wall of raw error and JSON
+## V6. Mobile chat has no title or model context
 
-The fallback is correct, but it prints the full validation payload, the allowed component list, and the raw spec. It fills most of the thread. A short summary line with a disclosure for the raw JSON would read better.
+`mobile-chat-reply.png`, `mobile-chat-long-code.png`
 
-Screenshots:
-- `docs/qa/screenshots/genui-unknown-desktop.png`
-- `docs/qa/screenshots/genui-malformed-desktop.png`
+The 44px header holds only the sidebar button and the orbit mark. On a long thread there is no visible chat title and no model. The only model chip is inside the composer.
 
-## Low
+## V7. Mobile code block cuts columns and prose mid-token
 
-### The button note appears twice
+`mobile-chat-long-code.png`
 
-The generated Button shows its note below the button. The Callout with `statePath: "/note"` also shows the same note. It reads as a duplicate when both components are present.
+The table stays inside the card, but "Column two" and "Column three" wrap to two lines while the body cells stay one line. In the code block the cut happens in the middle of an identifier, which reads as clipping rather than scrolling.
 
-Screenshots:
-- `docs/qa/screenshots/genui-all-desktop.png`
+## V8. Chat titles keep markdown and line breaks
 
-### Numbers are not formatted
+`desktop-sidebar-history.png`
 
-Metric and KeyValue values print exactly as stored. `1234` and `42000` stay unformatted. The catalog treats numbers as text, so this is a presentation choice for the design pass.
+A title is the first 80 characters of the first user message. Newlines collapse in the sidebar, but markdown markers, code fences, and leading list markers would show raw. Long titles truncate with an ellipsis, which works.
 
-Screenshots:
-- `docs/qa/screenshots/genui-all-desktop.png`
+## V9. Empty state figure scale
 
-### The generated button uses the browser focus outline
+`desktop-empty-chat.png`, `desktop-empty-no-provider.png`
 
-The generated button has no custom focus ring. Keyboard focus falls back to a thin browser outline. It is visible, but it does not match the rest of the interface.
+The dish and plug figures are 240px wide in a 1440x900 canvas. They read as small and float in the middle. This may be intentional, but the relationship between the figure, the caption, and the composer is loose.
 
-Screenshots:
-- `docs/qa/screenshots/genui-button-focus.png`
+## V10. Error banner weight
 
-### Long user prompts wrap into the sidebar edge on mobile
+`desktop-chat-error.png`
 
-The user bubble is right aligned and uses `max-w-[80%]` of an already narrow chat column. The text stacks one or two words per line. This comes from the same mobile width problem above.
+The error banner spans the full column and uses the destructive tint at full width for a two-word message. The orbit mark and the action row below stay, so the failure looks like a normal assistant turn with a red skin. A tighter inline treatment may fit the night-sky direction better.
 
-Screenshots:
-- `docs/qa/screenshots/genui-all-mobile.png`
+## V11. Settings status dot without a label for the empty state
+
+`desktop-settings-empty.png`, `desktop-settings-missing-key.png`
+
+"Not checked" and "0 models" are clear enough, but the dot colors carry the state. When there is no key the row could say so directly, since that is the action the screen wants.
+
+## Status after the design pass
+
+Screenshots are `after-*.png` in the same folder. V12 to V15 cover inline editing and are handled on `feat/inline-editing`.
+
+| # | Change | After |
+| --- | --- | --- |
+| V1, V7 | Code and tables scroll under an edge fade. Table headers stay on one line. Code longer than 20 lines opens capped with a "N more lines" control. | `after-desktop-chat-long`, `after-desktop-code-collapsed`, `after-mobile-chat-long-code` |
+| V2 | The palette list fades its bottom edge while more rows are below. | `after-desktop-command-palette`, `after-mobile-command-palette` |
+| V3 | With no provider and no messages the composer is gone and only "Open settings" remains. In a thread it turns dashed and the send button goes grey. | `after-desktop-empty-no-provider` |
+| V4, V10 | A failure is one red line and a labeled Retry button. Copy is hidden when there is nothing to copy. | `after-desktop-chat-error` |
+| V5 | Reasoning is a bordered chip with an icon. | `after-desktop-chat-reasoning` |
+| V6 | The mobile and collapsed headers show the chat title and a new chat button. | `after-mobile-chat-long-code`, `after-desktop-sidebar-collapsed` |
+| V8 | New titles drop code fences, markdown markers, and line breaks, and cut at a word. Existing titles are unchanged. | `after-desktop-chat-long` |
+| V9 | An empty chat centers the figure and the composer as one group. | `after-desktop-empty-chat`, `after-mobile-empty-chat` |
+| V11 | The status reads "No key" until a key is entered or stored. | `after-desktop-settings-empty` |

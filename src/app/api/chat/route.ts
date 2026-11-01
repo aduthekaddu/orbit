@@ -3,7 +3,7 @@ import { z } from "zod";
 import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
 import { assistantHasVisiblePart } from "@/lib/genui/spec";
 import { chatTools } from "@/lib/genui/tool";
-import { ensureChat, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
+import { ensureChat, planChatWrite, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { getSettings } from "@/lib/settings";
 import { getSession, unauthorized } from "@/lib/session";
@@ -21,6 +21,8 @@ const messageSchema = z.object({
 const bodySchema = z.object({
   id: z.string().min(1).max(100),
   messages: z.array(messageSchema).min(1),
+  trigger: z.enum(["submit-message", "regenerate-message", "resume-stream"]).optional(),
+  messageId: z.string().min(1).max(100).optional(),
 });
 
 function sanitize(message: string, secret: string) {
@@ -61,10 +63,12 @@ export async function POST(request: Request) {
   if (!chat) return Response.json({ error: "Not found" }, { status: 404 });
 
   const incoming = parsed.data.messages;
-  for (const message of incoming) {
-    if (message.parts) upsertMessage(chat.id, { id: message.id, role: message.role, parts: message.parts });
+  const write = planChatWrite(chat.id, incoming, parsed.data.trigger, parsed.data.messageId);
+  if (!write) {
+    return Response.json({ error: "A message id belongs to a different chat." }, { status: 409 });
   }
   const firstUser = incoming.find((message) => message.role === "user");
+  const lastUser = incoming.findLast((message) => message.role === "user");
   const title = textFromParts(firstUser?.parts).trim();
   if (title) touchChat(chat.id, title);
   else touchChat(chat.id);
@@ -92,10 +96,13 @@ export async function POST(request: Request) {
       ...(allowReasoning ? reasoningOptions(settings.reasoningEffort) : {}),
     });
 
-    const stream = toUIMessageStream({
+    // Send the response id so the client reuses it. Without it the client mints
+    // its own id and the next turn stores the assistant reply a second time.
+    const uiStream = toUIMessageStream({
       stream: result.stream,
       tools: chatTools,
       originalMessages: uiMessages,
+      generateMessageId: () => write.responseId,
       onError: (error) => streamErrorMessage(error, settings.apiKey),
       onEnd: async ({ responseMessage, isAborted, outcome }) => {
         if (!assistantHasVisiblePart(responseMessage.parts)) {
@@ -105,19 +112,24 @@ export async function POST(request: Request) {
                 .slice(0, 8)
             : [];
           const status = outcome && typeof outcome === "object" && "status" in outcome ? String(outcome.status) : "";
-          console.error("chat end without a visible part", isAborted ? "aborted" : "finished", status, types.join(",") || "none");
+          console.error("chat end without text", isAborted ? "aborted" : "finished", status, types.join(",") || "none");
           return;
         }
-        upsertMessage(chat.id, {
-          id: responseMessage.id || crypto.randomUUID(),
-          role: "assistant",
-          parts: responseMessage.parts,
-        });
+        if (write.regenerate && (isAborted || outcome.status !== "completed")) return;
+        upsertMessage(
+          chat.id,
+          {
+            id: responseMessage.id || write.responseId,
+            role: "assistant",
+            parts: responseMessage.parts,
+          },
+          lastUser?.id,
+        );
         touchChat(chat.id);
       },
     });
 
-    return createUIMessageStreamResponse({ stream });
+    return createUIMessageStreamResponse({ stream: uiStream });
   } catch (error) {
     const message = error instanceof Error ? error.message : "The model request failed";
     console.error("chat request error", sanitize(message, settings.apiKey));
