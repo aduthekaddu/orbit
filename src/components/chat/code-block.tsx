@@ -4,7 +4,7 @@ import { useState, type KeyboardEvent } from "react";
 import { Highlight, type PrismTheme } from "prism-react-renderer";
 import type { CodeHeaderProps, SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
 import { CaretDownIcon, CheckIcon, CopyIcon, WarningCircleIcon } from "@phosphor-icons/react";
-import { replaceCode } from "@/lib/chat-parts";
+import { codeBodyStart, replaceCode } from "@/lib/chat-parts";
 import { cn } from "@/lib/utils";
 import { ScrollFade } from "@/components/ui/scroll-fade";
 import { useCodeEdit } from "./code-edit-context";
@@ -34,16 +34,10 @@ const orbitCodeTheme: PrismTheme = {
   ],
 };
 
-function codeStart(node: CodeHeaderProps["node"], text: string, code: string) {
-  const offset = node?.position?.start?.offset;
-  if (typeof offset === "number") return offset;
-  return text.indexOf(code);
-}
-
 export function CodeHeader({ language, code, node }: CodeHeaderProps) {
   const { copied, failed, copy } = useCopy();
   const edit = useCodeEdit();
-  const start = edit ? codeStart(node, edit.text, code) : -1;
+  const start = edit ? codeBodyStart(edit.text, node?.position?.start?.offset, code) : -1;
   const active = edit?.active === start;
 
   return (
@@ -125,7 +119,7 @@ function CodeEditor({ code, start, language }: { code: string; start: number; la
 export function SyntaxHighlighter({ code, language, node }: SyntaxHighlighterProps) {
   const edit = useCodeEdit();
   const [expanded, setExpanded] = useState(false);
-  const start = edit ? codeStart(node, edit.text, code) : -1;
+  const start = edit ? codeBodyStart(edit.text, node?.position?.start?.offset, code) : -1;
   const active = edit?.enabled && edit.active === start;
 
   if (active) return <CodeEditor code={code} start={start} language={language} />;
