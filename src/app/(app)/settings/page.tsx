@@ -6,5 +6,5 @@ export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   await requireUser();
-  return <SettingsForm initial={toPublicSettings(getSettings())} />;
+  return <SettingsForm initial={toPublicSettings(getSettings())} title="Settings" />;
 }

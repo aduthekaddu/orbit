@@ -32,7 +32,7 @@ function canLoadStored(initial: PublicSettings) {
   return initial.keySet && Boolean(initial.baseUrl);
 }
 
-export function SettingsForm({ initial }: { initial: PublicSettings }) {
+export function SettingsForm({ initial, title }: { initial: PublicSettings; title: string }) {
   const router = useRouter();
   const [baseUrl, setBaseUrl] = useState(initial.baseUrl);
   const [apiKey, setApiKey] = useState("");
@@ -132,7 +132,7 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
 
   return (
     <div className="mx-auto w-full max-w-widget px-6 py-10">
-      <h1 className="mb-6 text-xl font-semibold tracking-tight">Settings</h1>
+      <h1 className="mb-6 text-xl font-semibold tracking-tight">{title}</h1>
       <form onSubmit={onSubmit} className="rounded-xl border bg-card shadow-card">
         <div className="flex items-center justify-between gap-3 border-b px-5 py-3.5">
           <h2 className="text-sm font-medium">Provider</h2>
@@ -185,7 +185,7 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
                   }}
                 >
                   <SelectTrigger id="model" className="w-full">
-                    <SelectValue />
+                    <SelectValue placeholder="Choose a model" />
                   </SelectTrigger>
                   <SelectContent>
                     {models.map((item, index) => (
