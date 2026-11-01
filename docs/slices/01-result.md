@@ -100,7 +100,7 @@ Chrome on `/c/fef162ad-d85a-4842-8279-ab544685a86b` posted that same id. Reload 
 
 `npm run typecheck` and `npm run build` (Next.js 16.4.3) exited 0. `npm start -- -p 3210 -H 127.0.0.1` was ready in 111ms. Smoke against that server exited 0 with the same passing lines. The server log did not contain the provider key. The process was stopped. Port 3210 was free afterward.
 
-`node .cursor/skills/verify-orbit/verify.mjs launch` printed `ready` and `signupOpen=yes` on an empty sandbox. `doctor` printed `doctor ok`. `drive chat` printed `drive chat passed` and `smoke passed`, including `first message chat id matches open chat: yes`. A second sandbox ran `drive signup`, `drive signin`, and `drive settings`. Each printed passed. Cleanup removed `.verify/sandbox` and left `.verify/evidence/`.
+`node .agents/skills/verify-orbit/verify.mjs launch` printed `ready` and `signupOpen=yes` on an empty sandbox. `doctor` printed `doctor ok`. `drive chat` printed `drive chat passed` and `smoke passed`, including `first message chat id matches open chat: yes`. A second sandbox ran `drive signup`, `drive signin`, and `drive settings`. Each printed passed. Cleanup removed `.verify/sandbox` and left `.verify/evidence/`.
 
 ## Greptile fixes
 

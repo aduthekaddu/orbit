@@ -18,12 +18,12 @@ Chat sends one user message, streams the assistant reply, and shows both after a
 
 Preconditions:
 
-- `node .cursor/skills/verify-orbit/verify.mjs doctor` prints `doctor ok`.
+- `node .agents/skills/verify-orbit/verify.mjs doctor` prints `doctor ok`.
 - The sandbox database is empty, or its only user is `smoke@orbit.local`. `scripts/smoke.ts` signs up that account and cannot run after a different first user. If `drive signup` already ran, this drive fails. Use a fresh launch.
 - `ORBIT_BASE_URL` and `ORBIT_API_KEY` are set in the environment. If either is missing, the drive fails before calling the provider.
 
 - **Stream and reload.** The drive runs `npx tsx scripts/smoke.ts` with cwd `.verify/sandbox`. The script signs in, saves the provider, posts one chat turn, checks streamed text, reloads `GET /api/chats/:id`, and reads `data/orbit.db`.
-- **Command.** Run `node .cursor/skills/verify-orbit/verify.mjs drive chat`.
+- **Command.** Run `node .agents/skills/verify-orbit/verify.mjs drive chat`.
 - **Proof.** `.verify/evidence/chat/summary.txt` contains the smoke exit code and the redacted smoke log, including `smoke passed` on success.
 
 ## Gotchas

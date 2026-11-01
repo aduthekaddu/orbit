@@ -6,15 +6,15 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 
 - The dev server and any other process on `127.0.0.1:3210` are stopped.
 - `npm run build` has produced `.next`.
-- Launch with `node .cursor/skills/verify-orbit/verify.mjs launch` so the server cwd is `.verify/sandbox` and `data/orbit.db` is created there.
-- Run `node .cursor/skills/verify-orbit/verify.mjs doctor` and require `doctor ok` plus the sandbox cwd.
+- Launch with `node .agents/skills/verify-orbit/verify.mjs launch` so the server cwd is `.verify/sandbox` and `data/orbit.db` is created there.
+- Run `node .agents/skills/verify-orbit/verify.mjs doctor` and require `doctor ok` plus the sandbox cwd.
 - Drive only the server this launch started. A server whose cwd is the repo uses the repo database. Do not drive that one from this map.
 
 ## Driving conventions
 
 - Start from the baseline unless the feature names a different precondition.
 - Page checks use the visible strings `Create account`, `Sign in`, `Message`, and the settings labels `Base URL` and `API key`.
-- Run every command through `node .cursor/skills/verify-orbit/verify.mjs`.
+- Run every command through `node .agents/skills/verify-orbit/verify.mjs`.
 - Keep `.verify/evidence/` after cleanup.
 
 ## Proof and skip reporting

@@ -16,7 +16,7 @@ Run the commands from the repo root.
 Done when the command prints `ready` and `signupOpen=yes` on an empty sandbox.
 
 1. Run `npm run build` if `.next` is missing. `npm start` serves that build.
-2. Run `node .cursor/skills/verify-orbit/verify.mjs launch`.
+2. Run `node .agents/skills/verify-orbit/verify.mjs launch`.
 3. The command symlinks the build into `.verify/sandbox`, creates an empty `.verify/sandbox/data`, and starts `npm start -- -p 3210 -H 127.0.0.1` with that cwd.
 4. Ready means `GET /api/setup` returns JSON with a boolean `signupOpen`. A live port alone is not ready.
 
@@ -24,7 +24,7 @@ A second launch while that sandbox server is healthy prints `already running` an
 
 ## Doctor
 
-Run `node .cursor/skills/verify-orbit/verify.mjs doctor` before a drive when anything looks wrong.
+Run `node .agents/skills/verify-orbit/verify.mjs doctor` before a drive when anything looks wrong.
 
 Done when it prints `doctor ok`. That means the recorded pid is alive, its cwd is `.verify/sandbox`, a process with that cwd is listening on `127.0.0.1:3210`, and `GET /api/setup` returns `signupOpen`.
 
@@ -32,10 +32,10 @@ Done when it prints `doctor ok`. That means the recorded pid is alive, its cwd i
 
 The helper is the harness. Prefer the commands below over ad hoc curls. Page checks look for the visible label text `Create account`, `Sign in`, and `Message`.
 
-- Signup. `node .cursor/skills/verify-orbit/verify.mjs drive signup`
-- Sign in. `node .cursor/skills/verify-orbit/verify.mjs drive signin`
-- Settings. `node .cursor/skills/verify-orbit/verify.mjs drive settings`
-- Chat. `node .cursor/skills/verify-orbit/verify.mjs drive chat`
+- Signup. `node .agents/skills/verify-orbit/verify.mjs drive signup`
+- Sign in. `node .agents/skills/verify-orbit/verify.mjs drive signin`
+- Settings. `node .agents/skills/verify-orbit/verify.mjs drive settings`
+- Chat. `node .agents/skills/verify-orbit/verify.mjs drive chat`
 
 Feature recipes live in `features/`. Read `features/README.md` first. Drive one feature from that map. A proof that uses a different entry point does not cover the ones you skipped.
 
@@ -51,7 +51,7 @@ The settings drive uses the fake key `test-key-not-real` and checks that the res
 
 ## Cleanup
 
-Run `node .cursor/skills/verify-orbit/verify.mjs cleanup`.
+Run `node .agents/skills/verify-orbit/verify.mjs cleanup`.
 
 Done when the sandbox pid is gone, `.verify/sandbox` is gone, and `.verify/evidence/` is still there. Cleanup signals the process group started by launch. It does not kill by process name. If the recorded pid is not the sandbox server, cleanup refuses to kill it.
 
@@ -59,6 +59,6 @@ Run cleanup after a failed drive too, so the port is free. Then confirm the evid
 
 ## Helpers
 
-`node .cursor/skills/verify-orbit/verify.mjs` with one of `launch`, `doctor`, `cleanup`, or `drive` plus `signup`, `signin`, `settings`, or `chat`.
+`node .agents/skills/verify-orbit/verify.mjs` with one of `launch`, `doctor`, `cleanup`, or `drive` plus `signup`, `signin`, `settings`, or `chat`.
 
 The script is the only helper. Feature files name these commands and the visible result.

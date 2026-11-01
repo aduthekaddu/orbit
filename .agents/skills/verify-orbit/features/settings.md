@@ -17,13 +17,13 @@ Settings stores a base URL, a model, and a key on the server. The browser receiv
 
 Preconditions:
 
-- `node .cursor/skills/verify-orbit/verify.mjs doctor` prints `doctor ok`.
+- `node .agents/skills/verify-orbit/verify.mjs doctor` prints `doctor ok`.
 - The sandbox can sign in as `verify@orbit.local`. If signup is still open, the drive creates that account first. If another account already owns the database, the drive fails.
 
 - **Open settings.** `GET /settings` with the session cookie returns 200.
 - **Save.** `PUT /api/settings` sends base URL `https://example.com/v1`, model `example-model`, reasoning `low`, and the fake key `test-key-not-real`. Status 200, `keySet` true, model `example-model`, and no `apiKey` field.
 - **Read back.** `GET /api/settings` returns 200, has no `apiKey` field, and the body does not contain the fake key.
-- **Command.** Run `node .cursor/skills/verify-orbit/verify.mjs drive settings`.
+- **Command.** Run `node .agents/skills/verify-orbit/verify.mjs drive settings`.
 - **Proof.** `.verify/evidence/settings/summary.txt` records the page status, both payloads' key checks, and `keySet`.
 
 ## Gotchas
