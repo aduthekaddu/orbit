@@ -214,7 +214,7 @@ export function updateMessageText(chatId: string, messageId: string, text: strin
     .from(messages)
     .where(and(eq(messages.id, messageId), eq(messages.chatId, chatId)))
     .get();
-  if (!row) return false;
+  if (!row || row.role !== "assistant") return false;
   const current = JSON.parse(row.parts) as UIMessage["parts"];
   const parts = partIndex == null ? replaceTextParts(current, text) : replaceTextPart(current, partIndex, text);
   if (!parts) return false;

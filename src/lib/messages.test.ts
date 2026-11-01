@@ -121,6 +121,22 @@ test("reply text editing keeps tool parts and stale echoes cannot overwrite it",
   assert.deepEqual(saved.parts, [{ type: "text", text: "after" }, parts[1]]);
 });
 
+test("a user prompt cannot be rewritten in place", () => {
+  const chat = "prompt-patch";
+  mods.db
+    .insert(mods.schema.chats)
+    .values({ id: chat, userId: "u1", title: "Prompt", createdAt: new Date(), updatedAt: new Date() })
+    .run();
+  mods.upsertMessage(chat, message("pp1", "user", "ask"));
+  mods.upsertMessage(chat, message("pp2", "assistant", "answer"), "pp1");
+
+  assert.equal(mods.updateMessageText(chat, "pp1", "rewritten"), false);
+  assert.deepEqual(mods.listMessages(chat), [
+    { id: "pp1", role: "user", parts: [{ type: "text", text: "ask" }] },
+    { id: "pp2", role: "assistant", parts: [{ type: "text", text: "answer" }] },
+  ]);
+});
+
 test("editing one text part by index keeps the reply's parts in order", () => {
   const parts = [
     { type: "text", text: "before" },
