@@ -45,6 +45,7 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
     } catch (error) {
       if (id !== modelLoad.current.id) return;
       if (error instanceof Error && error.name === "AbortError") return;
+      setModels([]);
     }
   }, []);
 
