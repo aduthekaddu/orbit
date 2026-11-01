@@ -40,7 +40,8 @@ export function codeBodyStart(text: string, fenceOffset: number | undefined, cod
 export function replaceCode(text: string, code: string, next: string, start?: number, end?: number): string {
   const closingFenceGlued = code === "" ? next !== "" : code.endsWith("\n");
   const keepNewline = closingFenceGlued && !next.endsWith("\n") ? "\n" : "";
-  if (start != null && end != null && start >= 0 && end <= text.length && text.slice(start, end) === code) {
+  if (start != null && end != null) {
+    if (start < 0 || end > text.length || text.slice(start, end) !== code) return text;
     return text.slice(0, start) + next + keepNewline + text.slice(end);
   }
   const index = text.indexOf(code);

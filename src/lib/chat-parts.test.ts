@@ -36,3 +36,10 @@ test("saving a new body into an empty code block keeps the closing fence on its 
   assert.equal(start, 6);
   assert.equal(replaceCode(markdown, "", "new", start, start), "```ts\nnew\n```");
 });
+
+test("a stale code range leaves the message unchanged instead of editing an earlier block", () => {
+  const markdown = "```ts\nold\n```\n\n```ts\nold\n```\n\nend";
+  const staleStart = 15;
+  const staleEnd = staleStart + "old\n".length;
+  assert.equal(replaceCode(markdown, "old\n", "new", staleStart, staleEnd), markdown);
+});
