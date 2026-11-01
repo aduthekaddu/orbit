@@ -1,5 +1,8 @@
-import { convertToModelMessages, createUIMessageStreamResponse, streamText, toUIMessageStream, type UIMessage } from "ai";
+import { convertToModelMessages, createUIMessageStreamResponse, stepCountIs, streamText, toUIMessageStream, type UIMessage } from "ai";
 import { z } from "zod";
+import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
+import { assistantHasVisiblePart, settleInterruptedParts } from "@/lib/genui/spec";
+import { chatTools } from "@/lib/genui/tool";
 import { ensureChat, planChatWrite, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { getSettings } from "@/lib/settings";
@@ -25,6 +28,20 @@ const bodySchema = z.object({
 function sanitize(message: string, secret: string) {
   if (!secret) return message;
   return message.split(secret).join("[redacted]");
+}
+
+function cleanErrorText(text: string) {
+  return text.replace(/AI_[A-Za-z]+Error:\s*/g, "").trim();
+}
+
+function streamErrorMessage(error: unknown, secret: string) {
+  if (typeof error === "string") return sanitize(cleanErrorText(error), secret);
+  const message = error instanceof Error ? error.message : "The model request failed";
+  console.error("chat stream error", sanitize(message, secret));
+  if (error instanceof Error && error.name === "AI_InvalidToolInputError") {
+    return sanitize(cleanErrorText(message), secret);
+  }
+  return "The model request failed";
 }
 
 export async function POST(request: Request) {
@@ -71,7 +88,10 @@ export async function POST(request: Request) {
         model: settings.model,
         chatId: chat.id,
       }),
-      messages: await convertToModelMessages(uiMessages),
+      instructions: RENDER_UI_SYSTEM,
+      messages: await convertToModelMessages(uiMessages, { tools: chatTools }),
+      tools: chatTools,
+      stopWhen: stepCountIs(1),
       abortSignal: request.signal,
       ...(allowReasoning ? reasoningOptions(settings.reasoningEffort) : {}),
     });
@@ -80,16 +100,14 @@ export async function POST(request: Request) {
     // its own id and the next turn stores the assistant reply a second time.
     const uiStream = toUIMessageStream({
       stream: result.stream,
+      tools: chatTools,
       originalMessages: uiMessages,
       generateMessageId: () => write.responseId,
-      onError: (error) => {
-        const message = error instanceof Error ? error.message : "The model request failed";
-        console.error("chat stream error", sanitize(message, settings.apiKey));
-        return "The model request failed";
-      },
+      onError: (error) => streamErrorMessage(error, settings.apiKey),
       onEnd: async ({ responseMessage, isAborted, outcome }) => {
-        const text = textFromParts(responseMessage.parts).trim();
-        if (!text) {
+        const interrupted = isAborted || outcome.status !== "completed";
+        const parts = settleInterruptedParts(responseMessage.parts, interrupted);
+        if (!assistantHasVisiblePart(parts)) {
           const types = Array.isArray(responseMessage.parts)
             ? responseMessage.parts
                 .map((part) => (part && typeof part === "object" && "type" in part ? String(part.type) : "?"))
@@ -99,13 +117,13 @@ export async function POST(request: Request) {
           console.error("chat end without text", isAborted ? "aborted" : "finished", status, types.join(",") || "none");
           return;
         }
-        if (write.regenerate && (isAborted || outcome.status !== "completed")) return;
+        if (write.regenerate && interrupted) return;
         upsertMessage(
           chat.id,
           {
             id: responseMessage.id || write.responseId,
             role: "assistant",
-            parts: responseMessage.parts,
+            parts,
           },
           lastUser?.id,
         );

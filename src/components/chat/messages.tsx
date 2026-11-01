@@ -17,6 +17,8 @@ import { Button } from "@/components/ui/button";
 import { IconAction, iconActionClass } from "./icon-action";
 import { MarkdownText } from "./markdown-text";
 import { Reasoning } from "./reasoning";
+import { RenderUiPart } from "@/components/genui/render-ui";
+import { RENDER_UI_TOOL } from "@/lib/genui/catalog";
 import { COPIED_MS } from "./use-copy";
 
 type PartComponents = NonNullable<MessagePrimitiveTypes.Parts.Props["components"]>;
@@ -35,7 +37,7 @@ const Pending: EmptyMessagePartComponent = ({ status }) => {
 
 const PlainText: TextMessagePartComponent = ({ text }) => <>{text}</>;
 
-const assistantParts: PartComponents = { Text: () => <MarkdownText />, Reasoning, Empty: Pending };
+const assistantParts: PartComponents = { Text: () => <MarkdownText />, Reasoning, Empty: Pending, tools: { by_name: { [RENDER_UI_TOOL]: RenderUiPart } } };
 
 const userParts: PartComponents = { Text: PlainText };
 
@@ -55,7 +57,7 @@ function AssistantMessage() {
   const failed = useAuiState((s) => s.message.status?.type === "incomplete" && s.message.status.reason === "error");
   const hasText = useAuiState((s) => s.message.content.some((part) => part.type === "text" && part.text.length > 0));
   return (
-    <MessagePrimitive.Root className="relative mx-auto w-full max-w-widget animate-rise">
+    <MessagePrimitive.Root data-message-role="assistant" className="relative mx-auto w-full max-w-widget animate-rise">
       <OrbitMark busy={running} tone={running ? "accent" : "mono"} className="absolute top-0.5 -left-9 hidden size-5 @3xl:block" />
       <MessagePrimitive.Parts components={assistantParts} />
       <MessagePrimitive.Error>

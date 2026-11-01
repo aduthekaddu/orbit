@@ -5,10 +5,16 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { eq } from "drizzle-orm";
 import { readEnv } from "../env";
+import { dataDirectory } from "../paths";
+import { withMigrationLock } from "./migration-lock";
 import * as schema from "./schema";
 
-const dataDir = path.join(process.cwd(), "data");
-fs.mkdirSync(dataDir, { recursive: true });
+const dataDir = dataDirectory();
+// The directory holds the database and the auth secret, so group and other
+// users must not be able to replace them. The mode on mkdir is masked by
+// umask, hence the chmod for both a fresh and an existing directory.
+fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+fs.chmodSync(dataDir, 0o700);
 
 const dbPath = path.join(dataDir, "orbit.db");
 const sqlite = new Database(dbPath);
@@ -18,7 +24,7 @@ sqlite.pragma("busy_timeout = 5000");
 
 function restrictDbFile(name: "orbit.db" | "orbit.db-wal" | "orbit.db-shm") {
   try {
-    fs.chmodSync(path.join(process.cwd(), "data", name), 0o600);
+    fs.chmodSync(path.join(dataDir, name), 0o600);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
@@ -31,8 +37,9 @@ restrictDbFile("orbit.db-shm");
 export const db = drizzle(sqlite, { schema });
 
 const migrationsFolder = path.join(process.cwd(), "drizzle");
+
 if (fs.existsSync(migrationsFolder)) {
-  migrate(db, { migrationsFolder });
+  withMigrationLock(() => migrate(db, { migrationsFolder }), { dir: dataDir });
 }
 
 sqlite.exec(`
