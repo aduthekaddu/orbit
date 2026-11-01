@@ -67,8 +67,24 @@ export function upsertMessage(chatId: string, message: { id: string; role: strin
 export type IncomingMessage = { id: string; role: string; parts?: unknown };
 
 export function persistIncoming(chatId: string, incoming: IncomingMessage[]) {
-  for (const message of incoming) {
-    if (!message.parts) continue;
+  const withParts = incoming.filter(
+    (message): message is IncomingMessage & { parts: unknown } => Boolean(message.parts),
+  );
+  if (withParts.length === 0) return true;
+  const saved = db
+    .select({ id: messages.id, chatId: messages.chatId, role: messages.role, content: messages.content, parts: messages.parts })
+    .from(messages)
+    .where(inArray(messages.id, withParts.map((message) => message.id)))
+    .all();
+  const byId = new Map(saved.map((row) => [row.id, row]));
+  for (const message of withParts) {
+    const existing = byId.get(message.id);
+    if (existing && existing.chatId === chatId) {
+      const content = textFromParts(message.parts);
+      if (existing.role === message.role && existing.content === content && existing.parts === JSON.stringify(message.parts ?? [])) {
+        continue;
+      }
+    }
     if (!upsertMessage(chatId, message)) return false;
   }
   return true;
