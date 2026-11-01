@@ -241,7 +241,7 @@ export function Text({ children, w, h = 6, tone = 3, wrap, filler, className, st
   const { fidelity } = useLook()
   if (fidelity === 'minimal' || (filler && fidelity !== 'realistic')) {
     const size = typeof style?.fontSize === 'number' ? style.fontSize : 11
-    return <Bar {...rest} w={w ?? Math.round(children.length * size * 0.52)} h={h} tone={tone} className={className} />
+    return <Bar {...rest} w={w ?? Math.round(children.length * size * 0.52)} h={h} tone={tone} className={className} style={style} />
   }
   return (
     <span {...rest} className={`ss-text${className ? ` ${className}` : ''}`} data-wrap={wrap || undefined} style={style}>

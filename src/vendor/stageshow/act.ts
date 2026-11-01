@@ -505,9 +505,12 @@ export function createAct<S>(signal: AbortSignal, env: ActEnv<S>): Act<S> {
     },
     async type(key, text, opts) {
       const interval = opts?.interval ?? 35
-      for (let i = 0; i <= text.length; i++) {
+      // Code points, so an emoji types whole: a slice by UTF-16 units would
+      // leave half a surrogate in state for a frame
+      const chars = Array.from(text)
+      for (let i = 0; i <= chars.length; i++) {
         check()
-        setState((s) => ({ ...s, [key]: text.slice(0, i) }))
+        setState((s) => ({ ...s, [key]: chars.slice(0, i).join('') }))
         // Uneven but repeatable rhythm, so every loop types the same way
         await wait(interval * (0.7 + 0.6 * hash(i)))
       }
@@ -558,7 +561,6 @@ export function createAct<S>(signal: AbortSignal, env: ActEnv<S>): Act<S> {
       // Gathers speed over the first quarter, then one speed to the lift,
       // still moving when it leaves so the throw carries straight on
       const fingerEase = (t: number) => { const a = 0.25, k = 1 / (1 - a / 2); return t < a ? (t * t) / (2 * a) * k : (t - a / 2) * k }
-      if (finger) { cursorRef.current?.setAttribute('data-touching', ''); await wait(140); check() }
       // The trail: one streak from where the finger was a few frames ago to
       // where it is now, turned along the motion and fading toward its tail
       const streak = finger ? cursorRef.current?.querySelector<HTMLElement>('.ss-cursor__streak') ?? null : null
@@ -583,6 +585,9 @@ export function createAct<S>(signal: AbortSignal, env: ActEnv<S>): Act<S> {
         if (finger) fingerGone(cursorEl)
       })
       try {
+        // The finger lands, and is already touching while it waits, so an
+        // abort during the wait still has a release to clean it up
+        if (finger) { cursorEl?.setAttribute('data-touching', ''); await wait(140); check() }
         // The press dips first and the hand closes at the bottom of it, so
         // the change of shape sits inside the press
         cursorEl?.setAttribute('data-pressed', 'true')
