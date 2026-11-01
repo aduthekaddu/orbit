@@ -176,32 +176,43 @@ function responseIdFor(chatId: string, incoming: IncomingMessage[], trigger?: st
   return crypto.randomUUID();
 }
 
-/** Persist the client list and pick the id the response stores under. Null means an id belongs to another chat. */
+export type ChatWritePlan =
+  | { regenerate: boolean; responseId: string }
+  | { error: "invalid-edit" | "cross-chat" | "stale" };
+
+/** Persist the client list and pick the id the response stores under. */
 export function planChatWrite(
   chatId: string,
   incoming: IncomingMessage[],
   trigger?: string,
   messageId?: string,
   editMessageId?: string,
-): { regenerate: boolean; responseId: string } | null {
+): ChatWritePlan {
   if (editMessageId) {
     const rows = db.select().from(messages).where(eq(messages.chatId, chatId)).orderBy(asc(messages.position)).all();
     const index = rows.findIndex((row) => row.id === editMessageId && row.role === "user");
     const target = rows[index];
     const edited = incoming.at(-1);
-    if (trigger !== "submit-message" || !target || edited?.role !== "user" || !Array.isArray(edited.parts)) return null;
+    if (trigger !== "submit-message" || !target || edited?.role !== "user" || !Array.isArray(edited.parts)) {
+      return { error: "invalid-edit" };
+    }
     const prefix = rows.slice(0, index);
-    if (incoming.length !== prefix.length + 1 || prefix.some((row, i) => incoming[i]?.id !== row.id)) return null;
+    if (incoming.length !== prefix.length + 1 || prefix.some((row, i) => incoming[i]?.id !== row.id)) {
+      return { error: "invalid-edit" };
+    }
     const ids = incoming.map((message) => message.id);
     const existing = db.select().from(messages).where(inArray(messages.id, ids)).all();
-    if (existing.some((row) => row.chatId !== chatId || (row.id === edited.id && row.id !== editMessageId))) return null;
+    if (existing.some((row) => row.chatId !== chatId || (row.id === edited.id && row.id !== editMessageId))) {
+      return { error: "cross-chat" };
+    }
     return db.transaction(() => {
       db.delete(messages).where(and(eq(messages.chatId, chatId), gte(messages.position, target.position))).run();
       if (persistIncoming(chatId, incoming) !== "ok") throw new Error("Edited history could not be saved");
       return { regenerate: false, responseId: crypto.randomUUID() };
     });
   }
-  if (persistIncoming(chatId, incoming) !== "ok") return null;
+  const result = persistIncoming(chatId, incoming);
+  if (result !== "ok") return { error: result };
   return {
     regenerate: trigger === "regenerate-message",
     responseId: responseIdFor(chatId, incoming, trigger, messageId),

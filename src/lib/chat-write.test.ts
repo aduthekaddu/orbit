@@ -53,6 +53,8 @@ before(async () => {
     "c-expected",
     "c-restore",
     "c-answer-edit",
+    "c-reasons",
+    "c-stale-reasons",
   ]) {
     mods.db.insert(mods.schema.chats).values({ id, userId: "u1", title: id, createdAt: now, updatedAt: now }).run();
   }
@@ -67,7 +69,7 @@ function message(id: string, role: "user" | "assistant", text: string): Incoming
 
 function write(chatId: string, incoming: Incoming[], trigger: Trigger = "submit-message", messageId?: string) {
   const plan = mods.planChatWrite(chatId, incoming, trigger, messageId);
-  assert.ok(plan);
+  if (!plan || "error" in plan) assert.fail(`write refused: ${plan?.error ?? "null"}`);
   return plan.responseId;
 }
 
@@ -192,7 +194,69 @@ test("a write whose id belongs to another chat is refused", () => {
     .values({ id: "o1", chatId: "c-other", role: "user", content: "x", parts: "[]", position: 0, createdAt: new Date() })
     .run();
 
-  assert.equal(mods.planChatWrite("c-conflict", [message("o1", "user", "x")], "submit-message"), null);
+  assert.deepEqual(mods.planChatWrite("c-conflict", [message("o1", "user", "x")], "submit-message"), {
+    error: "cross-chat",
+  });
+});
+
+test("edit validation names the reason it refused", () => {
+  write("c-reasons", [message("q1", "user", "one")]);
+  answer("c-reasons", "q2", "two", "q1");
+  write("c-reasons", [
+    message("q1", "user", "one"),
+    message("q2", "assistant", "two"),
+    message("q3", "user", "three"),
+  ]);
+  mods.db
+    .insert(mods.schema.messages)
+    .values({ id: "o2", chatId: "c-other", role: "user", content: "x", parts: "[]", position: 1, createdAt: new Date() })
+    .run();
+
+  assert.deepEqual(
+    mods.planChatWrite("c-reasons", [message("q2", "assistant", "bad")], "submit-message", undefined, "q2"),
+    { error: "invalid-edit" },
+  );
+  assert.deepEqual(
+    mods.planChatWrite("c-reasons", [message("q3", "user", "x")], "submit-message", undefined, "missing"),
+    { error: "invalid-edit" },
+  );
+  assert.deepEqual(
+    mods.planChatWrite("c-reasons", [message("q3", "user", "x")], "submit-message", undefined, "q3"),
+    { error: "invalid-edit" },
+  );
+  assert.deepEqual(
+    mods.planChatWrite(
+      "c-reasons",
+      [message("q1", "user", "one"), message("q2", "assistant", "two"), message("o2", "user", "x")],
+      "submit-message",
+      undefined,
+      "q3",
+    ),
+    { error: "cross-chat" },
+  );
+});
+
+test("a stale full-history echo is named stale", () => {
+  write("c-stale-reasons", [message("v1", "user", "one")]);
+  answer("c-stale-reasons", "v2", "two", "v1");
+  write("c-stale-reasons", [
+    message("v1", "user", "one"),
+    message("v2", "assistant", "two"),
+    message("v3", "user", "three"),
+  ]);
+  const edit = mods.planChatWrite("c-stale-reasons", [message("v1", "user", "edited")], "submit-message", undefined, "v1");
+  assert.ok(edit && !("error" in edit));
+
+  assert.deepEqual(
+    mods.planChatWrite(
+      "c-stale-reasons",
+      [message("v1", "user", "one"), message("v2", "assistant", "two"), message("v3", "user", "three")],
+      "submit-message",
+      "v3",
+    ),
+    { error: "stale" },
+  );
+  assert.deepEqual(ids("c-stale-reasons"), ["v1"]);
 });
 
 test("a reply to a prompt removed by an edit is refused", () => {

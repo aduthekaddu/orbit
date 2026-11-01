@@ -106,7 +106,9 @@ test("explicit user editing replaces later turns and invalid targets leave histo
   mods.upsertMessage(chat, history[0]);
   mods.upsertMessage(chat, history[1], "eu");
   mods.upsertMessage(chat, history[2]);
-  assert.equal(mods.planChatWrite(chat, [message("new", "assistant", "bad")], "submit-message", undefined, "eu"), null);
+  assert.deepEqual(mods.planChatWrite(chat, [message("new", "assistant", "bad")], "submit-message", undefined, "eu"), {
+    error: "invalid-edit",
+  });
   assert.equal(mods.listMessages(chat).length, 3);
   assert.ok(mods.planChatWrite(chat, [message("new", "user", "edited")], "submit-message", undefined, "eu"));
   assert.deepEqual(mods.listMessages(chat).map((row) => row.id), ["new"]);

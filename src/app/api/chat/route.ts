@@ -65,8 +65,14 @@ export async function POST(request: Request) {
 
   const incoming = parsed.data.messages;
   const write = planChatWrite(chat.id, incoming, parsed.data.trigger, parsed.data.messageId, parsed.data.editMessageId);
-  if (!write) {
-    return Response.json({ error: "A message id belongs to a different chat." }, { status: 409 });
+  if ("error" in write) {
+    if (write.error === "invalid-edit") {
+      return Response.json({ error: "Invalid edit request" }, { status: 400 });
+    }
+    if (write.error === "cross-chat") {
+      return Response.json({ error: "A message id belongs to a different chat." }, { status: 409 });
+    }
+    return Response.json({ error: "The chat changed. Reload and try again." }, { status: 409 });
   }
   const firstUser = incoming.find((message) => message.role === "user");
   const lastUser = incoming.findLast((message) => message.role === "user");
