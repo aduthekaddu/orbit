@@ -11,6 +11,7 @@ import {
   showsModelInput,
   type ModelOption,
 } from "@/lib/model-picker";
+import { appliedSave, type SettingsSnapshot } from "@/lib/settings-form";
 import type { PublicSettings, ReasoningEffort } from "@/lib/settings";
 
 const EFFORTS: ReasoningEffort[] = ["low", "medium", "high"];
@@ -27,6 +28,9 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
   const [saved, setSaved] = useState(false);
   const [pending, setPending] = useState(false);
   const modelLoad = useRef<{ id: number; controller: AbortController | null }>({ id: 0, controller: null });
+  const formValues: SettingsSnapshot = { baseUrl, apiKey, model, effort };
+  const latestValues = useRef(formValues);
+  latestValues.current = formValues;
 
   const loadModels = useCallback(async (nextBase: string, nextKey: string) => {
     const id = ++modelLoad.current.id;
@@ -73,10 +77,10 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          baseUrl,
-          apiKey: apiKey || undefined,
-          model,
-          reasoningEffort: effort,
+          baseUrl: formValues.baseUrl,
+          apiKey: formValues.apiKey || undefined,
+          model: formValues.model,
+          reasoningEffort: formValues.effort,
         }),
       });
       const body = (await response.json()) as PublicSettings & { error?: string };
@@ -84,9 +88,10 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
         setError(body.error ?? "Could not save");
         return;
       }
-      setKeySet(body.keySet);
-      setApiKey("");
-      setSaved(true);
+      const applied = appliedSave(formValues, latestValues.current);
+      if (applied.applyKeySet) setKeySet(body.keySet);
+      if (applied.clearKey) setApiKey("");
+      if (applied.saved) setSaved(true);
     } catch {
       setError("Could not save");
     } finally {
