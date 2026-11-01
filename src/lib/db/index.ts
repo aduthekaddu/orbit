@@ -6,10 +6,15 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { eq } from "drizzle-orm";
 import { readEnv } from "../env";
 import { dataDirectory } from "../paths";
+import { withMigrationLock } from "./migration-lock";
 import * as schema from "./schema";
 
 const dataDir = dataDirectory();
-fs.mkdirSync(dataDir, { recursive: true });
+// The directory holds the database and the auth secret, so group and other
+// users must not be able to replace them. The mode on mkdir is masked by
+// umask, hence the chmod for both a fresh and an existing directory.
+fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+fs.chmodSync(dataDir, 0o700);
 
 const dbPath = path.join(dataDir, "orbit.db");
 const sqlite = new Database(dbPath);
@@ -33,44 +38,8 @@ export const db = drizzle(sqlite, { schema });
 
 const migrationsFolder = path.join(process.cwd(), "drizzle");
 
-function sleep(ms: number) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-
-function withMigrationLock<T>(run: () => T): T {
-  const lockPath = path.join(dataDir, ".migrate.lock");
-  const deadline = Date.now() + 60_000;
-  while (true) {
-    try {
-      const fd = fs.openSync(lockPath, "wx");
-      try {
-        return run();
-      } finally {
-        fs.closeSync(fd);
-        try {
-          fs.unlinkSync(lockPath);
-        } catch {
-          // Another process already removed a stale lock.
-        }
-      }
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      try {
-        if (Date.now() - fs.statSync(lockPath).mtimeMs > 30_000) {
-          fs.unlinkSync(lockPath);
-          continue;
-        }
-      } catch {
-        continue;
-      }
-      if (Date.now() > deadline) throw new Error("Timed out waiting for the database migration lock");
-      sleep(50);
-    }
-  }
-}
-
 if (fs.existsSync(migrationsFolder)) {
-  withMigrationLock(() => migrate(db, { migrationsFolder }));
+  withMigrationLock(() => migrate(db, { migrationsFolder }), { dir: dataDir });
 }
 
 sqlite.exec(`
