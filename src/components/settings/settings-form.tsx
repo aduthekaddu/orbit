@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CheckIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,7 @@ function canLoadStored(initial: PublicSettings) {
 }
 
 export function SettingsForm({ initial }: { initial: PublicSettings }) {
+  const router = useRouter();
   const [baseUrl, setBaseUrl] = useState(initial.baseUrl);
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(initial.model);
@@ -110,6 +112,8 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
         setError(body.error ?? "Could not save");
         return;
       }
+      // Pages that read settings on the server stay in the router cache, so Back would show them stale.
+      router.refresh();
       const applied = appliedSave(formValues, latestValues.current);
       if (applied.applyKeySet) setKeySet(body.keySet);
       if (applied.clearKey) setApiKey("");
