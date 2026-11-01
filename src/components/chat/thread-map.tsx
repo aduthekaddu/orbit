@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type RefObject } from "react";
 import { useAuiState } from "@assistant-ui/react";
 import { cn } from "@/lib/utils";
-import { currentTurnIndex, turnLabel, visibleTurns, type Turn } from "@/lib/thread-map";
+import { currentTurnIndex, shortcutTarget, turnLabel, visibleTurns, type Turn } from "@/lib/thread-map";
 
 const MIN_TURNS = 3;
 
@@ -67,10 +67,10 @@ export function ThreadMap({ viewport }: { viewport: RefObject<HTMLElement | null
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (!event.altKey || event.metaKey || event.ctrlKey) return;
-      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+      const target = shortcutTarget(event, position.current, turns.length);
+      if (target === null) return;
       event.preventDefault();
-      jump(position.current + (event.key === "ArrowUp" ? -1 : 1));
+      jump(target);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);

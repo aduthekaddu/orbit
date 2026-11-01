@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { currentTurnIndex, turnLabel, visibleTurns } from "./thread-map";
+import { currentTurnIndex, shortcutTarget, turnLabel, visibleTurns } from "./thread-map";
+
+const shortcut = (keys: Partial<Parameters<typeof shortcutTarget>[0]>) => ({
+  altKey: true,
+  shiftKey: false,
+  metaKey: false,
+  ctrlKey: false,
+  key: "ArrowDown",
+  ...keys,
+});
 
 test("the current turn is the last prompt above the anchor line", () => {
   assert.equal(currentTurnIndex([0, 400, 900], 450), 1);
@@ -18,4 +27,17 @@ test("a turn is visible while any part of its span is in view", () => {
 
 test("a turn is labelled by its first line", () => {
   assert.equal(turnLabel("  Plan the trip\nwith details"), "Plan the trip");
+});
+
+test("alt arrow steps to the next prompt", () => {
+  assert.equal(shortcutTarget(shortcut({}), 1, 3), 2);
+  assert.equal(shortcutTarget(shortcut({ key: "ArrowUp" }), 1, 3), 0);
+});
+
+test("shift, meta, ctrl, and plain arrows stay with the page", () => {
+  assert.equal(shortcutTarget(shortcut({ shiftKey: true }), 1, 3), null);
+  assert.equal(shortcutTarget(shortcut({ key: "ArrowUp", shiftKey: true }), 1, 3), null);
+  assert.equal(shortcutTarget(shortcut({ metaKey: true }), 1, 3), null);
+  assert.equal(shortcutTarget(shortcut({ ctrlKey: true }), 1, 3), null);
+  assert.equal(shortcutTarget(shortcut({ altKey: false }), 1, 3), null);
 });
