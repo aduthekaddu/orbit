@@ -55,6 +55,8 @@ before(async () => {
     "c-answer-edit",
     "c-reasons",
     "c-stale-reasons",
+    "c-invisible",
+    "c-invisible-retry",
   ]) {
     mods.db.insert(mods.schema.chats).values({ id, userId: "u1", title: id, createdAt: now, updatedAt: now }).run();
   }
@@ -305,6 +307,37 @@ test("a stale regenerate cannot overwrite a newer answer edit", () => {
 
   assert.equal(mods.upsertMessage("c-answer-edit", message("z2", "assistant", "regenerated"), "z1", expected), false);
   assert.deepEqual(mods.listMessages("c-answer-edit")[1].parts, [{ type: "text", text: "edited answer" }]);
+});
+
+test("an unsaved assistant reply does not block the next prompt", () => {
+  write("c-invisible", [message("f1", "user", "first")]);
+  answer("c-invisible", "f2", "first answer", "f1");
+
+  const plan = mods.planChatWrite("c-invisible", [
+    message("f1", "user", "first"),
+    message("f2", "assistant", "first answer"),
+    { id: "f3", role: "assistant", parts: [{ type: "reasoning", text: "thinking" }] },
+    message("f4", "user", "next question"),
+  ]);
+  assert.ok(plan && !("error" in plan), JSON.stringify(plan));
+  assert.deepEqual(ids("c-invisible"), ["f1", "f2", "f4"]);
+});
+
+test("a retry of an unsaved assistant reply is accepted", () => {
+  write("c-invisible-retry", [message("ir1", "user", "first")]);
+  answer("c-invisible-retry", "ir2", "first answer", "ir1");
+
+  const plan = mods.planChatWrite(
+    "c-invisible-retry",
+    [
+      message("ir1", "user", "first"),
+      message("ir2", "assistant", "first answer"),
+      { id: "ir-failed", role: "assistant", parts: [{ type: "reasoning", text: "thinking" }] },
+    ],
+    "regenerate-message",
+  );
+  assert.ok(plan && !("error" in plan), JSON.stringify(plan));
+  assert.deepEqual(ids("c-invisible-retry"), ["ir1", "ir2"]);
 });
 
 test("a stale tab cannot restore turns removed by an edit", () => {

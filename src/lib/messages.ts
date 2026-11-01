@@ -2,6 +2,7 @@ import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { UIMessage } from "ai";
 import { replaceTextPart, replaceTextParts } from "./chat-parts";
 import { db } from "./db";
+import { assistantHasVisiblePart } from "./genui/spec";
 import { chats, messages } from "./db/schema";
 
 export function textFromParts(parts: unknown): string {
@@ -61,7 +62,7 @@ export function upsertMessage(
   expected?: ExpectedMessage,
 ) {
   if (message.role !== "user" && message.role !== "assistant") return true;
-  if (message.role === "assistant" && Array.isArray(message.parts) && message.parts.length === 0) return true;
+  if (message.role === "assistant" && !assistantHasVisiblePart(message.parts)) return true;
   if (expected) {
     // The write is only valid while the row it was planned against is still current.
     const current = db
@@ -134,6 +135,8 @@ export function persistIncoming(chatId: string, incoming: IncomingMessage[]): Wr
   for (const message of withParts) {
     const existing = byId.get(message.id);
     if (!existing) {
+      // A reply with nothing visible is never stored, so the client holds it and resends it. Ignore it.
+      if (message.role === "assistant" && !assistantHasVisiblePart(message.parts)) continue;
       // Only the tab's new tail prompt may be unknown. Any other unknown id was replaced by an edit.
       if (message !== tail || message.role !== "user") return "stale";
       continue;
