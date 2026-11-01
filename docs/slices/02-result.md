@@ -4,7 +4,7 @@ The model can call `render_ui`. The chat stores that spec, and a reload still ha
 
 ## What was verified
 
-Host tools: Node v26.13.0, npm 11.20.0. No browser tools were available, so the chat page was not clicked. A server render check and the HTTP smoke stand in for that.
+Host tools: Node v26.13.0, npm 11.20.0. The browser QA is in `docs/qa/2026-11-01-genui-qa.md`. A server render check and the HTTP smoke cover the rest.
 
 `npm run typecheck` (`tsc --noEmit`) exited 0.
 
@@ -43,5 +43,9 @@ An earlier call on the same server, before numeric values were accepted, did cal
 - `catalog.zodSchema()` does not check prop types once the catalog has more than one component. `parseRenderSpec` checks each element's props, then `validateSpec`.
 - `catalog.prompt()` asks for a JSONL patch stream, so the chat instructions are a short string in `src/lib/genui/catalog.ts`.
 - The element field `on` is not in the spec schema, so the button action is the prop `action: "note"`.
-- Auth trusts `http://127.0.0.1:3211` and `http://localhost:3211` as well as port 3210. The first smoke signup failed with `Invalid origin` before that change.
-- The chat UI was not clicked in a browser. Reload was checked with `GET /api/chats/:id` and by reading `data/orbit.db`.
+- Auth no longer trusts the fixed 3211 origins. The smoke server must set `ORBIT_TRUSTED_ORIGINS=http://127.0.0.1:3211` when `BETTER_AUTH_URL` stays on port 3210.
+- The chat UI was not clicked in the first run. The later browser QA is in `docs/qa/2026-11-01-genui-qa.md`.
+
+## Review fixes
+
+The review round added table-width validation, persistence for stopped `render_ui` replies, an ownership-checked migration lock, private data-directory and auth-secret modes, deployment-only auth origins, and the QA harness fixes. `npm test` runs 87 tests. The browser QA, smoke, lock interleaving, two-process migration, and auth-origin probes all pass on this branch. The details are in `docs/qa/2026-11-01-genui-qa.md` and the PR thread.
