@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appliedSave, type SettingsSnapshot } from "./settings-form";
+import { appliedSave, connectionFromResponse, type SettingsSnapshot } from "./settings-form";
 
 const submitted: SettingsSnapshot = {
   baseUrl: "https://api.example.com/v1",
@@ -39,4 +39,21 @@ test("a model changed during the save is not reported as saved", () => {
     applyKeySet: true,
     saved: false,
   });
+});
+
+test("an empty model list without a key stays idle", () => {
+  assert.deepEqual(connectionFromResponse({ ok: true, status: 200 }, { models: [] }, false), { status: "idle" });
+});
+
+test("a model list from the provider is connected", () => {
+  const models = [{ id: "gpt-4", reasoning: null }];
+  assert.deepEqual(connectionFromResponse({ ok: true, status: 200 }, { models }, true), { status: "connected", models });
+});
+
+test("an unreachable provider is failed", () => {
+  assert.deepEqual(connectionFromResponse({ ok: false, status: 502 }, { models: [] }, true), { status: "failed" });
+});
+
+test("a not-configured request without a key stays idle", () => {
+  assert.deepEqual(connectionFromResponse({ ok: false, status: 400 }, { models: [] }, false), { status: "idle" });
 });

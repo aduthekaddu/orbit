@@ -9,8 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
-import { CUSTOM_OPTION, NO_OPTION, selectedOptionIndex, showsModelInput } from "@/lib/model-picker";
-import { appliedSave, type SettingsSnapshot } from "@/lib/settings-form";
+import { CUSTOM_OPTION, NO_OPTION, selectedOptionIndex, showsModelInput, type ModelOption } from "@/lib/model-picker";
+import { appliedSave, connectionFromResponse, type Connection, type SettingsSnapshot } from "@/lib/settings-form";
 import type { PublicSettings, ReasoningEffort } from "@/lib/settings";
 
 const EFFORTS: { value: ReasoningEffort; label: string }[] = [
@@ -19,14 +19,6 @@ const EFFORTS: { value: ReasoningEffort; label: string }[] = [
   { value: "high", label: "High" },
 ];
 
-
-type ListedModel = { id: string; reasoning: boolean | null };
-
-type Connection =
-  | { status: "idle" }
-  | { status: "checking" }
-  | { status: "connected"; models: ListedModel[] }
-  | { status: "failed" };
 
 function canLoadStored(initial: PublicSettings) {
   return initial.keySet && Boolean(initial.baseUrl);
@@ -39,6 +31,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
   const [model, setModel] = useState(initial.model);
   const [effort, setEffort] = useState<ReasoningEffort>(initial.reasoningEffort);
   const [keySet, setKeySet] = useState(initial.keySet);
+  const hasKey = keySet || apiKey.trim().length > 0;
   const [connection, setConnection] = useState<Connection>(() => canLoadStored(initial) ? { status: "checking" } : { status: "idle" });
   const [customMode, setCustomMode] = useState(false);
   const [error, setError] = useState("");
@@ -49,7 +42,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
   const latestValues = useRef(formValues);
   latestValues.current = formValues;
 
-  const loadModels = useCallback(async (nextBase: string, nextKey: string) => {
+  const loadModels = useCallback(async (nextBase: string, nextKey: string, nextHasKey: boolean) => {
     const id = ++modelLoad.current.id;
     modelLoad.current.controller?.abort();
     const controller = new AbortController();
@@ -66,9 +59,9 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
         }),
       });
       if (id !== modelLoad.current.id) return;
-      const body = (await response.json().catch(() => ({}))) as { models?: ListedModel[] };
+      const body = (await response.json().catch(() => ({}))) as { models?: ModelOption[] };
       if (id !== modelLoad.current.id) return;
-      setConnection(response.ok ? { status: "connected", models: body.models ?? [] } : { status: "failed" });
+      setConnection(connectionFromResponse(response, body, nextHasKey));
     } catch (error) {
       if (id !== modelLoad.current.id) return;
       if (error instanceof Error && error.name === "AbortError") return;
@@ -78,7 +71,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
 
   useEffect(() => {
     if (canLoadStored(initial)) {
-      void loadModels(initial.baseUrl, "");
+      void loadModels(initial.baseUrl, "", initial.keySet);
     }
     return () => {
       modelLoad.current.controller?.abort();
@@ -136,7 +129,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
       <form onSubmit={onSubmit} className="rounded-xl border bg-card shadow-card">
         <div className="flex items-center justify-between gap-3 border-b px-5 py-3.5">
           <h2 className="text-sm font-medium">Provider</h2>
-          <ConnectionStatus connection={connection} hasKey={keySet || apiKey.trim().length > 0} />
+          <ConnectionStatus connection={connection} hasKey={hasKey} />
         </div>
         <div className="divide-y">
           <Row id="baseUrl" label="Base URL">
@@ -147,7 +140,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
                 setError("");
                 setBaseUrl(event.target.value);
               }}
-              onBlur={() => void loadModels(baseUrl, apiKey)}
+              onBlur={() => void loadModels(baseUrl, apiKey, hasKey)}
               autoComplete="off"
               required
             />
@@ -162,7 +155,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
                 setError("");
                 setApiKey(event.target.value);
               }}
-              onBlur={() => void loadModels(baseUrl, apiKey)}
+              onBlur={() => void loadModels(baseUrl, apiKey, hasKey)}
               autoComplete="off"
             />
           </Row>
