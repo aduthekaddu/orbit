@@ -5,11 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import {
+  CUSTOM_OPTION,
+  selectedOptionIndex,
+  showsModelInput,
+  type ModelOption,
+} from "@/lib/model-picker";
 import type { PublicSettings, ReasoningEffort } from "@/lib/settings";
 
 const EFFORTS: ReasoningEffort[] = ["low", "medium", "high"];
-
-type ListedModel = { id: string; reasoning: boolean | null };
 
 export function SettingsForm({ initial }: { initial: PublicSettings }) {
   const [baseUrl, setBaseUrl] = useState(initial.baseUrl);
@@ -17,7 +21,8 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
   const [model, setModel] = useState(initial.model);
   const [effort, setEffort] = useState<ReasoningEffort>(initial.reasoningEffort);
   const [keySet, setKeySet] = useState(initial.keySet);
-  const [models, setModels] = useState<ListedModel[]>([]);
+  const [models, setModels] = useState<ModelOption[]>([]);
+  const [customMode, setCustomMode] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [pending, setPending] = useState(false);
@@ -39,7 +44,7 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
         }),
       });
       if (id !== modelLoad.current.id) return;
-      const body = (await response.json().catch(() => ({}))) as { models?: ListedModel[] };
+      const body = (await response.json().catch(() => ({}))) as { models?: ModelOption[] };
       if (id !== modelLoad.current.id) return;
       setModels(response.ok ? (body.models ?? []) : []);
     } catch (error) {
@@ -89,7 +94,7 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
     }
   }
 
-  const inList = models.some((item) => item.id === model);
+  const selectedIndex = selectedOptionIndex(models, model, customMode);
   const selected = models.find((item) => item.id === model);
   const allowReasoning = !selected || selected.reasoning !== false;
 
@@ -124,30 +129,35 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
         {models.length > 0 ? (
           <select
             id="model"
-            value={inList ? model : "__custom__"}
+            value={String(selectedIndex)}
             onChange={(event) => {
-              const value = event.target.value;
-              if (value === "__custom__") {
-                if (inList) setModel("");
+              const option = models[Number(event.target.value)];
+              if (!option) {
+                setCustomMode(true);
+                if (selectedIndex !== CUSTOM_OPTION) setModel("");
                 return;
               }
-              setModel(value);
+              setCustomMode(false);
+              setModel(option.id);
             }}
             className="h-9 rounded-md border bg-background px-3 text-sm"
           >
-            {models.map((item) => (
-              <option key={item.id} value={item.id}>
+            {models.map((item, index) => (
+              <option key={item.id} value={String(index)}>
                 {item.id}
               </option>
             ))}
-            <option value="__custom__">Custom</option>
+            <option value={String(CUSTOM_OPTION)}>Custom</option>
           </select>
         ) : null}
-        {models.length === 0 || !inList ? (
+        {showsModelInput(models, model, customMode) ? (
           <Input
             id={models.length === 0 ? "model" : "model-custom"}
             value={model}
-            onChange={(event) => setModel(event.target.value)}
+            onChange={(event) => {
+              setCustomMode(true);
+              setModel(event.target.value);
+            }}
             required
           />
         ) : null}
