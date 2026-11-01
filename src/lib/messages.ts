@@ -139,6 +139,12 @@ export function persistIncoming(chatId: string, incoming: IncomingMessage[]): Wr
       continue;
     }
     if (existing.chatId !== chatId) return "cross-chat";
+    if (
+      existing.role === "user" &&
+      (existing.content !== textFromParts(message.parts) || existing.parts !== JSON.stringify(message.parts ?? []))
+    ) {
+      return "stale";
+    }
   }
   for (const message of withParts) {
     const existing = byId.get(message.id);

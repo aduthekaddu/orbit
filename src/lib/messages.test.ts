@@ -123,6 +123,24 @@ test("reply text editing keeps tool parts and stale echoes cannot overwrite it",
   assert.deepEqual(saved.parts, [{ type: "text", text: "after" }, parts[1]]);
 });
 
+test("a stale user echo cannot revert an edited prompt", () => {
+  const chat = "user-echo";
+  mods.db
+    .insert(mods.schema.chats)
+    .values({ id: chat, userId: "u1", title: "Echo", createdAt: new Date(), updatedAt: new Date() })
+    .run();
+  mods.upsertMessage(chat, message("ue1", "user", "before"));
+  assert.ok(mods.planChatWrite(chat, [message("ue1", "user", "after")], "submit-message", undefined, "ue1"));
+
+  assert.equal(
+    mods.persistIncoming(chat, [message("ue1", "user", "before"), message("ue2", "user", "next")]),
+    "stale",
+  );
+  assert.deepEqual(mods.listMessages(chat), [
+    { id: "ue1", role: "user", parts: [{ type: "text", text: "after" }] },
+  ]);
+});
+
 test("a user prompt cannot be rewritten in place", () => {
   const chat = "prompt-patch";
   mods.db
