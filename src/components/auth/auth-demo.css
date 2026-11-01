@@ -1,0 +1,263 @@
+/* The sign-in thread map demo. Orbit's tokens mapped onto the stageshow kit's, scoped to the demo. */
+
+/* A stage shorter than the column sits on its foot, so the thread's cut lands on the page edge. */
+.auth-demo {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: safe flex-end;
+}
+
+.auth-demo .ss-stage {
+  --ss-canvas: var(--background);
+  --ss-surface: #131418;
+  --ss-chrome: #131418;
+  --ss-raised: #1d1e24;
+  --ss-line: #23252b;
+  --ss-text: #8c8d94;
+  --ss-text-strong: #ecebe6;
+  --ss-shadow-hero: 0 0 0 1px #23252b, 0 30px 60px -12px rgb(0 0 0 / 0.6);
+  --ad-sun: #ff9e5e;
+  --ad-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  overflow: hidden;
+  background: transparent;
+  color: var(--ss-text-strong);
+}
+
+/* Inset top, left and right by one gutter; the thread runs off the bottom. The rail sits on the
+   window's right edge in the real app, so that edge stays in frame. */
+.auth-demo .ad-win {
+  position: absolute;
+  top: 72px;
+  left: 40px;
+  width: 680px;
+  height: 920px;
+  box-shadow: var(--ss-shadow-hero);
+}
+
+.auth-demo .ad-side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.auth-demo .ad-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.auth-demo .ad-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  margin: 4px 8px 0;
+  padding: 0 10px;
+  border: 1px solid var(--ss-line);
+  border-radius: 8px;
+  background: #0b0c0f;
+  color: var(--ss-text);
+  font-size: 13px;
+}
+
+.auth-demo .ad-chats {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 12px;
+  padding: 0 8px;
+}
+
+.auth-demo .ad-chat {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  color: var(--ss-text);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.auth-demo .ad-chat[data-active] {
+  background: #1e1f25;
+  color: var(--ss-text-strong);
+}
+
+.auth-demo .ad-group {
+  display: flex;
+  align-items: flex-end;
+  height: 32px;
+  padding: 0 10px 8px;
+}
+
+/* The thread viewport: the window's content column, with the map on its right edge */
+/* The thread is never at its top, so rows passing under the bar soften as the kit's Scroll does */
+.auth-demo .ad-thread {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+
+.auth-demo .ad-thread::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 1;
+  height: 20px;
+  background: linear-gradient(var(--ss-surface), transparent);
+  pointer-events: none;
+}
+
+.auth-demo .ad-track {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 392px;
+  margin: 0 auto;
+  padding-top: 32px;
+  will-change: transform;
+}
+
+.auth-demo .ad-track[data-moving] {
+  transition: transform 1s cubic-bezier(0.45, 0, 0.1, 1);
+}
+
+.auth-demo .ad-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.auth-demo .ad-user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.auth-demo .ad-bubble {
+  display: flex;
+  align-items: center;
+  max-width: 85%;
+  min-height: 42px;
+  padding: 8px 14px;
+  border: 1px solid var(--ss-line);
+  border-radius: 16px;
+  background: var(--ss-raised);
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.auth-demo .ad-prose {
+  margin: 0;
+  font-size: 14px;
+  line-height: 24px;
+  text-wrap: pretty;
+}
+
+.auth-demo .ad-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.auth-demo .ad-lines > span:not(.ss-bar) {
+  display: block;
+}
+
+/* Room the real thread keeps for its composer footer */
+.auth-demo .ad-footer-space {
+  height: 200px;
+}
+
+/* The map: one tick per prompt, 10px apart, as src/components/chat/thread-map.tsx draws it */
+.auth-demo .ad-map {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  translate: 0 -50%;
+}
+
+.auth-demo .ad-ticks {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 4px 8px 16px;
+}
+
+.auth-demo .ad-tick {
+  display: block;
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+  background: color-mix(in oklab, #8c8d94 35%, transparent);
+  transition: width 0.2s var(--ad-ease), background-color 0.2s var(--ad-ease);
+}
+
+.auth-demo .ad-tick[data-state="visible"] {
+  width: 16px;
+  background: color-mix(in oklab, #ecebe6 70%, transparent);
+}
+
+.auth-demo .ad-tick[data-state="current"] {
+  width: 20px;
+  background: var(--ad-sun);
+}
+
+/* The prompt list opens to the rail's left, centered on it */
+.auth-demo .ad-panel {
+  --ss-popover-bg: #18191e;
+  --ss-popover-shadow: 0 0 0 1px #23252b, 0 24px 64px -16px rgb(0 0 0 / 0.75), 0 2px 8px -2px rgb(0 0 0 / 0.5);
+  top: calc(50% - 132px);
+  right: 56px;
+  width: 280px;
+  padding: 4px;
+  border-radius: 14px;
+}
+
+.auth-demo .ad-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 10px;
+  color: var(--ss-text);
+  font-size: 14px;
+  transition: background-color 0.15s var(--ad-ease), color 0.15s var(--ad-ease);
+}
+
+.auth-demo .ad-row[data-hover] {
+  background: #1e1f25;
+  color: var(--ss-text-strong);
+}
+
+.auth-demo .ad-row[data-current] {
+  color: var(--ss-text-strong);
+}
+
+.auth-demo .ad-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.auth-demo .ad-row[data-current] .ad-dot {
+  background: var(--ad-sun);
+}
+
+.auth-demo .ad-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

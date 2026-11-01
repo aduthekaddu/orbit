@@ -163,17 +163,21 @@ function modelsFromPayload(payload: unknown): ListedModel[] {
 }
 
 async function fetchModels(url: string, apiKey: string, extraHeaders?: Record<string, string>): Promise<ListedModel[] | null> {
-  const response = await fetch(url, {
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      accept: "application/json",
-      "user-agent": "orbit/0.1",
-      ...extraHeaders,
-    },
-    signal: AbortSignal.timeout(20_000),
-  });
-  if (!response.ok) return null;
-  return modelsFromPayload(await response.json());
+  try {
+    const response = await fetch(url, {
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        accept: "application/json",
+        "user-agent": "orbit/0.1",
+        ...extraHeaders,
+      },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) return null;
+    return modelsFromPayload(await response.json());
+  } catch {
+    return null;
+  }
 }
 
 export const MODEL_META_TTL_MS = 5 * 60 * 1000;
@@ -197,7 +201,8 @@ function rememberModels(baseUrl: string, models: ListedModel[], now = Date.now()
   }
 }
 
-export async function listModels(baseUrl: string, apiKey: string): Promise<ListedModel[]> {
+/** Null means no endpoint answered. An empty array means the provider has no models. */
+export async function listModels(baseUrl: string, apiKey: string): Promise<ListedModel[] | null> {
   const base = normalizeBaseUrl(baseUrl);
   const session = openCodeSessionHeader(base, "models");
   let primary: ListedModel[] | null = null;
@@ -221,7 +226,7 @@ export async function listModels(baseUrl: string, apiKey: string): Promise<Liste
     rememberModels(base, primary);
     return primary;
   }
-  return [];
+  return null;
 }
 
 export function modelAllowsReasoning(baseUrl: string, modelId: string, now = Date.now()): boolean {

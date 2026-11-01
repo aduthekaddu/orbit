@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CUSTOM_OPTION, modelOptionIndex, selectedOptionIndex, showsModelInput, type ModelOption } from "./model-picker";
+import { CUSTOM_OPTION, NO_OPTION, modelOptionIndex, selectedOptionIndex, showsModelInput, type ModelOption } from "./model-picker";
 
 const models: ModelOption[] = [
   { id: "__custom__", reasoning: null },
@@ -27,4 +27,14 @@ test("an id outside the list uses the custom field", () => {
 
 test("an empty list always uses the custom field", () => {
   assert.equal(showsModelInput([], "gpt-4", false), true);
+});
+
+test("a loaded list with no saved model selects nothing and hides the custom field", () => {
+  assert.equal(selectedOptionIndex(models, "", false), NO_OPTION);
+  assert.equal(showsModelInput(models, "", false), false);
+});
+
+test("choosing Custom with no model shows the empty custom field", () => {
+  assert.equal(selectedOptionIndex(models, "", true), CUSTOM_OPTION);
+  assert.equal(showsModelInput(models, "", true), true);
 });
