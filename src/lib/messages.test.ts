@@ -8,6 +8,8 @@ type Modules = {
   db: typeof import("./db").db;
   schema: typeof import("./db/schema");
   persistIncoming: typeof import("./messages").persistIncoming;
+  listMessages: typeof import("./messages").listMessages;
+  upsertMessage: typeof import("./messages").upsertMessage;
 };
 
 let mods: Modules;
@@ -22,7 +24,13 @@ before(async () => {
   const dbModule = await import("./db");
   const schema = await import("./db/schema");
   const messageModule = await import("./messages");
-  mods = { db: dbModule.db, schema, persistIncoming: messageModule.persistIncoming };
+  mods = {
+    db: dbModule.db,
+    schema,
+    persistIncoming: messageModule.persistIncoming,
+    listMessages: messageModule.listMessages,
+    upsertMessage: messageModule.upsertMessage,
+  };
 
   const now = new Date();
   mods.db.insert(mods.schema.user).values({ id: "u1", name: "Test", email: "test@orbit.local" }).run();
@@ -63,4 +71,22 @@ test("a message id from another chat is rejected", () => {
     .values({ id: "m9", chatId: "c2", role: "user", content: "x", parts: "[]", position: 0, createdAt: new Date() })
     .run();
   assert.equal(mods.persistIncoming("c1", [message("m9", "user", "x")]), false);
+});
+
+test("a reply keeps its prompt's place when two requests finish out of order", () => {
+  const now = new Date();
+  mods.db.insert(mods.schema.chats).values({ id: "c3", userId: "u1", title: "Three", createdAt: now, updatedAt: now }).run();
+  assert.equal(mods.persistIncoming("c3", [message("p-a", "user", "prompt a")]), true);
+  assert.equal(
+    mods.persistIncoming("c3", [message("p-a", "user", "prompt a"), message("p-b", "user", "prompt b")]),
+    true,
+  );
+
+  assert.equal(mods.upsertMessage("c3", message("r-b", "assistant", "reply b"), "p-b"), true);
+  assert.equal(mods.upsertMessage("c3", message("r-a", "assistant", "reply a"), "p-a"), true);
+
+  assert.deepEqual(
+    mods.listMessages("c3").map((entry) => entry.id),
+    ["p-a", "r-a", "p-b", "r-b"],
+  );
 });

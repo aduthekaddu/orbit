@@ -48,6 +48,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "A message id belongs to a different chat." }, { status: 409 });
   }
   const firstUser = incoming.find((message) => message.role === "user");
+  const lastUser = incoming.findLast((message) => message.role === "user");
   const title = textFromParts(firstUser?.parts).trim();
   if (title) touchChat(chat.id, title);
   else touchChat(chat.id);
@@ -92,11 +93,15 @@ export async function POST(request: Request) {
           console.error("chat end without text", isAborted ? "aborted" : "finished", status, types.join(",") || "none");
           return;
         }
-        upsertMessage(chat.id, {
-          id: responseMessage.id || crypto.randomUUID(),
-          role: "assistant",
-          parts: responseMessage.parts,
-        });
+        upsertMessage(
+          chat.id,
+          {
+            id: responseMessage.id || crypto.randomUUID(),
+            role: "assistant",
+            parts: responseMessage.parts,
+          },
+          lastUser?.id,
+        );
         touchChat(chat.id);
       },
     });

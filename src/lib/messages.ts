@@ -1,4 +1,4 @@
-import { asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { UIMessage } from "ai";
 import { db } from "./db";
 import { chats, messages } from "./db/schema";
@@ -35,7 +35,11 @@ export function touchChat(id: string, title?: string) {
   db.update(chats).set({ title: nextTitle, updatedAt: new Date() }).where(eq(chats.id, id)).run();
 }
 
-export function upsertMessage(chatId: string, message: { id: string; role: string; parts: unknown }) {
+export function upsertMessage(
+  chatId: string,
+  message: { id: string; role: string; parts: unknown },
+  replyTo?: string,
+) {
   if (message.role !== "user" && message.role !== "assistant") return true;
   const content = textFromParts(message.parts);
   const parts = JSON.stringify(message.parts ?? []);
@@ -45,23 +49,39 @@ export function upsertMessage(chatId: string, message: { id: string; role: strin
     db.update(messages).set({ role: message.role, content, parts }).where(eq(messages.id, message.id)).run();
     return true;
   }
-  const row = db
-    .select({ position: sql<number>`coalesce(max(${messages.position}), -1)` })
-    .from(messages)
-    .where(eq(messages.chatId, chatId))
-    .get();
-  db.insert(messages)
-    .values({
-      id: message.id,
-      chatId,
-      role: message.role,
-      content,
-      parts,
-      position: (row?.position ?? -1) + 1,
-      createdAt: new Date(),
-    })
-    .run();
-  return true;
+  return db.transaction((tx) => {
+    const prompt = replyTo
+      ? tx
+          .select({ position: messages.position })
+          .from(messages)
+          .where(and(eq(messages.id, replyTo), eq(messages.chatId, chatId)))
+          .get()
+      : undefined;
+    const row = tx
+      .select({ position: sql<number>`coalesce(max(${messages.position}), -1)` })
+      .from(messages)
+      .where(eq(messages.chatId, chatId))
+      .get();
+    const position = prompt ? prompt.position + 1 : (row?.position ?? -1) + 1;
+    if (prompt) {
+      tx.update(messages)
+        .set({ position: sql`${messages.position} + 1` })
+        .where(and(eq(messages.chatId, chatId), gte(messages.position, position)))
+        .run();
+    }
+    tx.insert(messages)
+      .values({
+        id: message.id,
+        chatId,
+        role: message.role,
+        content,
+        parts,
+        position,
+        createdAt: new Date(),
+      })
+      .run();
+    return true;
+  });
 }
 
 export type IncomingMessage = { id: string; role: string; parts?: unknown };
