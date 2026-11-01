@@ -1,0 +1,15 @@
+services:
+  orbit:
+    build: .
+    ports:
+      - "127.0.0.1:3210:3210"
+    volumes:
+      - ./data:/app/data
+    environment:
+      BETTER_AUTH_URL: http://127.0.0.1:3210
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      ORBIT_BASE_URL: ${ORBIT_BASE_URL:-}
+      ORBIT_API_KEY: ${ORBIT_API_KEY:-}
+      ORBIT_MODEL: ${ORBIT_MODEL:-}
+    command: ["npm", "start", "--", "-p", "3210", "-H", "0.0.0.0"]
+    restart: "no"
