@@ -8,7 +8,9 @@ export function modelOptionIndex(options: ModelOption[], model: string) {
 }
 
 export function selectedOptionIndex(options: ModelOption[], model: string, customMode: boolean) {
-  return customMode ? CUSTOM_OPTION : modelOptionIndex(options, model);
+  if (customMode) return CUSTOM_OPTION;
+  if (model === "") return NO_OPTION;
+  return modelOptionIndex(options, model);
 }
 
 export function showsModelInput(options: ModelOption[], model: string, customMode: boolean) {

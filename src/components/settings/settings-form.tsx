@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
-import { CUSTOM_OPTION, selectedOptionIndex, showsModelInput } from "@/lib/model-picker";
+import { CUSTOM_OPTION, NO_OPTION, selectedOptionIndex, showsModelInput } from "@/lib/model-picker";
 import { appliedSave, type SettingsSnapshot } from "@/lib/settings-form";
 import type { PublicSettings, ReasoningEffort } from "@/lib/settings";
 
@@ -166,7 +166,8 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
             <div className="flex flex-col gap-2">
               {models.length > 0 ? (
                 <Select
-                  value={String(selectedIndex)}
+                  required
+                  value={selectedIndex === NO_OPTION ? "" : String(selectedIndex)}
                   onValueChange={(value) => {
                     setError("");
                     const option = models[Number(value)];
