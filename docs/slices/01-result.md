@@ -173,3 +173,25 @@ base change without key error Base URL changed. Enter the API key for the new pr
 ```
 
 The smoke server log did not contain the provider key. Cleanup removed `.verify/sandbox`, left `.verify/evidence/`, and port 3210 was free after each phase.
+
+## CodeAnt fixes
+
+Five inline findings. Three reproduced and are fixed. Two did not reproduce.
+
+1. `next-env.d.ts` imports `.next` types. Not reproduced. A `git archive` of HEAD with no `.next` ran `npm run typecheck` and exited 0. `skipLibCheck` covers the declaration file.
+2. `POST /api/chat` rewrote every message in the client history on each send. Reproduced. `persistIncoming` now reads the stored rows in one query and writes only new or changed rows. A resend of three stored messages performs 0 writes. Adding one new message performs 1.
+3. `normalizeBaseUrl` did not lowercase the host. Reproduced. It now canonicalizes through `new URL`, so `https://OpenCode.AI/...` gets the session header. Path case still identifies a different provider.
+4. `loadModels` kept the old provider's models after a network failure. Fixed by clearing the list on the non-abort error path. The repo has no client test harness, so this one is covered by typecheck and build only.
+5. SQLite sidecars. Not reproduced. The database file is chmod 600 before the first write. SQLite creates `-wal` and `-shm` with the database file's mode. The app's own module left `orbit.db`, `-wal`, and `-shm` at 600.
+
+The Greptile blocking finding (`apiKey: ***` in `verify.mjs`) was not present at HEAD. `node --check` parsed the file.
+
+The verify-orbit skill moved from `.cursor/skills/verify-orbit` to `.agents/skills/verify-orbit`. Its docs and this file point at the new path.
+
+Commands run from `~/orbit`:
+
+- `npm test` before the fixes: 6 tests, 2 pass, 4 fail. The failures were `3 !== 0` and `2 !== 1` for history writes, and `https://OpenCode.AI/...` versus `https://opencode.ai/...` for URL matching.
+- `npm test` after the fixes: 6 tests, 6 pass, exit 0.
+- `npm run typecheck` exited 0.
+- `npm run build` (Next.js 16.4.3) exited 0.
+- `node .agents/skills/verify-orbit/verify.mjs launch` printed `ready` and `signupOpen=yes`. `doctor` printed `doctor ok`. `drive chat` against a local fake OpenAI-compatible provider printed `smoke passed` and `drive chat passed`. `cleanup` removed the sandbox and left the evidence.
