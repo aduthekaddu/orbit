@@ -63,12 +63,19 @@ export function ThreadMap({ viewport }: { viewport: RefObject<HTMLElement | null
 
   useEffect(() => {
     const list = rail.current;
-    const tick = list?.children[current];
-    if (!list || !(tick instanceof HTMLElement)) return;
-    const listBox = list.getBoundingClientRect();
-    const tickBox = tick.getBoundingClientRect();
-    if (tickBox.top < listBox.top) list.scrollTop += tickBox.top - listBox.top;
-    else if (tickBox.bottom > listBox.bottom) list.scrollTop += tickBox.bottom - listBox.bottom;
+    if (!list) return;
+    const keep = () => {
+      const tick = list.children[current];
+      if (!(tick instanceof HTMLElement)) return;
+      const listBox = list.getBoundingClientRect();
+      const tickBox = tick.getBoundingClientRect();
+      if (tickBox.top < listBox.top) list.scrollTop += tickBox.top - listBox.top;
+      else if (tickBox.bottom > listBox.bottom) list.scrollTop += tickBox.bottom - listBox.bottom;
+    };
+    keep();
+    const resize = new ResizeObserver(keep);
+    resize.observe(list);
+    return () => resize.disconnect();
   }, [current, turns.length]);
 
   function jump(index: number) {
