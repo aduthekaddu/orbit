@@ -1,6 +1,6 @@
 import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { UIMessage } from "ai";
-import { replaceTextParts } from "./chat-parts";
+import { replaceTextPart, replaceTextParts } from "./chat-parts";
 import { db } from "./db";
 import { chats, messages } from "./db/schema";
 
@@ -183,16 +183,18 @@ export function planChatWrite(
   };
 }
 
-export function updateMessageText(chatId: string, messageId: string, text: string) {
+export function updateMessageText(chatId: string, messageId: string, text: string, partIndex?: number) {
   const row = db
     .select()
     .from(messages)
     .where(and(eq(messages.id, messageId), eq(messages.chatId, chatId)))
     .get();
   if (!row) return false;
-  const parts = replaceTextParts(JSON.parse(row.parts) as UIMessage["parts"], text);
+  const current = JSON.parse(row.parts) as UIMessage["parts"];
+  const parts = partIndex == null ? replaceTextParts(current, text) : replaceTextPart(current, partIndex, text);
+  if (!parts) return false;
   db.update(messages)
-    .set({ content: text, parts: JSON.stringify(parts) })
+    .set({ content: textFromParts(parts), parts: JSON.stringify(parts) })
     .where(eq(messages.id, messageId))
     .run();
   return true;

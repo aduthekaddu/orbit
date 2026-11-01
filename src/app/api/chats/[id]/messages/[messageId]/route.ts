@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 
 const patchSchema = z.object({
   text: z.string().max(200_000),
+  partIndex: z.number().int().nonnegative().optional(),
 });
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string; messageId: string }> }) {
@@ -17,7 +18,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (!chat) return Response.json({ error: "Not found" }, { status: 404 });
   const parsed = patchSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid message text" }, { status: 400 });
-  if (!updateMessageText(chat.id, messageId, parsed.data.text)) {
+  if (!updateMessageText(chat.id, messageId, parsed.data.text, parsed.data.partIndex)) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
   touchChat(chat.id);

@@ -115,3 +115,18 @@ test("reply text editing keeps tool parts and stale echoes cannot overwrite it",
   const saved = mods.listMessages("c2").find((row) => row.id === "edited-answer")!;
   assert.deepEqual(saved.parts, [{ type: "text", text: "after" }, parts[1]]);
 });
+
+test("editing one text part by index keeps the reply's parts in order", () => {
+  const parts = [
+    { type: "text", text: "before" },
+    { type: "tool-render_ui", toolCallId: "t2", state: "output-available", input: {}, output: { ok: true } },
+    { type: "text", text: "old code" },
+    { type: "text", text: "after" },
+  ];
+  mods.upsertMessage("c2", { id: "indexed-answer", role: "assistant", parts });
+  assert.equal(mods.updateMessageText("c2", "indexed-answer", "new code", 2), true);
+  const saved = mods.listMessages("c2").find((row) => row.id === "indexed-answer")!;
+  assert.deepEqual(saved.parts, [parts[0], parts[1], { type: "text", text: "new code" }, parts[3]]);
+  const stored = mods.db.$client.prepare("select content from messages where id = ?").get("indexed-answer") as { content: string };
+  assert.equal(stored.content, parts[0].text + "new code" + parts[3].text);
+});

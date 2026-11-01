@@ -1,13 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { codeBodyStart, editedMessageText, replaceCode, replaceTextParts } from "./chat-parts";
+import { codeBodyStart, replaceCode, replaceTextPart } from "./chat-parts";
 
 test("editing code in one text part preserves other prose and the generated tool", () => {
   const tool = { type: "tool-render_ui" as const, toolCallId: "tool", state: "output-available" as const, input: {}, output: {} };
   const parts = [{ type: "text" as const, text: "before" }, tool, { type: "text" as const, text: "```js\nold\n```" }, { type: "text" as const, text: "after" }];
-  const text = editedMessageText(parts, 2, "```js\nnew\n```");
-  assert.equal(text, "before\n\n```js\nnew\n```\n\nafter");
-  assert.deepEqual(replaceTextParts(parts, text), [{ type: "text", text }, tool]);
+  assert.deepEqual(replaceTextPart(parts, 2, "```js\nnew\n```"), [
+    parts[0],
+    tool,
+    { type: "text", text: "```js\nnew\n```" },
+    parts[3],
+  ]);
+});
+
+test("a part that is not text cannot be replaced", () => {
+  const tool = { type: "tool-render_ui" as const, toolCallId: "tool", state: "output-available" as const, input: {}, output: {} };
+  const parts = [{ type: "text" as const, text: "before" }, tool];
+  assert.equal(replaceTextPart(parts, 1, "nope"), null);
+  assert.equal(replaceTextPart(parts, 9, "nope"), null);
 });
 
 test("editing the second of two identical code blocks changes only the second", () => {

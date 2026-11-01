@@ -19,6 +19,15 @@ export function replaceTextParts(parts: MessageParts, text: string): MessagePart
   return next;
 }
 
+/** Replace the text of one part in place. Null when the index is missing or is not a text part. */
+export function replaceTextPart(parts: MessageParts, index: number, text: string): MessageParts | null {
+  const part = parts[index];
+  if (!part || part.type !== "text") return null;
+  const next = parts.slice();
+  next[index] = { ...part, text };
+  return next;
+}
+
 export function messageText(parts: MessageParts): string {
   return parts
     .filter((part) => part.type === "text")
@@ -47,8 +56,4 @@ export function replaceCode(text: string, code: string, next: string, start?: nu
   const index = text.indexOf(code);
   if (index === -1) return text;
   return text.slice(0, index) + next + keepNewline + text.slice(index + code.length);
-}
-
-export function editedMessageText(parts: readonly { type: string; text?: string }[], index: number, text: string): string {
-  return parts.flatMap((part, current) => part.type === "text" ? [current === index ? text : part.text ?? ""] : []).join("\n\n");
 }

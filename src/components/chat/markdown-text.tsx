@@ -4,7 +4,6 @@ import { useMemo, useState, type ComponentProps, type ElementType, type JSX } fr
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import { useAui, useAuiState } from "@assistant-ui/react";
 import remarkGfm from "remark-gfm";
-import { editedMessageText } from "@/lib/chat-parts";
 import { cn } from "@/lib/utils";
 import { ScrollFade } from "@/components/ui/scroll-fade";
 import { CodeEditContext } from "./code-edit-context";
@@ -73,7 +72,6 @@ const remarkPlugins = [remarkGfm];
 
 export function MarkdownText({ className, editable = false }: { className?: string; editable?: boolean }) {
   const aui = useAui();
-  const parts = useAuiState((s) => s.message.parts);
   const partText = useAuiState((s) => (s.part.type === "text" ? s.part.text : ""));
   const messageId = useAuiState((s) => s.message.id);
   const running = useAuiState((s) => s.message.status?.type === "running");
@@ -87,10 +85,10 @@ export function MarkdownText({ className, editable = false }: { className?: stri
       save: (id: string, text: string) => {
         const query = aui.part.query;
         if (!query || !("index" in query) || typeof query.index !== "number") return Promise.resolve(false);
-        return save(id, editedMessageText(parts, query.index, text));
+        return save(id, text, query.index);
       },
     }),
-    [aui, parts, editable, messageId, running, partText, active, save, saving, error],
+    [aui, editable, messageId, running, partText, active, save, saving, error],
   );
 
   return (
