@@ -10,6 +10,8 @@ type Modules = {
   planChatWrite: typeof import("./messages").planChatWrite;
   listMessages: typeof import("./messages").listMessages;
   upsertMessage: typeof import("./messages").upsertMessage;
+  persistIncoming: typeof import("./messages").persistIncoming;
+  updateMessageText: typeof import("./messages").updateMessageText;
 };
 
 let mods: Modules;
@@ -30,6 +32,8 @@ before(async () => {
     planChatWrite: messageModule.planChatWrite,
     listMessages: messageModule.listMessages,
     upsertMessage: messageModule.upsertMessage,
+    persistIncoming: messageModule.persistIncoming,
+    updateMessageText: messageModule.updateMessageText,
   };
 
   const now = new Date();
@@ -45,6 +49,10 @@ before(async () => {
     "c-conflict",
     "c-other",
     "c-echo",
+    "c-deleted",
+    "c-expected",
+    "c-restore",
+    "c-answer-edit",
   ]) {
     mods.db.insert(mods.schema.chats).values({ id, userId: "u1", title: id, createdAt: now, updatedAt: now }).run();
   }
@@ -91,6 +99,8 @@ test("a stale tab's prefix keeps newer stored turns", () => {
 });
 
 test("a request list that is a prefix of stored history keeps the extra turns", () => {
+  write("c-prefix", [message("p1", "user", "one")]);
+  answer("c-prefix", "p2", "two", "p1");
   write("c-prefix", [message("p1", "user", "one"), message("p2", "assistant", "two")]);
   answer("c-prefix", "p3", "three", "p1");
 
@@ -161,7 +171,8 @@ test("a regenerate targeted at an earlier answer keeps the later turns", () => {
 });
 
 test("a resent message without parts keeps its stored row", () => {
-  write("c-parts", [message("x1", "user", "kept with parts"), message("x2", "assistant", "resent without parts")]);
+  write("c-parts", [message("x1", "user", "kept with parts")]);
+  answer("c-parts", "x2", "resent without parts", "x1");
 
   write("c-parts", [message("x1", "user", "kept with parts"), { id: "x2", role: "assistant" }]);
 
@@ -182,4 +193,78 @@ test("a write whose id belongs to another chat is refused", () => {
     .run();
 
   assert.equal(mods.planChatWrite("c-conflict", [message("o1", "user", "x")], "submit-message"), null);
+});
+
+test("a reply to a prompt removed by an edit is refused", () => {
+  write("c-deleted", [message("d1", "user", "first")]);
+  answer("c-deleted", "d2", "first answer", "d1");
+  write("c-deleted", [
+    message("d1", "user", "first"),
+    message("d2", "assistant", "first answer"),
+    message("d3", "user", "second"),
+  ]);
+  answer("c-deleted", "d4", "second answer", "d3");
+
+  assert.ok(mods.planChatWrite("c-deleted", [message("d1", "user", "edited first")], "submit-message", undefined, "d1"));
+  assert.deepEqual(ids("c-deleted"), ["d1"]);
+
+  assert.equal(mods.upsertMessage("c-deleted", message("d5", "assistant", "late answer"), "d3"), false);
+  assert.deepEqual(ids("c-deleted"), ["d1"]);
+});
+
+test("a write checked against a row removed by an edit is refused", () => {
+  write("c-expected", [message("y1", "user", "ask")]);
+  answer("c-expected", "y2", "answer", "y1");
+  assert.ok(mods.planChatWrite("c-expected", [message("y1", "user", "edited ask")], "submit-message", undefined, "y1"));
+
+  assert.equal(
+    mods.upsertMessage("c-expected", message("y3", "assistant", "late"), undefined, {
+      id: "y1",
+      content: "ask",
+      parts: JSON.stringify([{ type: "text", text: "ask" }]),
+    }),
+    false,
+  );
+  assert.deepEqual(ids("c-expected"), ["y1"]);
+});
+
+test("a stale regenerate cannot overwrite a newer answer edit", () => {
+  write("c-answer-edit", [message("z1", "user", "ask")]);
+  answer("c-answer-edit", "z2", "first answer", "z1");
+  const expected = {
+    id: "z2",
+    content: "first answer",
+    parts: JSON.stringify([{ type: "text", text: "first answer" }]),
+  };
+  assert.equal(mods.upsertMessage("c-answer-edit", message("z2", "assistant", "first answer"), "z1", expected), true);
+  assert.equal(mods.updateMessageText("c-answer-edit", "z2", "edited answer"), true);
+
+  assert.equal(mods.upsertMessage("c-answer-edit", message("z2", "assistant", "regenerated"), "z1", expected), false);
+  assert.deepEqual(mods.listMessages("c-answer-edit")[1].parts, [{ type: "text", text: "edited answer" }]);
+});
+
+test("a stale tab cannot restore turns removed by an edit", () => {
+  write("c-restore", [message("w1", "user", "first")]);
+  answer("c-restore", "w2", "first answer", "w1");
+  write("c-restore", [
+    message("w1", "user", "first"),
+    message("w2", "assistant", "first answer"),
+    message("w3", "user", "second"),
+  ]);
+  answer("c-restore", "w4", "second answer", "w3");
+
+  assert.ok(mods.planChatWrite("c-restore", [message("w1", "user", "edited first")], "submit-message", undefined, "w1"));
+  assert.deepEqual(ids("c-restore"), ["w1"]);
+
+  assert.equal(
+    mods.persistIncoming("c-restore", [
+      message("w1", "user", "first"),
+      message("w2", "assistant", "first answer"),
+      message("w3", "user", "second"),
+      message("w4", "assistant", "second answer"),
+    ]),
+    "stale",
+  );
+  assert.deepEqual(ids("c-restore"), ["w1"]);
+  assert.deepEqual(mods.listMessages("c-restore")[0].parts, [{ type: "text", text: "edited first" }]);
 });

@@ -75,6 +75,11 @@ export async function POST(request: Request) {
   else touchChat(chat.id);
 
   const stored = new Map(listMessages(chat.id).map((message) => [message.id, message]));
+  const expectedId = write.regenerate ? write.responseId : lastUser?.id;
+  const expectedRow = expectedId ? stored.get(expectedId) : undefined;
+  const expected = expectedRow
+    ? { id: expectedRow.id, content: textFromParts(expectedRow.parts), parts: JSON.stringify(expectedRow.parts) }
+    : undefined;
   const uiMessages = incoming.map((message) => ({
     id: message.id,
     role: message.role,
@@ -128,6 +133,7 @@ export async function POST(request: Request) {
             parts,
           },
           lastUser?.id,
+          expected,
         );
         touchChat(chat.id);
       },

@@ -52,13 +52,25 @@ export function touchChat(id: string, title?: string) {
   db.update(chats).set({ title: nextTitle, updatedAt: new Date() }).where(eq(chats.id, id)).run();
 }
 
+export type ExpectedMessage = { id: string; content: string; parts: string };
+
 export function upsertMessage(
   chatId: string,
   message: { id: string; role: string; parts: unknown },
   replyTo?: string,
+  expected?: ExpectedMessage,
 ) {
   if (message.role !== "user" && message.role !== "assistant") return true;
   if (message.role === "assistant" && Array.isArray(message.parts) && message.parts.length === 0) return true;
+  if (expected) {
+    // The write is only valid while the row it was planned against is still current.
+    const current = db
+      .select({ content: messages.content, parts: messages.parts })
+      .from(messages)
+      .where(and(eq(messages.id, expected.id), eq(messages.chatId, chatId)))
+      .get();
+    if (!current || current.content !== expected.content || current.parts !== expected.parts) return false;
+  }
   const content = textFromParts(message.parts);
   const parts = JSON.stringify(message.parts ?? []);
   const existing = db.select({ chatId: messages.chatId }).from(messages).where(eq(messages.id, message.id)).get();
@@ -75,6 +87,7 @@ export function upsertMessage(
           .where(and(eq(messages.id, replyTo), eq(messages.chatId, chatId)))
           .get()
       : undefined;
+    if (replyTo && !prompt) return false;
     const row = tx
       .select({ position: sql<number>`coalesce(max(${messages.position}), -1)` })
       .from(messages)
@@ -103,21 +116,33 @@ export function upsertMessage(
 }
 
 export type IncomingMessage = { id: string; role: string; parts?: unknown };
+export type WriteResult = "ok" | "cross-chat" | "stale";
 
-export function persistIncoming(chatId: string, incoming: IncomingMessage[]) {
+export function persistIncoming(chatId: string, incoming: IncomingMessage[]): WriteResult {
   const withParts = incoming.filter(
     (message): message is IncomingMessage & { parts: unknown } => Boolean(message.parts),
   );
-  if (withParts.length === 0) return true;
+  if (withParts.length === 0) return "ok";
   const saved = db
     .select({ id: messages.id, chatId: messages.chatId, role: messages.role, content: messages.content, parts: messages.parts })
     .from(messages)
     .where(inArray(messages.id, withParts.map((message) => message.id)))
     .all();
   const byId = new Map(saved.map((row) => [row.id, row]));
+  const tail = withParts.at(-1);
+  // Validate the whole list first so a refused request writes nothing.
   for (const message of withParts) {
     const existing = byId.get(message.id);
-    if (existing && existing.chatId === chatId) {
+    if (!existing) {
+      // Only the tab's new tail prompt may be unknown. Any other unknown id was replaced by an edit.
+      if (message !== tail || message.role !== "user") return "stale";
+      continue;
+    }
+    if (existing.chatId !== chatId) return "cross-chat";
+  }
+  for (const message of withParts) {
+    const existing = byId.get(message.id);
+    if (existing) {
       // The server owns answers. A stale tab echoes the pre-regenerate text under the same id.
       if (existing.role === "assistant" && message.role === "assistant") continue;
       const content = textFromParts(message.parts);
@@ -125,9 +150,9 @@ export function persistIncoming(chatId: string, incoming: IncomingMessage[]) {
         continue;
       }
     }
-    if (!upsertMessage(chatId, message)) return false;
+    if (!upsertMessage(chatId, message)) return "cross-chat";
   }
-  return true;
+  return "ok";
 }
 
 /** The id this response stores under. A regenerate reuses the answer it replaces, so a failed one leaves that answer alone. */
@@ -172,11 +197,11 @@ export function planChatWrite(
     if (existing.some((row) => row.chatId !== chatId || (row.id === edited.id && row.id !== editMessageId))) return null;
     return db.transaction(() => {
       db.delete(messages).where(and(eq(messages.chatId, chatId), gte(messages.position, target.position))).run();
-      if (!persistIncoming(chatId, incoming)) throw new Error("Edited history could not be saved");
+      if (persistIncoming(chatId, incoming) !== "ok") throw new Error("Edited history could not be saved");
       return { regenerate: false, responseId: crypto.randomUUID() };
     });
   }
-  if (!persistIncoming(chatId, incoming)) return null;
+  if (persistIncoming(chatId, incoming) !== "ok") return null;
   return {
     regenerate: trigger === "regenerate-message",
     responseId: responseIdFor(chatId, incoming, trigger, messageId),

@@ -56,16 +56,19 @@ test("resending a full history writes nothing", () => {
     message("m2", "assistant", "two"),
     message("m3", "user", "three"),
   ];
-  assert.equal(mods.persistIncoming("c1", history), true);
+  mods.upsertMessage("c1", history[0]);
+  mods.upsertMessage("c1", history[1], "m1");
+  mods.upsertMessage("c1", history[2]);
+  assert.equal(mods.persistIncoming("c1", history), "ok");
   const before = changes();
-  assert.equal(mods.persistIncoming("c1", history), true);
+  assert.equal(mods.persistIncoming("c1", history), "ok");
   assert.equal(changes() - before, 0);
 });
 
 test("a new message is written once", () => {
   const history = [message("m1", "user", "one"), message("m4", "user", "four")];
   const before = changes();
-  assert.equal(mods.persistIncoming("c1", history), true);
+  assert.equal(mods.persistIncoming("c1", history), "ok");
   assert.equal(changes() - before, 1);
 });
 
@@ -74,16 +77,16 @@ test("a message id from another chat is rejected", () => {
     .insert(mods.schema.messages)
     .values({ id: "m9", chatId: "c2", role: "user", content: "x", parts: "[]", position: 0, createdAt: new Date() })
     .run();
-  assert.equal(mods.persistIncoming("c1", [message("m9", "user", "x")]), false);
+  assert.equal(mods.persistIncoming("c1", [message("m9", "user", "x")]), "cross-chat");
 });
 
 test("a reply keeps its prompt's place when two requests finish out of order", () => {
   const now = new Date();
   mods.db.insert(mods.schema.chats).values({ id: "c3", userId: "u1", title: "Three", createdAt: now, updatedAt: now }).run();
-  assert.equal(mods.persistIncoming("c3", [message("p-a", "user", "prompt a")]), true);
+  assert.equal(mods.persistIncoming("c3", [message("p-a", "user", "prompt a")]), "ok");
   assert.equal(
     mods.persistIncoming("c3", [message("p-a", "user", "prompt a"), message("p-b", "user", "prompt b")]),
-    true,
+    "ok",
   );
 
   assert.equal(mods.upsertMessage("c3", message("r-b", "assistant", "reply b"), "p-b"), true);
@@ -100,7 +103,9 @@ test("explicit user editing replaces later turns and invalid targets leave histo
   const chat = "edit-chat";
   mods.db.insert(mods.schema.chats).values({ id: chat, userId: "u1", title: "Edit", createdAt: new Date(), updatedAt: new Date() }).run();
   const history = [message("eu", "user", "old"), message("ea", "assistant", "answer"), message("eu2", "user", "later")];
-  mods.persistIncoming(chat, history);
+  mods.upsertMessage(chat, history[0]);
+  mods.upsertMessage(chat, history[1], "eu");
+  mods.upsertMessage(chat, history[2]);
   assert.equal(mods.planChatWrite(chat, [message("new", "assistant", "bad")], "submit-message", undefined, "eu"), null);
   assert.equal(mods.listMessages(chat).length, 3);
   assert.ok(mods.planChatWrite(chat, [message("new", "user", "edited")], "submit-message", undefined, "eu"));
