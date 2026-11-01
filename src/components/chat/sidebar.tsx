@@ -57,7 +57,7 @@ export function Sidebar({
 
   return (
     <div className="flex h-full w-64 flex-col">
-      <div className="flex h-12 shrink-0 items-center gap-1 pr-2 pl-3">
+      <div className="flex h-12 shrink-0 items-center gap-1 pr-2 pl-3 pointer-coarse:h-14">
         <Link href="/" onClick={onNavigate} className="mr-auto flex items-center gap-2 rounded-md px-1 py-1 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
           <OrbitMark className="size-5" />
           <span className="text-sm font-medium tracking-tight">orbit</span>
@@ -89,7 +89,7 @@ export function Sidebar({
       <button
         type="button"
         onClick={onSearch}
-        className="mx-2 flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-md border bg-surface-sunken pr-1.5 pl-2.5 text-sm text-muted-foreground transition-colors outline-none hover:border-border-strong hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        className="mx-2 flex h-8 pointer-coarse:h-11 shrink-0 cursor-pointer items-center gap-2 rounded-md border bg-surface-sunken pr-1.5 pl-2.5 text-sm text-muted-foreground transition-colors outline-none hover:border-border-strong hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
         <MagnifyingGlassIcon weight="regular" className="size-3.5" />
         <span className="flex-1 text-left">Search</span>
@@ -110,7 +110,7 @@ export function Sidebar({
                   onClick={onNavigate}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "relative truncate rounded-md px-2.5 py-1.5 text-sm transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                    "relative truncate rounded-md px-2.5 py-1.5 text-sm pointer-coarse:py-3 transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                     active
                       ? "bg-accent text-foreground before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-primary"
                       : "text-muted-foreground hover:bg-accent hover:text-foreground",

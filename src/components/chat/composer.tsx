@@ -27,9 +27,9 @@ export function Composer({ ready, model }: { ready: boolean; model: string }) {
         {model ? (
           <Link
             href="/settings"
-            className="min-w-0 truncate rounded-full border px-2 py-0.5 font-mono text-2xs text-muted-foreground transition-colors duration-150 ease-orbit hover:border-border-strong hover:text-foreground"
+            className="min-w-0 rounded-full border px-2 py-0.5 font-mono text-2xs text-muted-foreground transition-colors duration-150 ease-orbit hover:border-border-strong hover:text-foreground"
           >
-            {model}
+            <span className="block truncate">{model}</span>
           </Link>
         ) : (
           <span />

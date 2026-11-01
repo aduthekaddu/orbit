@@ -247,6 +247,21 @@
     @apply bg-background font-sans text-foreground antialiased;
   }
 
+  /* Touch needs a 44px hit area; grow it without changing what the control looks like. */
+  @media (pointer: coarse) {
+    :where(button, a, [role="combobox"], [role="radio"], [role="option"], [role="menuitem"]):not(:where(.sr-only)) {
+      position: relative;
+    }
+    :where(button, a, [role="combobox"], [role="radio"], [role="option"], [role="menuitem"])::after {
+      content: "";
+      position: absolute;
+      inset: min(0px, (100% - 44px) / 2);
+    }
+    :where(input:not([type="checkbox"], [type="radio"], [type="hidden"]), select) {
+      min-height: 44px;
+    }
+  }
+
   ::selection {
     background-color: color-mix(in oklab, var(--primary) 35%, transparent);
   }

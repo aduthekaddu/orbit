@@ -34,13 +34,13 @@ const orbitCodeTheme: PrismTheme = {
 export function CodeHeader({ language, code }: CodeHeaderProps) {
   const { copied, copy } = useCopy();
   return (
-    <div className="mt-4 flex h-8 items-center justify-between rounded-t-lg border border-b-0 bg-surface-sunken pr-1 pl-3">
+    <div className="mt-4 flex h-8 pointer-coarse:h-11 items-center justify-between rounded-t-lg border border-b-0 bg-surface-sunken pr-1 pl-3">
       <span className="font-mono text-2xs text-muted-foreground">{language || "text"}</span>
       <button
         type="button"
         onClick={() => copy(code)}
         aria-label={copied ? "Copied" : "Copy code"}
-        className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 ease-orbit hover:bg-accent hover:text-foreground"
+        className="flex size-6 pointer-coarse:size-11 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 ease-orbit hover:bg-accent hover:text-foreground"
       >
         {copied ? <CheckIcon weight="regular" className="size-3.5" /> : <CopyIcon weight="regular" className="size-3.5" />}
       </button>

@@ -27,8 +27,8 @@ export function Thread({ ready, model }: { ready: boolean; model: string }) {
                   }}
                 </ThreadPrimitive.Messages>
               </div>
-              <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mt-auto bg-gradient-to-t from-background from-60% pt-8 pb-4">
-                <div className="relative mx-auto w-full max-w-widget">
+              <ThreadPrimitive.ViewportFooter className="pointer-events-none sticky bottom-0 mt-auto bg-gradient-to-t from-background from-60% pt-8 pb-4">
+                <div className="pointer-events-auto relative mx-auto w-full max-w-widget">
                   <ThreadPrimitive.ScrollToBottom
                     aria-label="Scroll to bottom"
                     className="absolute -top-12 left-1/2 flex size-8 -translate-x-1/2 items-center justify-center rounded-full border bg-popover text-muted-foreground shadow-float transition-opacity duration-200 ease-orbit hover:text-foreground disabled:pointer-events-none disabled:opacity-0"
