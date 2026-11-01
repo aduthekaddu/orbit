@@ -1,4 +1,4 @@
-import { asc, eq, sql } from "drizzle-orm";
+import { asc, eq, inArray, sql } from "drizzle-orm";
 import type { UIMessage } from "ai";
 import { db } from "./db";
 import { chats, messages } from "./db/schema";
@@ -61,6 +61,16 @@ export function upsertMessage(chatId: string, message: { id: string; role: strin
       createdAt: new Date(),
     })
     .run();
+  return true;
+}
+
+export type IncomingMessage = { id: string; role: string; parts?: unknown };
+
+export function persistIncoming(chatId: string, incoming: IncomingMessage[]) {
+  for (const message of incoming) {
+    if (!message.parts) continue;
+    if (!upsertMessage(chatId, message)) return false;
+  }
   return true;
 }
 

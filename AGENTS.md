@@ -23,6 +23,7 @@ Run these from the repo root. Each one is done when it exits 0.
 
 - Run `npm run dev` to start the dev server on `127.0.0.1:3210`.
 - Run `npm run typecheck` for `tsc --noEmit`.
+- Run `npm test` for the unit tests.
 - Run `npm run build` for `next build`.
 - For smoke, start the built app with `npm start -- -p 3210 -H 127.0.0.1`, then run `npm run smoke`. The process needs `ORBIT_BASE_URL` and `ORBIT_API_KEY`. Done when the script prints `smoke passed`. Stop the server after the run. Read a key into the environment and keep it out of the output.
 - Run `docker compose build`, then `docker compose config`. The published port is `127.0.0.1:3210` only.
