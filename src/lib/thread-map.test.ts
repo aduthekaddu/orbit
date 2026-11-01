@@ -34,6 +34,20 @@ test("alt arrow steps to the next prompt", () => {
   assert.equal(shortcutTarget(shortcut({ key: "ArrowUp" }), 1, 3), 0);
 });
 
+test("alt arrow stays at the first and last prompt", () => {
+  assert.equal(shortcutTarget(shortcut({ key: "ArrowUp" }), 0, 3), 0);
+  assert.equal(shortcutTarget(shortcut({}), 2, 3), 2);
+});
+
+test("alt arrow does nothing when there are no prompts", () => {
+  assert.equal(shortcutTarget(shortcut({}), 0, 0), null);
+  assert.equal(shortcutTarget(shortcut({ key: "ArrowUp" }), 0, 0), null);
+});
+
+test("keys other than the arrows stay with the page", () => {
+  assert.equal(shortcutTarget(shortcut({ key: "PageDown" }), 1, 3), null);
+});
+
 test("shift, meta, ctrl, and plain arrows stay with the page", () => {
   assert.equal(shortcutTarget(shortcut({ shiftKey: true }), 1, 3), null);
   assert.equal(shortcutTarget(shortcut({ key: "ArrowUp", shiftKey: true }), 1, 3), null);

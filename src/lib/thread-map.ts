@@ -27,5 +27,6 @@ type ShortcutKey = Pick<KeyboardEvent, "altKey" | "shiftKey" | "metaKey" | "ctrl
 export function shortcutTarget(event: ShortcutKey, current: number, count: number) {
   if (!event.altKey || event.shiftKey || event.metaKey || event.ctrlKey) return null;
   if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return null;
+  if (count <= 0) return null;
   return Math.max(0, Math.min(count - 1, current + (event.key === "ArrowUp" ? -1 : 1)));
 }

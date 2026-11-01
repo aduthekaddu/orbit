@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type RefObject } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type RefObject } from "react";
 import { useAuiState } from "@assistant-ui/react";
 import { cn } from "@/lib/utils";
 import { currentTurnIndex, shortcutTarget, turnLabel, visibleTurns, type Turn } from "@/lib/thread-map";
@@ -20,6 +20,12 @@ export function ThreadMap({ viewport }: { viewport: RefObject<HTMLElement | null
     [messages],
   );
   const [position, setPosition] = useState({ current: 0, visible: [] as boolean[] });
+  const current = position.current;
+  const [open, setOpen] = useState(false);
+  const [hoverDismissed, setHoverDismissed] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const rail = useRef<HTMLOListElement>(null);
+  const panelId = useId();
 
   useEffect(() => {
     const root = viewport.current;
@@ -55,19 +61,29 @@ export function ThreadMap({ viewport }: { viewport: RefObject<HTMLElement | null
     };
   }, [turns, viewport]);
 
+  useEffect(() => {
+    const list = rail.current;
+    const tick = list?.children[current];
+    if (!list || !(tick instanceof HTMLElement)) return;
+    const listBox = list.getBoundingClientRect();
+    const tickBox = tick.getBoundingClientRect();
+    if (tickBox.top < listBox.top) list.scrollTop += tickBox.top - listBox.top;
+    else if (tickBox.bottom > listBox.bottom) list.scrollTop += tickBox.bottom - listBox.bottom;
+  }, [current, turns.length]);
+
   function jump(index: number) {
     const turn = turns[Math.max(0, Math.min(turns.length - 1, index))];
     if (!turn) return;
     const target = viewport.current?.querySelector<HTMLElement>(`[data-turn-id="${CSS.escape(turn.id)}"]`);
     if (!target) return;
+    setOpen(false);
     target.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
-    // Focus follows the jump, which also closes the panel the click came from.
     target.focus({ preventScroll: true });
   }
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      const target = shortcutTarget(event, position.current, turns.length);
+      const target = shortcutTarget(event, current, turns.length);
       if (target === null) return;
       event.preventDefault();
       jump(target);
@@ -82,8 +98,38 @@ export function ThreadMap({ viewport }: { viewport: RefObject<HTMLElement | null
     <nav
       aria-label="Prompts in this chat"
       className="group/map absolute top-1/2 right-2 z-10 hidden -translate-y-1/2 @[52rem]/thread:block"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+      }}
+      onPointerLeave={() => setHoverDismissed(false)}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        const hovering = event.currentTarget.matches(":hover");
+        if (!open && (!hovering || hoverDismissed)) return;
+        event.preventDefault();
+        setHoverDismissed(hovering);
+        setOpen(false);
+        trigger.current?.focus();
+      }}
     >
-      <ol className="flex max-h-[60vh] flex-col items-end gap-2 overflow-hidden py-2 pr-1 pl-4">
+      <button
+        ref={trigger}
+        type="button"
+        aria-label="Prompts"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onFocus={(event) => {
+          const fromRail = event.currentTarget.parentElement?.contains(event.relatedTarget);
+          if (!fromRail && event.currentTarget.matches(":focus-visible")) setOpen(true);
+        }}
+        onClick={(event) => setOpen(event.detail === 0 || !open)}
+        className="absolute -top-4 right-0 h-4 w-5 rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      />
+      <ol
+        ref={rail}
+        tabIndex={-1}
+        className="flex max-h-[60vh] flex-col items-end gap-2 overflow-y-auto py-2 pr-1 pl-4 scrollbar-none"
+      >
         {turns.map((turn, index) => (
           <li key={turn.id} className="flex h-0.5 items-center">
             <span
@@ -99,7 +145,19 @@ export function ThreadMap({ viewport }: { viewport: RefObject<HTMLElement | null
           </li>
         ))}
       </ol>
-      <div className="pointer-events-none invisible absolute top-1/2 right-full w-72 -translate-y-1/2 translate-x-1 pr-2 opacity-0 transition-[opacity,translate,visibility] duration-150 ease-orbit group-focus-within/map:pointer-events-auto group-focus-within/map:visible group-focus-within/map:translate-x-0 group-focus-within/map:opacity-100 group-hover/map:pointer-events-auto group-hover/map:visible group-hover/map:translate-x-0 group-hover/map:opacity-100">
+      <div
+        id={panelId}
+        className={cn(
+          "absolute top-1/2 right-full w-72 -translate-y-1/2 pr-2 transition-[opacity,translate,visibility] duration-150 ease-orbit",
+          open
+            ? "visible translate-x-0 opacity-100"
+            : cn(
+                "pointer-events-none invisible translate-x-1 opacity-0",
+                !hoverDismissed &&
+                  "group-hover/map:pointer-events-auto group-hover/map:visible group-hover/map:translate-x-0 group-hover/map:opacity-100",
+              ),
+        )}
+      >
         <ul className="max-h-[60vh] overflow-y-auto rounded-xl border bg-popover p-1 shadow-float scrollbar-thin">
           {turns.map((turn, index) => (
             <li key={turn.id}>
