@@ -48,7 +48,7 @@ function Link({ node: _node, className, ...props }: ComponentProps<"a"> & { node
     <a
       target="_blank"
       rel="noreferrer noopener"
-      className={cn("text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary", className)}
+      className={cn("text-foreground underline decoration-sun/50 underline-offset-2 hover:decoration-sun", className)}
       {...props}
     />
   );

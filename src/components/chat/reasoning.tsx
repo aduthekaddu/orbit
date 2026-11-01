@@ -11,7 +11,7 @@ export const Reasoning: ReasoningMessagePartComponent = ({ status }) => {
   return (
     <Collapsible.Root className="group/reasoning my-3 first:mt-0">
       <Collapsible.Trigger className="flex h-7 items-center gap-1.5 rounded-full border bg-surface-sunken pr-2 pl-2.5 text-xs text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:border-border-strong hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 group-data-[state=open]/reasoning:text-foreground">
-        <LightbulbIcon weight="regular" className={cn("size-3.5", running && "motion-safe:animate-pulse text-primary")} />
+        <LightbulbIcon weight="regular" className={cn("size-3.5", running && "motion-safe:animate-pulse text-sun")} />
         {running ? "Thinking" : "Thought"}
         <CaretRightIcon
           weight="regular"

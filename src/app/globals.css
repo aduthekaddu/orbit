@@ -7,62 +7,65 @@
   color-scheme: dark;
 
   /* Brand primitives */
-  --orbit-bg: #0b0b10;
-  --orbit-surface: #14141b;
-  --orbit-border: #24242e;
-  --orbit-text: #ededf2;
-  --orbit-muted: #8a8a99;
-  --orbit-accent: #8b7cff;
+  --orbit-bg: #0b0c0f;
+  --orbit-surface: #131418;
+  --orbit-border: #23252b;
+  --orbit-text: #ecebe6;
+  --orbit-muted: #8c8d94;
+  --orbit-ivory: #f1ece1;
+  /* Sunrise on the planet's limb. The one lit color: the moon, the active chat, the thread map. */
+  --orbit-sun: #ff9e5e;
 
   /* shadcn/ui semantic tokens */
   --background: var(--orbit-bg);
   --foreground: var(--orbit-text);
   --card: var(--orbit-surface);
   --card-foreground: var(--orbit-text);
-  --popover: #191921;
+  --popover: #18191e;
   --popover-foreground: var(--orbit-text);
-  --primary: var(--orbit-accent);
-  --primary-foreground: #0b0b10;
-  --secondary: #1b1b24;
+  --primary: var(--orbit-ivory);
+  --primary-foreground: #0b0c0f;
+  --secondary: #1a1b20;
   --secondary-foreground: var(--orbit-text);
-  --muted: #1b1b24;
+  --muted: #1a1b20;
   --muted-foreground: var(--orbit-muted);
-  --accent: #1f1f29;
+  --accent: #1e1f25;
   --accent-foreground: var(--orbit-text);
-  --destructive: #ff6b7a;
+  --destructive: #ff6259;
   --border: var(--orbit-border);
   --input: var(--orbit-border);
-  --ring: var(--orbit-accent);
+  --ring: var(--orbit-sun);
+  --sun: var(--orbit-sun);
 
   /* orbit extensions */
-  --canvas: #07070a;
-  --surface-sunken: #0f0f15;
-  --surface-raised: #1b1b24;
-  --border-strong: #30303c;
-  --positive: #3dd68c;
-  --negative: #ff6b7a;
-  --warning: #f5b451;
+  --canvas: #07080a;
+  --surface-sunken: #0e0f12;
+  --surface-raised: #1d1e24;
+  --border-strong: #33353d;
+  --positive: #4fd18b;
+  --negative: #ff6259;
+  --warning: #f2cf4a;
   --info: #5ec8f2;
-  --skeleton: #1b1b24;
-  --skeleton-highlight: #2a2a36;
+  --skeleton: #1a1b20;
+  --skeleton-highlight: #282a31;
 
   /* Data visualisation */
-  --chart-1: #8b7cff;
+  --chart-1: #ff9e5e;
   --chart-2: #5ec8f2;
   --chart-3: #3dd68c;
-  --chart-4: #f5b451;
+  --chart-4: #f2cf4a;
   --chart-5: #ff7ab6;
 
   /* Syntax highlighting */
-  --syntax-keyword: #b4a9ff;
+  --syntax-keyword: #ff9e5e;
   --syntax-string: #7ee0a8;
-  --syntax-number: #f5b451;
+  --syntax-number: #f2cf4a;
   --syntax-function: #7cc8f8;
-  --syntax-comment: #5f5f70;
-  --syntax-punctuation: #8a8a99;
+  --syntax-comment: #5d5f68;
+  --syntax-punctuation: #8c8d94;
   --syntax-builtin: #ff9ec4;
   --syntax-class: #f5d58a;
-  --syntax-operator: #c9c9d6;
+  --syntax-operator: #c9c8c2;
 
   /* Hairline figures. Plates are filled, so the plate must match the surface the figure sits on. */
   --hairline-plate: var(--background);
@@ -94,6 +97,7 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-sun: var(--sun);
 
   --color-canvas: var(--canvas);
   --color-surface-sunken: var(--surface-sunken);

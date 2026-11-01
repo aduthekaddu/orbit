@@ -112,7 +112,7 @@ export function Sidebar({
                   className={cn(
                     "relative truncate rounded-md px-2.5 py-1.5 text-sm pointer-coarse:py-3 transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                     active
-                      ? "bg-accent text-foreground before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-primary"
+                      ? "bg-accent text-foreground before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-sun"
                       : "text-muted-foreground hover:bg-accent hover:text-foreground",
                   )}
                 >
