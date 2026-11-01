@@ -1,6 +1,6 @@
 import { convertToModelMessages, createUIMessageStreamResponse, streamText, toUIMessageStream, type UIMessage } from "ai";
 import { z } from "zod";
-import { ensureChat, keepOnlyMessages, persistIncoming, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
+import { ensureChat, planChatWrite, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { getSettings } from "@/lib/settings";
 import { getSession, unauthorized } from "@/lib/session";
@@ -18,6 +18,8 @@ const messageSchema = z.object({
 const bodySchema = z.object({
   id: z.string().min(1).max(100),
   messages: z.array(messageSchema).min(1),
+  trigger: z.enum(["submit-message", "regenerate-message", "resume-stream"]).optional(),
+  messageId: z.string().min(1).max(100).optional(),
 });
 
 function sanitize(message: string, secret: string) {
@@ -44,11 +46,10 @@ export async function POST(request: Request) {
   if (!chat) return Response.json({ error: "Not found" }, { status: 404 });
 
   const incoming = parsed.data.messages;
-  const keptIds = incoming.filter((message) => message.parts).map((message) => message.id);
-  if (!persistIncoming(chat.id, incoming)) {
+  const write = planChatWrite(chat.id, incoming, parsed.data.trigger, parsed.data.messageId);
+  if (!write) {
     return Response.json({ error: "A message id belongs to a different chat." }, { status: 409 });
   }
-  keepOnlyMessages(chat.id, keptIds);
   const firstUser = incoming.find((message) => message.role === "user");
   const lastUser = incoming.findLast((message) => message.role === "user");
   const title = textFromParts(firstUser?.parts).trim();
@@ -77,11 +78,10 @@ export async function POST(request: Request) {
 
     // Send the response id so the client reuses it. Without it the client mints
     // its own id and the next turn stores the assistant reply a second time.
-    const responseId = crypto.randomUUID();
     const uiStream = toUIMessageStream({
       stream: result.stream,
       originalMessages: uiMessages,
-      generateMessageId: () => responseId,
+      generateMessageId: () => write.responseId,
       onError: (error) => {
         const message = error instanceof Error ? error.message : "The model request failed";
         console.error("chat stream error", sanitize(message, settings.apiKey));
@@ -99,10 +99,11 @@ export async function POST(request: Request) {
           console.error("chat end without text", isAborted ? "aborted" : "finished", status, types.join(",") || "none");
           return;
         }
+        if (write.regenerate && (isAborted || outcome.status !== "completed")) return;
         upsertMessage(
           chat.id,
           {
-            id: responseMessage.id || crypto.randomUUID(),
+            id: responseMessage.id || write.responseId,
             role: "assistant",
             parts: responseMessage.parts,
           },

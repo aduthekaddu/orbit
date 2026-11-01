@@ -7,8 +7,7 @@ import test, { before } from "node:test";
 type Modules = {
   db: typeof import("./db").db;
   schema: typeof import("./db/schema");
-  persistIncoming: typeof import("./messages").persistIncoming;
-  keepOnlyMessages: typeof import("./messages").keepOnlyMessages;
+  planChatWrite: typeof import("./messages").planChatWrite;
   listMessages: typeof import("./messages").listMessages;
   upsertMessage: typeof import("./messages").upsertMessage;
 };
@@ -28,29 +27,39 @@ before(async () => {
   mods = {
     db: dbModule.db,
     schema,
-    persistIncoming: messageModule.persistIncoming,
-    keepOnlyMessages: messageModule.keepOnlyMessages,
+    planChatWrite: messageModule.planChatWrite,
     listMessages: messageModule.listMessages,
     upsertMessage: messageModule.upsertMessage,
   };
 
   const now = new Date();
   mods.db.insert(mods.schema.user).values({ id: "u1", name: "Test", email: "test@orbit.local" }).run();
-  for (const id of ["c-stale", "c-regen", "c-prefix", "c-parts", "c-concurrent"]) {
+  for (const id of [
+    "c-stale",
+    "c-regen",
+    "c-regen-ok",
+    "c-target",
+    "c-prefix",
+    "c-parts",
+    "c-concurrent",
+    "c-conflict",
+    "c-other",
+  ]) {
     mods.db.insert(mods.schema.chats).values({ id, userId: "u1", title: id, createdAt: now, updatedAt: now }).run();
   }
 });
 
 type Incoming = { id: string; role: "user" | "assistant" | "system"; parts?: unknown };
+type Trigger = "submit-message" | "regenerate-message";
 
-function message(id: string, role: "user" | "assistant", text: string): Incoming {
+function message(id: string, role: "user" | "assistant", text: string): Incoming & { parts: unknown } {
   return { id, role, parts: [{ type: "text", text }] };
 }
 
-function write(chatId: string, incoming: Incoming[]) {
-  const keptIds = incoming.filter((entry) => entry.parts).map((entry) => entry.id);
-  assert.equal(mods.persistIncoming(chatId, incoming), true);
-  mods.keepOnlyMessages(chatId, keptIds);
+function write(chatId: string, incoming: Incoming[], trigger: Trigger = "submit-message", messageId?: string) {
+  const plan = mods.planChatWrite(chatId, incoming, trigger, messageId);
+  assert.ok(plan);
+  return plan.responseId;
 }
 
 function answer(chatId: string, id: string, text: string, replyTo: string) {
@@ -89,13 +98,48 @@ test("a request list that is a prefix of stored history keeps the extra turns", 
   assert.deepEqual(ids("c-prefix").sort(), ["p1", "p2", "p3"]);
 });
 
-test("a regenerate that never stores a replacement keeps the previous answer", () => {
+test("a regenerate that stores nothing keeps the previous answer", () => {
   write("c-regen", [message("g1", "user", "explain the bug")]);
   answer("c-regen", "g2", "the first answer", "g1");
 
-  write("c-regen", [message("g1", "user", "explain the bug")]);
-
+  assert.equal(write("c-regen", [message("g1", "user", "explain the bug")], "regenerate-message"), "g2");
   assert.deepEqual(ids("c-regen"), ["g1", "g2"]);
+});
+
+test("a successful regenerate leaves one answer under the same id", () => {
+  write("c-regen-ok", [message("r1", "user", "one question")]);
+  answer("c-regen-ok", "r2", "first answer", "r1");
+
+  const responseId = write("c-regen-ok", [message("r1", "user", "one question")], "regenerate-message", "r2");
+  assert.equal(responseId, "r2");
+  answer("c-regen-ok", responseId, "second answer", "r1");
+
+  assert.deepEqual(mods.listMessages("c-regen-ok"), [
+    { id: "r1", role: "user", parts: [{ type: "text", text: "one question" }] },
+    { id: "r2", role: "assistant", parts: [{ type: "text", text: "second answer" }] },
+  ]);
+});
+
+test("a regenerate targeted at an earlier answer keeps the later turns", () => {
+  write("c-target", [message("t1", "user", "one")]);
+  answer("c-target", "t2", "answer one", "t1");
+  write("c-target", [
+    message("t1", "user", "one"),
+    message("t2", "assistant", "answer one"),
+    message("t3", "user", "two"),
+  ]);
+  answer("c-target", "t4", "answer two", "t3");
+
+  const responseId = write("c-target", [message("t1", "user", "one")], "regenerate-message", "t2");
+  assert.equal(responseId, "t2");
+  answer("c-target", responseId, "new answer one", "t1");
+
+  assert.deepEqual(ids("c-target"), ["t1", "t2", "t3", "t4"]);
+  assert.deepEqual(mods.listMessages("c-target")[1], {
+    id: "t2",
+    role: "assistant",
+    parts: [{ type: "text", text: "new answer one" }],
+  });
 });
 
 test("a resent message without parts keeps its stored row", () => {
@@ -111,4 +155,13 @@ test("two interleaved sends keep both rows", () => {
   write("c-concurrent", [message("k2", "user", "from tab B")]);
 
   assert.deepEqual(ids("c-concurrent"), ["k1", "k2"]);
+});
+
+test("a write whose id belongs to another chat is refused", () => {
+  mods.db
+    .insert(mods.schema.messages)
+    .values({ id: "o1", chatId: "c-other", role: "user", content: "x", parts: "[]", position: 0, createdAt: new Date() })
+    .run();
+
+  assert.equal(mods.planChatWrite("c-conflict", [message("o1", "user", "x")], "submit-message"), null);
 });

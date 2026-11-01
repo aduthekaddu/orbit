@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { UIMessage } from "ai";
 import { db } from "./db";
 import { chats, messages } from "./db/schema";
@@ -127,12 +127,39 @@ export function persistIncoming(chatId: string, incoming: IncomingMessage[]) {
   return true;
 }
 
-/** Drop stored messages the client did not resend, so a regenerated or edited turn replaces the old one. */
-export function keepOnlyMessages(chatId: string, ids: string[]) {
-  if (ids.length === 0) return;
-  db.delete(messages)
-    .where(and(eq(messages.chatId, chatId), notInArray(messages.id, ids)))
-    .run();
+/** The id this response stores under. A regenerate reuses the answer it replaces, so a failed one leaves that answer alone. */
+function responseIdFor(chatId: string, incoming: IncomingMessage[], trigger?: string, messageId?: string) {
+  if (trigger !== "regenerate-message") return crypto.randomUUID();
+  const rows = db
+    .select({ id: messages.id, role: messages.role })
+    .from(messages)
+    .where(eq(messages.chatId, chatId))
+    .orderBy(asc(messages.position))
+    .all();
+  const target = messageId ? rows.find((row) => row.id === messageId) : undefined;
+  if (target?.role === "assistant") return target.id;
+  const lastUser = incoming.findLast((message) => message.role === "user");
+  const promptIndex = lastUser ? rows.findIndex((row) => row.id === lastUser.id) : -1;
+  if (promptIndex === -1) return crypto.randomUUID();
+  for (const row of rows.slice(promptIndex + 1)) {
+    if (row.role === "user") break;
+    if (row.role === "assistant") return row.id;
+  }
+  return crypto.randomUUID();
+}
+
+/** Persist the client list and pick the id the response stores under. Null means an id belongs to another chat. */
+export function planChatWrite(
+  chatId: string,
+  incoming: IncomingMessage[],
+  trigger?: string,
+  messageId?: string,
+): { regenerate: boolean; responseId: string } | null {
+  if (!persistIncoming(chatId, incoming)) return null;
+  return {
+    regenerate: trigger === "regenerate-message",
+    responseId: responseIdFor(chatId, incoming, trigger, messageId),
+  };
 }
 
 export function listMessages(chatId: string): UIMessage[] {
