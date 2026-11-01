@@ -1,7 +1,16 @@
 /* The sign-in thread map demo. Orbit's tokens mapped onto the stageshow kit's, scoped to the demo. */
 
+/* A stage shorter than the column sits on its foot, so the thread's cut lands on the page edge. */
+.auth-demo {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: safe flex-end;
+}
+
 .auth-demo .ss-stage {
-  --ss-canvas: #0e0f12;
+  --ss-canvas: var(--background);
   --ss-surface: #131418;
   --ss-chrome: #131418;
   --ss-raised: #1d1e24;
