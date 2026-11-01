@@ -19,6 +19,7 @@ export function MessageTextEditor({
   const [text, setText] = useState(initialText);
 
   async function commit() {
+    if (saving) return;
     if (text === initialText) {
       onClose();
       return;
@@ -30,6 +31,7 @@ export function MessageTextEditor({
     <div className="overflow-hidden rounded-xl border border-primary/40 bg-card shadow-card">
       <textarea
         autoFocus
+        readOnly={saving}
         value={text}
         aria-label={label}
         onChange={(event) => setText(event.target.value)}
@@ -40,7 +42,7 @@ export function MessageTextEditor({
           }
           if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
             event.preventDefault();
-            void commit();
+            if (!saving) void commit();
           }
         }}
         className="block max-h-[60vh] min-h-24 w-full resize-none bg-transparent px-4 py-3 text-sm leading-6 outline-none field-sizing-content scrollbar-thin"

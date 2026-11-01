@@ -80,7 +80,7 @@ function CodeEditor({ code, start, language }: { code: string; start: number; la
   const [draft, setDraft] = useState(code);
 
   async function commit() {
-    if (!edit) return;
+    if (!edit || edit.saving) return;
     const next = replaceCode(edit.text, code, draft, start, start + code.length);
     if (next === edit.text) {
       edit.setActive(null);
@@ -96,7 +96,7 @@ function CodeEditor({ code, start, language }: { code: string; start: number; la
     }
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
-      void commit();
+      if (!edit?.saving) void commit();
     }
   }
 
@@ -105,6 +105,7 @@ function CodeEditor({ code, start, language }: { code: string; start: number; la
       <textarea
         autoFocus
         spellCheck={false}
+        readOnly={edit?.saving}
         value={draft}
         aria-label={`Edit ${language || "code"} block`}
         onChange={(event) => setDraft(event.target.value)}
