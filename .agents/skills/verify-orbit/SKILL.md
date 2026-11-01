@@ -43,7 +43,7 @@ Feature recipes live in `features/`. Read `features/README.md` first. Drive one 
 
 ## Evidence
 
-Each drive writes `.verify/evidence/<feature>/summary.txt`. The file records the action and the resulting status, redirect, and database counts. It does not record cookies or key values.
+Each drive writes `.verify/evidence/<feature>/summary.txt`. Signup records the statuses, the redirect, the chat list count, and the `user` and `chats` row counts. Signin records the statuses and the redirect location. Settings records the statuses and the key-leak checks. Chat records the smoke exit code and the redacted log. No file records cookies or key values.
 
 A proof shows the request and the state after it. For signup, that is the page text, the signup status, the redirect to `/c/<id>`, the composer page, `GET /api/chats`, a logged-out 401, the `user` and `chats` row counts, and a second signup status 403. A final screen with no prior action is not proof.
 
