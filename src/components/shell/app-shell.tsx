@@ -78,6 +78,11 @@ export function AppShell({
     else setDrawerOpen(true);
   }
 
+  function toggleSidebar() {
+    if (window.matchMedia(DESKTOP_QUERY).matches) setCollapsed(!sidebar.collapsed);
+    else setDrawerOpen((open) => !open);
+  }
+
   async function newChat() {
     if (newChatPending) return;
     setNewChatPending(true);
@@ -95,7 +100,7 @@ export function AppShell({
   useShortcuts({
     palette: () => setPalette(!paletteOpen),
     newChat,
-    sidebar: () => setCollapsed(!sidebar.collapsed),
+    sidebar: toggleSidebar,
   });
 
   const title = pathname === "/settings" ? "Settings" : chats.find((chat) => pathname === `/c/${chat.id}`)?.title;
@@ -166,7 +171,13 @@ export function AppShell({
         {children}
       </div>
 
-      <CommandPalette open={paletteOpen} onOpenChange={setPalette} chats={chats} onNewChat={newChat} />
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPalette}
+        chats={chats}
+        onNewChat={newChat}
+        onAction={() => setDrawerOpen(false)}
+      />
     </div>
   );
 }

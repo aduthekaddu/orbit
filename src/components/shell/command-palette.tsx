@@ -22,16 +22,19 @@ export function CommandPalette({
   onOpenChange,
   chats,
   onNewChat,
+  onAction,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   chats: ChatSummary[];
   onNewChat: () => void;
+  onAction: () => void;
 }) {
   const router = useRouter();
 
   function run(action: () => void) {
     onOpenChange(false);
+    onAction();
     action();
   }
 
