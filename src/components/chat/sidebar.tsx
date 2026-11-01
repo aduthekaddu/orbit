@@ -10,20 +10,15 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { OrbitMark } from "@/components/orbit-mark";
-import { groupChatsByRecency, startOfDay } from "@/components/shell/chat-groups";
+import { groupChatsByRecency } from "@/components/shell/chat-groups";
+import { serverTodaySnapshot, subscribeToday, todaySnapshot } from "@/components/shell/today";
 import { ShortcutKbd } from "@/components/shell/shortcuts";
 
 export type ChatSummary = ReturnType<typeof listChats>[number];
 
-const noSubscribe = () => () => {};
-
 // Null on the server: its timezone is not the reader's, so buckets are computed only in the browser.
 function useToday() {
-  return useSyncExternalStore(
-    noSubscribe,
-    () => startOfDay(new Date()),
-    () => null,
-  );
+  return useSyncExternalStore(subscribeToday, todaySnapshot, serverTodaySnapshot);
 }
 
 export function Sidebar({

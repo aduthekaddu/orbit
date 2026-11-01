@@ -196,6 +196,17 @@
     transition: background 0.08s ease, transform 0.1s ease-out;
   }
 
+  /* The touch rule above ties the dark dot's specificity and comes later, so
+     dark restates the dot in white, a step up while the finger presses */
+  .ss-stage[data-theme='dark'] .ss-cursor[data-style="touch"] .ss-cursor__dot {
+    background: rgba(255, 255, 255, 0.4);
+  }
+
+  .ss-stage[data-theme='dark'] .ss-cursor[data-style="touch"][data-pressed="true"] .ss-cursor__dot,
+  .ss-stage[data-theme='dark'] .ss-cursor[data-style="touch"][data-swiping] .ss-cursor__dot {
+    background: rgba(255, 255, 255, 0.5);
+  }
+
   .ss-cursor__glyph svg {
     display: block;
     filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
