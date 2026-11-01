@@ -117,6 +117,8 @@ export function persistIncoming(chatId: string, incoming: IncomingMessage[]) {
   for (const message of withParts) {
     const existing = byId.get(message.id);
     if (existing && existing.chatId === chatId) {
+      // The server owns answers. A stale tab echoes the pre-regenerate text under the same id.
+      if (existing.role === "assistant" && message.role === "assistant") continue;
       const content = textFromParts(message.parts);
       if (existing.role === message.role && existing.content === content && existing.parts === JSON.stringify(message.parts ?? [])) {
         continue;

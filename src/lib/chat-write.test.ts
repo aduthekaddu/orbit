@@ -44,6 +44,7 @@ before(async () => {
     "c-concurrent",
     "c-conflict",
     "c-other",
+    "c-echo",
   ]) {
     mods.db.insert(mods.schema.chats).values({ id, userId: "u1", title: id, createdAt: now, updatedAt: now }).run();
   }
@@ -104,6 +105,23 @@ test("a regenerate that stores nothing keeps the previous answer", () => {
 
   assert.equal(write("c-regen", [message("g1", "user", "explain the bug")], "regenerate-message"), "g2");
   assert.deepEqual(ids("c-regen"), ["g1", "g2"]);
+});
+
+test("a stale tab cannot overwrite a regenerated answer", () => {
+  write("c-echo", [message("e1", "user", "explain the bug")]);
+  answer("c-echo", "e2", "regenerated answer", "e1");
+
+  // Tab B loaded before the regeneration and still holds the old text under the same id.
+  write("c-echo", [
+    message("e1", "user", "explain the bug"),
+    message("e2", "assistant", "old answer"),
+    message("e3", "user", "next question"),
+  ]);
+
+  assert.deepEqual(
+    mods.listMessages("c-echo").find((entry) => entry.id === "e2")?.parts,
+    [{ type: "text", text: "regenerated answer" }],
+  );
 });
 
 test("a successful regenerate leaves one answer under the same id", () => {
