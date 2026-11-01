@@ -1,7 +1,7 @@
 import { convertToModelMessages, createUIMessageStreamResponse, stepCountIs, streamText, toUIMessageStream, type UIMessage } from "ai";
 import { z } from "zod";
 import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
-import { assistantHasVisiblePart } from "@/lib/genui/spec";
+import { assistantHasVisiblePart, settleInterruptedParts } from "@/lib/genui/spec";
 import { chatTools } from "@/lib/genui/tool";
 import { ensureChat, planChatWrite, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
@@ -105,7 +105,9 @@ export async function POST(request: Request) {
       generateMessageId: () => write.responseId,
       onError: (error) => streamErrorMessage(error, settings.apiKey),
       onEnd: async ({ responseMessage, isAborted, outcome }) => {
-        if (!assistantHasVisiblePart(responseMessage.parts)) {
+        const interrupted = isAborted || outcome.status !== "completed";
+        const parts = settleInterruptedParts(responseMessage.parts, interrupted);
+        if (!assistantHasVisiblePart(parts)) {
           const types = Array.isArray(responseMessage.parts)
             ? responseMessage.parts
                 .map((part) => (part && typeof part === "object" && "type" in part ? String(part.type) : "?"))
@@ -115,13 +117,13 @@ export async function POST(request: Request) {
           console.error("chat end without text", isAborted ? "aborted" : "finished", status, types.join(",") || "none");
           return;
         }
-        if (write.regenerate && (isAborted || outcome.status !== "completed")) return;
+        if (write.regenerate && interrupted) return;
         upsertMessage(
           chat.id,
           {
             id: responseMessage.id || write.responseId,
             role: "assistant",
-            parts: responseMessage.parts,
+            parts,
           },
           lastUser?.id,
         );

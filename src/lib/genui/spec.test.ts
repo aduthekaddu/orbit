@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { assistantHasVisiblePart, parseRenderSpec } from "./spec";
+import { assistantHasVisiblePart, parseRenderSpec, settleInterruptedParts } from "./spec";
+
+function table(columns: string[], rows: Array<Array<string | number>>) {
+  return {
+    root: "table",
+    elements: {
+      table: { type: "Table", props: { columns, rows }, children: [] },
+    },
+  };
+}
 
 const card = {
   root: "card",
@@ -94,13 +103,45 @@ test("a text format outside plain and code fails", () => {
   assert.equal(outcome.ok, false);
 });
 
+test("a table row with more cells than columns fails", () => {
+  const outcome = parseRenderSpec(table(["A", "B"], [["1", "2", "3"]]));
+  assert.equal(outcome.ok, false);
+  if (outcome.ok) return;
+  assert.match(outcome.error, /elements\.table\.props\.rows\.0/);
+  assert.match(outcome.error, /row 0 has width 3, expected width 2/);
+});
+
+test("a table row with fewer cells than columns fails", () => {
+  const outcome = parseRenderSpec(table(["A", "B"], [["1"]]));
+  assert.equal(outcome.ok, false);
+  if (outcome.ok) return;
+  assert.match(outcome.error, /elements\.table\.props\.rows\.0/);
+  assert.match(outcome.error, /row 0 has width 1, expected width 2/);
+});
+
 test("a tool-only assistant part is worth saving", () => {
   assert.equal(assistantHasVisiblePart([]), false);
   assert.equal(
     assistantHasVisiblePart([{ type: "tool-render_ui", state: "output-available", output: { ok: true } }]),
     true,
   );
-  assert.equal(assistantHasVisiblePart([{ type: "tool-render_ui", state: "input-streaming" }]), false);
+  assert.equal(assistantHasVisiblePart([{ type: "tool-render_ui", state: "input-streaming" }]), true);
   assert.equal(assistantHasVisiblePart([{ type: "text", text: "  " }]), false);
   assert.equal(assistantHasVisiblePart([{ type: "text", text: "pong" }]), true);
+});
+
+test("an interrupted reply settles streaming tool parts to a stopped error", () => {
+  const streaming = {
+    type: "tool-render_ui",
+    toolCallId: "call_1",
+    state: "input-streaming",
+    input: { root: "card" },
+  };
+  const finished = { type: "tool-render_ui", toolCallId: "call_2", state: "output-available", output: { ok: true } };
+  assert.deepEqual(settleInterruptedParts([streaming, finished], true), [
+    { ...streaming, state: "output-error", errorText: "Stopped" },
+    finished,
+  ]);
+  assert.deepEqual(settleInterruptedParts([streaming], false), [streaming]);
+  assert.deepEqual(settleInterruptedParts(undefined, true), undefined);
 });
