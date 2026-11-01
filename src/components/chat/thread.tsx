@@ -1,18 +1,21 @@
 "use client";
 
+import { useRef } from "react";
 import { ThreadPrimitive, useAuiState } from "@assistant-ui/react";
 import { ArrowDownIcon } from "@phosphor-icons/react";
 import { Figure } from "@/components/figure";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Composer } from "./composer";
 import { messageByRole } from "./messages";
+import { ThreadMap } from "./thread-map";
 
 export function Thread({ ready, model }: { ready: boolean; model: string }) {
   const empty = useAuiState((state) => state.thread.isEmpty);
+  const viewport = useRef<HTMLDivElement>(null);
   return (
     <TooltipProvider>
-      <ThreadPrimitive.Root className="flex h-full min-h-0 flex-col">
-        <ThreadPrimitive.Viewport className="@container flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-8 scrollbar-thin">
+      <ThreadPrimitive.Root className="@container/thread relative flex h-full min-h-0 flex-col">
+        <ThreadPrimitive.Viewport ref={viewport} className="@container flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-8 scrollbar-thin">
           {empty ? (
             <EmptyState model={model} />
           ) : (
@@ -39,6 +42,7 @@ export function Thread({ ready, model }: { ready: boolean; model: string }) {
             </>
           )}
         </ThreadPrimitive.Viewport>
+        {empty ? null : <ThreadMap viewport={viewport} />}
       </ThreadPrimitive.Root>
     </TooltipProvider>
   );

@@ -88,8 +88,9 @@ function AssistantMessage() {
 }
 
 function UserMessage() {
+  const id = useAuiState((state) => state.message.id);
   return (
-    <MessagePrimitive.Root className="mx-auto flex w-full max-w-widget animate-rise items-end justify-end gap-1.5">
+    <MessagePrimitive.Root data-turn-id={id} tabIndex={-1} className="mx-auto flex w-full scroll-mt-6 outline-none max-w-widget animate-rise items-end justify-end gap-1.5">
       <ActionBarPrimitive.Root autohide="always">
         <CopyAction />
       </ActionBarPrimitive.Root>
