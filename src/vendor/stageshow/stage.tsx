@@ -305,7 +305,7 @@ export function Stage<S extends object>({
   const resolve = useCallback((t: Target): Point => {
     // One target per layout, as cursor.at takes it
     if (typeof t === 'object' && t !== null && 'wide' in t) t = (layoutRef.current === 'compact' ? t.compact : t.wide)
-    const name = nameOf(t)
+    const name = nameOf(t, layoutRef.current)
     if (name === null) return t as Point
     const root = rootRef.current
     const el = root?.querySelector<HTMLElement>(`[data-target="${name}"]`)

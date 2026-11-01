@@ -268,7 +268,7 @@ export function createAct<S>(signal: AbortSignal, env: ActEnv<S>): Act<S> {
   let keyId = keysRef.current.id
   let carets = 0
   const targetEl = (t: Target) => {
-    const name = nameOf(t)
+    const name = nameOf(t, layout)
     return name === null ? null : rootRef.current?.querySelector(`[data-target="${name}"]`) ?? null
   }
 

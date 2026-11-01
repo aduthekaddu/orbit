@@ -194,8 +194,9 @@ export function installVirtualClock(opts: { fps?: number; epoch?: number; onLayo
     await settle()
     // Timers due by `to`, in time order, each with the work it queued. A
     // hair of slack, so a wait summed from frame-sized steps can't miss its
-    // frame by a rounding error
-    for (let guard = 0; guard < 10000; guard++) {
+    // frame by a rounding error. No count cap: leaving work due before `to`
+    // while reporting `to` makes it run after time has already moved on
+    for (;;) {
       let next: Timer | null = null
       for (const t of Array.from(timers.values())) if (t.at <= to + 1e-6 && (!next || t.at < next.at || (t.at === next.at && t.seq < next.seq))) next = t
       if (!next) break

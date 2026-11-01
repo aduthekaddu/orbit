@@ -2,6 +2,8 @@
 // script API, the drawn scale that turns screen pixels into stage pixels,
 // and the rect helpers demos use to place overlays from measured targets.
 
+import type { Layout } from './looks'
+
 export type Point = { x: number; y: number }
 export type Rect = { x: number; y: number; width: number; height: number }
 /**
@@ -13,7 +15,10 @@ export type Target = string | Point | { at: string; x: number; y: number } | { w
 
 export const EMPTY: Rect = { x: 0, y: 0, width: 0, height: 0 }
 
-export const nameOf = (t: Target) => (typeof t === 'string' ? t : 'at' in t ? t.at : null)
+/** The data-target a target names, or null when it is a point. A per-layout
+ * pair resolves to the branch the stage is showing. */
+export const nameOf = (t: Target, layout: Layout): string | null =>
+  typeof t === 'string' ? t : 'at' in t ? t.at : 'wide' in t ? nameOf(t[layout], layout) : null
 
 /** Rect helpers for positioning overlays from measured targets. */
 export const inset = (r: Rect, by: number): Rect => ({ x: r.x - by, y: r.y - by, width: r.width + by * 2, height: r.height + by * 2 })
@@ -51,19 +56,34 @@ export function rectOf(root: HTMLElement, el: HTMLElement, fallback: number, spa
 // without a scale of its own (a button's press, a hover lift). Anything
 // placed from it (a popover under a button) would otherwise shift by a
 // fraction of a pixel for every press and settle back after
+const scaleValue = (v: string) => (v.endsWith('%') ? parseFloat(v) / 100 : parseFloat(v))
 export function targetRectOf(root: HTMLElement, el: HTMLElement, fallback: number, space = stageSpace(root, fallback)): Rect {
   const r = rectOf(root, el, fallback, space)
   const style = getComputedStyle(el)
   const t = style.transform
   const m = t && t !== 'none' ? t.match(/^matrix\(([^)]+)\)$/) : null
-  if (!m) return r
-  const [a, b, c, d, e, f] = m[1].split(',').map(Number)
-  if (b || c || e || f || !a || !d) return r
+  let sx = 1
+  let sy = 1
+  if (m) {
+    const [a, b, c, d, e, f] = m[1].split(',').map(Number)
+    if (b || c || e || f || !a || !d) return r
+    sx = a
+    sy = d
+  }
+  // The scale property is its own transform, applied on top of the matrix
+  const own = style.scale && style.scale !== 'none' ? style.scale.trim().split(/\s+/).map(scaleValue) : []
+  if (own.length) {
+    if (!own[0] || Number.isNaN(own[0])) return r
+    sx *= own[0]
+    sy *= own[1] ?? own[0]
+    if (!sy || Number.isNaN(sy)) return r
+  }
+  if (sx === 1 && sy === 1) return r
   // Unscaled from the drawn box, not offsetWidth, which rounds to whole pixels
-  const w = r.width / a
-  const h = r.height / d
+  const w = r.width / sx
+  const h = r.height / sy
   const [ox, oy] = style.transformOrigin.split(' ').map(parseFloat)
-  return { x: r.x - ox * (1 - a), y: r.y - oy * (1 - d), width: w, height: h }
+  return { x: r.x - ox * (1 - sx), y: r.y - oy * (1 - sy), width: w, height: h }
 }
 
 // The untransformed layout box: offsets up to the stage, ignoring any scale
@@ -90,6 +110,12 @@ export function layoutRectOf(root: HTMLElement, el: HTMLElement): Rect {
     y += n.offsetTop
     const parent: Element | null = n.offsetParent
     if (!parent || !root.contains(parent)) break
+    // Offsets are measured before any scroll, and a plain scroller between
+    // the element and its offsetParent never appears in the walk above
+    for (let s = n.parentElement; s && s !== parent; s = s.parentElement) {
+      x -= s.scrollLeft
+      y -= s.scrollTop
+    }
     n = parent as HTMLElement
     if (n !== root) {
       x += n.clientLeft - n.scrollLeft
