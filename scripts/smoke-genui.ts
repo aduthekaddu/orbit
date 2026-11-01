@@ -1,5 +1,7 @@
+import path from "node:path";
 import Database from "better-sqlite3";
 import { parseRenderSpec } from "../src/lib/genui/spec";
+import { dataDirectory } from "../src/lib/paths";
 
 const origin = "http://127.0.0.1:3211";
 const email = "smoke@orbit.local";
@@ -157,7 +159,7 @@ async function main() {
   const elementCount = Object.keys(checked.spec.elements).length;
   console.log(`reload spec root=${checked.spec.root} elements=${elementCount}`);
 
-  const sqlite = new Database("data/orbit.db", { readonly: true, fileMustExist: true });
+  const sqlite = new Database(path.join(dataDirectory(), "orbit.db"), { readonly: true, fileMustExist: true });
   const rows = sqlite
     .prepare("select role, parts from messages where chat_id = ? order by position")
     .all(chatId) as Array<{ role: string; parts: string }>;

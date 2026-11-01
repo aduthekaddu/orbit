@@ -10,6 +10,9 @@ const REAL_KEY = process.env.ORBIT_REAL_API_KEY ?? "";
 const REAL_BASE = process.env.ORBIT_REAL_BASE_URL ?? "https://opencode.ai/inference/go/openai/v1";
 const REAL_MODEL = process.env.ORBIT_REAL_MODEL ?? "deepseek-v4.1-flash";
 const MOCK_BASE = process.env.ORBIT_MOCK_BASE_URL ?? "http://127.0.0.1:3299/v1";
+const COMPOSER = 'textarea[placeholder="Message orbit"]';
+const ASSISTANT = '[data-message-role="assistant"]';
+const FALLBACK = "[data-genui-fallback]";
 
 fs.mkdirSync(OUT, { recursive: true });
 
@@ -42,25 +45,35 @@ async function signIn(page) {
     await page.getByRole("button", { name: "Sign in" }).click();
   }
   await page.waitForURL(/\/c\/[0-9a-f-]+/, { timeout: 30_000 });
-  await page.locator('textarea[placeholder="Message"]').waitFor({ timeout: 30_000 });
+}
+
+async function useMockProvider(request) {
+  const response = await request.put(`${ORIGIN}/api/settings`, {
+    data: { baseUrl: MOCK_BASE, apiKey: "mock-key", model: "mock-genui", reasoningEffort: "low" },
+  });
+  const body = await response.json();
+  if (!response.ok() || body.keySet !== true || body.model !== "mock-genui") {
+    throw new Error(`mock provider setup failed status=${response.status()} body=${JSON.stringify(body)}`);
+  }
+  console.log(`mock provider ${MOCK_BASE} model=mock-genui`);
 }
 
 async function newChat(page) {
   await page.getByRole("button", { name: "New chat" }).click();
   await page.waitForURL(/\/c\/[0-9a-f-]+/, { timeout: 30_000 });
-  await page.locator('textarea[placeholder="Message"]').waitFor({ timeout: 30_000 });
+  await page.locator(COMPOSER).waitFor({ timeout: 30_000 });
   await page.waitForTimeout(250);
 }
 
 async function send(page, text) {
-  const composer = page.locator('textarea[placeholder="Message"]');
+  const composer = page.locator(COMPOSER);
   await composer.click();
   await composer.fill(text);
   await composer.press("Enter");
 }
 
 async function waitIdle(page, timeout = 120_000) {
-  await page.waitForFunction(() => !document.querySelector("svg.lucide-square"), null, { timeout });
+  await page.waitForFunction(() => !document.querySelector('button[aria-label="Stop"]'), null, { timeout });
   await page.waitForTimeout(350);
 }
 
@@ -70,8 +83,8 @@ async function waitForText(page, pattern, timeout = 60_000) {
 }
 
 async function viewportMetrics(page) {
-  return page.evaluate(() => {
-    const composer = document.querySelector('textarea[placeholder="Message"]');
+  return page.evaluate((selector) => {
+    const composer = document.querySelector(selector);
     const box = composer?.getBoundingClientRect();
     const viewport = document.querySelector(".overflow-y-auto");
     return {
@@ -82,7 +95,7 @@ async function viewportMetrics(page) {
       threadClientWidth: viewport ? viewport.clientWidth : null,
       composer: box ? { left: box.left, right: box.right, top: box.top, bottom: box.bottom } : null,
     };
-  });
+  }, COMPOSER);
 }
 
 async function mobileCheck(page, label) {
@@ -113,18 +126,18 @@ async function mobileCheck(page, label) {
 
 async function reloadAndCountAssistants(page, expected, label) {
   await page.reload();
-  await page.locator('textarea[placeholder="Message"]').waitFor({ timeout: 30_000 });
+  await page.locator(COMPOSER).waitFor({ timeout: 30_000 });
   await page.getByText(expected).first().waitFor({ timeout: 30_000 });
-  const count = await page.locator("div.mx-auto.w-full.max-w-3xl.text-sm").count();
+  const count = await page.locator(ASSISTANT).count();
   await screenshot(page, `${label}-reload-desktop`);
   return count;
 }
 
 async function assistantText(page) {
-  return page.evaluate(() => {
-    const roots = [...document.querySelectorAll("div.mx-auto.w-full.max-w-3xl.text-sm")];
+  return page.evaluate((selector) => {
+    const roots = [...document.querySelectorAll(selector)];
     return roots.map((node) => node.innerText).join("\n---\n");
-  });
+  }, ASSISTANT);
 }
 
 async function runScenario(page, name, prompt, expected, options = {}) {
@@ -141,13 +154,14 @@ async function runScenario(page, name, prompt, expected, options = {}) {
   const text = await assistantText(page);
   if (options.check) await options.check(page, text);
   await screenshot(page, `${name}-desktop`);
-  const metrics = await mobileCheck(page, name);
+  const desktopMetrics = await viewportMetrics(page);
+  await mobileCheck(page, name);
   if (consoleErrors.length > errorsBefore) {
     for (const error of consoleErrors.slice(errorsBefore)) {
       finding("medium", "console", `${name}: ${error}`, `docs/qa/screenshots/genui-${name}-desktop.png`);
     }
   }
-  return { text, metrics };
+  return { text, metrics: desktopMetrics };
 }
 
 async function main() {
@@ -162,6 +176,9 @@ async function main() {
   });
 
   await signIn(page);
+  await useMockProvider(context.request);
+  await page.reload();
+  await page.locator(COMPOSER).waitFor({ timeout: 30_000 });
 
   const all = await runScenario(
     page,
@@ -211,7 +228,7 @@ async function main() {
           finding("high", "text", "all: the editable text did not accept keyboard input", "docs/qa/screenshots/genui-all-desktop.png");
         }
         await screenshot(target, "all-text-edited");
-        if ((await target.locator('[class*="border-destructive"]').count()) > 0) {
+        if ((await target.locator(FALLBACK).count()) > 0) {
           finding("high", "text", "all: editing text triggered a validation fallback", "docs/qa/screenshots/genui-all-text-edited.png");
         }
         await button.click();
@@ -226,7 +243,7 @@ async function main() {
 
   console.log("reload after edit");
   await page.reload();
-  await page.locator('textarea[placeholder="Message"]').waitFor({ timeout: 30_000 });
+  await page.locator(COMPOSER).waitFor({ timeout: 30_000 });
   await page.getByText("Quarterly report").first().waitFor({ timeout: 30_000 });
   const reloaded = await assistantText(page);
   if (!reloaded.includes("Quarterly report") || !reloaded.includes("Active users")) {
@@ -299,7 +316,7 @@ async function main() {
       if (!/invalid input|rejected/i.test(text)) {
         finding("medium", "fallback", "unknown: the fallback did not explain that the tool arguments were rejected", "docs/qa/screenshots/genui-unknown-desktop.png");
       }
-      if (!(await target.locator('[class*="border-destructive"]').count())) {
+      if (!(await target.locator(FALLBACK).count())) {
         finding("high", "fallback", "unknown: no fallback block was rendered", "docs/qa/screenshots/genui-unknown-desktop.png");
       }
     },
@@ -326,7 +343,7 @@ async function main() {
 
   await runScenario(page, "malformed", "[qa:malformed] Render malformed arguments.", null, {
     check: async (target) => {
-      if (!(await target.locator('[class*="border-destructive"]').count())) {
+      if (!(await target.locator(FALLBACK).count())) {
         finding("high", "fallback", "malformed: no fallback block was rendered", "docs/qa/screenshots/genui-malformed-desktop.png");
       }
     },
@@ -337,7 +354,7 @@ async function main() {
   await runScenario(page, "truncated", "[qa:truncated] Render a stream that stops.", null, {
     check: async (target) => {
       const text = await assistantText(target);
-      const fallback = await target.locator('[class*="border-destructive"]').count();
+      const fallback = await target.locator(FALLBACK).count();
       if (!fallback) {
         finding("high", "truncated", "truncated: no fallback block was rendered", "docs/qa/screenshots/genui-truncated-desktop.png");
       }
@@ -373,20 +390,24 @@ async function main() {
   await newChat(page);
   await page.locator("body").click({ position: { x: 5, y: 5 } });
   const focusOrder = [];
-  for (let index = 0; index < 24; index += 1) {
+  const tabStops = await page.evaluate(
+    () => document.querySelectorAll("a[href], button, input, textarea, select, [tabindex]:not([tabindex='-1'])").length,
+  );
+  let reachedComposer = false;
+  for (let index = 0; index < tabStops + 2 && !reachedComposer; index += 1) {
     await page.keyboard.press("Tab");
-    focusOrder.push(
-      await page.evaluate(() => {
-        const node = document.activeElement;
-        if (!node) return "none";
-        return `${node.tagName}[${node.getAttribute("aria-label") ?? ""}][${node.getAttribute("placeholder") ?? ""}]`;
-      }),
-    );
+    const entry = await page.evaluate(() => {
+      const node = document.activeElement;
+      if (!node) return "none";
+      return `${node.tagName}[${node.getAttribute("aria-label") ?? ""}][${node.getAttribute("placeholder") ?? ""}]`;
+    });
+    focusOrder.push(entry);
+    reachedComposer = entry.includes("[Message orbit]");
   }
-  if (!focusOrder.some((entry) => entry.includes('placeholder="Message"') || entry.includes("[Message]"))) {
+  if (!reachedComposer) {
     finding("high", "keyboard", `keyboard: Tab never reached the composer. Order: ${focusOrder.join(" > ")}`, null);
   }
-  const composer = page.locator('textarea[placeholder="Message"]');
+  const composer = page.locator(COMPOSER);
   await composer.click();
   await composer.type("[qa:recover] sent from the keyboard");
   await composer.press("Enter");
@@ -429,11 +450,10 @@ async function main() {
         await screenshot(page, "real-desktop");
       }
     }
-    await context.request.put(`${ORIGIN}/api/settings`, {
-      data: { baseUrl: MOCK_BASE, apiKey: "mock-key", model: "mock-genui", reasoningEffort: "low" },
-    });
+    await useMockProvider(context.request);
   }
 
+  console.log(`desktop metrics viewport=${all.metrics.innerWidth} doc=${all.metrics.docScrollWidth}`);
   if (all.metrics.docScrollWidth > all.metrics.innerWidth + 1) {
     finding("medium", "desktop", `all: document overflows horizontally at 1440px (${all.metrics.docScrollWidth}px)`, "docs/qa/screenshots/genui-all-desktop.png");
   }

@@ -57,7 +57,7 @@ function AssistantMessage() {
   const failed = useAuiState((s) => s.message.status?.type === "incomplete" && s.message.status.reason === "error");
   const hasText = useAuiState((s) => s.message.content.some((part) => part.type === "text" && part.text.length > 0));
   return (
-    <MessagePrimitive.Root className="relative mx-auto w-full max-w-widget animate-rise">
+    <MessagePrimitive.Root data-message-role="assistant" className="relative mx-auto w-full max-w-widget animate-rise">
       <OrbitMark busy={running} tone={running ? "accent" : "mono"} className="absolute top-0.5 -left-9 hidden size-5 @3xl:block" />
       <MessagePrimitive.Parts components={assistantParts} />
       <MessagePrimitive.Error>
