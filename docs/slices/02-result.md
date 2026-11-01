@@ -48,4 +48,4 @@ An earlier call on the same server, before numeric values were accepted, did cal
 
 ## Review fixes
 
-The review round added table-width validation, persistence for stopped `render_ui` replies, an ownership-checked migration lock, private data-directory and auth-secret modes, deployment-only auth origins, and the QA harness fixes. `npm test` runs 87 tests. The browser QA, smoke, lock interleaving, two-process migration, and auth-origin probes all pass on this branch. The details are in `docs/qa/2026-11-01-genui-qa.md` and the PR thread.
+The review round added table-width validation, persistence for stopped `render_ui` replies, a SQLite exclusive migration lock, private data-directory and auth-secret modes, deployment-only auth origins, and the QA harness fixes. `npm test` runs 85 tests. The browser QA, smoke, two-process migration, crash recovery, and auth-origin probes all pass on this branch. The details are in `docs/qa/2026-11-01-genui-qa.md` and the PR thread.

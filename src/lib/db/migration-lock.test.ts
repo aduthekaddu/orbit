@@ -13,24 +13,12 @@ function tempDir(prefix: string) {
   return fs.mkdtempSync(path.join(os.tmpdir(), `orbit-migration-lock-${prefix}-`));
 }
 
-function deadPid() {
-  for (let pid = 999_999; pid > 0; pid -= 1) {
-    try {
-      process.kill(pid, 0);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ESRCH") return pid;
-    }
-  }
-  throw new Error("could not find a dead pid");
-}
-
 const holderSource = `
 import("./src/lib/db/migration-lock.ts").then((mod) => {
   const withMigrationLock = mod.withMigrationLock ?? mod.default.withMigrationLock;
-  const holdMs = Number(process.env.HOLD_MS ?? 1000);
   withMigrationLock(() => {
     console.log("HOLD " + Date.now());
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, holdMs);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(process.env.HOLD_MS ?? 1000));
     console.log("RELEASE " + Date.now());
   }, { dir: process.env.LOCK_DIR, timeoutMs: 20000 });
 });
@@ -46,67 +34,14 @@ import("./src/lib/db/migration-lock.ts").then((mod) => {
 });
 `;
 
-const racerSource = `
-import fs from "node:fs";
-import("./src/lib/db/migration-lock.ts").then((mod) => {
-  const withMigrationLock = mod.withMigrationLock ?? mod.default.withMigrationLock;
-  withMigrationLock(() => {
-    fs.appendFileSync(process.env.LOG_PATH, "enter " + process.pid + "\\n");
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 80);
-    fs.appendFileSync(process.env.LOG_PATH, "exit " + process.pid + "\\n");
-  }, { dir: process.env.LOCK_DIR, timeoutMs: 20000 });
-});
-`;
-
-const waiterSource = `
-import fs from "node:fs";
-import("./src/lib/db/migration-lock.ts").then((mod) => {
-  const withMigrationLock = mod.withMigrationLock ?? mod.default.withMigrationLock;
-  const log = (line) => fs.appendFileSync(process.env.LOG_PATH, line + "\\n");
-  withMigrationLock(() => {
-    log("enter waiter " + Date.now());
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(process.env.HOLD_MS ?? 100));
-    log("exit waiter " + Date.now());
-  }, { dir: process.env.LOCK_DIR, timeoutMs: 20000 });
-});
-`;
-
-const legacyOwnerSource = `
-import fs from "node:fs";
-const lockPath = process.env.LOCK_DIR + "/.migrate.lock";
-const log = (line) => fs.appendFileSync(process.env.LOG_PATH, line + "\\n");
-const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-const fd = fs.openSync(lockPath, "wx");
-console.log("PUBLISHED " + Date.now());
-pause(2500);
-fs.writeSync(fd, process.pid + ":00000000-0000-4000-8000-000000000000");
-fs.closeSync(fd);
-log("enter old " + Date.now());
-pause(600);
-log("exit old " + Date.now());
-try { fs.unlinkSync(lockPath); } catch {}
-`;
-
-const linkedOwnerSource = `
-import fs from "node:fs";
-const realLink = fs.linkSync;
-fs.linkSync = (from, to) => {
-  const result = realLink.call(fs, from, to);
-  if (to === process.env.LOCK_PATH) {
-    console.log("PUBLISHED " + Date.now());
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(process.env.PAUSE_MS));
-  }
-  return result;
-};
-import("./src/lib/db/migration-lock.ts").then((mod) => {
-  const withMigrationLock = mod.withMigrationLock ?? mod.default.withMigrationLock;
-  const log = (line) => fs.appendFileSync(process.env.LOG_PATH, line + "\\n");
-  withMigrationLock(() => {
-    log("enter owner " + Date.now());
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 600);
-    log("exit owner " + Date.now());
-  }, { dir: process.env.LOCK_DIR, timeoutMs: 20000 });
-});
+const importDbSource = `
+import("./src/lib/db/index.ts").then(
+  () => console.log("READY"),
+  (error) => {
+    console.error(error);
+    process.exitCode = 1;
+  },
+);
 `;
 
 function start(source: string, env: Record<string, string>) {
@@ -133,7 +68,7 @@ function start(source: string, env: Record<string, string>) {
       resolve({ code: code ?? -1, stdout, stderr });
     });
   });
-  return { output: () => `${stdout}\n${stderr}`, done };
+  return { proc, output: () => `${stdout}\n${stderr}`, done };
 }
 
 async function waitFor(condition: () => boolean, what: string) {
@@ -144,111 +79,10 @@ async function waitFor(condition: () => boolean, what: string) {
   }
 }
 
-function readLock(lockPath: string) {
-  try {
-    return fs.readFileSync(lockPath, "utf8");
-  } catch {
-    return "";
-  }
-}
-
-function readEvents(logPath: string) {
-  return fs
-    .readFileSync(logPath, "utf8")
-    .trim()
-    .split("\n")
-    .map((line) => line.replace(/ \d+$/, ""));
-}
-
-function alternates(events: string[]) {
-  return events.every((event, index) => event.startsWith(index % 2 === 0 ? "enter" : "exit"));
-}
-
-test("a directory at the lock path fails fast with a clear error", () => {
-  const dir = tempDir("directory");
-  const lockPath = path.join(dir, ".migrate.lock");
-  fs.mkdirSync(lockPath);
-  let entered = false;
-  const started = Date.now();
-
-  assert.throws(
-    () =>
-      withMigrationLock(
-        () => {
-          entered = true;
-        },
-        { dir, timeoutMs: 60_000 },
-      ),
-    /database migration lock .*EISDIR/,
-  );
-  assert.equal(entered, false);
-  assert.ok(Date.now() - started < 2_000, `blocked for ${Date.now() - started}ms`);
-});
-
-test(
-  "a lock that cannot be claimed fails fast instead of spinning",
-  { skip: process.getuid?.() === 0 },
-  () => {
-    const dir = tempDir("unwritable");
-    fs.writeFileSync(path.join(dir, ".migrate.lock"), `${deadPid()}:${randomUUID()}`);
-    fs.chmodSync(dir, 0o500);
-    const started = Date.now();
-    try {
-      assert.throws(
-        () => withMigrationLock(() => undefined, { dir, timeoutMs: 60_000 }),
-        /database migration lock.*EACCES/,
-      );
-    } finally {
-      fs.chmodSync(dir, 0o700);
-    }
-    assert.ok(Date.now() - started < 2_000, `blocked for ${Date.now() - started}ms`);
-  },
-);
-
-test("a lock left by a dead process is taken over and released", () => {
-  const dir = tempDir("dead");
-  const lockPath = path.join(dir, ".migrate.lock");
-  fs.writeFileSync(lockPath, `${deadPid()}:${randomUUID()}`);
-
-  const result = withMigrationLock(() => "migrated", { dir, timeoutMs: 5_000 });
-
-  assert.equal(result, "migrated");
-  assert.equal(fs.existsSync(lockPath), false);
-  assert.equal(fs.existsSync(path.join(dir, ".migrate.lock.claim")), false);
-  assert.deepEqual(fs.readdirSync(dir).filter((name) => name.endsWith(".tmp")), []);
-});
-
-test("a live lock times out at the deadline instead of entering", () => {
-  const dir = tempDir("deadline");
-  const lockPath = path.join(dir, ".migrate.lock");
-  const token = `${process.pid}:${randomUUID()}`;
-  fs.writeFileSync(lockPath, token);
-  let entered = false;
-  const started = Date.now();
-
-  assert.throws(
-    () =>
-      withMigrationLock(
-        () => {
-          entered = true;
-        },
-        { dir, timeoutMs: 200 },
-      ),
-    /Timed out after 200ms/,
-  );
-  assert.equal(entered, false);
-  assert.ok(Date.now() - started < 5_000, `blocked for ${Date.now() - started}ms`);
-  assert.equal(readLock(lockPath), token);
-});
-
-test("a live lock is not taken over, however old its mtime", { timeout: 30_000 }, async () => {
-  const dir = tempDir("live");
-  const lockPath = path.join(dir, ".migrate.lock");
-  const holder = start(holderSource, { LOCK_DIR: dir, HOLD_MS: "1200" });
-  await waitFor(() => /^\d+:[0-9a-f-]{36}$/.test(readLock(lockPath)), "the holder to write its lock");
-
-  const old = new Date(Date.now() - 10 * 60_000);
-  fs.utimesSync(lockPath, old, old);
+test("two processes serialize and the second enters after the first releases", { timeout: 30_000 }, async () => {
+  const dir = tempDir("serialize");
+  const holder = start(holderSource, { LOCK_DIR: dir, HOLD_MS: "900" });
+  await waitFor(() => holder.output().includes("HOLD"), "the holder to enter");
   const contender = start(contenderSource, { LOCK_DIR: dir });
 
   const held = await holder.done;
@@ -260,77 +94,97 @@ test("a live lock is not taken over, however old its mtime", { timeout: 30_000 }
   assert.ok(entered >= released, `contender entered at ${entered} before the holder released at ${released}`);
 });
 
-test("release leaves a lock whose token it does not own", { timeout: 30_000 }, async () => {
-  const dir = tempDir("release");
-  const lockPath = path.join(dir, ".migrate.lock");
-  const holder = start(holderSource, { LOCK_DIR: dir, HOLD_MS: "900" });
+test("a SIGKILLed holder releases the lock within a short time", { timeout: 30_000 }, async () => {
+  const dir = tempDir("kill");
+  const holder = start(holderSource, { LOCK_DIR: dir, HOLD_MS: "30000" });
   await waitFor(() => holder.output().includes("HOLD"), "the holder to enter");
 
-  const successor = `${process.pid}:${randomUUID()}`;
-  fs.writeFileSync(lockPath, successor);
-  const held = await holder.done;
+  const killedAt = Date.now();
+  holder.proc.kill("SIGKILL");
+  await holder.done;
 
-  assert.equal(held.code, 0, held.stderr);
-  assert.equal(readLock(lockPath), successor);
+  const result = withMigrationLock(() => "recovered", { dir, timeoutMs: 2_000 });
+  const elapsed = Date.now() - killedAt;
+
+  assert.equal(result, "recovered");
+  assert.ok(elapsed < 2_000, `the next owner waited ${elapsed}ms for a killed holder`);
 });
 
-test("only one of six processes enters at a time when they race for a stale lock", { timeout: 40_000 }, async () => {
-  const dir = tempDir("race");
-  const lockPath = path.join(dir, ".migrate.lock");
-  const logPath = path.join(dir, "sections.log");
-  fs.writeFileSync(lockPath, `${deadPid()}:${randomUUID()}`);
+test("a live holder makes a 200ms waiter throw a clear timeout", { timeout: 30_000 }, async () => {
+  const dir = tempDir("timeout");
+  const holder = start(holderSource, { LOCK_DIR: dir, HOLD_MS: "1500" });
+  await waitFor(() => holder.output().includes("HOLD"), "the holder to enter");
 
-  const racers = Array.from({ length: 6 }, () => start(racerSource, { LOCK_DIR: dir, LOG_PATH: logPath }));
-  const results = await Promise.all(racers.map((racer) => racer.done));
-  for (const result of results) assert.equal(result.code, 0, result.stderr);
-
-  const events = fs
-    .readFileSync(logPath, "utf8")
-    .trim()
-    .split("\n")
-    .map((line) => line.split(" ")[0]);
-  assert.equal(events.filter((event) => event === "enter").length, 6);
-  assert.equal(events.filter((event) => event === "exit").length, 6);
-  const expected = events.flatMap((_, index) => [index % 2 === 0 ? "enter" : "exit"]);
-  assert.deepEqual(events, expected, `two processes were inside the lock at once:\n${events.join("\n")}`);
-  assert.equal(fs.existsSync(lockPath), false);
-});
-
-test("the old create-then-write lock overlaps when its owner pauses", { timeout: 30_000 }, async () => {
-  const dir = tempDir("legacy-pause");
-  const logPath = path.join(dir, "sections.log");
-  const owner = start(legacyOwnerSource, { LOCK_DIR: dir, LOG_PATH: logPath });
-  await waitFor(() => owner.output().includes("PUBLISHED"), "the old owner to create the empty lock");
-
-  const waiter = start(waiterSource, { LOCK_DIR: dir, LOG_PATH: logPath, HOLD_MS: "3000" });
-  const [oldOwner, newWaiter] = await Promise.all([owner.done, waiter.done]);
-
-  assert.equal(oldOwner.code, 0, oldOwner.stderr);
-  assert.equal(newWaiter.code, 0, newWaiter.stderr);
-  const events = readEvents(logPath);
-  assert.equal(alternates(events), false, `expected the old shape to overlap:\n${events.join("\n")}`);
-});
-
-test("a lock published by link is not taken over while its owner pauses", { timeout: 30_000 }, async () => {
-  const dir = tempDir("linked-pause");
-  const logPath = path.join(dir, "sections.log");
-  const owner = start(linkedOwnerSource, {
-    LOCK_DIR: dir,
-    LOCK_PATH: path.join(dir, ".migrate.lock"),
-    LOG_PATH: logPath,
-    PAUSE_MS: "2500",
-  });
-  await waitFor(() => owner.output().includes("PUBLISHED"), "the owner to publish its lock");
-
-  const waiter = start(waiterSource, { LOCK_DIR: dir, LOG_PATH: logPath, HOLD_MS: "100" });
-  const [held, waited] = await Promise.all([owner.done, waiter.done]);
-
-  assert.equal(held.code, 0, held.stderr);
-  assert.equal(waited.code, 0, waited.stderr);
-  const events = readEvents(logPath);
-  assert.equal(alternates(events), true, `two owners were inside:\n${events.join("\n")}`);
-  assert.ok(
-    events.indexOf("enter waiter") > events.indexOf("exit owner"),
-    `the waiter entered before the owner left:\n${events.join("\n")}`,
+  let entered = false;
+  const started = Date.now();
+  assert.throws(
+    () =>
+      withMigrationLock(
+        () => {
+          entered = true;
+        },
+        { dir, timeoutMs: 200 },
+      ),
+    /Timed out after 200ms waiting for the database migration lock at .*\.migrate\.lock\.db/,
   );
+  assert.equal(entered, false);
+  assert.ok(Date.now() - started < 5_000);
+
+  const held = await holder.done;
+  assert.equal(held.code, 0, held.stderr);
+});
+
+test("a stale .migrate.lock file with a live pid does not block", () => {
+  const dir = tempDir("legacy");
+  const legacyLock = path.join(dir, ".migrate.lock");
+  const token = `${process.pid}:${randomUUID()}`;
+  fs.writeFileSync(legacyLock, token);
+
+  let entered = false;
+  withMigrationLock(
+    () => {
+      entered = true;
+    },
+    { dir, timeoutMs: 300 },
+  );
+
+  assert.equal(entered, true);
+  assert.equal(fs.readFileSync(legacyLock, "utf8"), token);
+});
+
+test("a directory at the lock database path fails clearly", () => {
+  const dir = tempDir("directory");
+  fs.mkdirSync(path.join(dir, ".migrate.lock.db"));
+  let entered = false;
+
+  assert.throws(
+    () =>
+      withMigrationLock(
+        () => {
+          entered = true;
+        },
+        { dir, timeoutMs: 60_000 },
+      ),
+    /Cannot open the database migration lock at .*\.migrate\.lock\.db/,
+  );
+  assert.equal(entered, false);
+});
+
+test("an existing 0775 data dir becomes 0700 when the db module starts", { timeout: 30_000 }, async () => {
+  const dir = tempDir("mode");
+  fs.chmodSync(dir, 0o775);
+
+  const child = start(importDbSource, { ORBIT_DATA_DIR: dir });
+  const result = await child.done;
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(fs.statSync(dir).mode & 0o777, 0o700);
+});
+
+test("the lock database is private", () => {
+  const dir = tempDir("private");
+
+  withMigrationLock(() => undefined, { dir });
+
+  assert.equal(fs.statSync(path.join(dir, ".migrate.lock.db")).mode & 0o777, 0o600);
 });
