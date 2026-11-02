@@ -68,6 +68,22 @@ export function shouldSaveReply({ regenerate, interrupted, hadReply, visible }: 
 
 export type ExpectedMessage = { id: string; content: string; parts: string };
 
+function expectedRow(chatId: string, id: string | undefined): ExpectedMessage | undefined {
+  if (!id) return undefined;
+  const row = db
+    .select({ id: messages.id, content: messages.content, parts: messages.parts })
+    .from(messages)
+    .where(and(eq(messages.id, id), eq(messages.chatId, chatId)))
+    .get();
+  return row ?? undefined;
+}
+
+/** The stored row a reply write is checked against: the reply a regenerate replaces, or else the prompt it answers. */
+export function replyGuard(chatId: string, regenerate: boolean, responseId: string, promptId?: string) {
+  const reply = regenerate ? expectedRow(chatId, responseId) : undefined;
+  return { hadReply: reply !== undefined, expected: reply ?? expectedRow(chatId, promptId) };
+}
+
 export function upsertMessage(
   chatId: string,
   message: { id: string; role: string; parts: unknown },

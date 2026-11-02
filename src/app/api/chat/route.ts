@@ -3,7 +3,7 @@ import { z } from "zod";
 import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
 import { assistantHasVisiblePart, settleInterruptedParts } from "@/lib/genui/spec";
 import { chatTools } from "@/lib/genui/tool";
-import { ensureChat, planChatWrite, shouldSaveReply, textFromParts, touchChat, upsertMessage, listMessages } from "@/lib/messages";
+import { ensureChat, planChatWrite, replyGuard, shouldSaveReply, textFromParts, touchChat, upsertMessage, listMessages } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { getSettings } from "@/lib/settings";
 import { getSession, unauthorized } from "@/lib/session";
@@ -81,11 +81,7 @@ export async function POST(request: Request) {
   else touchChat(chat.id);
 
   const stored = new Map(listMessages(chat.id).map((message) => [message.id, message]));
-  const expectedId = write.regenerate ? write.responseId : lastUser?.id;
-  const expectedRow = expectedId ? stored.get(expectedId) : undefined;
-  const expected = expectedRow
-    ? { id: expectedRow.id, content: textFromParts(expectedRow.parts), parts: JSON.stringify(expectedRow.parts) }
-    : undefined;
+  const { hadReply, expected } = replyGuard(chat.id, write.regenerate, write.responseId, lastUser?.id);
   const uiMessages = incoming.map((message) => ({
     id: message.id,
     role: message.role,
@@ -130,7 +126,6 @@ export async function POST(request: Request) {
           const status = outcome && typeof outcome === "object" && "status" in outcome ? String(outcome.status) : "";
           console.error("chat end without text", isAborted ? "aborted" : "finished", status, types.join(",") || "none");
         }
-        const hadReply = write.regenerate && expectedRow !== undefined;
         if (!shouldSaveReply({ regenerate: write.regenerate, interrupted, hadReply, visible })) return;
         upsertMessage(
           chat.id,
