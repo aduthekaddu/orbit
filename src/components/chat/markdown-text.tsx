@@ -6,8 +6,8 @@ import { useAui, useAuiState } from "@assistant-ui/react";
 import { useAISDKChat } from "@assistant-ui/react-ai-sdk";
 import { textPartIndex } from "@/lib/chat-parts";
 import remarkGfm from "remark-gfm";
-import type { Root, RootContent } from "hast";
 import { cn } from "@/lib/utils";
+import { rehypeCodeBlocks } from "@/lib/markdown-code";
 import { ScrollFade } from "@/components/ui/scroll-fade";
 import { CodeEditContext } from "./code-edit-context";
 import { CodeHeader, SyntaxHighlighter } from "./code-block";
@@ -72,23 +72,6 @@ function Table({ node: _node, className, ...props }: ComponentProps<"table"> & {
 
 const components = { ...styledElements, a: Link, table: Table, CodeHeader, SyntaxHighlighter };
 const remarkPlugins = [remarkGfm];
-
-function rehypeCodeBlocks() {
-  return (tree: Root) => {
-    let index = 0;
-    function visit(node: Root | RootContent) {
-      if (node.type === "element" && node.tagName === "pre") {
-        const code = node.children.find((child) => child.type === "element" && child.tagName === "code");
-        if (code?.type === "element") {
-          code.properties["data-code-index"] = index++;
-          if (code.position?.start.offset !== undefined) code.properties["data-code-fence"] = code.position.start.offset;
-        }
-      }
-      if ("children" in node) node.children.forEach(visit);
-    }
-    visit(tree);
-  };
-}
 
 const rehypePlugins = [rehypeCodeBlocks];
 
