@@ -15,6 +15,13 @@ export default async function emptyChat({ page, origin, step, shot }) {
   step("sidebar shows Untitled for the new chat", (await count(nav.getByRole("link", { name: "Untitled" }))) > 0, "no Untitled link");
   step("sidebar has no chat named New chat", (await count(nav.getByRole("link", { name: "New chat" }))) === 0, "a chat link says New chat");
 
+  await page.keyboard.press("Control+K");
+  const palette = page.getByRole("dialog", { name: "Command palette" });
+  await palette.waitFor({ timeout: 5_000 });
+  step("palette lists the new chat as Untitled", (await count(palette.getByRole("option", { name: "Untitled" }))) > 0, "no Untitled option");
+  await page.keyboard.press("Escape");
+  await palette.waitFor({ state: "hidden", timeout: 2_000 });
+
   const composer = page.getByPlaceholder("Ask anything");
   step("composer placeholder is Ask anything", (await count(composer)) === 1, "no Ask anything placeholder");
 
@@ -50,6 +57,7 @@ export default async function emptyChat({ page, origin, step, shot }) {
     const box = await mobile.getByRole("button", { name: label, exact: true }).boundingBox({ timeout: 2_000 }).catch(() => null);
     heights.push(box ? Math.round(box.height) : 0);
   }
+  step("phone header shows Untitled", (await count(mobile.getByRole("heading", { name: "Untitled" }))) === 1, "header is not Untitled");
   step("starters are at least 44px tall on a phone", heights.every((height) => height >= 44), `heights ${heights.join(", ")}`);
   await shot("phone-390x844", mobile);
   await phone.close();

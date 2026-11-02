@@ -5,7 +5,7 @@ import { Command, defaultFilter } from "cmdk";
 import { ChatCircleIcon, GearSixIcon, MagnifyingGlassIcon, NotePencilIcon } from "@phosphor-icons/react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ScrollFade } from "@/components/ui/scroll-fade";
-import type { ChatSummary } from "@/components/chat/sidebar";
+import { chatLabel, type ChatSummary } from "@/components/chat/sidebar";
 import { ShortcutKbd } from "./shortcuts";
 
 const itemClass =
@@ -71,12 +71,12 @@ export function CommandPalette({
                     <Command.Item
                       key={chat.id}
                       value={chat.id}
-                      keywords={[chat.title]}
+                      keywords={[chatLabel(chat.title)]}
                       onSelect={() => run(() => router.push(`/c/${chat.id}`))}
                       className={itemClass}
                     >
                       <ChatCircleIcon weight="light" className="size-4 shrink-0" />
-                      <span className="truncate">{chat.title}</span>
+                      <span className="truncate">{chatLabel(chat.title)}</span>
                     </Command.Item>
                   ))}
                 </Command.Group>

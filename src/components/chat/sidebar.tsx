@@ -16,6 +16,11 @@ import { ShortcutKbd } from "@/components/shell/shortcuts";
 
 export type ChatSummary = ReturnType<typeof listChats>[number];
 
+// The stored default title would repeat the New chat button label.
+export function chatLabel(title: string) {
+  return title === "New chat" ? "Untitled" : title;
+}
+
 // Null on the server: its timezone is not the reader's, so buckets are computed only in the browser.
 function useToday() {
   return useSyncExternalStore(subscribeToday, todaySnapshot, serverTodaySnapshot);
@@ -111,7 +116,7 @@ export function Sidebar({
                       : "text-muted-foreground hover:bg-accent hover:text-foreground",
                   )}
                 >
-                  {chat.title === "New chat" ? "Untitled" : chat.title}
+                  {chatLabel(chat.title)}
                 </Link>
               );
             })}
