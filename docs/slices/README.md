@@ -6,7 +6,7 @@ Orbit grows in slices. A slice is one pull request that ships one user-visible c
 | --- | --- | --- | --- |
 | 1 | [Walking skeleton](01.md) | `feat/walking-skeleton` | Shipped in #2 |
 | 2 | [Generative UI](02.md) | `feat/generative-ui` | Shipped in #4 |
-| 3 | [Chat polish](03.md) | `feat/chat-polish` | Planned |
+| 3 | [Chat polish](03.md) | `feat/chat-polish` | Shipped in #16 |
 | 4 | [Branching](04.md) | `feat/branching` | Planned |
 | 5 | [Artifact panel](05.md) | `feat/artifacts` | Planned |
 | 6 | [Titles and history search](06.md) | `feat/history-search` | Planned |

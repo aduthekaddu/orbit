@@ -6,15 +6,23 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Added
 
+- Four starter prompts on an empty chat. A click fills the composer and does not send. (#16)
+- `verify.mjs browse <scenario>` drives Chrome through Playwright and saves screenshots. `launch --mock` starts the mock provider. (#16)
 - `ARCHITECTURE.md` with a stack diagram and a checked state chart of one chat turn.
 - Build plans for slices 3 to 12 in `docs/slices/`.
 - `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, the MIT `LICENSE`, and GitHub issue and pull request templates.
 
 ### Changed
 
+- The composer placeholder is `Ask anything`. (#16)
+- The sidebar shows `Untitled` for a chat that has no title yet. (#16)
 - Rewrote `README.md` and `AGENTS.md`.
 - Renamed `docs/SPEC.md` to `docs/roadmap.md` and `docs/DESIGN.md` to `docs/design.md`.
 - `scripts/qa/genui-qa.cjs` saves screenshots under `.verify/evidence/genui-qa/` instead of `docs/qa/screenshots/`.
+
+### Fixed
+
+- A retry that you stop after a failed first message keeps the text you saw after reload. (#16)
 
 ### Removed
 
