@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { codeBodyStart, replaceCode, replaceTextPart } from "./chat-parts";
+import { codeBodyStart, replaceCode, replaceTextPart, textPartIndex } from "./chat-parts";
 
 test("editing code in one text part preserves other prose and the generated tool", () => {
   const tool = { type: "tool-render_ui" as const, toolCallId: "tool", state: "output-available" as const, input: {}, output: {} };
@@ -40,6 +40,16 @@ test("editing a later code block whose code prefixes an earlier block changes on
   );
 });
 
+test("a prose match before the block does not move the code body", () => {
+  const markdown = "null\n\n```json\nnull\n```";
+  const start = codeBodyStart(markdown, 6, "null\n");
+  assert.equal(start, 14);
+  assert.equal(
+    replaceCode(markdown, "null\n", "true", start, start + "null\n".length),
+    "null\n\n```json\ntrue\n```",
+  );
+});
+
 test("saving a new body into an empty code block keeps the closing fence on its own line", () => {
   const markdown = "```ts\n```";
   const start = codeBodyStart(markdown, 0, "");
@@ -52,4 +62,20 @@ test("a stale code range leaves the message unchanged instead of editing an earl
   const staleStart = 15;
   const staleEnd = staleStart + "old\n".length;
   assert.equal(replaceCode(markdown, "old\n", "new", staleStart, staleEnd), markdown);
+});
+
+
+test("an editable text part maps to its saved index past step markers and tools", () => {
+  const parts = [
+    { type: "step-start" as const },
+    { type: "reasoning" as const, text: "thinking" },
+    { type: "text" as const, text: "first" },
+    { type: "step-start" as const },
+    { type: "tool-render_ui" as const, toolCallId: "tool", state: "output-available" as const, input: {}, output: {} },
+    { type: "text" as const, text: "second" },
+  ];
+  assert.equal(textPartIndex(parts, 0), 2);
+  assert.equal(textPartIndex(parts, 1), 5);
+  assert.equal(textPartIndex(parts, 2), undefined);
+  assert.equal(textPartIndex([{ type: "text", text: "plain" }], 0), 0);
 });

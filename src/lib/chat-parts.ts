@@ -57,3 +57,13 @@ export function replaceCode(text: string, code: string, next: string, start?: nu
   if (index === -1) return text;
   return text.slice(0, index) + next + keepNewline + text.slice(index + code.length);
 }
+
+export function textPartIndex(parts: MessageParts, ordinal: number): number | undefined {
+  let textOrdinal = 0;
+  for (const [index, part] of parts.entries()) {
+    if (part.type !== "text") continue;
+    if (textOrdinal === ordinal) return index;
+    textOrdinal += 1;
+  }
+  return undefined;
+}

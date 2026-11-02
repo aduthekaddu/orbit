@@ -109,6 +109,8 @@ statechart docs/architecture/ChatTurn.tla --config docs/architecture/ChatTurn.cf
 | `src/lib/settings.ts` | The settings row. `toPublicSettings` is the only shape that leaves the server. |
 | `src/lib/genui/` | The `render_ui` tool: the component catalog, the spec parser, and the system prompt. |
 | `src/components/chat/` | Thread, messages, composer, code blocks, inline editors, and the thread map. |
+| `src/lib/artifacts/` | Artifact language detection, prompt instructions and the sandboxed frame document. |
+| `src/components/artifacts/` | Preview registration, URL selection, lazy compilation and the responsive panel. |
 | `src/components/genui/` | The React side of `render_ui`: the component registry and the fallback card. |
 | `src/components/shell/` | App shell, sidebar, command palette, and keyboard shortcuts. |
 | `src/components/ui/` | shadcn/ui primitives, styled with the tokens in `src/app/globals.css`. |
