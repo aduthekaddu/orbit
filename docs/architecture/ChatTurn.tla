@@ -28,7 +28,7 @@ Finishes ==
 
 Interrupt(to) ==
   /\ phase = "streaming" /\ phase' = to
-  /\ stored' = IF shown /\ kind = "send" THEN "partial" ELSE stored
+  /\ stored' = IF shown /\ (kind = "send" \/ before = "none") THEN "partial" ELSE stored
   /\ UNCHANGED <<kind, shown, before>>
 
 YouStop == Interrupt("idle")
@@ -39,7 +39,7 @@ Next == YouSend \/ YouRegenerate \/ YouRetry \/ TextArrives \/ Finishes \/ YouSt
 \* A row changes only when the reader saw text for this turn.
 NothingSavedWithoutText == (phase # "streaming" /\ stored # before) => shown
 \* Regenerate replaces the old reply only with a finished one.
-RegenerateReplacesOnlyWhenFinished == (kind = "regenerate" /\ phase # "streaming" /\ stored # before) => stored = "full"
+RegenerateReplacesOnlyWhenFinished == (kind = "regenerate" /\ before # "none" /\ phase # "streaming" /\ stored # before) => stored = "full"
 \* A stopped or failed send keeps what was shown.
 StoppedSendKeepsText == (kind = "send" /\ phase # "streaming" /\ shown) => stored \in {"full", "partial"}
 \* Text you saw survives a stop or a failure when no older reply exists.
