@@ -4,9 +4,9 @@ import { useEffect, useState, type KeyboardEvent } from "react";
 import { Highlight, type PrismTheme } from "prism-react-renderer";
 import type { CodeHeaderProps, SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
 import { CaretDownIcon, CheckIcon, CopyIcon, WarningCircleIcon } from "@phosphor-icons/react";
-import { artifactKind } from "@/lib/artifacts/detect";
+import { artifactKind, isArtifactLanguage } from "@/lib/artifacts/detect";
 import { useArtifact } from "@/components/artifacts/use-artifact";
-import { codeBodyStart, replaceCode } from "@/lib/chat-parts";
+import { codeStart, replaceCode } from "@/lib/chat-parts";
 import { cn } from "@/lib/utils";
 import { ScrollFade } from "@/components/ui/scroll-fade";
 import { useCodeEdit } from "./code-edit-context";
@@ -39,16 +39,21 @@ const orbitCodeTheme: PrismTheme = {
 export function CodeHeader({ language, code, node }: CodeHeaderProps) {
   const { copied, failed, copy } = useCopy();
   const edit = useCodeEdit();
-  const start = edit ? codeBodyStart(edit.text, node?.position?.start?.offset, code) : -1;
+  const start = edit ? codeStart(edit.text, code, node?.position?.start?.offset) : -1;
   const active = edit?.active === start;
   const artifacts = useArtifact();
   const register = artifacts?.register;
-  const kind = artifactKind(language ?? "");
-  const key = edit && start >= 0 ? `${edit.messageId}.${edit.artifactOffset + start}` : null;
+  const sourceLanguage = typeof language === "string" && isArtifactLanguage(language) ? language : undefined;
+  const kind = sourceLanguage && artifactKind(sourceLanguage);
+  const blockIndex = node?.properties?.["data-code-index"];
+  const messageId = edit?.messageId;
+  const key = edit && typeof blockIndex === "number" && edit.textOrdinal !== undefined
+    ? `${edit.messageId}.${edit.textOrdinal}.${blockIndex}`
+    : null;
   useEffect(() => {
-    if (!register || !kind || !key) return;
-    return register({ key, kind, code });
-  }, [register, kind, key, code]);
+    if (!register || !kind || !key || !sourceLanguage || !messageId) return;
+    return register({ key, kind, code, language: sourceLanguage });
+  }, [register, kind, key, code, sourceLanguage, messageId]);
 
   return (
     <div
@@ -140,7 +145,7 @@ function CodeEditor({ code, start, language }: { code: string; start: number; la
 export function SyntaxHighlighter({ code, language, node }: SyntaxHighlighterProps) {
   const edit = useCodeEdit();
   const [expanded, setExpanded] = useState(false);
-  const start = edit ? codeBodyStart(edit.text, node?.position?.start?.offset, code) : -1;
+  const start = edit ? codeStart(edit.text, code, node?.position?.start?.offset) : -1;
   const active = edit?.enabled && edit.active === start;
 
   if (active) return <CodeEditor code={code} start={start} language={language} />;

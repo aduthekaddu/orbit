@@ -29,3 +29,6 @@ node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
 It asks for a small HTML page with a button that changes color, opens Preview and clicks the button. The scenario waits for hover and click animations to finish. A pass requires the button's computed color to change after the click. It saves `.verify/evidence/artifacts-real/real-provider-clicked.png`. Post the command output and screenshots in the PR thread. Do not commit proof files.
+
+
+Run `node .agents/skills/verify-orbit/verify.mjs browse artifact-review` after `launch --mock` for the PR review regressions. It checks older branches, earlier code edits that grow and shrink, TSX downloads, editor Escape, keyboard tabs, long-error fades and phone Fix focus. Evidence goes to `.verify/evidence/artifact-review/`.

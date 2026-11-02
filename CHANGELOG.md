@@ -26,6 +26,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Fixed
 
+- Keep artifact previews open when canceling a code edit, editing an earlier block or reloading an older branch. Preserve TSX download extensions, support keyboard tabs, show fades on long errors and reveal the composer after Fix on a phone.
+
 - A retry that you stop after a failed first message keeps the text you saw after reload. (#16)
 - A retry's reply is no longer saved under a prompt that another tab edited while it streamed. (#16)
 

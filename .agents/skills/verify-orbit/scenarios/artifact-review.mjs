@@ -48,7 +48,7 @@ export default async function artifactReview({ page, origin, step, shot }) {
     const url = page.url();
     await page.reload();
     await reply.getByRole('button', { name: 'Regenerate', exact: true }).waitFor();
-    const visible = await page.locator('iframe').isVisible();
+    const visible = await page.locator('iframe').waitFor({ timeout: 3000 }).then(() => true, () => false);
     step('an older branch preview survives reload', visible && await reply.getAttribute('data-message-id') === firstId && page.url() === url);
     await shot('older-branch');
   });
@@ -57,22 +57,52 @@ export default async function artifactReview({ page, origin, step, shot }) {
     await chat('artifact-multiple');
     await open(1);
     await page.frameLocator('iframe').getByRole('heading', { name: 'Second artifact', exact: true }).waitFor();
-    const oldKey = new URL(page.url()).searchParams.get('artifact');
     await reply.getByRole('button', { name: 'Edit code', exact: true }).first().click();
     const editor = page.getByRole('textbox', { name: 'Edit html block', exact: true });
-    await editor.fill((await editor.inputValue()).replace('First artifact', 'A much longer first artifact'));
+    // The fixture puts the third block 38 characters after the second, so this growth moves the second onto the third's old offset.
+    await editor.fill((await editor.inputValue()).replace('First artifact', 'First artifact' + 'x'.repeat(38)));
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await editor.waitFor({ state: 'hidden' });
-    const visible = await page.locator('iframe').isVisible();
-    const newKey = new URL(page.url()).searchParams.get('artifact');
+    const visible = await page.locator('iframe').waitFor({ timeout: 3000 }).then(() => true, () => false);
     const heading = visible && await page.frameLocator('iframe').getByRole('heading', { name: 'Second artifact', exact: true }).isVisible();
-    step('editing an earlier block keeps the selected preview', heading && newKey !== oldKey);
+    step('editing an earlier block keeps the selected preview', heading);
     if (heading) {
       await page.reload();
       await page.frameLocator('iframe').getByRole('heading', { name: 'Second artifact', exact: true }).waitFor({ timeout: 5000 });
       step('the moved preview survives reload', true);
+      await reply.getByRole('button', { name: 'Edit code', exact: true }).first().click();
+      const shorter = page.getByRole('textbox', { name: 'Edit html block', exact: true });
+      await shorter.fill('<h1>F</h1>');
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
+      await shorter.waitFor({ state: 'hidden' });
+      await page.frameLocator('iframe').getByRole('heading', { name: 'Second artifact', exact: true }).waitFor({ timeout: 5000 });
+      step('shrinking an earlier block keeps the selected preview', true);
+      await reply.getByRole('button', { name: 'Edit code', exact: true }).nth(1).click();
+      const later = page.getByRole('textbox', { name: 'Edit html block', exact: true });
+      await later.fill((await later.inputValue()).replace('Second artifact', 'Second edited'));
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
+      await later.waitFor({ state: 'hidden' });
+      await page.frameLocator('iframe').getByRole('heading', { name: 'Second edited', exact: true }).waitFor({ timeout: 5000 });
+      step('the earlier block keeps its shortened code', (await reply.innerText()).includes('<h1>F</h1>'));
+      await page.reload();
+      await page.frameLocator('iframe').getByRole('heading', { name: 'Second edited', exact: true }).waitFor({ timeout: 5000 });
+      step('the shortened preview survives reload', true);
     }
     await shot('earlier-edit');
+  });
+
+  await check('preview reload keeps later turns on its saved branch', async () => {
+    await chat('artifact-html');
+    const composer = page.getByPlaceholder('Ask anything');
+    await composer.fill('[qa:artifact-svg]');
+    await composer.press('Enter');
+    await page.locator('[data-message-role="assistant"]').nth(1).waitFor();
+    await reply.getByRole('button', { name: 'Regenerate', exact: true }).waitFor();
+    await page.locator('[data-message-role="assistant"]').first().getByRole('button', { name: 'Preview', exact: true }).click();
+    await page.frameLocator('iframe').getByRole('heading', { name: 'Artifact HTML', exact: true }).waitFor();
+    await page.reload();
+    await page.frameLocator('iframe').getByRole('heading', { name: 'Artifact HTML', exact: true }).waitFor({ timeout: 5000 });
+    step('preview reload keeps later turns on its saved branch', await page.locator('[data-message-role="assistant"]').count() === 2);
   });
 
   await check('TSX downloads preserve their extension and source', async () => {
@@ -137,7 +167,9 @@ export default async function artifactReview({ page, origin, step, shot }) {
     const alert = dialog.getByRole('alert').filter({ hasText: 'Artifact exploded' });
     await alert.waitFor();
     await dialog.getByRole('button', { name: 'Fix', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden', timeout: 5000 });
     const composer = page.getByPlaceholder('Ask anything');
+    await page.waitForFunction(() => document.activeElement?.getAttribute('placeholder') === 'Ask anything', null, { timeout: 3000 });
     step('phone Fix reveals and focuses the filled composer', !await dialog.isVisible() && await composer.isVisible() && await composer.evaluate(node => node === document.activeElement) && (await composer.inputValue()).includes('Artifact exploded'));
     await shot('phone-fix');
     await page.setViewportSize({ width: 1440, height: 900 });

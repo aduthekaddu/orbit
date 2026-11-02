@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { useAui } from "@assistant-ui/react";
 import { XIcon } from "@phosphor-icons/react";
 import type { Artifact } from "@/lib/artifacts/detect";
@@ -22,6 +22,9 @@ function subscribeWidth(callback: () => void) {
 function isWideScreen() { return window.matchMedia(WIDE_SCREEN).matches; }
 
 export function ArtifactWorkspace({ children }: { children: ReactNode }) {
+  const aui = useAui();
+  const chat = useRef<HTMLDivElement>(null);
+  const focusAfterClose = useRef(false);
   const context = useArtifact();
   const artifact = context?.artifact;
   const wide = useSyncExternalStore(subscribeWidth, isWideScreen, () => false);
@@ -29,20 +32,38 @@ export function ArtifactWorkspace({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!artifact || !wide) return;
     function escape(event: KeyboardEvent) {
-      if (event.key === "Escape") close?.();
+      if (event.key === "Escape" && !event.defaultPrevented) close?.();
     }
     window.addEventListener("keydown", escape);
     return () => window.removeEventListener("keydown", escape);
   }, [artifact, wide, close]);
 
-  const panel = artifact ? <ArtifactPanel key={artifact.key + artifact.code} artifact={artifact} onClose={() => close?.()} /> : null;
+  function focusComposer() {
+    chat.current?.querySelector<HTMLTextAreaElement>('[data-aui-composer-type="thread"] textarea[name="input"]')?.focus();
+  }
+
+  function fix(message: string) {
+    aui.composer.setText(`Fix this artifact error:\n\n${message}`);
+    if (wide) focusComposer();
+    else {
+      focusAfterClose.current = true;
+      close?.();
+    }
+  }
+
+  const panel = artifact ? <ArtifactPanel key={artifact.key + artifact.code} artifact={artifact} onClose={() => close?.()} onFix={fix} /> : null;
   return (
     <div className="flex h-full min-h-0 min-w-0">
-      <div className="min-h-0 min-w-0 flex-1">{children}</div>
+      <div ref={chat} className="min-h-0 min-w-0 flex-1">{children}</div>
       {artifact && wide ? <aside aria-label="Artifact" className="h-full min-w-[380px] basis-[45%] shrink-0 border-l">{panel}</aside> : null}
       <Dialog open={Boolean(artifact) && !wide} onOpenChange={(open) => { if (!open) close?.(); }}>
         {!wide && artifact ? (
-          <DialogContent showCloseButton={false} aria-describedby={undefined} className="inset-0 top-0 left-0 flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 p-0 sm:max-w-none">
+          <DialogContent showCloseButton={false} aria-describedby={undefined} onCloseAutoFocus={(event) => {
+            if (!focusAfterClose.current) return;
+            event.preventDefault();
+            focusAfterClose.current = false;
+            focusComposer();
+          }} className="inset-0 top-0 left-0 flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 p-0 sm:max-w-none">
             <DialogTitle className="sr-only">Artifact</DialogTitle>
             {panel}
           </DialogContent>
@@ -54,9 +75,10 @@ export function ArtifactWorkspace({ children }: { children: ReactNode }) {
 
 type PreviewState = { status: "loading" } | { status: "ready"; document: string } | { status: "error"; message: string };
 
-function ArtifactPanel({ artifact, onClose }: { artifact: Artifact; onClose: () => void }) {
-  const aui = useAui();
+function ArtifactPanel({ artifact, onClose, onFix }: { artifact: Artifact; onClose: () => void; onFix: (message: string) => void }) {
   const [tab, setTab] = useState<"preview" | "code">("preview");
+  const previewTab = useRef<HTMLButtonElement>(null);
+  const codeTab = useRef<HTMLButtonElement>(null);
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<PreviewState>({ status: "loading" });
@@ -86,13 +108,26 @@ function ArtifactPanel({ artifact, onClose }: { artifact: Artifact; onClose: () 
   const message = preview.status === "error" ? preview.message : error;
 
   function download() {
-    const extension = { html: "html", svg: "svg", react: "jsx" }[artifact.kind];
     const url = URL.createObjectURL(new Blob([artifact.code], { type: "text/plain;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `artifact.${extension}`;
+    link.download = `artifact.${artifact.language}`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  function tabKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>, value: typeof tab) {
+    let next: typeof tab;
+    switch (event.key) {
+      case "ArrowLeft":
+      case "ArrowRight": next = value === "preview" ? "code" : "preview"; break;
+      case "Home": next = "preview"; break;
+      case "End": next = "code"; break;
+      default: return;
+    }
+    event.preventDefault();
+    setTab(next);
+    (next === "preview" ? previewTab : codeTab).current?.focus();
   }
 
   return (
@@ -100,7 +135,7 @@ function ArtifactPanel({ artifact, onClose }: { artifact: Artifact; onClose: () 
       <div className="flex shrink-0 items-center justify-between border-b p-2">
         <div role="tablist" aria-label="Artifact view" className="flex gap-1">
           {(["preview", "code"] as const).map((value) => (
-            <Button key={value} role="tab" aria-selected={tab === value} aria-controls={`artifact-${value}`} id={`artifact-tab-${value}`} variant="ghost" size="sm" onClick={() => setTab(value)} className={cn(tab === value && "bg-surface-raised")}>
+            <Button key={value} ref={value === "preview" ? previewTab : codeTab} role="tab" tabIndex={tab === value ? 0 : -1} aria-selected={tab === value} aria-controls={`artifact-${value}`} id={`artifact-tab-${value}`} variant="ghost" size="sm" onClick={() => setTab(value)} onKeyDown={(event) => tabKeyDown(event, value)} className={cn(tab === value && "bg-surface-raised")}>
               {value === "preview" ? "Preview" : "Code"}
             </Button>
           ))}
@@ -117,9 +152,13 @@ function ArtifactPanel({ artifact, onClose }: { artifact: Artifact; onClose: () 
           {preview.status === "ready" ? <ArtifactFrame key={revision} document={preview.document} onError={onError} onClose={onClose} /> : preview.status === "loading" ? <span role="status" className="sr-only">Loading preview</span> : null}
         </div>
         {message ? (
-          <div role="alert" className="max-h-40 shrink-0 overflow-y-auto border-t p-3 text-sm text-destructive scrollbar-thin">
-            <pre className="whitespace-pre-wrap break-words">{message}</pre>
-            <Button variant="outline" size="sm" className="mt-2" onClick={() => aui.composer.setText(`Fix this artifact error:\n\n${message}`)}>Fix</Button>
+          <div role="alert" className="shrink-0 border-t text-sm text-destructive">
+            <ScrollFade axis="y" fade="var(--card)" scrollerClassName="max-h-40 p-3">
+              <pre className="whitespace-pre-wrap break-words">{message}</pre>
+            </ScrollFade>
+            <div className="px-3 pb-3">
+              <Button variant="outline" size="sm" onClick={() => onFix(message)}>Fix</Button>
+            </div>
           </div>
         ) : null}
       </div>

@@ -401,7 +401,7 @@ const server = http.createServer((req, res) => {
     const scenario = scenarioOf(prompt);
     console.log(`mock request scenario=${scenario}`);
     if (scenario === "artifact-multiple") {
-      textResponse(res, "```html\n<h1>First artifact</h1>\n```\n\n```html\n<h1>Second artifact</h1>\n```");
+      textResponse(res, "```html\n<h1>First artifact</h1>\n```\n\n```html\n<h1>Second artifact</h1>\n```\n\n```html\n<h1>Third artifact</h1>\n```");
       return;
     }
     if (Object.hasOwn(artifactReplies, scenario)) {

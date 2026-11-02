@@ -6,6 +6,7 @@ import { useAui, useAuiState } from "@assistant-ui/react";
 import { useAISDKChat } from "@assistant-ui/react-ai-sdk";
 import { textPartIndex } from "@/lib/chat-parts";
 import remarkGfm from "remark-gfm";
+import type { Root, RootContent } from "hast";
 import { cn } from "@/lib/utils";
 import { ScrollFade } from "@/components/ui/scroll-fade";
 import { CodeEditContext } from "./code-edit-context";
@@ -72,15 +73,26 @@ function Table({ node: _node, className, ...props }: ComponentProps<"table"> & {
 const components = { ...styledElements, a: Link, table: Table, CodeHeader, SyntaxHighlighter };
 const remarkPlugins = [remarkGfm];
 
+function rehypeCodeIndexes() {
+  return (tree: Root) => {
+    let index = 0;
+    function visit(node: Root | RootContent) {
+      if (node.type === "element" && node.tagName === "pre") {
+        const code = node.children.find((child) => child.type === "element" && child.tagName === "code");
+        if (code?.type === "element") code.properties["data-code-index"] = index++;
+      }
+      if ("children" in node) node.children.forEach(visit);
+    }
+    visit(tree);
+  };
+}
+
+const rehypePlugins = [rehypeCodeIndexes];
+
 export function MarkdownText({ className, editable = false }: { className?: string; editable?: boolean }) {
   const aui = useAui();
   const chat = useAISDKChat();
   const partText = useAuiState((s) => (s.part.type === "text" ? s.part.text : ""));
-  const artifactOffset = useAuiState((s) => {
-    const query = aui.part.query;
-    if (!query || !("index" in query) || typeof query.index !== "number") return 0;
-    return s.message.parts.slice(0, query.index).reduce((offset, part) => offset + (part.type === "text" ? part.text.length + 2 : 0), 0);
-  });
   const textOrdinal = useAuiState((s) => {
     const query = aui.part.query;
     if (!query || !("index" in query) || typeof query.index !== "number") return undefined;
@@ -96,19 +108,20 @@ export function MarkdownText({ className, editable = false }: { className?: stri
   const codeEdit = useMemo(
     () => ({
       enabled: editable && Boolean(messageId) && !running,
-      text: partText, artifactOffset, active, setActive, messageId, saving, error,
+      text: partText, textOrdinal, active, setActive, messageId, saving, error,
       save: (id: string, text: string) => {
         if (sourceIndex === undefined) return Promise.resolve(false);
         return save(id, text, sourceIndex);
       },
     }),
-    [artifactOffset, editable, messageId, running, partText, active, save, saving, error, sourceIndex],
+    [editable, messageId, running, partText, textOrdinal, active, save, saving, error, sourceIndex],
   );
 
   return (
     <CodeEditContext.Provider value={codeEdit}>
       <MarkdownTextPrimitive
         remarkPlugins={remarkPlugins}
+        rehypePlugins={rehypePlugins}
         components={components}
         className={cn("text-sm leading-6 break-words [&>:first-child]:mt-0 [&>:last-child]:mb-0", className)}
       />

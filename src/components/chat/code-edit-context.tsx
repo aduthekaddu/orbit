@@ -5,7 +5,7 @@ import { createContext, useContext } from "react";
 export type CodeEditContextValue = {
   enabled: boolean;
   text: string;
-  artifactOffset: number;
+  textOrdinal: number | undefined;
   active: number | null;
   setActive: (start: number | null) => void;
   save: (messageId: string, text: string) => Promise<boolean>;
