@@ -73,13 +73,16 @@ function Table({ node: _node, className, ...props }: ComponentProps<"table"> & {
 const components = { ...styledElements, a: Link, table: Table, CodeHeader, SyntaxHighlighter };
 const remarkPlugins = [remarkGfm];
 
-function rehypeCodeIndexes() {
+function rehypeCodeBlocks() {
   return (tree: Root) => {
     let index = 0;
     function visit(node: Root | RootContent) {
       if (node.type === "element" && node.tagName === "pre") {
         const code = node.children.find((child) => child.type === "element" && child.tagName === "code");
-        if (code?.type === "element") code.properties["data-code-index"] = index++;
+        if (code?.type === "element") {
+          code.properties["data-code-index"] = index++;
+          if (code.position?.start.offset !== undefined) code.properties["data-code-fence"] = code.position.start.offset;
+        }
       }
       if ("children" in node) node.children.forEach(visit);
     }
@@ -87,7 +90,7 @@ function rehypeCodeIndexes() {
   };
 }
 
-const rehypePlugins = [rehypeCodeIndexes];
+const rehypePlugins = [rehypeCodeBlocks];
 
 export function MarkdownText({ className, editable = false }: { className?: string; editable?: boolean }) {
   const aui = useAui();

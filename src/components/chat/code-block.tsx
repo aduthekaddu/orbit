@@ -6,7 +6,7 @@ import type { CodeHeaderProps, SyntaxHighlighterProps } from "@assistant-ui/reac
 import { CaretDownIcon, CheckIcon, CopyIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { artifactKind, isArtifactLanguage } from "@/lib/artifacts/detect";
 import { useArtifact } from "@/components/artifacts/use-artifact";
-import { codeStart, replaceCode } from "@/lib/chat-parts";
+import { codeBodyStart, replaceCode } from "@/lib/chat-parts";
 import { cn } from "@/lib/utils";
 import { ScrollFade } from "@/components/ui/scroll-fade";
 import { useCodeEdit } from "./code-edit-context";
@@ -36,10 +36,15 @@ const orbitCodeTheme: PrismTheme = {
   ],
 };
 
+function fenceOffset(node: CodeHeaderProps["node"] | SyntaxHighlighterProps["node"]) {
+  const value = node?.properties?.["data-code-fence"];
+  return typeof value === "number" ? value : node?.position?.start?.offset;
+}
+
 export function CodeHeader({ language, code, node }: CodeHeaderProps) {
   const { copied, failed, copy } = useCopy();
   const edit = useCodeEdit();
-  const start = edit ? codeStart(edit.text, code, node?.position?.start?.offset) : -1;
+  const start = edit ? codeBodyStart(edit.text, fenceOffset(node), code) : -1;
   const active = edit?.active === start;
   const artifacts = useArtifact();
   const register = artifacts?.register;
@@ -145,7 +150,7 @@ function CodeEditor({ code, start, language }: { code: string; start: number; la
 export function SyntaxHighlighter({ code, language, node }: SyntaxHighlighterProps) {
   const edit = useCodeEdit();
   const [expanded, setExpanded] = useState(false);
-  const start = edit ? codeStart(edit.text, code, node?.position?.start?.offset) : -1;
+  const start = edit ? codeBodyStart(edit.text, fenceOffset(node), code) : -1;
   const active = edit?.enabled && edit.active === start;
 
   if (active) return <CodeEditor code={code} start={start} language={language} />;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { codeStart, replaceCode, replaceTextPart, textPartIndex } from "./chat-parts";
+import { codeBodyStart, replaceCode, replaceTextPart, textPartIndex } from "./chat-parts";
 
 test("editing code in one text part preserves other prose and the generated tool", () => {
   const tool = { type: "tool-render_ui" as const, toolCallId: "tool", state: "output-available" as const, input: {}, output: {} };
@@ -22,7 +22,7 @@ test("a part that is not text cannot be replaced", () => {
 
 test("editing the second of two identical code blocks changes only the second", () => {
   const markdown = "intro\n\n```ts\nold\n```\n\n```ts\nold\n```\n\noutro";
-  const start = codeStart(markdown, "old\n", 22);
+  const start = codeBodyStart(markdown, 22, "old\n");
   assert.equal(start, 28);
   assert.equal(
     replaceCode(markdown, "old\n", "new", start, start + "old\n".length),
@@ -32,7 +32,7 @@ test("editing the second of two identical code blocks changes only the second", 
 
 test("editing a later code block whose code prefixes an earlier block changes only the later one", () => {
   const markdown = "```ts\na\nb\n```\n\n```ts\na\n```\n\nend";
-  const start = codeStart(markdown, "a\n", 15);
+  const start = codeBodyStart(markdown, 15, "a\n");
   assert.equal(start, 21);
   assert.equal(
     replaceCode(markdown, "a\n", "c", start, start + "a\n".length),
@@ -40,9 +40,19 @@ test("editing a later code block whose code prefixes an earlier block changes on
   );
 });
 
+test("a prose match before the block does not move the code body", () => {
+  const markdown = "null\n\n```json\nnull\n```";
+  const start = codeBodyStart(markdown, 6, "null\n");
+  assert.equal(start, 14);
+  assert.equal(
+    replaceCode(markdown, "null\n", "true", start, start + "null\n".length),
+    "null\n\n```json\ntrue\n```",
+  );
+});
+
 test("saving a new body into an empty code block keeps the closing fence on its own line", () => {
   const markdown = "```ts\n```";
-  const start = codeStart(markdown, "", 0);
+  const start = codeBodyStart(markdown, 0, "");
   assert.equal(start, 6);
   assert.equal(replaceCode(markdown, "", "new", start, start), "```ts\nnew\n```");
 });

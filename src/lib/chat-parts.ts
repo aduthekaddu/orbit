@@ -35,46 +35,14 @@ export function messageText(parts: MessageParts): string {
     .join("\n\n");
 }
 
-/** The offset where a code block's body starts, using the old offset to choose among identical blocks. */
-export function codeStart(text: string, code: string, near: number | undefined): number {
-  if (code === "") return nearestFenceBody(text, near);
-  let best = text.indexOf(code);
-  if (best === -1 || near === undefined) return best;
-  let distance = Math.abs(best - near);
-  for (let at = text.indexOf(code, best + code.length); at !== -1; at = text.indexOf(code, at + code.length)) {
-    const next = Math.abs(at - near);
-    if (next < distance) {
-      best = at;
-      distance = next;
-    }
-  }
-  return best;
-}
-
-function nearestFenceBody(text: string, near: number | undefined): number {
-  if (near === undefined) return -1;
-  let best = -1;
-  let distance = Infinity;
-  let open = false;
-  for (let lineStart = 0; lineStart <= text.length;) {
-    const lineEnd = text.indexOf("\n", lineStart);
-    const end = lineEnd === -1 ? text.length : lineEnd;
-    if (/^ {0,3}(`{3,}|~{3,})/.test(text.slice(lineStart, end))) {
-      if (open) open = false;
-      else {
-        open = true;
-        const body = Math.min(end + 1, text.length);
-        const gap = Math.abs(body - near);
-        if (gap < distance) {
-          best = body;
-          distance = gap;
-        }
-      }
-    }
-    if (lineEnd === -1) break;
-    lineStart = lineEnd + 1;
-  }
-  return best;
+/** The offset where a fenced block's body starts, found from its opening fence. */
+export function codeBodyStart(text: string, fenceOffset: number | undefined, code: string): number {
+  if (fenceOffset == null) return text.indexOf(code);
+  const newline = text.indexOf("\n", fenceOffset);
+  const bodyStart = newline === -1 ? text.length : newline + 1;
+  if (code === "") return bodyStart;
+  const index = text.indexOf(code, bodyStart);
+  return index === -1 ? bodyStart : index;
 }
 
 /** Replace one fenced block's code inside a message, using the code block's markdown offsets. */
