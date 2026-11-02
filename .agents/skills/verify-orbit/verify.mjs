@@ -7,12 +7,18 @@ import Database from "better-sqlite3";
 
 const PORT = 3210;
 const ORIGIN = `http://127.0.0.1:${PORT}`;
+const MOCK_PORT = 3299;
+const MOCK_MODEL = "mock-genui";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "../../..");
 const verifyDir = path.join(repoRoot, ".verify");
 const sandbox = path.join(verifyDir, "sandbox");
 const statePath = path.join(verifyDir, "server.json");
 const logPath = path.join(verifyDir, "server.log");
+const mockStatePath = path.join(verifyDir, "mock.json");
+const mockLogPath = path.join(verifyDir, "mock.log");
+const mockScript = path.join(repoRoot, "scripts/qa/mock-provider.mjs");
+const scenarioDir = path.join(scriptDir, "scenarios");
 const evidenceRoot = path.join(verifyDir, "evidence");
 
 const VERIFY_EMAIL = "verify@orbit.local";
@@ -28,9 +34,13 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function readState() {
-  if (!fs.existsSync(statePath)) return null;
-  return JSON.parse(fs.readFileSync(statePath, "utf8"));
+// A launch killed mid-write leaves a truncated file. Treat it as no state so cleanup still runs.
+function readState(file = statePath) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
 }
 
 function alive(pid) {
@@ -50,8 +60,8 @@ function procCwd(pid) {
   }
 }
 
-function listenerPids() {
-  const hex = PORT.toString(16).toUpperCase().padStart(4, "0");
+function listenerPids(port = PORT) {
+  const hex = port.toString(16).toUpperCase().padStart(4, "0");
   const needle = `0100007F:${hex}`;
   const inodes = new Set();
   let tcp = "";
@@ -142,6 +152,7 @@ async function request(urlPath, { method = "GET", json, cookies, redirect = "man
   return {
     status: response.status,
     location: response.headers.get("location"),
+    retryAfter: Number(response.headers.get("x-retry-after")) || 0,
     text: await response.text(),
   };
 }
@@ -173,12 +184,17 @@ function assertOurServer() {
   }
 }
 
-async function launch() {
+async function launch({ mock }) {
   const state = readState();
   if (state && alive(state.pid) && procCwd(state.pid) === sandbox) {
     console.log(`already starting or running pid=${state.pid} origin=${ORIGIN}`);
-    return;
+  } else {
+    await startServer();
   }
+  if (mock) await startMock();
+}
+
+async function startServer() {
   const listeners = listenerPids();
   if (listeners.length > 0) {
     const owner = listeners[0];
@@ -220,6 +236,71 @@ async function launch() {
   }
 }
 
+async function startMock() {
+  const state = readState(mockStatePath);
+  if (state && alive(state.pid) && listenerPids(MOCK_PORT).includes(state.pid)) {
+    console.log(`mock already running pid=${state.pid}`);
+  } else {
+    const listeners = listenerPids(MOCK_PORT);
+    if (listeners.length > 0) {
+      fail(`port ${MOCK_PORT} is in use by pid ${listeners[0]} cwd ${procCwd(listeners[0]) || "unknown"}. Stop it before launch --mock.`);
+    }
+    const logFd = fs.openSync(mockLogPath, "w");
+    const child = spawn(process.execPath, [mockScript], {
+      env: { PATH: process.env.PATH ?? "", MOCK_PORT: String(MOCK_PORT), MOCK_MODEL },
+      detached: true,
+      stdio: ["ignore", logFd, logFd],
+    });
+    child.unref();
+    fs.closeSync(logFd);
+    fs.writeFileSync(mockStatePath, JSON.stringify({ pid: child.pid, port: MOCK_PORT }, null, 2));
+    const deadline = Date.now() + 10_000;
+    while (!listenerPids(MOCK_PORT).includes(child.pid)) {
+      if (Date.now() > deadline) {
+        try {
+          process.kill(-child.pid, "SIGTERM");
+        } catch {
+          // The child already exited.
+        }
+        fail(`mock provider did not listen on ${MOCK_PORT}. Log: ${mockLogPath}`);
+      }
+      await sleep(100);
+    }
+    console.log(`mock ready pid=${child.pid} base=http://127.0.0.1:${MOCK_PORT}/v1 model=${MOCK_MODEL}`);
+  }
+  const cookies = await signInVerify();
+  const saved = await request("/api/settings", {
+    method: "PUT",
+    cookies,
+    json: { baseUrl: `http://127.0.0.1:${MOCK_PORT}/v1`, apiKey: FAKE_KEY, model: MOCK_MODEL, reasoningEffort: "low" },
+  });
+  const body = JSON.parse(saved.text);
+  if (saved.status !== 200 || body.model !== MOCK_MODEL || body.keySet !== true) {
+    fail(`saving mock settings returned ${saved.status}`);
+  }
+  console.log(`settings baseUrl=${body.baseUrl} model=${body.model} keySet=yes`);
+}
+
+async function stopMock() {
+  const state = readState(mockStatePath);
+  if (!state) return;
+  let cmdline = "";
+  try {
+    cmdline = fs.readFileSync(`/proc/${state.pid}/cmdline`, "utf8");
+  } catch {
+    // The mock already exited.
+  }
+  if (cmdline) {
+    if (!cmdline.includes(mockScript)) fail(`pid ${state.pid} is not the mock provider. Not killing it.`);
+    process.kill(-state.pid, "SIGTERM");
+    const deadline = Date.now() + 5_000;
+    while (alive(state.pid) && Date.now() < deadline) await sleep(100);
+    if (alive(state.pid)) process.kill(-state.pid, "SIGKILL");
+  }
+  fs.rmSync(mockStatePath, { force: true });
+  fs.rmSync(mockLogPath, { force: true });
+}
+
 function doctor() {
   const state = readState();
   if (!state) fail("no server.json. Run launch first.");
@@ -259,7 +340,11 @@ async function waitForStopped(pid, timeoutMs) {
 
 async function stopServer() {
   const state = readState();
-  if (!state) return;
+  if (!state) {
+    const orphans = listenerPids().filter((pid) => procCwd(pid) === sandbox);
+    if (orphans.length > 0) fail(`server.json is missing or unreadable, but pid ${orphans.join(", ")} still serves the sandbox. Stop it, then run cleanup again.`);
+    return;
+  }
   if (alive(state.pid) && procCwd(state.pid) !== sandbox) {
     fail(`pid ${state.pid} is not the sandbox server. Not killing it.`);
   }
@@ -288,6 +373,7 @@ async function stopServer() {
 }
 
 async function cleanup() {
+  await stopMock();
   await stopServer();
   fs.rmSync(sandbox, { recursive: true, force: true });
   fs.rmSync(statePath, { force: true });
@@ -317,13 +403,18 @@ async function signInVerify() {
     if (created.status !== 200) fail(`signup status ${created.status}`);
     return cookies;
   }
-  const signed = await request("/api/auth/sign-in/email", {
-    method: "POST",
-    cookies,
-    json: { email: VERIFY_EMAIL, password: VERIFY_PASSWORD },
-  });
+  // better-auth allows 3 sign-ins per 10 seconds, and back-to-back browse runs reach that.
+  let signed = { status: 429, retryAfter: 0 };
+  for (let attempt = 0; attempt < 3 && signed.status === 429; attempt += 1) {
+    if (attempt > 0) await sleep((signed.retryAfter || 10) * 1000);
+    signed = await request("/api/auth/sign-in/email", {
+      method: "POST",
+      cookies,
+      json: { email: VERIFY_EMAIL, password: VERIFY_PASSWORD },
+    });
+  }
   if (signed.status !== 200) {
-    fail("signup is closed and the verify account cannot sign in. Use an empty sandbox.");
+    fail(`sign-in status ${signed.status}. Signup is closed and the verify account cannot sign in. Use an empty sandbox.`);
   }
   return cookies;
 }
@@ -359,7 +450,7 @@ async function driveSignup() {
   }
   const chatPage = await request(chatPath, { cookies });
   lines.push(`chat page status ${chatPage.status}`);
-  lines.push(`chat page has Message ${chatPage.text.includes("Message") ? "yes" : "no"}`);
+  lines.push(`chat page has Ask anything ${chatPage.text.includes("Ask anything") ? "yes" : "no"}`);
   const listed = await request("/api/chats", { cookies });
   let count = 0;
   try {
@@ -384,7 +475,7 @@ async function driveSignup() {
   });
   lines.push(`second signup status ${again.status}`);
   writeEvidence("signup", lines);
-  if (chatPage.status !== 200 || !chatPage.text.includes("Message")) fail("chat page missing composer");
+  if (chatPage.status !== 200 || !chatPage.text.includes("Ask anything")) fail("chat page missing composer");
   if (listed.status !== 200 || count < 1) fail("chat list empty");
   if (loggedOut.status !== 401) fail(`logged out chats status ${loggedOut.status}`);
   if (users !== 1 || chats < 1) fail(`db users ${users} chats ${chats}`);
@@ -539,11 +630,61 @@ async function driveChat() {
   console.log("drive chat passed");
 }
 
+function chromePath() {
+  const system = "/usr/bin/google-chrome";
+  return fs.existsSync(system) ? system : undefined;
+}
+
+async function browse(scenario) {
+  if (!scenario || !/^[a-z-]+$/.test(scenario)) fail("usage: verify.mjs browse <scenario>");
+  const scenarioPath = path.join(scenarioDir, `${scenario}.mjs`);
+  if (!fs.existsSync(scenarioPath)) fail(`no scenario at ${scenarioPath}`);
+  assertOurServer();
+  await doctor();
+  const cookies = await signInVerify();
+  const { chromium } = await import("playwright");
+  const browser = await chromium.launch({ executablePath: chromePath() });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await context.addCookies(
+    [...cookies.entries()].map(([name, value]) => ({ name, value, url: ORIGIN, httpOnly: true, sameSite: "Lax" })),
+  );
+  const page = await context.newPage();
+  const evidence = path.join(evidenceRoot, scenario);
+  fs.rmSync(evidence, { recursive: true, force: true });
+  fs.mkdirSync(evidence, { recursive: true });
+  const lines = [];
+  let failed = 0;
+  const step = (name, ok, detail = "") => {
+    const line = ok ? `PASS ${name}` : `FAIL ${name}: ${detail}`;
+    if (!ok) failed += 1;
+    lines.push(line);
+    console.log(line);
+    return ok;
+  };
+  const shot = async (name, target = page) => {
+    const file = path.join(evidence, `${name}.png`);
+    await target.screenshot({ path: file });
+    console.log(`shot ${path.relative(repoRoot, file)}`);
+  };
+  try {
+    const run = (await import(scenarioPath)).default;
+    await run({ page, origin: ORIGIN, step, shot });
+  } catch (error) {
+    step("scenario finished", false, redact(error instanceof Error ? error.message.split("\n")[0] : String(error)));
+    await shot("error").catch(() => {});
+  } finally {
+    await browser.close();
+  }
+  writeEvidence(scenario, lines);
+  if (failed > 0) fail(`browse ${scenario} failed ${failed} step(s)`);
+  console.log(`browse ${scenario} passed`);
+}
+
 const command = process.argv[2];
 const feature = process.argv[3];
 
 if (command === "launch") {
-  await launch();
+  await launch({ mock: process.argv.includes("--mock") });
 } else if (command === "doctor") {
   await doctor();
 } else if (command === "cleanup") {
@@ -556,6 +697,8 @@ if (command === "launch") {
   await driveSettings();
 } else if (command === "drive" && feature === "chat") {
   await driveChat();
+} else if (command === "browse") {
+  await browse(feature);
 } else {
-  fail("usage: verify.mjs launch | doctor | cleanup | drive signup | drive signin | drive settings | drive chat");
+  fail("usage: verify.mjs launch [--mock] | doctor | cleanup | drive signup | drive signin | drive settings | drive chat | browse <scenario>");
 }

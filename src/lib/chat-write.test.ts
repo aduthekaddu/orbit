@@ -12,6 +12,7 @@ type Modules = {
   upsertMessage: typeof import("./messages").upsertMessage;
   persistIncoming: typeof import("./messages").persistIncoming;
   updateMessageText: typeof import("./messages").updateMessageText;
+  replyGuard: typeof import("./messages").replyGuard;
 };
 
 let mods: Modules;
@@ -34,6 +35,7 @@ before(async () => {
     upsertMessage: messageModule.upsertMessage,
     persistIncoming: messageModule.persistIncoming,
     updateMessageText: messageModule.updateMessageText,
+    replyGuard: messageModule.replyGuard,
   };
 
   const now = new Date();
@@ -57,6 +59,7 @@ before(async () => {
     "c-stale-reasons",
     "c-invisible",
     "c-invisible-retry",
+    "c-retry-edit",
   ]) {
     mods.db.insert(mods.schema.chats).values({ id, userId: "u1", title: id, createdAt: now, updatedAt: now }).run();
   }
@@ -364,4 +367,17 @@ test("a stale tab cannot restore turns removed by an edit", () => {
   );
   assert.deepEqual(ids("c-restore"), ["w1"]);
   assert.deepEqual(mods.listMessages("c-restore")[0].parts, [{ type: "text", text: "edited first" }]);
+});
+
+test("a retry's reply is refused after another tab edits its prompt in place", () => {
+  write("c-retry-edit", [message("re1", "user", "before")]);
+  const responseId = write("c-retry-edit", [message("re1", "user", "before")], "regenerate-message");
+  const guard = mods.replyGuard("c-retry-edit", true, responseId, "re1");
+  assert.equal(guard.hadReply, false);
+
+  const edited = mods.planChatWrite("c-retry-edit", [message("re1", "user", "after")], "submit-message", undefined, "re1");
+  assert.ok(!("error" in edited));
+
+  assert.equal(mods.upsertMessage("c-retry-edit", message(responseId, "assistant", "answer to before"), "re1", guard.expected), false);
+  assert.deepEqual(mods.listMessages("c-retry-edit"), [{ id: "re1", role: "user", parts: [{ type: "text", text: "after" }] }]);
 });

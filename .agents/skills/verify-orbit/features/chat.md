@@ -11,7 +11,7 @@ Chat sends one user message, streams the assistant reply, and shows both after a
 ## How to get to it (user POV)
 
 - Sign in. The home page opens the latest chat or creates one.
-- Type in the box whose placeholder is `Message`, then send.
+- Type in the box whose placeholder is `Ask anything`, then send.
 - `New chat` in the sidebar starts another thread. Each thread is a link `/c/<id>`.
 
 ## Driving it with verify-orbit

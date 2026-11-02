@@ -22,7 +22,7 @@ Orbit is a self-hosted chat app for one person, shaped like ChatGPT or Claude, t
 | --- | --- | --- | --- |
 | 1 | [Walking skeleton](slices/01.md) | Sign up, set a provider, stream a chat that survives reload. | Shipped |
 | 2 | [Generative UI](slices/02.md) | The model can answer with cards, tables, and metrics. | Shipped |
-| 3 | [Chat polish](slices/03.md) | Starter prompts, fixes from issue #11, and no lost text after retry and stop. | Planned |
+| 3 | [Chat polish](slices/03.md) | Starter prompts, fixes from issue #11, and no lost text after retry and stop. | Shipped |
 | 4 | [Branching](slices/04.md) | Edit and regenerate keep the old version. Arrows switch between versions. | Planned |
 | 5 | [Artifact panel](slices/05.md) | HTML, SVG, and React code from the model runs in a side panel. | Planned |
 | 6 | [Titles and history search](slices/06.md) | Short model-written titles. ⌘K finds any message. | Planned |
@@ -44,9 +44,9 @@ Between slices 2 and 3, two pull requests shipped without a slice number: the de
 | Stop button while streaming | Shipped in #2 |
 | Edit a sent message | Shipped in #5, as replace. Slice 4 makes it a branch. |
 | Branch from any point | Slice 4 |
-| Suggested prompts on an empty chat | Slice 3 |
-| Palette stays open, Esc, short-screen Save, duplicate "New chat" | Slice 3 reproduces each one and fixes the ones that still fail. |
-| Placeholder text | Slice 3 |
+| Suggested prompts on an empty chat | Shipped in #16 |
+| Palette stays open, Esc, short-screen Save, duplicate "New chat" | #16 shows `Untitled` for an untitled chat. The palette and Save did not reproduce. |
+| Placeholder text | Shipped in #16 |
 | Artifacts | Slice 5 |
 | Smart titles and full-text search | Slice 6 |
 | A first-run hint for ⌘K | Not planned. The project avoids helper text. |

@@ -10,7 +10,7 @@ const REAL_KEY = process.env.ORBIT_REAL_API_KEY ?? "";
 const REAL_BASE = process.env.ORBIT_REAL_BASE_URL ?? "https://opencode.ai/inference/go/openai/v1";
 const REAL_MODEL = process.env.ORBIT_REAL_MODEL ?? "deepseek-v4.1-flash";
 const MOCK_BASE = process.env.ORBIT_MOCK_BASE_URL ?? "http://127.0.0.1:3299/v1";
-const COMPOSER = 'textarea[placeholder="Message orbit"]';
+const COMPOSER = 'textarea[placeholder="Ask anything"]';
 const ASSISTANT = '[data-message-role="assistant"]';
 const FALLBACK = "[data-genui-fallback]";
 
@@ -402,7 +402,7 @@ async function main() {
       return `${node.tagName}[${node.getAttribute("aria-label") ?? ""}][${node.getAttribute("placeholder") ?? ""}]`;
     });
     focusOrder.push(entry);
-    reachedComposer = entry.includes("[Message orbit]");
+    reachedComposer = entry.includes("[Ask anything]");
   }
   if (!reachedComposer) {
     finding("high", "keyboard", `keyboard: Tab never reached the composer. Order: ${focusOrder.join(" > ")}`, null);

@@ -1,13 +1,21 @@
 "use client";
 
 import { useRef } from "react";
-import { ThreadPrimitive, useAuiState } from "@assistant-ui/react";
+import { ThreadPrimitive, useAui, useAuiState } from "@assistant-ui/react";
 import { ArrowDownIcon } from "@phosphor-icons/react";
 import { Figure } from "@/components/figure";
+import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Composer } from "./composer";
 import { messageByRole } from "./messages";
 import { ThreadMap } from "./thread-map";
+
+const STARTERS = [
+  { label: "Make a table", prompt: "Make a table comparing " },
+  { label: "Explain code", prompt: "Explain this code:\n\n" },
+  { label: "Summarize", prompt: "Summarize this in five bullets:\n\n" },
+  { label: "Brainstorm", prompt: "Give me ten ideas for " },
+];
 
 export function Thread({ ready, model }: { ready: boolean; model: string }) {
   const empty = useAuiState((state) => state.thread.isEmpty);
@@ -50,13 +58,35 @@ export function Thread({ ready, model }: { ready: boolean; model: string }) {
 
 // An empty chat centers the figure and the composer as one group; the composer drops to the bottom on the first send.
 function EmptyState({ model }: { model: string }) {
+  const aui = useAui();
+  const input = useRef<HTMLTextAreaElement>(null);
+
+  function start(prompt: string) {
+    input.current?.focus();
+    aui.composer.setText(prompt);
+    requestAnimationFrame(() => input.current?.setSelectionRange(prompt.length, prompt.length));
+  }
+
   return (
     <div className="flex flex-1 flex-col items-center justify-center pb-[12vh]">
       <div className="w-64 max-w-[70%]">
         <Figure name="dish" />
       </div>
       <div className="mt-8 w-full max-w-widget animate-rise">
-        <Composer ready model={model} />
+        <Composer ready model={model} inputRef={input} />
+        <div className="mt-3 flex flex-wrap justify-center gap-2">
+          {STARTERS.map((starter) => (
+            <Button
+              key={starter.label}
+              variant="outline"
+              size="sm"
+              onClick={() => start(starter.prompt)}
+              className="rounded-full font-normal text-muted-foreground hover:text-foreground pointer-coarse:h-11 pointer-coarse:px-4"
+            >
+              {starter.label}
+            </Button>
+          ))}
+        </div>
       </div>
     </div>
   );

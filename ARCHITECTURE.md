@@ -20,7 +20,7 @@ Solid boxes are shipped. The dashed box is planned, and each node names its slic
 3. `src/app/api/chat/route.ts` parses the body with zod, loads the settings row, and calls `planChatWrite` in `src/lib/messages.ts`. That function saves the incoming user messages and picks the id the reply will be stored under. It rejects a write planned against an older copy of the chat with `409`.
 4. The route calls `streamText` from the AI SDK with the model from `orbitModel` in `src/lib/provider.ts` and the tools in `src/lib/genui/tool.ts`. Today the only tool is `render_ui`, and the loop stops after one step (`stepCountIs(1)`).
 5. The stream goes back to the browser as AI SDK UI message parts. Text, reasoning, and tool parts render as they arrive.
-6. When the stream ends, `onEnd` saves the assistant message with `upsertMessage`. It saves only a reply that has a visible part. It never lets a stopped regenerate replace the reply that was already there.
+6. When the stream ends, `onEnd` asks `shouldSaveReply` in `src/lib/messages.ts`, then saves the assistant message with `upsertMessage`. It saves only a reply that has a visible part. It never lets a stopped regenerate replace the reply that was already there.
 7. On reload, `src/app/(app)/c/[id]/page.tsx` reads the stored `parts` JSON and passes it to the chat as its first messages.
 
 ## The rules of a turn
@@ -36,14 +36,10 @@ stateDiagram-v2
     lg0: idle
     lg1: streaming
     lg2: failed
-    lg3: Breaks ShownTextKept in some cases
-    lg4: Path to the ShownTextKept bug
   }
   class lg0 blue
   class lg1 orange
   class lg2 pink
-  class lg3 mayBreak
-  class lg4 bugPath
   s0: Idle, no reply saved
   s1: Sending, waiting for text
   s2: Error shown
@@ -68,22 +64,13 @@ stateDiagram-v2
   s4 --> s5: the model finishes or you press stop
   s6 --> s5: the model finishes or you press stop
   s6 --> s2: the provider fails
-  s6 --> s0: you press stop
-  classDef mayBreak fill:#fff3e6,stroke:#e8730c,stroke-width:2.5px,color:#b85a06
   class s0 blue
-  class s0 mayBreak
-  class s0 bugPath
   class s1 orange
-  class s1 bugPath
   class s2 pink
-  class s2 mayBreak
-  class s2 bugPath
   class s3 orange
   class s4 orange
-  class s4 bugPath
   class s5 blue
   class s6 orange
-  class s6 bugPath
 ```
 
 These rules hold in every state the model reaches:
@@ -91,16 +78,9 @@ These rules hold in every state the model reaches:
 - **Nothing is saved without text.** A reply row changes only when you saw text for that turn.
 - **Regenerate replaces only with a finished reply.** If you stop a regenerate, or the provider fails, the old reply stays.
 - **A stopped send keeps its text.** If you stop a new message mid-stream, the partial reply is saved and is still there after reload.
+- **Text you saw is kept (ShownTextKept).** If you stop and no older reply exists, the text you saw is saved. This covers a retry after a failed first message, which is a regenerate with nothing to replace.
 
-One rule breaks. **ShownTextKept** says that text you saw survives a stop when there is no older reply. The shortest path that breaks it has five steps:
-
-1. You send a message.
-2. The provider fails before any text arrives. The error box shows.
-3. You press retry. The retry is a regenerate.
-4. Text starts to stream.
-5. You press stop. Nothing is saved, so the text is gone after reload.
-
-The cause is in the code, not only the model. `planChatWrite` marks every retry as a regenerate, and the route returns early on `write.regenerate && interrupted` even when no older reply exists. Nobody has reproduced it live yet. [Slice 3](docs/slices/03.md) starts by doing that.
+ShownTextKept broke until [slice 3](docs/slices/03.md). The route returned early on every stopped regenerate, so a retry that you stopped lost its text. Now `shouldSaveReply` skips the save only when a stopped regenerate has an older reply to protect. The regenerate rule changed to match. It now covers only a regenerate that has an older reply.
 
 The model leaves out edits, tool calls, and concurrent tabs. The stale-write guard in step 3 covers concurrent tabs, and `src/lib/chat-write.test.ts` tests it.
 
