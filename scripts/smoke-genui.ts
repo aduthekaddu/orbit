@@ -1,4 +1,5 @@
 import path from "node:path";
+import type { toRepository } from "../src/lib/chat-tree";
 import Database from "better-sqlite3";
 import { parseRenderSpec } from "../src/lib/genui/spec";
 import { dataDirectory } from "../src/lib/paths";
@@ -147,12 +148,13 @@ async function main() {
   console.log(`stream bytes=${raw.length} types=${types.join(",") || "none"}`);
 
   const reloaded = await request(`/api/chats/${chatId}`);
-  const reloadedBody = (await reloaded.json()) as { messages?: Array<{ role: string; parts?: unknown }> };
+  const reloadedBody = (await reloaded.json()) as ReturnType<typeof toRepository>;
   if (!reloaded.ok) fail(`reload failed ${reloaded.status}`);
-  const assistant = (reloadedBody.messages ?? []).filter((message) => message.role === "assistant");
+  const reloadedMessages = reloadedBody.messages.map(({ message }) => message);
+  const assistant = reloadedMessages.filter((message) => message.role === "assistant");
   const fromApi = assistant.map((message) => savedSpec(message.parts)).find((spec) => spec != null);
   if (!fromApi) {
-    fail(`reload has no render_ui spec messages=${reloadedBody.messages?.length ?? 0} roles=${(reloadedBody.messages ?? []).map((message) => message.role).join(",")}`);
+    fail(`reload has no render_ui spec messages=${reloadedBody.messages?.length ?? 0} roles=${reloadedMessages.map((message) => message.role).join(",")}`);
   }
   const checked = parseRenderSpec(fromApi);
   if (!checked.ok) fail(`saved spec failed validation ${checked.error}`);

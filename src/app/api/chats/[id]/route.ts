@@ -1,4 +1,4 @@
-import { getChatForUser, listMessages } from "@/lib/messages";
+import { getChatForUser, messageRepository } from "@/lib/messages";
 import { getSession, unauthorized } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -13,6 +13,6 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   return Response.json({
     id: chat.id,
     title: chat.title,
-    messages: listMessages(chat.id),
+    ...messageRepository(chat.id),
   });
 }

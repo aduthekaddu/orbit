@@ -4,6 +4,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- Keep earlier prompts and replies when editing or regenerating. Switch versions with the message arrows. Reload opens the last written branch.
+
 ### Added
 
 - Four starter prompts on an empty chat. A click fills the composer and does not send. (#16)

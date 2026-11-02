@@ -20,8 +20,8 @@ Solid boxes are shipped. The dashed box is planned, and each node names its slic
 3. `src/app/api/chat/route.ts` parses the body with zod, loads the settings row, and calls `planChatWrite` in `src/lib/messages.ts`. That function saves the incoming user messages and picks the id the reply will be stored under. It rejects a write planned against an older copy of the chat with `409`.
 4. The route calls `streamText` from the AI SDK with the model from `orbitModel` in `src/lib/provider.ts` and the tools in `src/lib/genui/tool.ts`. Today the only tool is `render_ui`, and the loop stops after one step (`stepCountIs(1)`).
 5. The stream goes back to the browser as AI SDK UI message parts. Text, reasoning, and tool parts render as they arrive.
-6. When the stream ends, `onEnd` asks `shouldSaveReply` in `src/lib/messages.ts`, then saves the assistant message with `upsertMessage`. It saves only a reply that has a visible part. It never lets a stopped regenerate replace the reply that was already there.
-7. On reload, `src/app/(app)/c/[id]/page.tsx` reads the stored `parts` JSON and passes it to the chat as its first messages.
+6. When the stream ends, `onEnd` asks `shouldSaveReply` in `src/lib/messages.ts`, then saves the assistant message with `upsertMessage`. It saves only a reply that has a visible part. A regenerate saves a new sibling and keeps the earlier reply.
+7. On reload, `src/app/(app)/c/[id]/page.tsx` loads every message and its parent into the history adapter. The chat opens the path ending at `chats.head_id`.
 
 ## The rules of a turn
 
@@ -76,11 +76,13 @@ stateDiagram-v2
 These rules hold in every state the model reaches:
 
 - **Nothing is saved without text.** A reply row changes only when you saw text for that turn.
-- **Regenerate replaces only with a finished reply.** If you stop a regenerate, or the provider fails, the old reply stays.
+- **Regenerate keeps the old reply.** Every visible new reply is a sibling. A stop or provider failure saves its visible text without changing the earlier reply.
 - **A stopped send keeps its text.** If you stop a new message mid-stream, the partial reply is saved and is still there after reload.
 - **Text you saw is kept (ShownTextKept).** If you stop and no older reply exists, the text you saw is saved. This covers a retry after a failed first message, which is a regenerate with nothing to replace.
 
-ShownTextKept broke until [slice 3](docs/slices/03.md). The route returned early on every stopped regenerate, so a retry that you stopped lost its text. Now `shouldSaveReply` skips the save only when a stopped regenerate has an older reply to protect. The regenerate rule changed to match. It now covers only a regenerate that has an older reply.
+`shouldSaveReply` saves every reply with visible content. [Slice 4](docs/slices/04.md) gives a regenerate a new id, so saving a partial reply preserves the earlier version. A stop before visible content leaves the head on the saved prompt.
+
+The model tracks up to three reply attempts per prompt with separate ids. A regenerate must keep every earlier reply id. `ChatTurnRegression.tla` checks that a finished reply followed by a finished regenerate leaves two versions. Run it with the same TLC command and `ChatTurnRegression.cfg`.
 
 The model leaves out edits, tool calls, and concurrent tabs. The stale-write guard in step 3 covers concurrent tabs, and `src/lib/chat-write.test.ts` tests it.
 
@@ -122,8 +124,8 @@ All state is in `data/orbit.db`. The directory is mode `0700`, and the database 
 | --- | --- | --- |
 | `user`, `session`, `account`, `verification` | better-auth's tables | A SQLite trigger, `user_single_row`, rejects a second user. |
 | `settings` | One row, `id = 1` | Base URL, API key, model, and reasoning effort. The key never leaves the server. |
-| `chats` | One per conversation | `title` starts as `New chat` and takes the first message's text. |
-| `messages` | One per user or assistant message | `parts` is the AI SDK parts array as JSON, and reload reads it. `content` is the plain text of the text parts. `position` orders the thread. |
+| `chats` | One per conversation | `title` starts as `New chat` and takes the first message's text. `head_id` selects the last written branch. |
+| `messages` | One per user or assistant message | `parts` is the AI SDK parts array as JSON, and reload reads it. `content` is the plain text of the text parts. `parent_id` links each message to its parent. `position` is its depth. Siblings stay in creation order. |
 
 Tool output, generated UI specs, and reasoning all live inside `parts`. A new tool needs no new table unless it stores something outside a message.
 
@@ -141,7 +143,7 @@ Each planned slice extends one of these seams. The slice plans in [`docs/slices/
 
 - **Tools.** `chatTools` in `src/lib/genui/tool.ts` becomes a registry in `src/lib/tools/`. [Slice 7](docs/slices/07.md) raises the step limit so the model can call a tool and then answer. It also adds one run card that every tool shares. The card shows running, succeeded, failed, or cancelled.
 - **Artifacts.** [Slice 5](docs/slices/05.md) renders HTML, SVG, and React code blocks in a side panel. The code runs in an `<iframe sandbox="allow-scripts">` with a strict Content Security Policy, so it cannot read the app's cookies or call its API.
-- **History.** [Slice 4](docs/slices/04.md) adds `parent_id` to `messages` so edits and regenerates make branches instead of overwriting.
+- **History.** Messages form a tree. Edits and regenerates add siblings, and the branch picker switches between them. A reload opens the last written branch. Switching alone does not update `head_id`.
 - **Search.** [Slice 6](docs/slices/06.md) adds an FTS5 index (SQLite full-text search) over `messages`, kept in sync by triggers.
 - **Memory.** [Slice 10](docs/slices/10.md) adds a `memories` table with its own FTS5 index and a `sqlite-vec` table for embeddings from Ollama. [Slice 11](docs/slices/11.md) fills it from the day's chats each night.
 

@@ -38,7 +38,7 @@ The helper is the harness. Prefer the commands below over ad hoc curls. Page che
 - Sign in. `node .agents/skills/verify-orbit/verify.mjs drive signin`
 - Settings. `node .agents/skills/verify-orbit/verify.mjs drive settings`
 - Chat. `node .agents/skills/verify-orbit/verify.mjs drive chat`
-- Browser. `node .agents/skills/verify-orbit/verify.mjs browse <scenario>`, with `<scenario>` one of `retry-stop`, `palette`, `settings-short`, or `empty-chat`. See `features/browse.md`.
+- Browser. `node .agents/skills/verify-orbit/verify.mjs browse <scenario>`, with `<scenario>` one of `retry-stop`, `palette`, `settings-short`, `empty-chat`, or `branches`. See `features/browse.md`.
 
 Feature recipes live in `features/`. Read `features/README.md` first. Drive one feature from that map. A proof that uses a different entry point does not cover the ones you skipped.
 

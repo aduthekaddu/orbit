@@ -95,6 +95,7 @@ export const chats = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    headId: text("head_id"),
     title: text("title").notNull().default("New chat"),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
@@ -109,11 +110,12 @@ export const messages = sqliteTable(
     chatId: text("chat_id")
       .notNull()
       .references(() => chats.id, { onDelete: "cascade" }),
+    parentId: text("parent_id"),
     role: text("role").notNull(),
     content: text("content").notNull(),
     parts: text("parts").notNull(),
     position: integer("position").notNull(),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
-  (table) => [index("messages_chat_position_idx").on(table.chatId, table.position)],
+  (table) => [index("messages_chat_position_idx").on(table.chatId, table.position), index("messages_chat_parent_idx").on(table.chatId, table.parentId)],
 );
