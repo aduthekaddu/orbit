@@ -31,7 +31,10 @@ Pass lines:
 PASS first send shows Retry
 PASS reply text visible at stop
 PASS reply text survives reload
+PASS one reply after reload
 ```
+
+The reload check is a substring match. The server can save a few words that streamed after the last frame the browser drew, so an exact match would fail for a harmless reason.
 
 Screenshots: `before-stop.png`, `after-reload.png`.
 

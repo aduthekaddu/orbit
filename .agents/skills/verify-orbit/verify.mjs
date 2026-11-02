@@ -34,9 +34,13 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// A launch killed mid-write leaves a truncated file. Treat it as no state so cleanup still runs.
 function readState(file = statePath) {
-  if (!fs.existsSync(file)) return null;
-  return JSON.parse(fs.readFileSync(file, "utf8"));
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
 }
 
 function alive(pid) {
@@ -148,6 +152,7 @@ async function request(urlPath, { method = "GET", json, cookies, redirect = "man
   return {
     status: response.status,
     location: response.headers.get("location"),
+    retryAfter: Number(response.headers.get("x-retry-after")) || 0,
     text: await response.text(),
   };
 }
@@ -251,7 +256,14 @@ async function startMock() {
     fs.writeFileSync(mockStatePath, JSON.stringify({ pid: child.pid, port: MOCK_PORT }, null, 2));
     const deadline = Date.now() + 10_000;
     while (!listenerPids(MOCK_PORT).includes(child.pid)) {
-      if (Date.now() > deadline) fail(`mock provider did not listen on ${MOCK_PORT}. Log: ${mockLogPath}`);
+      if (Date.now() > deadline) {
+        try {
+          process.kill(-child.pid, "SIGTERM");
+        } catch {
+          // The child already exited.
+        }
+        fail(`mock provider did not listen on ${MOCK_PORT}. Log: ${mockLogPath}`);
+      }
       await sleep(100);
     }
     console.log(`mock ready pid=${child.pid} base=http://127.0.0.1:${MOCK_PORT}/v1 model=${MOCK_MODEL}`);
@@ -272,10 +284,14 @@ async function startMock() {
 async function stopMock() {
   const state = readState(mockStatePath);
   if (!state) return;
-  if (alive(state.pid)) {
-    if (!fs.readFileSync(`/proc/${state.pid}/cmdline`, "utf8").includes(mockScript)) {
-      fail(`pid ${state.pid} is not the mock provider. Not killing it.`);
-    }
+  let cmdline = "";
+  try {
+    cmdline = fs.readFileSync(`/proc/${state.pid}/cmdline`, "utf8");
+  } catch {
+    // The mock already exited.
+  }
+  if (cmdline) {
+    if (!cmdline.includes(mockScript)) fail(`pid ${state.pid} is not the mock provider. Not killing it.`);
     process.kill(-state.pid, "SIGTERM");
     const deadline = Date.now() + 5_000;
     while (alive(state.pid) && Date.now() < deadline) await sleep(100);
@@ -383,13 +399,18 @@ async function signInVerify() {
     if (created.status !== 200) fail(`signup status ${created.status}`);
     return cookies;
   }
-  const signed = await request("/api/auth/sign-in/email", {
-    method: "POST",
-    cookies,
-    json: { email: VERIFY_EMAIL, password: VERIFY_PASSWORD },
-  });
+  // better-auth allows 3 sign-ins per 10 seconds, and back-to-back browse runs reach that.
+  let signed = { status: 429, retryAfter: 0 };
+  for (let attempt = 0; attempt < 3 && signed.status === 429; attempt += 1) {
+    if (attempt > 0) await sleep((signed.retryAfter || 10) * 1000);
+    signed = await request("/api/auth/sign-in/email", {
+      method: "POST",
+      cookies,
+      json: { email: VERIFY_EMAIL, password: VERIFY_PASSWORD },
+    });
+  }
   if (signed.status !== 200) {
-    fail("signup is closed and the verify account cannot sign in. Use an empty sandbox.");
+    fail(`sign-in status ${signed.status}. Signup is closed and the verify account cannot sign in. Use an empty sandbox.`);
   }
   return cookies;
 }

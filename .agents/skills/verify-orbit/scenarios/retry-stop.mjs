@@ -21,11 +21,17 @@ export default async function retryStop({ page, origin, step, shot }) {
   const seen = (await reply.innerText()).trim();
   step("reply text visible at stop", seen.includes("word3"), `text was "${seen}"`);
 
-  await page.waitForTimeout(1_500);
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const { messages } = await (await page.request.get(`${origin}/api/chats/${id}`)).json();
+    if (messages.some((message) => message.role === "assistant")) break;
+    await page.waitForTimeout(250);
+  }
   await page.reload();
   await page.locator('[data-turn-id]').first().waitFor({ timeout: 15_000 });
   const saved = page.locator('[data-message-role="assistant"]');
   const savedText = (await saved.count()) > 0 ? (await saved.last().innerText()).trim() : "";
   await shot("after-reload");
   step("reply text survives reload", savedText.includes(seen), `before stop "${seen}", after reload "${savedText}"`);
+  step("one reply after reload", (await saved.count()) === 1, `found ${await saved.count()} replies`);
 }

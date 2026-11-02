@@ -61,13 +61,10 @@ function EmptyState({ model }: { model: string }) {
   const aui = useAui();
   const input = useRef<HTMLTextAreaElement>(null);
 
-  // A starter fills the draft and leaves sending to the user.
   function start(prompt: string) {
+    input.current?.focus();
     aui.composer.setText(prompt);
-    requestAnimationFrame(() => {
-      input.current?.focus();
-      input.current?.setSelectionRange(prompt.length, prompt.length);
-    });
+    requestAnimationFrame(() => input.current?.setSelectionRange(prompt.length, prompt.length));
   }
 
   return (
