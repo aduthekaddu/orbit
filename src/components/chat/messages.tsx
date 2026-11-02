@@ -23,6 +23,7 @@ import { RenderUiPart } from "@/components/genui/render-ui";
 import { RENDER_UI_TOOL } from "@/lib/genui/catalog";
 import { useCoarsePointer } from "./use-coarse-pointer";
 import { useEditTarget } from "./chat-id";
+import { BranchPicker } from "./branch-picker";
 import { COPIED_MS } from "./use-copy";
 
 type PartComponents = NonNullable<MessagePrimitiveTypes.Parts.Props["components"]>;
@@ -80,7 +81,7 @@ function AssistantMessage() {
   const touch = useCoarsePointer();
 
   return (
-    <MessagePrimitive.Root data-message-role="assistant" className="relative mx-auto w-full max-w-widget animate-rise">
+    <MessagePrimitive.Root data-message-role="assistant" data-message-id={messageId} className="relative mx-auto w-full max-w-widget animate-rise">
       <OrbitMark busy={running} tone={running ? "accent" : "mono"} className="absolute top-0.5 -left-9 hidden size-5 @3xl:block" />
       {editing ? (
         <MessageTextEditor messageId={messageId} initialText={text} onClose={() => setEditing(false)} label="Edit reply" />
@@ -117,6 +118,7 @@ function AssistantMessage() {
           </ActionBarPrimitive.Root>
         </div>
       )}
+      <BranchPicker />
     </MessagePrimitive.Root>
   );
 }
@@ -127,18 +129,21 @@ function UserMessage() {
   const touch = useCoarsePointer();
   if (editing) return <UserEditComposer />;
   return (
-    <MessagePrimitive.Root data-turn-id={id} tabIndex={-1} className="mx-auto flex w-full scroll-mt-6 outline-none max-w-widget animate-rise items-end justify-end gap-1.5">
-      <ActionBarPrimitive.Root autohide={touch ? "never" : "always"} className="flex">
-        <CopyAction />
-        <IconAction label="Edit">
-          <ActionBarPrimitive.Edit className={iconActionClass}>
-            <PencilSimpleIcon />
-          </ActionBarPrimitive.Edit>
-        </IconAction>
-      </ActionBarPrimitive.Root>
-      <div className="max-w-[85%] rounded-2xl border bg-surface-raised px-3.5 py-2 text-sm leading-6 break-words whitespace-pre-wrap">
-        <MessagePrimitive.Parts components={userParts} />
+    <MessagePrimitive.Root data-turn-id={id} tabIndex={-1} className="mx-auto flex w-full scroll-mt-6 outline-none max-w-widget animate-rise flex-col items-end gap-1.5">
+      <div className="flex w-full items-end justify-end gap-1.5">
+        <ActionBarPrimitive.Root autohide={touch ? "never" : "always"} className="flex">
+          <CopyAction />
+          <IconAction label="Edit">
+            <ActionBarPrimitive.Edit className={iconActionClass}>
+              <PencilSimpleIcon />
+            </ActionBarPrimitive.Edit>
+          </IconAction>
+        </ActionBarPrimitive.Root>
+        <div className="max-w-[85%] rounded-2xl border bg-surface-raised px-3.5 py-2 text-sm leading-6 break-words whitespace-pre-wrap">
+          <MessagePrimitive.Parts components={userParts} />
+        </div>
       </div>
+      <BranchPicker />
     </MessagePrimitive.Root>
   );
 }

@@ -1,9 +1,10 @@
-import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { UIMessage } from "ai";
 import { replaceTextPart, replaceTextParts } from "./chat-parts";
 import { db } from "./db";
 import { assistantHasVisiblePart } from "./genui/spec";
 import { chats, messages } from "./db/schema";
+import { isPath, pathTo, toRepository, type StoredMessage } from "./chat-tree";
 
 export function textFromParts(parts: unknown): string {
   if (!Array.isArray(parts)) return "";
@@ -60,87 +61,53 @@ type ReplyEnd = {
   visible: boolean;
 };
 
-/** A stopped regenerate must not replace the reply it was regenerating, but with no older reply the streamed text is all there is. */
-export function shouldSaveReply({ regenerate, interrupted, hadReply, visible }: ReplyEnd): boolean {
-  if (!visible) return false;
-  return !(regenerate && interrupted && hadReply);
+export function shouldSaveReply({ visible }: ReplyEnd): boolean {
+  return visible;
 }
 
 export type ExpectedMessage = { id: string; content: string; parts: string };
 
-function expectedRow(chatId: string, id: string | undefined): ExpectedMessage | undefined {
-  if (!id) return undefined;
-  const row = db
-    .select({ id: messages.id, content: messages.content, parts: messages.parts })
-    .from(messages)
-    .where(and(eq(messages.id, id), eq(messages.chatId, chatId)))
-    .get();
-  return row ?? undefined;
-}
-
-/** The stored row a reply write is checked against: the reply a regenerate replaces, or else the prompt it answers. */
-export function replyGuard(chatId: string, regenerate: boolean, responseId: string, promptId?: string) {
-  const reply = regenerate ? expectedRow(chatId, responseId) : undefined;
-  return { hadReply: reply !== undefined, expected: reply ?? expectedRow(chatId, promptId) };
+export function replyGuard(chatId: string, _regenerate: boolean, _responseId: string, promptId?: string) {
+  const prompt = promptId ? db.select().from(messages)
+    .where(and(eq(messages.id, promptId), eq(messages.chatId, chatId))).get() : undefined;
+  return { hadReply: false, expected: prompt && { id: prompt.id, content: prompt.content, parts: prompt.parts } };
 }
 
 export function upsertMessage(
   chatId: string,
   message: { id: string; role: string; parts: unknown },
-  replyTo?: string,
+  replyTo?: string | null,
   expected?: ExpectedMessage,
 ) {
   if (message.role !== "user" && message.role !== "assistant") return true;
   if (message.role === "assistant" && !assistantHasVisiblePart(message.parts)) return true;
-  if (expected) {
-    // The write is only valid while the row it was planned against is still current.
-    const current = db
-      .select({ content: messages.content, parts: messages.parts })
-      .from(messages)
-      .where(and(eq(messages.id, expected.id), eq(messages.chatId, chatId)))
-      .get();
-    if (!current || current.content !== expected.content || current.parts !== expected.parts) return false;
-  }
-  const content = textFromParts(message.parts);
-  const parts = JSON.stringify(message.parts ?? []);
-  const existing = db.select({ chatId: messages.chatId }).from(messages).where(eq(messages.id, message.id)).get();
-  if (existing) {
-    if (existing.chatId !== chatId) return false;
-    db.update(messages).set({ role: message.role, content, parts }).where(eq(messages.id, message.id)).run();
-    return true;
-  }
   return db.transaction((tx) => {
-    const prompt = replyTo
-      ? tx
-          .select({ position: messages.position })
-          .from(messages)
-          .where(and(eq(messages.id, replyTo), eq(messages.chatId, chatId)))
-          .get()
-      : undefined;
-    if (replyTo && !prompt) return false;
-    const row = tx
-      .select({ position: sql<number>`coalesce(max(${messages.position}), -1)` })
-      .from(messages)
-      .where(eq(messages.chatId, chatId))
-      .get();
-    const position = prompt ? prompt.position + 1 : (row?.position ?? -1) + 1;
-    if (prompt) {
-      tx.update(messages)
-        .set({ position: sql`${messages.position} + 1` })
-        .where(and(eq(messages.chatId, chatId), gte(messages.position, position)))
-        .run();
+    if (expected) {
+      const current = tx.select().from(messages)
+        .where(and(eq(messages.id, expected.id), eq(messages.chatId, chatId))).get();
+      if (!current || current.content !== expected.content || current.parts !== expected.parts) return false;
     }
-    tx.insert(messages)
-      .values({
-        id: message.id,
-        chatId,
-        role: message.role,
-        content,
-        parts,
-        position,
-        createdAt: new Date(),
-      })
-      .run();
+    const content = textFromParts(message.parts);
+    const parts = JSON.stringify(message.parts ?? []);
+    const existing = tx.select().from(messages).where(eq(messages.id, message.id)).get();
+    if (existing) {
+      if (existing.chatId !== chatId) return false;
+      tx.update(messages).set({ role: message.role, content, parts }).where(eq(messages.id, message.id)).run();
+      return true;
+    }
+    const chat = tx.select().from(chats).where(eq(chats.id, chatId)).get();
+    if (!chat) return false;
+    const parentId = replyTo === undefined ? chat.headId : replyTo;
+    const parent = parentId ? tx.select().from(messages)
+      .where(and(eq(messages.id, parentId), eq(messages.chatId, chatId))).get() : undefined;
+    if (parentId && !parent) return false;
+    tx.insert(messages).values({
+      id: message.id, chatId, parentId,
+      role: message.role, content, parts,
+      position: parent ? parent.position + 1 : 0,
+      createdAt: new Date(),
+    }).run();
+    tx.update(chats).set({ headId: message.id }).where(eq(chats.id, chatId)).run();
     return true;
   });
 }
@@ -149,112 +116,62 @@ export type IncomingMessage = { id: string; role: string; parts?: unknown };
 export type WriteResult = "ok" | "cross-chat" | "stale";
 
 export function persistIncoming(chatId: string, incoming: IncomingMessage[]): WriteResult {
-  const withParts = incoming.filter(
-    (message): message is IncomingMessage & { parts: unknown } => Boolean(message.parts),
-  );
-  if (withParts.length === 0) return "ok";
-  const saved = db
-    .select({ id: messages.id, chatId: messages.chatId, role: messages.role, content: messages.content, parts: messages.parts })
-    .from(messages)
-    .where(inArray(messages.id, withParts.map((message) => message.id)))
-    .all();
-  const byId = new Map(saved.map((row) => [row.id, row]));
-  const tail = withParts.at(-1);
-  // Validate the whole list first so a refused request writes nothing.
-  for (const message of withParts) {
-    const existing = byId.get(message.id);
-    if (!existing) {
-      // A reply with nothing visible is never stored, so the client holds it and resends it. Ignore it.
-      if (message.role === "assistant" && !assistantHasVisiblePart(message.parts)) continue;
-      // Only the tab's new tail prompt may be unknown. Any other unknown id was replaced by an edit.
-      if (message !== tail || message.role !== "user") return "stale";
-      continue;
-    }
-    if (existing.chatId !== chatId) return "cross-chat";
-    if (
-      existing.role === "user" &&
-      (existing.content !== textFromParts(message.parts) || existing.parts !== JSON.stringify(message.parts ?? []))
-    ) {
-      return "stale";
-    }
-  }
-  for (const message of withParts) {
-    const existing = byId.get(message.id);
-    if (existing) {
-      // The server owns answers. A stale tab echoes the pre-regenerate text under the same id.
-      if (existing.role === "assistant" && message.role === "assistant") continue;
-      const content = textFromParts(message.parts);
-      if (existing.role === message.role && existing.content === content && existing.parts === JSON.stringify(message.parts ?? [])) {
-        continue;
+  return db.transaction(() => {
+    const rows = db.select().from(messages).where(eq(messages.chatId, chatId)).all();
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const ids = incoming.map((message) => message.id);
+    const referenced = ids.length ? db.select().from(messages).where(inArray(messages.id, ids)).all() : [];
+    if (referenced.some((row) => row.chatId !== chatId)) return "cross-chat";
+    const path = incoming.filter((message) => byId.has(message.id) ||
+      message.role !== "assistant" || assistantHasVisiblePart(message.parts));
+    const tail = path.at(-1);
+    const prefix = tail && !byId.has(tail.id) && tail.role === "user" ? path.slice(0, -1) : path;
+    if (!isPath(rows, prefix)) return "stale";
+    for (const message of path) {
+      const saved = byId.get(message.id);
+      if (!saved) {
+        if (message !== tail || message.role !== "user" || !Array.isArray(message.parts)) return "stale";
+      } else if (saved.role !== message.role || (saved.role === "user" && message.parts &&
+        (saved.content !== textFromParts(message.parts) || saved.parts !== JSON.stringify(message.parts)))) {
+        return "stale";
       }
     }
-    if (!upsertMessage(chatId, message)) return "cross-chat";
-  }
-  return "ok";
-}
-
-/** The id this response stores under. A regenerate reuses the answer it replaces, so a failed one leaves that answer alone. */
-function responseIdFor(chatId: string, incoming: IncomingMessage[], trigger?: string, messageId?: string) {
-  if (trigger !== "regenerate-message") return crypto.randomUUID();
-  const rows = db
-    .select({ id: messages.id, role: messages.role })
-    .from(messages)
-    .where(eq(messages.chatId, chatId))
-    .orderBy(asc(messages.position))
-    .all();
-  const target = messageId ? rows.find((row) => row.id === messageId) : undefined;
-  if (target?.role === "assistant") return target.id;
-  const lastUser = incoming.findLast((message) => message.role === "user");
-  const promptIndex = lastUser ? rows.findIndex((row) => row.id === lastUser.id) : -1;
-  if (promptIndex === -1) return crypto.randomUUID();
-  for (const row of rows.slice(promptIndex + 1)) {
-    if (row.role === "user") break;
-    if (row.role === "assistant") return row.id;
-  }
-  return crypto.randomUUID();
+    if (tail && !byId.has(tail.id)) {
+      if (!upsertMessage(chatId, { ...tail, parts: tail.parts }, prefix.at(-1)?.id ?? null)) return "cross-chat";
+    }
+    return "ok";
+  });
 }
 
 export type ChatWritePlan =
   | { regenerate: boolean; responseId: string }
   | { error: "invalid-edit" | "cross-chat" | "stale" };
 
-/** Persist the client list and pick the id the response stores under. */
 export function planChatWrite(
   chatId: string,
   incoming: IncomingMessage[],
   trigger?: string,
-  messageId?: string,
+  _messageId?: string,
   editMessageId?: string,
 ): ChatWritePlan {
-  if (editMessageId) {
-    const rows = db.select().from(messages).where(eq(messages.chatId, chatId)).orderBy(asc(messages.position)).all();
-    const index = rows.findIndex((row) => row.id === editMessageId && row.role === "user");
-    const target = rows[index];
-    const edited = incoming.at(-1);
-    if (trigger !== "submit-message" || !target || edited?.role !== "user" || !Array.isArray(edited.parts)) {
-      return { error: "invalid-edit" };
+  return db.transaction(() => {
+    if (editMessageId) {
+      const tree = storedMessages(chatId);
+      const target = tree.find((message) => message.id === editMessageId && message.role === "user");
+      const edited = incoming.at(-1);
+      if (trigger !== "submit-message" || !target || edited?.role !== "user" ||
+        edited.id === editMessageId || !Array.isArray(edited.parts)) return { error: "invalid-edit" };
+      const prefix = pathTo(tree, target.parentId);
+      if (incoming.length !== prefix.length + 1 || prefix.some((message, i) => incoming[i]?.id !== message.id)) {
+        return { error: "invalid-edit" };
+      }
     }
-    const prefix = rows.slice(0, index);
-    if (incoming.length !== prefix.length + 1 || prefix.some((row, i) => incoming[i]?.id !== row.id)) {
-      return { error: "invalid-edit" };
-    }
-    const ids = incoming.map((message) => message.id);
-    const existing = db.select().from(messages).where(inArray(messages.id, ids)).all();
-    if (existing.some((row) => row.chatId !== chatId || (row.id === edited.id && row.id !== editMessageId))) {
-      return { error: "cross-chat" };
-    }
-    return db.transaction(() => {
-      db.delete(messages).where(and(eq(messages.chatId, chatId), gte(messages.position, target.position))).run();
-      if (persistIncoming(chatId, incoming) !== "ok") throw new Error("Edited history could not be saved");
-      return { regenerate: false, responseId: crypto.randomUUID() };
-    });
-  }
-  const result = persistIncoming(chatId, incoming);
-  if (result !== "ok") return { error: result };
-  return {
-    regenerate: trigger === "regenerate-message",
-    responseId: responseIdFor(chatId, incoming, trigger, messageId),
-  };
+    const result = persistIncoming(chatId, incoming);
+    if (result !== "ok") return { error: result };
+    const prompt = incoming.findLast((message) => message.role === "user");
+    if (prompt) db.update(chats).set({ headId: prompt.id }).where(eq(chats.id, chatId)).run();
+    return { regenerate: trigger === "regenerate-message", responseId: crypto.randomUUID() };
+  });
 }
 
 export function updateMessageText(chatId: string, messageId: string, text: string, partIndex?: number) {
@@ -274,13 +191,24 @@ export function updateMessageText(chatId: string, messageId: string, text: strin
   return true;
 }
 
-export function listMessages(chatId: string): UIMessage[] {
-  const rows = db.select().from(messages).where(eq(messages.chatId, chatId)).orderBy(asc(messages.position)).all();
+function storedMessages(chatId: string): StoredMessage[] {
+  const rows = db.select().from(messages).where(eq(messages.chatId, chatId))
+    .orderBy(asc(messages.createdAt), sql`rowid`).all();
   return rows.map((row) => ({
     id: row.id,
+    parentId: row.parentId,
     role: row.role as "user" | "assistant",
     parts: JSON.parse(row.parts) as UIMessage["parts"],
   }));
+}
+
+export function listMessages(chatId: string): UIMessage[] {
+  return storedMessages(chatId).map(({ parentId: _parentId, ...message }) => message);
+}
+
+export function messageRepository(chatId: string) {
+  const chat = db.select().from(chats).where(eq(chats.id, chatId)).get();
+  return toRepository(storedMessages(chatId), chat?.headId ?? null);
 }
 
 export function listChats(userId: string) {

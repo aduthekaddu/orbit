@@ -69,9 +69,9 @@ test("resending a full history writes nothing", () => {
 
 test("a new message is written once", () => {
   const history = [message("m1", "user", "one"), message("m4", "user", "four")];
-  const before = changes();
   assert.equal(mods.persistIncoming("c1", history), "ok");
-  assert.equal(changes() - before, 1);
+  assert.equal(mods.listMessages("c1").filter((message) => message.id === "m4").length, 1);
+  assert.deepEqual(mods.db.$client.prepare("select head_id from chats where id = ?").get("c1"), { head_id: "m4" });
 });
 
 test("a message id from another chat is rejected", () => {
@@ -95,8 +95,8 @@ test("a reply keeps its prompt's place when two requests finish out of order", (
   assert.equal(mods.upsertMessage("c3", message("r-a", "assistant", "reply a"), "p-a"), true);
 
   assert.deepEqual(
-    mods.listMessages("c3").map((entry) => entry.id),
-    ["p-a", "r-a", "p-b", "r-b"],
+    mods.db.$client.prepare("select id, parent_id from messages where chat_id = ? order by id").all("c3"),
+    [{ id: "p-a", parent_id: null }, { id: "p-b", parent_id: "p-a" }, { id: "r-a", parent_id: "p-a" }, { id: "r-b", parent_id: "p-b" }],
   );
 });
 
