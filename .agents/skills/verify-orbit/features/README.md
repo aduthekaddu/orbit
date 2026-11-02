@@ -29,3 +29,4 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 - [Sign in](./signin.md) returns that account to a chat.
 - [Settings](./settings.md) stores a provider without returning the key.
 - [Chat](./chat.md) streams one turn and reads it back from SQLite.
+- [Browse](./browse.md) drives Chrome for retry and stop, the palette, short-screen settings, and the empty chat.
