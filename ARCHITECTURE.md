@@ -82,6 +82,8 @@ These rules hold in every state the model reaches:
 
 `shouldSaveReply` saves every reply with visible content. [Slice 4](docs/slices/04.md) gives a regenerate a new id, so saving a partial reply preserves the earlier version. A stop before visible content leaves the head on the saved prompt.
 
+The model tracks up to three reply attempts per prompt with separate ids. A regenerate must keep every earlier reply id. `ChatTurnRegression.tla` checks that a finished reply followed by a finished regenerate leaves two versions. Run it with the same TLC command and `ChatTurnRegression.cfg`.
+
 The model leaves out edits, tool calls, and concurrent tabs. The stale-write guard in step 3 covers concurrent tabs, and `src/lib/chat-write.test.ts` tests it.
 
 To rebuild the chart, run the [statechart skill](https://github.com/cursor/plugins/blob/main/pstack/skills/statechart/SKILL.md) on [`docs/architecture/ChatTurn.tla`](docs/architecture/ChatTurn.tla):
