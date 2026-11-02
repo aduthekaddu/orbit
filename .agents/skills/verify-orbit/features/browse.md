@@ -5,7 +5,7 @@ Browse drives Chrome through Playwright. Use it to prove a click, a layout, or a
 ## How it runs
 
 - **Command.** `node .agents/skills/verify-orbit/verify.mjs browse <scenario>`. The scenario file is `scenarios/<scenario>.mjs`.
-- **Browser.** `/usr/bin/google-chrome` when that file exists, and Playwright's own Chromium otherwise.
+- **Browser.** `/usr/bin/google-chrome` when that file exists, and Playwright's own Chromium otherwise. Without Chrome, run `npx playwright install chromium` once first.
 - **Account.** The command signs up `verify@orbit.local` on an empty sandbox, or signs in that account. Then it puts the session cookie in the browser.
 - **Output.** Each check prints `PASS <name>` or `FAIL <name>: <detail>`. Screenshots go to `.verify/evidence/<scenario>/<name>.png`, and the step lines go to `summary.txt` in the same folder. Each run deletes that scenario's old evidence first.
 - **Exit code.** 1 when any step fails or the scenario throws. A throw prints `FAIL scenario finished` and saves `error.png`.
@@ -29,6 +29,7 @@ Pass lines:
 
 ```
 PASS first send shows Retry
+PASS Stop ends the stream early
 PASS reply text visible at stop
 PASS reply text survives reload
 PASS one reply after reload
@@ -70,18 +71,20 @@ Screenshot: `save-visible.png`.
 
 ### empty-chat
 
-Opens a new chat. Checks the sidebar label, the placeholder, and the four starters. Clicks **Make a table**. Then it opens the same chat on a 390×844 touch screen.
+Opens a new chat. Checks the sidebar and palette labels, the placeholder, and the four starters. Clicks **Make a table**. Then it opens the same chat on a 390×844 touch screen and checks the header label.
 
 Pass lines:
 
 ```
 PASS sidebar shows Untitled for the new chat
 PASS sidebar has no chat named New chat
+PASS palette lists the new chat as Untitled
 PASS composer placeholder is Ask anything
 PASS four starters show
 PASS Make a table fills the composer
 PASS composer has focus with the caret at the end
 PASS starter does not send
+PASS phone header shows Untitled
 PASS starters are at least 44px tall on a phone
 ```
 

@@ -340,7 +340,11 @@ async function waitForStopped(pid, timeoutMs) {
 
 async function stopServer() {
   const state = readState();
-  if (!state) return;
+  if (!state) {
+    const orphans = listenerPids().filter((pid) => procCwd(pid) === sandbox);
+    if (orphans.length > 0) fail(`server.json is missing or unreadable, but pid ${orphans.join(", ")} still serves the sandbox. Stop it, then run cleanup again.`);
+    return;
+  }
   if (alive(state.pid) && procCwd(state.pid) !== sandbox) {
     fail(`pid ${state.pid} is not the sandbox server. Not killing it.`);
   }

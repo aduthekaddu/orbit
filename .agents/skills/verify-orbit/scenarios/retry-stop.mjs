@@ -17,8 +17,9 @@ export default async function retryStop({ page, origin, step, shot }) {
   await shot("before-stop");
 
   await page.getByRole("button", { name: "Stop" }).click();
-  await page.getByRole("button", { name: "Send" }).waitFor({ timeout: 10_000 });
+  const ended = await page.getByRole("button", { name: "Send" }).waitFor({ timeout: 3_000 }).then(() => true, () => false);
   const seen = (await reply.innerText()).trim();
+  step("Stop ends the stream early", ended && !seen.includes("word50"), `ended=${ended} text "${seen}"`);
   step("reply text visible at stop", seen.includes("word3"), `text was "${seen}"`);
 
   const deadline = Date.now() + 5_000;

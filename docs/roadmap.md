@@ -45,7 +45,7 @@ Between slices 2 and 3, two pull requests shipped without a slice number: the de
 | Edit a sent message | Shipped in #5, as replace. Slice 4 makes it a branch. |
 | Branch from any point | Slice 4 |
 | Suggested prompts on an empty chat | Shipped in #16 |
-| Palette stays open, Esc, short-screen Save, duplicate "New chat" | #16 shows `Untitled` in the sidebar. The palette and Save did not reproduce. |
+| Palette stays open, Esc, short-screen Save, duplicate "New chat" | #16 shows `Untitled` for an untitled chat. The palette and Save did not reproduce. |
 | Placeholder text | Shipped in #16 |
 | Artifacts | Slice 5 |
 | Smart titles and full-text search | Slice 6 |

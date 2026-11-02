@@ -15,7 +15,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 ### Changed
 
 - The composer placeholder is `Ask anything`. (#16)
-- The sidebar shows `Untitled` for a chat that has no title yet. (#16)
+- The sidebar, the mobile header, and the command palette show `Untitled` for a chat that has no title yet. (#16)
 - Rewrote `README.md` and `AGENTS.md`.
 - Renamed `docs/SPEC.md` to `docs/roadmap.md` and `docs/DESIGN.md` to `docs/design.md`.
 - `scripts/qa/genui-qa.cjs` saves screenshots under `.verify/evidence/genui-qa/` instead of `docs/qa/screenshots/`.
@@ -23,6 +23,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 ### Fixed
 
 - A retry that you stop after a failed first message keeps the text you saw after reload. (#16)
+- A retry's reply is no longer saved under a prompt that another tab edited while it streamed. (#16)
 
 ### Removed
 
