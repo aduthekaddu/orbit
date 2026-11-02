@@ -120,7 +120,7 @@ test("a regenerate that stores nothing keeps the previous answer", () => {
   write("c-regen", [message("g1", "user", "explain the bug")]);
   answer("c-regen", "g2", "the first answer", "g1");
 
-  assert.equal(write("c-regen", [message("g1", "user", "explain the bug")], "regenerate-message"), "g2");
+  assert.notEqual(write("c-regen", [message("g1", "user", "explain the bug")], "regenerate-message"), "g2");
   assert.deepEqual(ids("c-regen"), ["g1", "g2"]);
 });
 
@@ -141,17 +141,18 @@ test("a stale tab cannot overwrite a regenerated answer", () => {
   );
 });
 
-test("a successful regenerate leaves one answer under the same id", () => {
+test("a successful regenerate keeps the old answer as a sibling", () => {
   write("c-regen-ok", [message("r1", "user", "one question")]);
   answer("c-regen-ok", "r2", "first answer", "r1");
 
   const responseId = write("c-regen-ok", [message("r1", "user", "one question")], "regenerate-message", "r2");
-  assert.equal(responseId, "r2");
+  assert.notEqual(responseId, "r2");
   answer("c-regen-ok", responseId, "second answer", "r1");
 
   assert.deepEqual(mods.listMessages("c-regen-ok"), [
     { id: "r1", role: "user", parts: [{ type: "text", text: "one question" }] },
-    { id: "r2", role: "assistant", parts: [{ type: "text", text: "second answer" }] },
+    { id: "r2", role: "assistant", parts: [{ type: "text", text: "first answer" }] },
+    { id: responseId, role: "assistant", parts: [{ type: "text", text: "second answer" }] },
   ]);
 });
 
@@ -166,14 +167,14 @@ test("a regenerate targeted at an earlier answer keeps the later turns", () => {
   answer("c-target", "t4", "answer two", "t3");
 
   const responseId = write("c-target", [message("t1", "user", "one")], "regenerate-message", "t2");
-  assert.equal(responseId, "t2");
+  assert.notEqual(responseId, "t2");
   answer("c-target", responseId, "new answer one", "t1");
 
-  assert.deepEqual(ids("c-target"), ["t1", "t2", "t3", "t4"]);
+  assert.deepEqual(ids("c-target").sort(), ["t1", "t2", "t3", "t4", responseId].sort());
   assert.deepEqual(mods.listMessages("c-target")[1], {
     id: "t2",
     role: "assistant",
-    parts: [{ type: "text", text: "new answer one" }],
+    parts: [{ type: "text", text: "answer one" }],
   });
 });
 
@@ -241,60 +242,22 @@ test("edit validation names the reason it refused", () => {
   );
 });
 
-test("a stale full-history echo is named stale", () => {
-  write("c-stale-reasons", [message("v1", "user", "one")]);
-  answer("c-stale-reasons", "v2", "two", "v1");
-  write("c-stale-reasons", [
-    message("v1", "user", "one"),
-    message("v2", "assistant", "two"),
-    message("v3", "user", "three"),
-  ]);
-  const edit = mods.planChatWrite("c-stale-reasons", [message("v1", "user", "edited")], "submit-message", undefined, "v1");
-  assert.ok(edit && !("error" in edit));
-
-  assert.deepEqual(
-    mods.planChatWrite(
-      "c-stale-reasons",
-      [message("v1", "user", "one"), message("v2", "assistant", "two"), message("v3", "user", "three")],
-      "submit-message",
-      "v3",
-    ),
-    { error: "stale" },
-  );
-  assert.deepEqual(ids("c-stale-reasons"), ["v1"]);
-});
-
-test("a reply to a prompt removed by an edit is refused", () => {
+test("an edit keeps the old prompt, reply and later turns", () => {
   write("c-deleted", [message("d1", "user", "first")]);
   answer("c-deleted", "d2", "first answer", "d1");
-  write("c-deleted", [
-    message("d1", "user", "first"),
-    message("d2", "assistant", "first answer"),
-    message("d3", "user", "second"),
-  ]);
-  answer("c-deleted", "d4", "second answer", "d3");
-
-  assert.ok(mods.planChatWrite("c-deleted", [message("d1", "user", "edited first")], "submit-message", undefined, "d1"));
-  assert.deepEqual(ids("c-deleted"), ["d1"]);
-
-  assert.equal(mods.upsertMessage("c-deleted", message("d5", "assistant", "late answer"), "d3"), false);
-  assert.deepEqual(ids("c-deleted"), ["d1"]);
+  write("c-deleted", [message("d1", "user", "first"), message("d2", "assistant", "first answer"), message("d3", "user", "later")]);
+  const edit = mods.planChatWrite("c-deleted", [message("d-new", "user", "edited")], "submit-message", undefined, "d1");
+  assert.ok(!("error" in edit));
+  assert.deepEqual(ids("c-deleted").sort(), ["d1", "d2", "d3", "d-new"].sort());
+  assert.equal(mods.upsertMessage("c-deleted", message("d4", "assistant", "late answer"), "d3"), true);
 });
 
-test("a write checked against a row removed by an edit is refused", () => {
+test("a path with a missing parent is stale and writes nothing", () => {
   write("c-expected", [message("y1", "user", "ask")]);
   answer("c-expected", "y2", "answer", "y1");
-  assert.ok(mods.planChatWrite("c-expected", [message("y1", "user", "edited ask")], "submit-message", undefined, "y1"));
-
-  assert.equal(
-    mods.upsertMessage("c-expected", message("y3", "assistant", "late"), undefined, {
-      id: "y1",
-      content: "ask",
-      parts: JSON.stringify([{ type: "text", text: "ask" }]),
-    }),
-    false,
-  );
-  assert.deepEqual(ids("c-expected"), ["y1"]);
+  write("c-expected", [message("y1", "user", "ask"), message("y2", "assistant", "answer"), message("y3", "user", "next")]);
+  assert.deepEqual(mods.planChatWrite("c-expected", [message("y1", "user", "ask"), message("y3", "user", "next"), message("y4", "user", "stale")]), { error: "stale" });
+  assert.deepEqual(ids("c-expected"), ["y1", "y2", "y3"]);
 });
 
 test("a stale regenerate cannot overwrite a newer answer edit", () => {
@@ -343,41 +306,12 @@ test("a retry of an unsaved assistant reply is accepted", () => {
   assert.deepEqual(ids("c-invisible-retry"), ["ir1", "ir2"]);
 });
 
-test("a stale tab cannot restore turns removed by an edit", () => {
-  write("c-restore", [message("w1", "user", "first")]);
-  answer("c-restore", "w2", "first answer", "w1");
-  write("c-restore", [
-    message("w1", "user", "first"),
-    message("w2", "assistant", "first answer"),
-    message("w3", "user", "second"),
-  ]);
-  answer("c-restore", "w4", "second answer", "w3");
-
-  assert.ok(mods.planChatWrite("c-restore", [message("w1", "user", "edited first")], "submit-message", undefined, "w1"));
-  assert.deepEqual(ids("c-restore"), ["w1"]);
-
-  assert.equal(
-    mods.persistIncoming("c-restore", [
-      message("w1", "user", "first"),
-      message("w2", "assistant", "first answer"),
-      message("w3", "user", "second"),
-      message("w4", "assistant", "second answer"),
-    ]),
-    "stale",
-  );
-  assert.deepEqual(ids("c-restore"), ["w1"]);
-  assert.deepEqual(mods.listMessages("c-restore")[0].parts, [{ type: "text", text: "edited first" }]);
-});
-
-test("a retry's reply is refused after another tab edits its prompt in place", () => {
-  write("c-retry-edit", [message("re1", "user", "before")]);
-  const responseId = write("c-retry-edit", [message("re1", "user", "before")], "regenerate-message");
-  const guard = mods.replyGuard("c-retry-edit", true, responseId, "re1");
-  assert.equal(guard.hadReply, false);
-
-  const edited = mods.planChatWrite("c-retry-edit", [message("re1", "user", "after")], "submit-message", undefined, "re1");
-  assert.ok(!("error" in edited));
-
-  assert.equal(mods.upsertMessage("c-retry-edit", message(responseId, "assistant", "answer to before"), "re1", guard.expected), false);
-  assert.deepEqual(mods.listMessages("c-retry-edit"), [{ id: "re1", role: "user", parts: [{ type: "text", text: "after" }] }]);
+test("provider failure and stop before visible text leave the saved prompt as head", () => {
+  for (const [chatId, promptId] of [["c-restore", "pf1"], ["c-retry-edit", "stop1"]]) {
+    write(chatId, [message(promptId, "user", "before")]);
+    assert.equal(mods.upsertMessage(chatId, { id: `${promptId}-empty`, role: "assistant", parts: [] }, promptId), true);
+    const row = mods.db.$client.prepare("select head_id from chats where id = ?").get(chatId);
+    assert.deepEqual(row, { head_id: promptId });
+    assert.deepEqual(ids(chatId), [promptId]);
+  }
 });

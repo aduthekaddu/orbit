@@ -101,7 +101,7 @@ test("a reply keeps its prompt's place when two requests finish out of order", (
 });
 
 
-test("explicit user editing replaces later turns and invalid targets leave history intact", () => {
+test("explicit user editing keeps later turns and invalid targets leave history intact", () => {
   const chat = "edit-chat";
   mods.db.insert(mods.schema.chats).values({ id: chat, userId: "u1", title: "Edit", createdAt: new Date(), updatedAt: new Date() }).run();
   const history = [message("eu", "user", "old"), message("ea", "assistant", "answer"), message("eu2", "user", "later")];
@@ -113,7 +113,7 @@ test("explicit user editing replaces later turns and invalid targets leave histo
   });
   assert.equal(mods.listMessages(chat).length, 3);
   assert.ok(mods.planChatWrite(chat, [message("new", "user", "edited")], "submit-message", undefined, "eu"));
-  assert.deepEqual(mods.listMessages(chat).map((row) => row.id), ["new"]);
+  assert.deepEqual(mods.listMessages(chat).map((row) => row.id).sort(), ["eu", "ea", "eu2", "new"].sort());
 });
 
 test("reply text editing keeps tool parts and stale echoes cannot overwrite it", () => {
@@ -123,24 +123,6 @@ test("reply text editing keeps tool parts and stale echoes cannot overwrite it",
   mods.persistIncoming("c2", [{ id: "edited-answer", role: "assistant", parts }]);
   const saved = mods.listMessages("c2").find((row) => row.id === "edited-answer")!;
   assert.deepEqual(saved.parts, [{ type: "text", text: "after" }, parts[1]]);
-});
-
-test("a stale user echo cannot revert an edited prompt", () => {
-  const chat = "user-echo";
-  mods.db
-    .insert(mods.schema.chats)
-    .values({ id: chat, userId: "u1", title: "Echo", createdAt: new Date(), updatedAt: new Date() })
-    .run();
-  mods.upsertMessage(chat, message("ue1", "user", "before"));
-  assert.ok(mods.planChatWrite(chat, [message("ue1", "user", "after")], "submit-message", undefined, "ue1"));
-
-  assert.equal(
-    mods.persistIncoming(chat, [message("ue1", "user", "before"), message("ue2", "user", "next")]),
-    "stale",
-  );
-  assert.deepEqual(mods.listMessages(chat), [
-    { id: "ue1", role: "user", parts: [{ type: "text", text: "after" }] },
-  ]);
 });
 
 test("a user prompt cannot be rewritten in place", () => {
@@ -178,11 +160,11 @@ test("a stopped retry with no older reply saves what streamed", () => {
   assert.equal(mods.shouldSaveReply({ regenerate: true, interrupted: true, hadReply: false, visible: true }), true);
 });
 
-test("a stopped regenerate keeps the older reply", () => {
-  assert.equal(mods.shouldSaveReply({ regenerate: true, interrupted: true, hadReply: true, visible: true }), false);
+test("a stopped regenerate saves visible text as a new sibling", () => {
+  assert.equal(mods.shouldSaveReply({ regenerate: true, interrupted: true, hadReply: true, visible: true }), true);
 });
 
-test("a finished regenerate replaces the older reply", () => {
+test("a finished regenerate saves its new reply", () => {
   assert.equal(mods.shouldSaveReply({ regenerate: true, interrupted: false, hadReply: true, visible: true }), true);
 });
 
