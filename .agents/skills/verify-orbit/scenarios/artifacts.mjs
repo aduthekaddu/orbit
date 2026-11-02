@@ -1,5 +1,5 @@
 async function security(frame, origin, kind, step) {
-  const state = await frame.evaluate(async (appOrigin) => {
+  const state = await frame.locator("body").evaluate(async (_body, appOrigin) => {
     let parentBlocked = false;
     let cookiesBlocked = false;
     let fetchBlocked = false;
@@ -22,6 +22,7 @@ export default async function artifacts({ page, origin, step, shot }) {
   const composer = page.getByPlaceholder("Ask anything");
   const reply = page.locator('[data-message-role="assistant"]').last();
   const previews = reply.getByRole("button", { name: "Preview", exact: true });
+  const panel = page.getByRole("complementary", { name: "Artifact", exact: true });
   const iframe = page.locator("iframe").last();
   const frame = page.frameLocator("iframe").last();
 
@@ -53,13 +54,13 @@ export default async function artifacts({ page, origin, step, shot }) {
     return;
   }
   step("HTML code block has a Preview button", true);
-  let currentFrame = await open();
+  await open();
   await frame.getByRole("heading", { name: "Artifact HTML", exact: true }).waitFor();
   step("HTML heading renders in the preview", true);
   step("iframe sandbox is exactly allow-scripts", await iframe.getAttribute("sandbox") === "allow-scripts");
   await frame.getByRole("button", { name: "Change color" }).click();
   step("HTML button responds to a click", await frame.getByRole("button", { name: "Change color" }).evaluate(node => node.style.backgroundColor === "green"));
-  await security(currentFrame, origin, "HTML", step);
+  await security(frame, origin, "HTML", step);
   await page.evaluate(() => window.postMessage({ type: "orbit-artifact-error", message: "Forged artifact error" }, "*"));
   await page.waitForTimeout(100);
   step("parent ignores error messages from another window", !await page.getByRole("alert").filter({ hasText: "Forged artifact error" }).count());
@@ -67,17 +68,25 @@ export default async function artifacts({ page, origin, step, shot }) {
   const artifactUrl = page.url();
   step("open artifact is stored in the URL", Boolean(new URL(artifactUrl).searchParams.get("artifact")));
   step("desktop page has no horizontal overflow", await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await frame.getByRole("button", { name: "Change color" }).focus();
+  await page.keyboard.press("Escape");
+  await iframe.waitFor({ state: "hidden" });
+  step("Escape closes the panel while the frame has focus", !new URL(page.url()).searchParams.has("artifact"));
+  await open();
+  await frame.getByRole("button", { name: "Change color" }).click();
 
-  await page.getByRole("tab", { name: "Code", exact: true }).click();
-  step("Code tab shows the artifact source", await page.getByRole("tabpanel").innerText().then(text => text.includes("Artifact HTML")));
+  await panel.getByRole("tab", { name: "Code", exact: true }).click();
+  step("Code tab shows the artifact source", await panel.getByRole("tabpanel").innerText().then(text => text.includes("Artifact HTML")));
   const downloadEvent = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download", exact: true }).click();
+  await panel.getByRole("button", { name: "Download", exact: true }).click();
   const download = await downloadEvent;
   step("Download returns an HTML file", download.suggestedFilename().endsWith(".html"));
-  await page.getByRole("button", { name: "Copy", exact: true }).click();
-  step("Copy reports the copied source", await page.getByRole("button", { name: "Copied", exact: true }).isVisible());
-  await page.getByRole("tab", { name: "Preview", exact: true }).click();
-  await page.getByRole("button", { name: "Reload", exact: true }).click();
+  await panel.getByRole("button", { name: "Copy", exact: true }).click();
+  await panel.getByRole("button", { name: "Copied", exact: true }).waitFor();
+  step("Copy reports the copied source", true);
+  await panel.getByRole("tab", { name: "Preview", exact: true }).click();
+  step("switching tabs keeps the running artifact", await frame.getByRole("button", { name: "Change color" }).evaluate(node => node.style.backgroundColor === "green"));
+  await panel.getByRole("button", { name: "Reload", exact: true }).click();
   await frame.getByRole("button", { name: "Change color" }).waitFor();
   step("Reload resets the running artifact", await frame.getByRole("button", { name: "Change color" }).evaluate(node => node.style.backgroundColor === ""));
 
@@ -98,23 +107,38 @@ export default async function artifacts({ page, origin, step, shot }) {
   step("Escape closes the panel and removes its URL parameter", !new URL(page.url()).searchParams.has("artifact"));
 
   await send("svg");
-  currentFrame = await open();
+  await open();
   await frame.locator("svg").waitFor();
   step("SVG renders in the preview", true);
-  await security(currentFrame, origin, "SVG", step);
+  await security(frame, origin, "SVG", step);
   await shot("svg");
   await close();
   step("Close removes the artifact URL parameter", !new URL(page.url()).searchParams.has("artifact"));
 
   await send("react");
-  currentFrame = await open();
+  await open();
   await frame.getByRole("button", { name: "Count 0", exact: true }).waitFor({ timeout: 60_000 });
   step("anonymous default React component renders", true);
   await frame.getByRole("button", { name: "Count 0", exact: true }).click();
   await frame.getByRole("button", { name: "Count 1", exact: true }).waitFor();
   step("React counter changes after a click", true);
-  await security(currentFrame, origin, "React", step);
+  await security(frame, origin, "React", step);
   await shot("react-clicked");
+  let reactSource;
+  for (const [name, prefix] of [
+    ["lodash", "import 'lodash';"],
+    ["https://esm.sh/lodash-es", "export { default as other } from 'https://esm.sh/lodash-es';"],
+    ["other-package", "import('other-package');"],
+    ["constructor", "import 'constructor';"],
+  ]) {
+    await reply.getByRole("button", { name: "Edit code", exact: true }).click();
+    const reactEditor = page.getByRole("textbox", { name: "Edit jsx block", exact: true });
+    if (reactSource === undefined) reactSource = await reactEditor.inputValue();
+    await reactEditor.fill(`${prefix}\n${reactSource}`);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await page.getByRole("alert").filter({ hasText: `Unsupported import: ${name}` }).waitFor({ timeout: 30_000 });
+    step(`React rejects unsupported import ${name}`, true);
+  }
   await close();
 
   await send("error");
@@ -123,7 +147,7 @@ export default async function artifacts({ page, origin, step, shot }) {
   await error.first().waitFor();
   step("runtime error is shown under the preview", true);
   await shot("error");
-  await page.getByRole("button", { name: "Fix", exact: true }).click();
+  await panel.getByRole("button", { name: "Fix", exact: true }).click();
   step("Fix fills the composer with the runtime error", (await composer.inputValue()).includes("Artifact exploded"));
   await close();
   await composer.fill("");
@@ -135,6 +159,7 @@ export default async function artifacts({ page, origin, step, shot }) {
   await mobile.frameLocator("iframe").getByRole("heading", { name: "Artifact HTML edited", exact: true }).waitFor();
   const sheet = mobile.getByRole("dialog");
   step("phone opens the preview in a dialog", await sheet.isVisible());
+  await sheet.evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
   const bounds = await sheet.boundingBox();
   step("phone dialog fills the screen", bounds && Math.abs(bounds.width - 390) <= 1 && Math.abs(bounds.height - 844) <= 1, JSON.stringify(bounds));
   step("phone has no horizontal overflow", await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth));

@@ -3,6 +3,8 @@
 import { useMemo, useState, type ComponentProps, type ElementType, type JSX } from "react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import { useAui, useAuiState } from "@assistant-ui/react";
+import { useAISDKChat } from "@assistant-ui/react-ai-sdk";
+import { textPartIndex } from "@/lib/chat-parts";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import { ScrollFade } from "@/components/ui/scroll-fade";
@@ -72,8 +74,21 @@ const remarkPlugins = [remarkGfm];
 
 export function MarkdownText({ className, editable = false }: { className?: string; editable?: boolean }) {
   const aui = useAui();
+  const chat = useAISDKChat();
   const partText = useAuiState((s) => (s.part.type === "text" ? s.part.text : ""));
+  const artifactOffset = useAuiState((s) => {
+    const query = aui.part.query;
+    if (!query || !("index" in query) || typeof query.index !== "number") return 0;
+    return s.message.parts.slice(0, query.index).reduce((offset, part) => offset + (part.type === "text" ? part.text.length + 2 : 0), 0);
+  });
+  const textOrdinal = useAuiState((s) => {
+    const query = aui.part.query;
+    if (!query || !("index" in query) || typeof query.index !== "number") return undefined;
+    return s.message.parts.slice(0, query.index).filter((part) => part.type === "text").length;
+  });
   const messageId = useAuiState((s) => s.message.id);
+  const sourceMessage = chat?.messages.find((message) => message.id === messageId);
+  const sourceIndex = sourceMessage && textOrdinal !== undefined ? textPartIndex(sourceMessage.parts, textOrdinal) : undefined;
   const running = useAuiState((s) => s.message.status?.type === "running");
   const [active, setActive] = useState<number | null>(null);
   const { save, saving, error } = useSaveMessageText();
@@ -81,14 +96,13 @@ export function MarkdownText({ className, editable = false }: { className?: stri
   const codeEdit = useMemo(
     () => ({
       enabled: editable && Boolean(messageId) && !running,
-      text: partText, active, setActive, messageId, saving, error,
+      text: partText, artifactOffset, active, setActive, messageId, saving, error,
       save: (id: string, text: string) => {
-        const query = aui.part.query;
-        if (!query || !("index" in query) || typeof query.index !== "number") return Promise.resolve(false);
-        return save(id, text, query.index);
+        if (sourceIndex === undefined) return Promise.resolve(false);
+        return save(id, text, sourceIndex);
       },
     }),
-    [aui, editable, messageId, running, partText, active, save, saving, error],
+    [artifactOffset, editable, messageId, running, partText, active, save, saving, error, sourceIndex],
   );
 
   return (

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { codeBodyStart, replaceCode, replaceTextPart } from "./chat-parts";
+import { codeBodyStart, replaceCode, replaceTextPart, textPartIndex } from "./chat-parts";
 
 test("editing code in one text part preserves other prose and the generated tool", () => {
   const tool = { type: "tool-render_ui" as const, toolCallId: "tool", state: "output-available" as const, input: {}, output: {} };
@@ -52,4 +52,20 @@ test("a stale code range leaves the message unchanged instead of editing an earl
   const staleStart = 15;
   const staleEnd = staleStart + "old\n".length;
   assert.equal(replaceCode(markdown, "old\n", "new", staleStart, staleEnd), markdown);
+});
+
+
+test("an editable text part maps to its saved index past step markers and tools", () => {
+  const parts = [
+    { type: "step-start" as const },
+    { type: "reasoning" as const, text: "thinking" },
+    { type: "text" as const, text: "first" },
+    { type: "step-start" as const },
+    { type: "tool-render_ui" as const, toolCallId: "tool", state: "output-available" as const, input: {}, output: {} },
+    { type: "text" as const, text: "second" },
+  ];
+  assert.equal(textPartIndex(parts, 0), 2);
+  assert.equal(textPartIndex(parts, 1), 5);
+  assert.equal(textPartIndex(parts, 2), undefined);
+  assert.equal(textPartIndex([{ type: "text", text: "plain" }], 0), 0);
 });

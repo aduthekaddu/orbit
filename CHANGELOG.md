@@ -8,6 +8,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Added
 
+- Preview HTML, SVG, JSX and TSX code blocks in a sandboxed panel. Switch between Preview and Code, reload, copy or download the source, and send runtime errors to the composer with Fix. The open preview survives a page reload and fills the screen on a phone.
+
 - Four starter prompts on an empty chat. A click fills the composer and does not send. (#16)
 - `verify.mjs browse <scenario>` drives Chrome through Playwright and saves screenshots. `launch --mock` starts the mock provider. (#16)
 - `ARCHITECTURE.md` with a stack diagram and a checked state chart of one chat turn.

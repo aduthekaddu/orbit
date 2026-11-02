@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { runInNewContext } from "node:vm";
 import { artifactKind } from "./detect";
 import { artifactDocument } from "./document";
 
@@ -39,4 +40,38 @@ test("only supported fenced code languages are artifacts", () => {
   assert.equal(artifactKind("jsx"), "react");
   assert.equal(artifactKind("tsx"), "react");
   assert.equal(artifactKind("python"), undefined);
+});
+
+test("React default export handling preserves regexes, strings, and named function references", () => {
+  const code = 'const pattern = /export default/; const label = "export default"; export default function Page() { return Page.name + label + pattern.source; }';
+  const document = artifactDocument("react", code);
+  assert.ok(document.includes('const pattern = /export default/;'));
+  assert.ok(document.includes('"export default"'));
+  assert.ok(document.includes('function Page()'));
+  assert.ok(document.includes('Page.name'));
+});
+
+test("Escape inside the frame asks the app to close the preview", () => {
+  const document = artifactDocument("html", "<h1>Page</h1>");
+  const script = /<script>([\s\S]*?)<\/script>/.exec(document)?.[1];
+  assert.ok(script);
+  const handlers = new Map<string, (event: { key: string }) => void>();
+  const messages: unknown[] = [];
+  runInNewContext(script, {
+    addEventListener: (name: string, listener: (event: { key: string }) => void) => handlers.set(name, listener),
+    parent: { postMessage: (message: unknown) => messages.push(message) },
+  });
+  handlers.get("keydown")?.({ key: "Enter" });
+  assert.equal(messages.length, 0);
+  handlers.get("keydown")?.({ key: "Escape" });
+  assert.equal(JSON.stringify(messages), JSON.stringify([{ type: "orbit-artifact-close" }]));
+});
+
+test("the error bridge does not reserve names in the artifact's global scope", () => {
+  const document = artifactDocument("html", "<h1>Page</h1>");
+  const script = /<script>([\s\S]*?)<\/script>/.exec(document)?.[1];
+  assert.ok(script);
+  const context = { addEventListener: () => {}, parent: { postMessage: () => {} } };
+  runInNewContext(script, context);
+  assert.doesNotThrow(() => runInNewContext("const report = () => 'User report'; report();", context));
 });

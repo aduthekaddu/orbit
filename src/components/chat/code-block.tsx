@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, type KeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { Highlight, type PrismTheme } from "prism-react-renderer";
 import type { CodeHeaderProps, SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
 import { CaretDownIcon, CheckIcon, CopyIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import { artifactKind } from "@/lib/artifacts/detect";
+import { useArtifact } from "@/components/artifacts/use-artifact";
 import { codeBodyStart, replaceCode } from "@/lib/chat-parts";
 import { cn } from "@/lib/utils";
 import { ScrollFade } from "@/components/ui/scroll-fade";
@@ -39,6 +41,14 @@ export function CodeHeader({ language, code, node }: CodeHeaderProps) {
   const edit = useCodeEdit();
   const start = edit ? codeBodyStart(edit.text, node?.position?.start?.offset, code) : -1;
   const active = edit?.active === start;
+  const artifacts = useArtifact();
+  const register = artifacts?.register;
+  const kind = artifactKind(language ?? "");
+  const key = edit && start >= 0 ? `${edit.messageId}.${edit.artifactOffset + start}` : null;
+  useEffect(() => {
+    if (!register || !kind || !key) return;
+    return register({ key, kind, code });
+  }, [register, kind, key, code]);
 
   return (
     <div
@@ -51,6 +61,16 @@ export function CodeHeader({ language, code, node }: CodeHeaderProps) {
       <span aria-live="polite" className="sr-only">{copied ? "Copied" : failed ? "Copy failed" : ""}</span>
       {active ? null : (
         <div className="flex items-center gap-0.5">
+          {kind && key && artifacts ? (
+            <button
+              type="button"
+              disabled={!edit?.enabled}
+              onClick={() => artifacts.open(key)}
+              className="flex h-6 pointer-coarse:h-11 items-center rounded-md px-2 text-2xs text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+            >
+              Preview
+            </button>
+          ) : null}
           {edit?.enabled ? (
             <button
               type="button"
