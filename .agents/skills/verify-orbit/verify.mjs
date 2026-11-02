@@ -425,7 +425,7 @@ async function driveSignup() {
   }
   const chatPage = await request(chatPath, { cookies });
   lines.push(`chat page status ${chatPage.status}`);
-  lines.push(`chat page has Message ${chatPage.text.includes("Message") ? "yes" : "no"}`);
+  lines.push(`chat page has Ask anything ${chatPage.text.includes("Ask anything") ? "yes" : "no"}`);
   const listed = await request("/api/chats", { cookies });
   let count = 0;
   try {
@@ -450,7 +450,7 @@ async function driveSignup() {
   });
   lines.push(`second signup status ${again.status}`);
   writeEvidence("signup", lines);
-  if (chatPage.status !== 200 || !chatPage.text.includes("Message")) fail("chat page missing composer");
+  if (chatPage.status !== 200 || !chatPage.text.includes("Ask anything")) fail("chat page missing composer");
   if (listed.status !== 200 || count < 1) fail("chat list empty");
   if (loggedOut.status !== 401) fail(`logged out chats status ${loggedOut.status}`);
   if (users !== 1 || chats < 1) fail(`db users ${users} chats ${chats}`);

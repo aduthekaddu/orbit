@@ -111,7 +111,7 @@ export function Sidebar({
                       : "text-muted-foreground hover:bg-accent hover:text-foreground",
                   )}
                 >
-                  {chat.title}
+                  {chat.title === "New chat" ? "Untitled" : chat.title}
                 </Link>
               );
             })}

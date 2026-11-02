@@ -13,7 +13,7 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 ## Driving conventions
 
 - Start from the baseline unless the feature names a different precondition.
-- Page checks use the visible strings `Create account`, `Sign in`, `Message`, and the settings labels `Base URL` and `API key`.
+- Page checks use the visible strings `Create account`, `Sign in`, `Ask anything`, and the settings labels `Base URL` and `API key`.
 - Run every command through `node .agents/skills/verify-orbit/verify.mjs`.
 - Keep `.verify/evidence/` after cleanup.
 

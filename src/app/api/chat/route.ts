@@ -3,7 +3,7 @@ import { z } from "zod";
 import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
 import { assistantHasVisiblePart, settleInterruptedParts } from "@/lib/genui/spec";
 import { chatTools } from "@/lib/genui/tool";
-import { ensureChat, planChatWrite, textFromParts, touchChat, upsertMessage, listMessages } from "@/lib/messages";
+import { ensureChat, planChatWrite, shouldSaveReply, textFromParts, touchChat, upsertMessage, listMessages } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { getSettings } from "@/lib/settings";
 import { getSession, unauthorized } from "@/lib/session";
@@ -120,7 +120,8 @@ export async function POST(request: Request) {
       onEnd: async ({ responseMessage, isAborted, outcome }) => {
         const interrupted = isAborted || outcome.status !== "completed";
         const parts = settleInterruptedParts(responseMessage.parts, interrupted);
-        if (!assistantHasVisiblePart(parts)) {
+        const visible = assistantHasVisiblePart(parts);
+        if (!visible) {
           const types = Array.isArray(responseMessage.parts)
             ? responseMessage.parts
                 .map((part) => (part && typeof part === "object" && "type" in part ? String(part.type) : "?"))
@@ -128,9 +129,9 @@ export async function POST(request: Request) {
             : [];
           const status = outcome && typeof outcome === "object" && "status" in outcome ? String(outcome.status) : "";
           console.error("chat end without text", isAborted ? "aborted" : "finished", status, types.join(",") || "none");
-          return;
         }
-        if (write.regenerate && interrupted) return;
+        const hadReply = write.regenerate && expectedRow !== undefined;
+        if (!shouldSaveReply({ regenerate: write.regenerate, interrupted, hadReply, visible })) return;
         upsertMessage(
           chat.id,
           {

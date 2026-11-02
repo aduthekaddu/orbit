@@ -60,8 +60,10 @@ type ReplyEnd = {
   visible: boolean;
 };
 
-export function shouldSaveReply(end: ReplyEnd): boolean {
-  throw new Error("not implemented");
+/** A stopped regenerate must not replace the reply it was regenerating, but with no older reply the streamed text is all there is. */
+export function shouldSaveReply({ regenerate, interrupted, hadReply, visible }: ReplyEnd): boolean {
+  if (!visible) return false;
+  return !(regenerate && interrupted && hadReply);
 }
 
 export type ExpectedMessage = { id: string; content: string; parts: string };
