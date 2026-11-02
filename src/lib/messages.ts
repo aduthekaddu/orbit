@@ -53,6 +53,17 @@ export function touchChat(id: string, title?: string) {
   db.update(chats).set({ title: nextTitle, updatedAt: new Date() }).where(eq(chats.id, id)).run();
 }
 
+type ReplyEnd = {
+  regenerate: boolean;
+  interrupted: boolean;
+  hadReply: boolean;
+  visible: boolean;
+};
+
+export function shouldSaveReply(end: ReplyEnd): boolean {
+  throw new Error("not implemented");
+}
+
 export type ExpectedMessage = { id: string; content: string; parts: string };
 
 export function upsertMessage(

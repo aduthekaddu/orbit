@@ -12,6 +12,7 @@ type Modules = {
   planChatWrite: typeof import("./messages").planChatWrite;
   updateMessageText: typeof import("./messages").updateMessageText;
   upsertMessage: typeof import("./messages").upsertMessage;
+  shouldSaveReply: typeof import("./messages").shouldSaveReply;
 };
 
 let mods: Modules;
@@ -34,6 +35,7 @@ before(async () => {
     upsertMessage: messageModule.upsertMessage,
     planChatWrite: messageModule.planChatWrite,
     updateMessageText: messageModule.updateMessageText,
+    shouldSaveReply: messageModule.shouldSaveReply,
   };
 
   const now = new Date();
@@ -170,4 +172,20 @@ test("editing one text part by index keeps the reply's parts in order", () => {
   assert.deepEqual(saved.parts, [parts[0], parts[1], { type: "text", text: "new code" }, parts[3]]);
   const stored = mods.db.$client.prepare("select content from messages where id = ?").get("indexed-answer") as { content: string };
   assert.equal(stored.content, parts[0].text + "new code" + parts[3].text);
+});
+
+test("a stopped retry with no older reply saves what streamed", () => {
+  assert.equal(mods.shouldSaveReply({ regenerate: true, interrupted: true, hadReply: false, visible: true }), true);
+});
+
+test("a stopped regenerate keeps the older reply", () => {
+  assert.equal(mods.shouldSaveReply({ regenerate: true, interrupted: true, hadReply: true, visible: true }), false);
+});
+
+test("a finished regenerate replaces the older reply", () => {
+  assert.equal(mods.shouldSaveReply({ regenerate: true, interrupted: false, hadReply: true, visible: true }), true);
+});
+
+test("a reply with nothing visible is not saved", () => {
+  assert.equal(mods.shouldSaveReply({ regenerate: false, interrupted: false, hadReply: false, visible: false }), false);
 });

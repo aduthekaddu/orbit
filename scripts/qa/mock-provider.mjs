@@ -262,6 +262,23 @@ function textResponse(res, text) {
   res.end();
 }
 
+function slowResponse(res) {
+  start(res);
+  let index = 0;
+  const timer = setInterval(() => {
+    index += 1;
+    if (index > 50) {
+      clearInterval(timer);
+      send(res, chunk([{ index: 0, delta: {}, finish_reason: "stop" }]));
+      res.write("data: [DONE]\n\n");
+      res.end();
+      return;
+    }
+    send(res, chunk([{ index: 0, delta: { content: `word${index} ` }, finish_reason: null }]));
+  }, 200);
+  res.on("close", () => clearInterval(timer));
+}
+
 function toolResponse(res, scenario, spec) {
   const args = JSON.stringify(spec);
   const id = `call_${scenario}_${Date.now()}`;
@@ -336,6 +353,9 @@ function malformedResponse(res) {
   res.end();
 }
 
+// The AI SDK retries a 500 twice, so three failures make the first send fail in the browser.
+const failuresByPrompt = new Map();
+
 const server = http.createServer((req, res) => {
   if (!req.url) {
     res.writeHead(404).end();
@@ -362,8 +382,24 @@ const server = http.createServer((req, res) => {
     } catch {
       body = {};
     }
-    const scenario = scenarioOf(lastUserText(body));
+    const prompt = lastUserText(body);
+    const scenario = scenarioOf(prompt);
     console.log(`mock request scenario=${scenario}`);
+    if (scenario === "fail-first") {
+      const failures = failuresByPrompt.get(prompt) ?? 0;
+      if (failures < 3) {
+        failuresByPrompt.set(prompt, failures + 1);
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: { message: "mock failure", type: "server_error" } }));
+        return;
+      }
+      slowResponse(res);
+      return;
+    }
+    if (scenario === "slow") {
+      slowResponse(res);
+      return;
+    }
     if (scenario === "truncated") {
       toolResponse(res, scenario, allSpec());
       return;
