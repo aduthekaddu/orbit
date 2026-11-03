@@ -8,9 +8,17 @@ import { requireUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
-export default async function ChatPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ChatPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ m?: string | string[] }>;
+}) {
   const session = await requireUser();
   const { id } = await params;
+  const { m } = await searchParams;
+  const focusMessageId = typeof m === "string" ? m : null;
   const chat = getChatForUser(id, session.user.id);
   if (!chat) notFound();
   const repository = messageRepository(id);
@@ -28,7 +36,7 @@ export default async function ChatPage({ params }: { params: Promise<{ id: strin
   }
   return (
     <div className="min-h-0 flex-1">
-      <ChatPanel key={id} chatId={id} initialHistory={repository} ready={ready} model={settings?.model ?? ""} />
+      <ChatPanel key={`${id}:${focusMessageId ?? ""}`} chatId={id} focusMessageId={focusMessageId} initialHistory={repository} ready={ready} model={settings?.model ?? ""} />
     </div>
   );
 }

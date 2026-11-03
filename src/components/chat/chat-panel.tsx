@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { AssistantRuntimeProvider, type ThreadHistoryAdapter } from "@assistant-ui/react";
 import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
-import type { toRepository } from "@/lib/chat-tree";
+import { focusedHead, type toRepository } from "@/lib/chat-tree";
 import { orbitChatTransport } from "@/lib/chat-transport";
 import { ChatIdProvider } from "./chat-id";
 import { Thread } from "./thread";
@@ -12,11 +12,13 @@ import { Thread } from "./thread";
 export function ChatPanel({
   chatId,
   initialHistory,
+  focusMessageId,
   ready,
   model,
 }: {
   chatId: string;
   initialHistory: ReturnType<typeof toRepository>;
+  focusMessageId: string | null;
   ready: boolean;
   model: string;
 }) {
@@ -29,8 +31,13 @@ export function ChatPanel({
       if (format.format !== "ai-sdk/v6") throw new Error("Unsupported chat history format");
       return {
         async load() {
+          const headId = focusedHead(
+            initialHistory.messages.map(({ parentId, message }) => ({ id: message.id, parentId })),
+            initialHistory.headId,
+            focusMessageId,
+          );
           return {
-            headId: initialHistory.headId,
+            headId,
             messages: initialHistory.messages.map(({ parentId, message: { id, ...content } }) => format.decode({
               id, parent_id: parentId, format: format.format,
               content: content as unknown as Parameters<typeof format.decode>[0]["content"],
@@ -41,7 +48,7 @@ export function ChatPanel({
         async append() {},
       };
     },
-  }), [initialHistory]);
+  }), [focusMessageId, initialHistory]);
   const runtime = useChatRuntime({
     id: chatId,
     adapters: { history },
@@ -58,7 +65,7 @@ export function ChatPanel({
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ChatIdProvider chatId={chatId} onEdit={(id) => { editMessageId.current = id; }}>
-        <Thread ready={ready} model={model} />
+        <Thread ready={ready} model={model} focusMessageId={focusMessageId} />
       </ChatIdProvider>
     </AssistantRuntimeProvider>
   );

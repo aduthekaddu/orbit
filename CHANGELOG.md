@@ -8,6 +8,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Added
 
+- A new chat gets a short title from the model. The command palette finds a message by its text.
 - Four starter prompts on an empty chat. A click fills the composer and does not send. (#16)
 - `verify.mjs browse <scenario>` drives Chrome through Playwright and saves screenshots. `launch --mock` starts the mock provider. (#16)
 - `ARCHITECTURE.md` with a stack diagram and a checked state chart of one chat turn.
