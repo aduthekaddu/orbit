@@ -208,6 +208,21 @@ function specFor(scenario) {
   }
 }
 
+const artifactReplies = {
+  "artifact-tsx": ["tsx", `type Label = string;
+export default function Typed() { const label: Label = 'Typed button'; return <button>{label}</button>; }`],
+  "artifact-long-error": ["html", `<script>throw new Error(${JSON.stringify(Array.from({ length: 80 }, (_, index) => `Error line ${index + 1}`).join("\n"))});</script>`],
+  "artifact-html": ["html", `<h1>Artifact HTML</h1>
+<button id="color" onclick="this.style.backgroundColor='green'">Change color</button>`],
+  "artifact-svg": ["svg", `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200"><title>Artifact SVG</title><rect width="400" height="200" fill="#ff9e5e"/><circle cx="200" cy="100" r="60" fill="#131418"/></svg>`],
+  "artifact-react": ["jsx", `import { useState } from 'react';
+export default () => {
+  const [count, setCount] = useState(0);
+  return <button onClick={() => setCount(count + 1)}>Count {count}</button>;
+};`],
+  "artifact-error": ["html", `<h1>Artifact error</h1><script>throw new Error('Artifact exploded');</script>`],
+};
+
 function lastUserText(body) {
   const messages = Array.isArray(body?.messages) ? body.messages : [];
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -405,6 +420,15 @@ const server = http.createServer((req, res) => {
     }
     if (scenario === "zebracorn") {
       textResponse(res, "A zebracorn stood in the road.");
+      return;
+    }
+    if (scenario === "artifact-multiple") {
+      textResponse(res, "```html\n<h1>First artifact</h1>\n```\n\n```html\n<h1>Second artifact</h1>\n```\n\n```html\n<h1>Third artifact</h1>\n```");
+      return;
+    }
+    if (Object.hasOwn(artifactReplies, scenario)) {
+      const [language, code] = artifactReplies[scenario];
+      textResponse(res, "\`\`\`" + language + "\n" + code + "\n\`\`\`");
       return;
     }
     if (scenario === "fail-first") {

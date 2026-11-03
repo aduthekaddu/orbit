@@ -1,5 +1,6 @@
 import { convertToModelMessages, createUIMessageStreamResponse, stepCountIs, streamText, toUIMessageStream, type UIMessage } from "ai";
 import { z } from "zod";
+import { ARTIFACT_INSTRUCTIONS } from "@/lib/artifacts/detect";
 import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
 import { assistantHasVisiblePart, settleInterruptedParts } from "@/lib/genui/spec";
 import { chatTools } from "@/lib/genui/tool";
@@ -114,7 +115,7 @@ export async function POST(request: Request) {
         model: settings.model,
         chatId: chat.id,
       }),
-      instructions: RENDER_UI_SYSTEM,
+      instructions: `${RENDER_UI_SYSTEM}\n\n${ARTIFACT_INSTRUCTIONS}`,
       messages: await convertToModelMessages(uiMessages, { tools: chatTools }),
       tools: chatTools,
       stopWhen: stepCountIs(1),

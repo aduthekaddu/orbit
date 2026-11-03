@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, type KeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { Highlight, type PrismTheme } from "prism-react-renderer";
 import type { CodeHeaderProps, SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
 import { CaretDownIcon, CheckIcon, CopyIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import { artifactKind, isArtifactLanguage } from "@/lib/artifacts/detect";
+import { useArtifact } from "@/components/artifacts/use-artifact";
 import { codeBodyStart, replaceCode } from "@/lib/chat-parts";
 import { cn } from "@/lib/utils";
 import { ScrollFade } from "@/components/ui/scroll-fade";
@@ -34,11 +36,29 @@ const orbitCodeTheme: PrismTheme = {
   ],
 };
 
+function fenceOffset(node: CodeHeaderProps["node"] | SyntaxHighlighterProps["node"]) {
+  const value = node?.properties?.["data-code-fence"];
+  return typeof value === "number" ? value : node?.position?.start?.offset;
+}
+
 export function CodeHeader({ language, code, node }: CodeHeaderProps) {
   const { copied, failed, copy } = useCopy();
   const edit = useCodeEdit();
-  const start = edit ? codeBodyStart(edit.text, node?.position?.start?.offset, code) : -1;
+  const start = edit ? codeBodyStart(edit.text, fenceOffset(node), code) : -1;
   const active = edit?.active === start;
+  const artifacts = useArtifact();
+  const register = artifacts?.register;
+  const sourceLanguage = typeof language === "string" && isArtifactLanguage(language) ? language : undefined;
+  const kind = sourceLanguage && artifactKind(sourceLanguage);
+  const blockIndex = node?.properties?.["data-code-index"];
+  const messageId = edit?.messageId;
+  const key = edit && typeof blockIndex === "number" && edit.textOrdinal !== undefined
+    ? `${edit.messageId}.${edit.textOrdinal}.${blockIndex}`
+    : null;
+  useEffect(() => {
+    if (!register || !kind || !key || !sourceLanguage || !messageId) return;
+    return register({ key, kind, code, language: sourceLanguage });
+  }, [register, kind, key, code, sourceLanguage, messageId]);
 
   return (
     <div
@@ -51,6 +71,16 @@ export function CodeHeader({ language, code, node }: CodeHeaderProps) {
       <span aria-live="polite" className="sr-only">{copied ? "Copied" : failed ? "Copy failed" : ""}</span>
       {active ? null : (
         <div className="flex items-center gap-0.5">
+          {kind && key && artifacts ? (
+            <button
+              type="button"
+              disabled={!edit?.enabled}
+              onClick={() => artifacts.open(key)}
+              className="flex h-6 pointer-coarse:h-11 items-center rounded-md px-2 text-2xs text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+            >
+              Preview
+            </button>
+          ) : null}
           {edit?.enabled ? (
             <button
               type="button"
@@ -120,7 +150,7 @@ function CodeEditor({ code, start, language }: { code: string; start: number; la
 export function SyntaxHighlighter({ code, language, node }: SyntaxHighlighterProps) {
   const edit = useCodeEdit();
   const [expanded, setExpanded] = useState(false);
-  const start = edit ? codeBodyStart(edit.text, node?.position?.start?.offset, code) : -1;
+  const start = edit ? codeBodyStart(edit.text, fenceOffset(node), code) : -1;
   const active = edit?.enabled && edit.active === start;
 
   if (active) return <CodeEditor code={code} start={start} language={language} />;

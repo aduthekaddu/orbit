@@ -6,6 +6,8 @@ import { AssistantRuntimeProvider, type ThreadHistoryAdapter } from "@assistant-
 import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
 import { focusedHead, type toRepository } from "@/lib/chat-tree";
 import { orbitChatTransport } from "@/lib/chat-transport";
+import { ArtifactProvider } from "@/components/artifacts/use-artifact";
+import { ArtifactWorkspace } from "@/components/artifacts/artifact-panel";
 import { ChatIdProvider } from "./chat-id";
 import { Thread } from "./thread";
 
@@ -65,7 +67,11 @@ export function ChatPanel({
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ChatIdProvider chatId={chatId} onEdit={(id) => { editMessageId.current = id; }}>
-        <Thread ready={ready} model={model} focusMessageId={focusMessageId} />
+        <ArtifactProvider>
+          <ArtifactWorkspace>
+            <Thread ready={ready} model={model} focusMessageId={focusMessageId} />
+          </ArtifactWorkspace>
+        </ArtifactProvider>
       </ChatIdProvider>
     </AssistantRuntimeProvider>
   );

@@ -33,3 +33,4 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 
 - [Branching](./branching.md) keeps edited prompts and regenerated answers, switches versions, and restores the last written branch.
 - [History search](./search.md) finds a message from the command palette and titles a new chat.
+- [Artifacts](./artifacts.md) previews HTML, SVG and React, checks frame isolation, and restores the selected preview after reload.

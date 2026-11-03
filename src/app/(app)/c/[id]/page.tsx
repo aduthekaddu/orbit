@@ -4,6 +4,7 @@ import { Figure } from "@/components/figure";
 import { SettingsForm } from "@/components/settings/settings-form";
 import { getChatForUser, messageRepository } from "@/lib/messages";
 import { getSettings, toPublicSettings } from "@/lib/settings";
+import { artifactHistory } from "@/lib/artifacts/history";
 import { requireUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -13,15 +14,15 @@ export default async function ChatPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ m?: string | string[] }>;
+  searchParams: Promise<{ m?: string | string[]; artifact?: string | string[] }>;
 }) {
   const session = await requireUser();
   const { id } = await params;
-  const { m } = await searchParams;
-  const focusMessageId = typeof m === "string" ? m : null;
+  const query = await searchParams;
+  const focusMessageId = typeof query.m === "string" ? query.m : null;
   const chat = getChatForUser(id, session.user.id);
   if (!chat) notFound();
-  const repository = messageRepository(id);
+  const repository = artifactHistory(messageRepository(id), typeof query.artifact === "string" ? query.artifact : undefined);
   const settings = getSettings();
   const ready = Boolean(settings?.baseUrl && settings.apiKey && settings.model);
   if (!ready && repository.messages.length === 0) {
