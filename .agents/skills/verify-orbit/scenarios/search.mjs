@@ -20,11 +20,12 @@ export default async function search({ page, origin, step, shot }) {
   await dialog.waitFor({ timeout: 5_000 });
   await dialog.locator("input").fill("zebracorn");
   await page.waitForTimeout(400);
-  const hit = dialog.getByText("zebracorn").first();
-  const visible = await hit.isVisible().catch(() => false);
+  const heading = dialog.getByText("Messages", { exact: true });
+  const visible = await heading.isVisible().catch(() => false);
   await shot(visible ? "results" : "before");
-  step("Messages result for zebracorn", visible, "no Messages result");
+  step("Messages result for zebracorn", visible, "no Messages group");
   if (!visible) return;
+  const hit = dialog.getByText("stood in the road");
 
   const before = await (await page.request.get(`${origin}/api/chats/${secondId}`)).json();
   await hit.click();
