@@ -21,30 +21,25 @@ export function Thread({ ready, model, focusMessageId }: { ready: boolean; model
   const empty = useAuiState((state) => state.thread.isEmpty);
   const viewport = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!focusMessageId) return;
-    const id = focusMessageId;
-    let ring = 0;
-    const mark = () => {
-      const el = viewport.current?.querySelector(`[data-message-id="${CSS.escape(id)}"]`);
-      if (!(el instanceof HTMLElement)) return;
-      el.scrollIntoView({ block: "center" });
-      el.style.boxShadow = "0 0 0 2px var(--sun)";
-      window.clearTimeout(ring);
-      ring = window.setTimeout(() => {
-        el.style.boxShadow = "";
-      }, 1600);
-    };
-    // The viewport snaps to the bottom on the frame after messages appear.
-    const timers = [0, 50, 300].map((delay) => window.setTimeout(mark, delay));
-    return () => {
-      timers.forEach((timer) => window.clearTimeout(timer));
-      window.clearTimeout(ring);
-    };
-  }, [focusMessageId]);
+    if (!focusMessageId || empty) return;
+    const el = viewport.current?.querySelector(`[data-message-id="${CSS.escape(focusMessageId)}"]`);
+    if (!(el instanceof HTMLElement)) return;
+    el.scrollIntoView({ block: "center" });
+    el.style.boxShadow = "0 0 0 2px var(--sun)";
+    const ring = window.setTimeout(() => {
+      el.style.boxShadow = "";
+    }, 1600);
+    return () => window.clearTimeout(ring);
+  }, [empty, focusMessageId]);
   return (
     <TooltipProvider>
       <ThreadPrimitive.Root className="@container/thread relative flex h-full min-h-0 flex-col">
-        <ThreadPrimitive.Viewport ref={viewport} className="@container flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-8 scrollbar-thin">
+        <ThreadPrimitive.Viewport
+          ref={viewport}
+          scrollToBottomOnInitialize={!focusMessageId}
+          autoScroll={!focusMessageId}
+          className="@container flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-8 scrollbar-thin"
+        >
           {empty ? (
             <EmptyState model={model} />
           ) : (

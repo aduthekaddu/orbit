@@ -1,4 +1,3 @@
--- Custom SQL migration file, put your code below! --
 CREATE VIRTUAL TABLE messages_fts USING fts5(content, content='messages', content_rowid='rowid');
 --> statement-breakpoint
 CREATE TRIGGER messages_fts_ai AFTER INSERT ON messages BEGIN

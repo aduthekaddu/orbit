@@ -46,11 +46,13 @@ export function CommandPalette({
       setHits([]);
       return;
     }
+    setHits([]);
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       fetch(`/api/search?q=${encodeURIComponent(query)}`, { signal: controller.signal })
         .then((response) => (response.ok ? response.json() : { hits: [] }))
         .then((payload: { hits?: unknown }) => {
+          if (controller.signal.aborted) return;
           if (!Array.isArray(payload.hits)) {
             setHits([]);
             return;

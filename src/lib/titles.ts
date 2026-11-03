@@ -1,4 +1,5 @@
 import { generateText, type LanguageModel } from "ai";
+import { after } from "next/server";
 import { chatTitle, replaceFallbackTitle } from "./messages";
 
 export const TITLE_ASK = "Write a title of at most six words.";
@@ -25,7 +26,8 @@ export function startChatTitle(input: {
 }): void {
   const firstMessage = input.firstMessage.trim();
   if (input.messagesBeforeTurn !== 0 || !firstMessage || !input.fallbackTitle) return;
-  void saveTitle(input, firstMessage);
+  const pending = saveTitle(input, firstMessage);
+  after(() => pending);
 }
 
 async function saveTitle(
@@ -46,7 +48,10 @@ async function saveTitle(
       maxRetries: 0,
     });
     const next = cleanTitle(result.text);
-    if (!next) return;
+    if (!next) {
+      input.onError("The title response was empty");
+      return;
+    }
     replaceFallbackTitle(input.chatId, input.fallbackTitle, next);
   } catch (error) {
     const message = error instanceof Error ? error.message : "The title request failed";
