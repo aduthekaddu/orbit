@@ -1,3 +1,4 @@
+import Database from "better-sqlite3";
 import { focusedHead } from "./chat-tree";
 import { db } from "./db";
 import { getChatForUser } from "./messages";
@@ -53,7 +54,10 @@ export function searchMessages(userId: string, q: string): SearchHit[] {
     return rows.flatMap((row) =>
       row.role === "user" || row.role === "assistant" ? [{ ...row, role: row.role }] : [],
     );
-  } catch {
+  } catch (error) {
+    console.error("[search] query failed", {
+      code: error instanceof Database.SqliteError ? error.code : "UNKNOWN",
+    });
     return [];
   }
 }

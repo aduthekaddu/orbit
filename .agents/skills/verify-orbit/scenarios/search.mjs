@@ -8,7 +8,7 @@ export default async function search({ page, origin, step, shot }) {
   await page.goto(`${origin}/c/${secondId}`);
   await page.getByRole("textbox").fill(`[qa:zebracorn] ${stack}`);
   await page.getByRole("textbox").press("Enter");
-  const reply = page.getByText("zebracorn");
+  const reply = page.locator('[data-message-role="assistant"]').getByText("A zebracorn stood in the road.", { exact: true });
   const replied = await reply.waitFor({ timeout: 30_000 }).then(() => true, () => false);
   step("second chat gets a reply", replied);
   await shot("long-title");
@@ -30,15 +30,15 @@ export default async function search({ page, origin, step, shot }) {
   const before = await (await page.request.get(`${origin}/api/chats/${secondId}`)).json();
   await hit.click();
   await page.waitForURL(new RegExp(`/c/${secondId}\\?m=`), { timeout: 10_000 });
-  await page.getByText("zebracorn").first().waitFor({ timeout: 10_000 });
+  await reply.waitFor({ timeout: 10_000 });
   await shot("opened");
   const after = await (await page.request.get(`${origin}/api/chats/${secondId}`)).json();
-  step("opened chat shows the matching message", await page.getByText("zebracorn").first().isVisible());
+  step("opened chat shows the matching message", await reply.isVisible());
   step("opening the hit keeps the stored head", after.headId === before.headId, `before=${before.headId} after=${after.headId}`);
 
   let titled = false;
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    titled = await page.getByRole("link", { name: "Mock title" }).isVisible().catch(() => false);
+    titled = await page.locator(`a[href="/c/${secondId}"]`).getByText("Mock title", { exact: true }).isVisible().catch(() => false);
     if (titled) break;
     await page.reload();
     await page.getByRole("textbox").waitFor({ timeout: 10_000 }).catch(() => {});

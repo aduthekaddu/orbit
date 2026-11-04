@@ -6,4 +6,6 @@ The browser opens two chats. The second message is a stack trace tagged `[qa:zeb
 
 The scenario saves `long-title.png`, `before.png` or `results.png`, `opened.png`, `title.png`, and `mobile.png` under `.verify/evidence/search/`. The mobile view is 390 by 844. On a build without message search, the palette step fails and the shot is `before.png`.
 
+Run `browse search-focus` to check user-message focus in a long chat and scrolling during a follow-up reply on a phone. Opening the result must keep the saved branch head. The scenario saves `user-hit.png` and `follow-up-stream.png` under `.verify/evidence/search-focus/`.
+
 Run `cleanup` after the server stops. Evidence stays on disk.
