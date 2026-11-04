@@ -55,10 +55,28 @@ test("a prefix of the last token matches", () => {
   assert.ok(hits.some((hit) => hit.messageId === "m-zebra"));
 });
 
-test("hostile search text returns no error", () => {
+test("hostile search text returns no error", (t) => {
+  const diagnostic = t.mock.method(console, "error", () => {});
   for (const query of ['"', "*", "-", "NEAR", "("]) {
     const hits = search.searchMessages("u1", query);
     assert.ok(Array.isArray(hits), query);
+  }
+  assert.equal(diagnostic.mock.callCount(), 0);
+});
+
+test("a broken search index records a diagnostic without message or query text", (t) => {
+  const diagnostic = t.mock.method(console, "error", () => {});
+  db.$client.exec("SAVEPOINT search_failure");
+  try {
+    db.$client.exec("DROP TABLE messages_fts");
+    assert.deepEqual(search.searchMessages("u1", "privatequerytoken"), []);
+    assert.equal(diagnostic.mock.callCount(), 1);
+    assert.deepEqual(diagnostic.mock.calls[0]?.arguments[1], { code: "SQLITE_ERROR" });
+    const output = JSON.stringify(diagnostic.mock.calls[0]?.arguments);
+    assert.match(output, /SQLITE_ERROR/);
+    assert.doesNotMatch(output, /privatequerytoken|zebracorn|stood in the road/);
+  } finally {
+    db.$client.exec("ROLLBACK TO search_failure; RELEASE search_failure");
   }
 });
 
