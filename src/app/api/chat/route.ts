@@ -4,8 +4,9 @@ import { ARTIFACT_INSTRUCTIONS } from "@/lib/artifacts/detect";
 import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
 import { assistantHasVisiblePart, settleInterruptedParts } from "@/lib/genui/spec";
 import { chatTools } from "@/lib/genui/tool";
-import { ensureChat, planChatWrite, replyGuard, shouldSaveReply, textFromParts, touchChat, upsertMessage, listMessages } from "@/lib/messages";
+import { chatTitle, ensureChat, listMessages, planChatWrite, replyGuard, shouldSaveReply, storedMessageCount, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
+import { startChatTitle } from "@/lib/titles";
 import { getSettings } from "@/lib/settings";
 import { getSession, unauthorized } from "@/lib/session";
 
@@ -65,6 +66,7 @@ export async function POST(request: Request) {
   if (!chat) return Response.json({ error: "Not found" }, { status: 404 });
 
   const incoming = parsed.data.messages;
+  const messagesBeforeTurn = storedMessageCount(chat.id);
   const write = planChatWrite(chat.id, incoming, parsed.data.trigger, parsed.data.messageId, parsed.data.editMessageId);
   if ("error" in write) {
     if (write.error === "invalid-edit") {
@@ -80,6 +82,21 @@ export async function POST(request: Request) {
   const title = textFromParts(firstUser?.parts).trim();
   if (title) touchChat(chat.id, title);
   else touchChat(chat.id);
+  if (title) {
+    startChatTitle({
+      messagesBeforeTurn,
+      chatId: chat.id,
+      firstMessage: title,
+      fallbackTitle: chatTitle(title),
+      model: orbitModel({
+        baseUrl: settings.baseUrl,
+        apiKey: settings.apiKey,
+        model: settings.model,
+        chatId: chat.id,
+      }),
+      onError: (message) => console.error("chat title", sanitize(message, settings.apiKey)),
+    });
+  }
 
   const stored = new Map(listMessages(chat.id).map((message) => [message.id, message]));
   const { hadReply, expected } = replyGuard(chat.id, write.regenerate, write.responseId, lastUser?.id);

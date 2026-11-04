@@ -9,7 +9,7 @@ Orbit grows in slices. A slice is one pull request that ships one user-visible c
 | 3 | [Chat polish](03.md) | `feat/chat-polish` | Shipped in #16 |
 | 4 | [Branching](04.md) | `feat/branching` | Draft in #17 |
 | 5 | [Artifact panel](05.md) | `feat/artifacts` | Draft in #18 |
-| 6 | [Titles and history search](06.md) | `feat/history-search` | Planned |
+| 6 | [Titles and history search](06.md) | `feat/history-search` | Draft in #19 |
 | 7 | [Web search](07.md) | `feat/search` | Planned |
 | 8 | [Code sandbox](08.md) | `feat/sandbox` | Planned |
 | 9 | [GitHub](09.md) | `feat/github-mcp` | Planned |

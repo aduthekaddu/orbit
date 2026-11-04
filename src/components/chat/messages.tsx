@@ -129,7 +129,7 @@ function UserMessage() {
   const touch = useCoarsePointer();
   if (editing) return <UserEditComposer />;
   return (
-    <MessagePrimitive.Root data-turn-id={id} tabIndex={-1} className="mx-auto flex w-full scroll-mt-6 outline-none max-w-widget animate-rise flex-col items-end gap-1.5">
+    <MessagePrimitive.Root data-turn-id={id} data-message-id={id} tabIndex={-1} className="mx-auto flex w-full scroll-mt-6 outline-none max-w-widget animate-rise flex-col items-end gap-1.5">
       <div className="flex w-full items-end justify-end gap-1.5">
         <ActionBarPrimitive.Root autohide={touch ? "never" : "always"} className="flex">
           <CopyAction />

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Command, defaultFilter } from "cmdk";
 import { ChatCircleIcon, GearSixIcon, MagnifyingGlassIcon, NotePencilIcon } from "@phosphor-icons/react";
@@ -31,6 +32,54 @@ export function CommandPalette({
   onAction: () => void;
 }) {
   const router = useRouter();
+  const [search, setSearch] = useState("");
+  const [hits, setHits] = useState<{ chatId: string; chatTitle: string; messageId: string; snippet: string }[]>([]);
+
+  useEffect(() => {
+    if (!open) {
+      setSearch("");
+      setHits([]);
+      return;
+    }
+    const query = search.trim();
+    if (!query) {
+      setHits([]);
+      return;
+    }
+    setHits([]);
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      fetch(`/api/search?q=${encodeURIComponent(query)}`, { signal: controller.signal })
+        .then((response) => (response.ok ? response.json() : { hits: [] }))
+        .then((payload: { hits?: unknown }) => {
+          if (controller.signal.aborted) return;
+          if (!Array.isArray(payload.hits)) {
+            setHits([]);
+            return;
+          }
+          setHits(
+            payload.hits.flatMap((hit) => {
+              if (!hit || typeof hit !== "object") return [];
+              const row = hit as Record<string, unknown>;
+              if (
+                typeof row.chatId !== "string" ||
+                typeof row.chatTitle !== "string" ||
+                typeof row.messageId !== "string" ||
+                typeof row.snippet !== "string"
+              ) {
+                return [];
+              }
+              return [{ chatId: row.chatId, chatTitle: row.chatTitle, messageId: row.messageId, snippet: row.snippet }];
+            }),
+          );
+        })
+        .catch(() => {});
+    }, 150);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [open, search]);
 
   function run(action: () => void) {
     onOpenChange(false);
@@ -49,7 +98,7 @@ export function CommandPalette({
         <Command filter={filter} loop>
           <div className="flex items-center gap-2.5 border-b px-3.5">
             <MagnifyingGlassIcon weight="light" className="size-4 shrink-0 text-muted-foreground" />
-            <Command.Input placeholder="Search" className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground" />
+            <Command.Input value={search} onValueChange={setSearch} placeholder="Search" className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground" />
           </div>
           <ScrollFade axis="y" fade="var(--popover)" scrollerClassName="max-h-[min(24rem,60vh)]">
             <Command.List className="p-1.5">
@@ -77,6 +126,25 @@ export function CommandPalette({
                     >
                       <ChatCircleIcon weight="light" className="size-4 shrink-0" />
                       <span className="truncate">{chatLabel(chat.title)}</span>
+                    </Command.Item>
+                  ))}
+                </Command.Group>
+              )}
+              {hits.length > 0 && (
+                <Command.Group heading="Messages" className={groupClass}>
+                  {hits.map((hit) => (
+                    <Command.Item
+                      key={hit.messageId}
+                      value={hit.messageId}
+                      keywords={[chatLabel(hit.chatTitle), hit.snippet, search]}
+                      onSelect={() => run(() => router.push(`/c/${hit.chatId}?m=${encodeURIComponent(hit.messageId)}`))}
+                      className="flex cursor-pointer items-start gap-2.5 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground select-none data-[selected=true]:bg-accent data-[selected=true]:text-foreground"
+                    >
+                      <ChatCircleIcon weight="light" className="mt-0.5 size-4 shrink-0" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{chatLabel(hit.chatTitle)}</span>
+                        <span className="block truncate">{hit.snippet}</span>
+                      </span>
                     </Command.Item>
                   ))}
                 </Command.Group>

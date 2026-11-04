@@ -9,15 +9,19 @@ import { requireUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
-export default async function ChatPage({ params, searchParams }: {
+export default async function ChatPage({
+  params,
+  searchParams,
+}: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ artifact?: string | string[] }>;
+  searchParams: Promise<{ m?: string | string[]; artifact?: string | string[] }>;
 }) {
   const session = await requireUser();
   const { id } = await params;
+  const query = await searchParams;
+  const focusMessageId = typeof query.m === "string" ? query.m : null;
   const chat = getChatForUser(id, session.user.id);
   if (!chat) notFound();
-  const query = await searchParams;
   const repository = artifactHistory(messageRepository(id), typeof query.artifact === "string" ? query.artifact : undefined);
   const settings = getSettings();
   const ready = Boolean(settings?.baseUrl && settings.apiKey && settings.model);
@@ -33,7 +37,7 @@ export default async function ChatPage({ params, searchParams }: {
   }
   return (
     <div className="min-h-0 flex-1">
-      <ChatPanel key={id} chatId={id} initialHistory={repository} ready={ready} model={settings?.model ?? ""} />
+      <ChatPanel key={`${id}:${focusMessageId ?? ""}`} chatId={id} focusMessageId={focusMessageId} initialHistory={repository} ready={ready} model={settings?.model ?? ""} />
     </div>
   );
 }

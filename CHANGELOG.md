@@ -8,8 +8,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Added
 
+- A new chat gets a short title from the model. The command palette finds a message by its text. (#19)
 - Preview HTML, SVG, JSX and TSX code blocks in a sandboxed panel. Switch between Preview and Code, reload, copy or download the source, and send runtime errors to the composer with Fix. The open preview survives a page reload and fills the screen on a phone.
-
 - Four starter prompts on an empty chat. A click fills the composer and does not send. (#16)
 - `verify.mjs browse <scenario>` drives Chrome through Playwright and saves screenshots. `launch --mock` starts the mock provider. (#16)
 - `ARCHITECTURE.md` with a stack diagram and a checked state chart of one chat turn.
@@ -25,6 +25,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - `scripts/qa/genui-qa.cjs` saves screenshots under `.verify/evidence/genui-qa/` instead of `docs/qa/screenshots/`.
 
 ### Fixed
+
+- Search results scroll to and highlight user messages. Replies follow the stream after opening a search result. Search database failures log an error code without message text. (#19)
 
 - Keep artifact previews open when canceling a code edit, editing an earlier block or reloading an older branch. Preserve TSX download extensions, support keyboard tabs, show fades on long errors and reveal the composer after Fix on a phone.
 

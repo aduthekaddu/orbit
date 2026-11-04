@@ -267,6 +267,20 @@ function start(res) {
   send(res, chunk([{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: null }]));
 }
 
+function jsonTitle(res) {
+  res.writeHead(200, { "content-type": "application/json" });
+  res.end(
+    JSON.stringify({
+      id: "chatcmpl-title",
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1000),
+      model: MODEL,
+      choices: [{ index: 0, message: { role: "assistant", content: "Mock title" }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+    }),
+  );
+}
+
 function textResponse(res, text) {
   start(res);
   for (const part of text.match(/.{1,24}/gs) ?? []) {
@@ -400,6 +414,14 @@ const server = http.createServer((req, res) => {
     const prompt = lastUserText(body);
     const scenario = scenarioOf(prompt);
     console.log(`mock request scenario=${scenario}`);
+    if (raw.includes("Write a title of at most six words.") && body.stream !== true) {
+      jsonTitle(res);
+      return;
+    }
+    if (scenario === "zebracorn") {
+      textResponse(res, "A zebracorn stood in the road.");
+      return;
+    }
     if (scenario === "artifact-multiple") {
       textResponse(res, "```html\n<h1>First artifact</h1>\n```\n\n```html\n<h1>Second artifact</h1>\n```\n\n```html\n<h1>Third artifact</h1>\n```");
       return;

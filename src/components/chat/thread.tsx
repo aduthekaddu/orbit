@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef } from "react";
-import { ThreadPrimitive, useAui, useAuiState } from "@assistant-ui/react";
+import { useEffect, useRef, useState } from "react";
+import { ThreadPrimitive, useAui, useAuiEvent, useAuiState } from "@assistant-ui/react";
 import { ArrowDownIcon } from "@phosphor-icons/react";
 import { Figure } from "@/components/figure";
 import { Button } from "@/components/ui/button";
@@ -17,13 +17,42 @@ const STARTERS = [
   { label: "Brainstorm", prompt: "Give me ten ideas for " },
 ];
 
-export function Thread({ ready, model }: { ready: boolean; model: string }) {
+export function Thread({ ready, model, focusMessageId }: { ready: boolean; model: string; focusMessageId?: string | null }) {
   const empty = useAuiState((state) => state.thread.isEmpty);
+  const [autoScroll, setAutoScroll] = useState(!focusMessageId);
+  useAuiEvent("thread.runStart", () => setAutoScroll(true));
   const viewport = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const root = viewport.current;
+    if (!focusMessageId || empty || !root) return;
+    let ring: number | undefined;
+    const focus = () => {
+      const el = root.querySelector(`[data-message-id="${CSS.escape(focusMessageId)}"]`);
+      if (!(el instanceof HTMLElement)) return;
+      observer.disconnect();
+      el.scrollIntoView({ block: "center" });
+      el.style.boxShadow = "0 0 0 2px var(--sun)";
+      ring = window.setTimeout(() => {
+        el.style.boxShadow = "";
+      }, 1600);
+    };
+    const observer = new MutationObserver(focus);
+    observer.observe(root, { childList: true, subtree: true });
+    focus();
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(ring);
+    };
+  }, [empty, focusMessageId]);
   return (
     <TooltipProvider>
       <ThreadPrimitive.Root className="@container/thread relative flex h-full min-h-0 flex-col">
-        <ThreadPrimitive.Viewport ref={viewport} className="@container flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-8 scrollbar-thin">
+        <ThreadPrimitive.Viewport
+          ref={viewport}
+          scrollToBottomOnInitialize={!focusMessageId}
+          autoScroll={autoScroll}
+          className="@container flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-8 scrollbar-thin"
+        >
           {empty ? (
             <EmptyState model={model} />
           ) : (

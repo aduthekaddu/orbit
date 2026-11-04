@@ -54,6 +54,16 @@ export function touchChat(id: string, title?: string) {
   db.update(chats).set({ title: nextTitle, updatedAt: new Date() }).where(eq(chats.id, id)).run();
 }
 
+export function storedMessageCount(chatId: string): number {
+  const row = db.$client.prepare("select count(*) as n from messages where chat_id = ?").get(chatId) as { n: number };
+  return row.n;
+}
+
+export function replaceFallbackTitle(chatId: string, fallback: string, title: string) {
+  if (!title || title === fallback) return;
+  db.update(chats).set({ title }).where(and(eq(chats.id, chatId), eq(chats.title, fallback))).run();
+}
+
 type ReplyEnd = {
   regenerate: boolean;
   interrupted: boolean;
