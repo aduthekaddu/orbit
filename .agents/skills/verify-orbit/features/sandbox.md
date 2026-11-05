@@ -23,6 +23,8 @@ Screenshots and output remain under `.verify/evidence/sandbox/` after cleanup. T
 
 `browse sandbox-tool-error` saves a framework validation error and checks that its reason appears in the failed card before and after reload.
 
+`browse sandbox-scroll` saves real Docker output near the output limit. Require bounded source, stdout, stderr, and error areas with their last lines reachable by scrolling. It checks horizontal scrolling and page width on desktop and at 390 pixels.
+
 ## Real provider
 
 Launch with the sandbox enabled. Pass `ORBIT_BASE_URL`, `ORBIT_API_KEY`, and `ORBIT_MODEL` through the environment, then run `node .agents/skills/verify-orbit/verify.mjs browse sandbox-real`.

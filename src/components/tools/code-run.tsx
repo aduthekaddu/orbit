@@ -6,10 +6,12 @@ const errorSchema = z.union([z.object({ ok: z.literal(false).optional(), error: 
 
 function CodeText({ text, kind }: { text: string; kind: "source" | "stdout" | "stderr" }) {
   return (
-    <ScrollFade axis="x" fade="var(--surface-sunken)" className="min-w-0 rounded-md border bg-surface-sunken">
-      <pre data-code-stdout={kind === "stdout" ? "" : undefined} data-code-stderr={kind === "stderr" ? "" : undefined} className="w-max min-w-full p-3 font-mono text-xs leading-5">
-        <code>{text}</code>
-      </pre>
+    <ScrollFade axis="y" fade="var(--surface-sunken)" className="min-w-0 rounded-md border bg-surface-sunken" scrollerClassName="max-h-tool-content">
+      <ScrollFade axis="x" fade="var(--surface-sunken)" className="min-w-0">
+        <pre data-code-stdout={kind === "stdout" ? "" : undefined} data-code-stderr={kind === "stderr" ? "" : undefined} className="w-max min-w-full p-3 font-mono text-xs leading-5">
+          <code>{text}</code>
+        </pre>
+      </ScrollFade>
     </ScrollFade>
   );
 }
@@ -21,7 +23,11 @@ export function CodeRun({ input, output }: { input: unknown; output: unknown }) 
   return (
     <div className="min-w-0 space-y-3">
       {parsedInput.success && <CodeText text={parsedInput.data.code} kind="source" />}
-      {error.success ? <p className="text-sm text-destructive">{typeof error.data === "string" ? error.data : error.data.error}</p> : parsedOutput.success ? (
+      {error.success ? (
+        <ScrollFade axis="y" fade="var(--card)" className="min-w-0" scrollerClassName="max-h-tool-content">
+          <p className="whitespace-pre-wrap break-words text-sm text-destructive">{typeof error.data === "string" ? error.data : error.data.error}</p>
+        </ScrollFade>
+      ) : parsedOutput.success ? (
         <>
           <div className="min-w-0 space-y-1">
             <p className="text-xs text-muted-foreground">stdout</p>

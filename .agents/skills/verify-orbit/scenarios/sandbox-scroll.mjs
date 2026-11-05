@@ -25,6 +25,7 @@ export default async function sandboxScroll({ page, origin, step, shot }) {
   await page.goto(`${origin}/c/${id}`);
   const cards = page.locator('[data-tool-name="run_code"]');
   await cards.first().waitFor();
+  await page.locator('[data-tool-name="run_code"] .opacity-100').first().waitFor();
   for (const [name, width, height] of [["desktop", 1280, 800], ["mobile", 390, 844]]) {
     await page.setViewportSize({ width, height });
     const cardHeight = await cards.first().evaluate((card) => card.getBoundingClientRect().height);
@@ -44,6 +45,17 @@ export default async function sandboxScroll({ page, origin, step, shot }) {
       });
       step(`${name} ${end} remains reachable by inner scrolling`, scrolls && (await well.textContent()).trimEnd().endsWith(end));
     }
+    const horizontal = await wells.first().evaluate((element) => {
+      const card = element.closest('[data-tool-name]');
+      for (let node = element.parentElement; node && node !== card; node = node.parentElement) {
+        if (["auto", "scroll"].includes(getComputedStyle(node).overflowX) && node.scrollWidth > node.clientWidth + 1) {
+          node.scrollLeft = node.scrollWidth;
+          return node.scrollLeft > 0;
+        }
+      }
+      return false;
+    });
+    step(`${name} long source lines still scroll sideways`, horizontal);
     const error = cards.last().locator("p.text-destructive");
     const errorScrolls = await error.evaluate((element) => {
       const card = element.closest('[data-tool-name]');
@@ -57,6 +69,12 @@ export default async function sandboxScroll({ page, origin, step, shot }) {
     });
     step(`${name} long errors stay bounded and keep their last line`, errorScrolls && (await error.textContent()).endsWith("END-ERROR") && await cards.last().evaluate((card) => card.getBoundingClientRect().height < 500));
     step(`${name} page fits its width`, await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+    const exit = cards.first().getByText("Exit 0", { exact: true });
+    await exit.evaluate((element) => element.scrollIntoView({ block: "center" }));
+    const exitBox = await exit.boundingBox();
+    const composerBox = await page.getByPlaceholder("Ask anything").boundingBox();
+    step(`${name} exit details remain reachable above the composer`, !!exitBox && !!composerBox && exitBox.y + exitBox.height < composerBox.y);
+    await shot(`${name}-output`);
     await cards.last().scrollIntoViewIfNeeded();
     await shot(name);
   }
