@@ -9,6 +9,8 @@ export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 export type SettingsRecord = {
   baseUrl: string;
   apiKey: string;
+  searxngUrl: string;
+  tavilyApiKey: string;
   model: string;
   reasoningEffort: ReasoningEffort;
 };
@@ -18,6 +20,8 @@ export type PublicSettings = {
   model: string;
   reasoningEffort: ReasoningEffort;
   keySet: boolean;
+  searxngUrl: string;
+  tavilyKeySet: boolean;
 };
 
 function asEffort(value: string): ReasoningEffort {
@@ -31,6 +35,8 @@ export function getSettings(): SettingsRecord | null {
   return {
     baseUrl: row.baseUrl,
     apiKey: row.apiKey,
+    searxngUrl: row.searxngUrl,
+    tavilyApiKey: row.tavilyApiKey,
     model: row.model,
     reasoningEffort: asEffort(row.reasoningEffort),
   };
@@ -42,12 +48,16 @@ export function toPublicSettings(row: SettingsRecord | null): PublicSettings {
     model: row?.model ?? "",
     reasoningEffort: row?.reasoningEffort ?? "medium",
     keySet: Boolean(row?.apiKey),
+    searxngUrl: row?.searxngUrl ?? "",
+    tavilyKeySet: Boolean(row?.tavilyApiKey),
   };
 }
 
 export function saveSettings(input: {
   baseUrl: string;
   apiKey?: string;
+  searxngUrl?: string;
+  tavilyApiKey?: string;
   model: string;
   reasoningEffort: ReasoningEffort;
 }) {
@@ -60,6 +70,8 @@ export function saveSettings(input: {
     id: 1,
     baseUrl,
     apiKey,
+    searxngUrl: input.searxngUrl?.trim().replace(/\/+$/, "") ?? current?.searxngUrl ?? "",
+    tavilyApiKey: input.tavilyApiKey?.trim() || current?.tavilyApiKey || "",
     model: input.model.trim(),
     reasoningEffort: input.reasoningEffort,
     updatedAt: new Date(),

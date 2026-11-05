@@ -91,3 +91,9 @@ Widgets are cards on the chat column: `bg-card`, `border`, `shadow-card`, `round
 - **Actions.** Use `Button`, so focus gets the ring instead of the browser outline.
 - **One place per value.** A value bound to state renders once. If a callout shows a note, the button does not repeat it.
 - **Failures.** A spec that fails validation renders one line in `text-destructive` with a disclosure for the raw JSON, collapsed by default.
+
+## Tool run cards
+
+Every tool call uses a bordered card in the chat column. The header shows the tool name and Running, Succeeded, Failed, or Cancelled. Running uses `OrbitMark`. Status comes from the message part, so the same card appears after reload.
+
+Web search results are text links with short snippets. Each result has a bordered square with the domain's first letter. Unknown tools show their JSON output in a collapsed Output disclosure.

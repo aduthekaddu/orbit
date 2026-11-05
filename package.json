@@ -29,6 +29,7 @@
     "@radix-ui/react-toggle-group": "1.2.1",
     "@radix-ui/react-tooltip": "1.4.1",
     "ai": "7.0.159",
+    "axios": "1.21.0",
     "better-auth": "1.7.14",
     "better-sqlite3": "13.0.3",
     "class-variance-authority": "0.7.1",
@@ -45,7 +46,8 @@
     "tailwind-merge": "3.4.0",
     "zod": "4.6.7",
     "@json-render/core": "0.21.3",
-    "@json-render/react": "0.21.3"
+    "@json-render/react": "0.21.3",
+    "@tavily/core": "0.7.14"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",

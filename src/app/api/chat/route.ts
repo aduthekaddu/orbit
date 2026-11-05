@@ -3,7 +3,8 @@ import { z } from "zod";
 import { ARTIFACT_INSTRUCTIONS } from "@/lib/artifacts/detect";
 import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
 import { assistantHasVisiblePart, settleInterruptedParts } from "@/lib/genui/spec";
-import { chatTools } from "@/lib/genui/tool";
+import { toolsFor } from "@/lib/tools";
+import { searchAnswerStep } from "@/lib/tools/answer-step";
 import { chatTitle, ensureChat, listMessages, planChatWrite, replyGuard, shouldSaveReply, storedMessageCount, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { startChatTitle } from "@/lib/titles";
@@ -108,6 +109,7 @@ export async function POST(request: Request) {
 
   try {
     const allowReasoning = modelAllowsReasoning(settings.baseUrl, settings.model);
+    const tools = toolsFor(settings);
     const result = streamText({
       model: orbitModel({
         baseUrl: settings.baseUrl,
@@ -115,10 +117,11 @@ export async function POST(request: Request) {
         model: settings.model,
         chatId: chat.id,
       }),
-      instructions: `${RENDER_UI_SYSTEM}\n\n${ARTIFACT_INSTRUCTIONS}`,
-      messages: await convertToModelMessages(uiMessages, { tools: chatTools }),
-      tools: chatTools,
-      stopWhen: stepCountIs(1),
+      instructions: `${RENDER_UI_SYSTEM}\n\n${ARTIFACT_INSTRUCTIONS}${tools.web_search ? "\n\nUse web_search for recent events, prices, or facts you are unsure of. Cite sources as markdown links to result URLs." : ""}`,
+      messages: await convertToModelMessages(uiMessages, { tools }),
+      tools,
+      stopWhen: stepCountIs(5),
+      prepareStep: tools.web_search ? searchAnswerStep : undefined,
       abortSignal: request.signal,
       ...(allowReasoning ? reasoningOptions(settings.reasoningEffort) : {}),
     });
@@ -127,7 +130,7 @@ export async function POST(request: Request) {
     // its own id and the next turn stores the assistant reply a second time.
     const uiStream = toUIMessageStream({
       stream: result.stream,
-      tools: chatTools,
+      tools,
       originalMessages: uiMessages,
       generateMessageId: () => write.responseId,
       onError: (error) => streamErrorMessage(error, settings.apiKey),

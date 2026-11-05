@@ -1,9 +1,32 @@
+import type { ToolCallMessagePartProps } from "@assistant-ui/react";
+
 export type ToolRunStatus = "running" | "succeeded" | "failed" | "cancelled";
 export type ToolRunPart =
   | { state: "input-streaming" | "input-available" }
   | { state: "output-available"; output: unknown }
   | { state: "output-error"; errorText?: string };
 
-export function toolRunStatus(_part: ToolRunPart, _stopped = false): ToolRunStatus {
-  return "running";
+export function toolRunStatus(part: ToolRunPart, stopped = false): ToolRunStatus {
+  switch (part.state) {
+    case "output-available":
+      return part.output && typeof part.output === "object" && "ok" in part.output && part.output.ok === false ? "failed" : "succeeded";
+    case "output-error":
+      return part.errorText === "Stopped" ? "cancelled" : "failed";
+    case "input-streaming":
+    case "input-available":
+      return stopped ? "cancelled" : "running";
+  }
+}
+
+export function toolCallRunStatus(props: Pick<ToolCallMessagePartProps, "status" | "result" | "isError">): ToolRunStatus {
+  let part: ToolRunPart;
+  if (props.isError) {
+    const error = props.result && typeof props.result === "object" && "error" in props.result && typeof props.result.error === "string" ? props.result.error : undefined;
+    part = { state: "output-error", errorText: error };
+  } else if (props.result !== undefined) {
+    part = { state: "output-available", output: props.result };
+  } else {
+    part = { state: "input-available" };
+  }
+  return toolRunStatus(part, props.status.type !== "running");
 }

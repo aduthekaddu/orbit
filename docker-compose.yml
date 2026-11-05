@@ -11,5 +11,18 @@ services:
       ORBIT_BASE_URL: ${ORBIT_BASE_URL:-}
       ORBIT_API_KEY: ${ORBIT_API_KEY:-}
       ORBIT_MODEL: ${ORBIT_MODEL:-}
+      ORBIT_SEARXNG_URL: ${ORBIT_SEARXNG_URL:-http://searxng:8080}
+      ORBIT_TAVILY_API_KEY: ${ORBIT_TAVILY_API_KEY:-}
     command: ["npm", "start", "--", "-p", "3210", "-H", "0.0.0.0"]
+    restart: "no"
+
+  searxng:
+    image: searxng/searxng@sha256:892ed5710603e38f9dc201e6a0b2f3f14dbdb8108edcadac30e55b165c979fb7
+    ports:
+      - "127.0.0.1:8888:8080"
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - 'export SEARXNG_SECRET="$$(python -c "import secrets; print(secrets.token_hex(32))")"; exec /usr/local/searxng/entrypoint.sh'
     restart: "no"

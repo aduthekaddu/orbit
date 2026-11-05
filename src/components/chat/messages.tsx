@@ -19,8 +19,7 @@ import { IconAction, iconActionClass } from "./icon-action";
 import { MarkdownText } from "./markdown-text";
 import { MessageTextEditor } from "./message-editor";
 import { Reasoning } from "./reasoning";
-import { RenderUiPart } from "@/components/genui/render-ui";
-import { RENDER_UI_TOOL } from "@/lib/genui/catalog";
+import { RunCard } from "@/components/tools/run-card";
 import { useCoarsePointer } from "./use-coarse-pointer";
 import { useEditTarget } from "./chat-id";
 import { BranchPicker } from "./branch-picker";
@@ -42,7 +41,7 @@ const Pending: EmptyMessagePartComponent = ({ status }) => {
 
 const PlainText: TextMessagePartComponent = ({ text }) => <>{text}</>;
 
-const assistantParts: PartComponents = { Text: () => <MarkdownText editable />, Reasoning, Empty: Pending, tools: { by_name: { [RENDER_UI_TOOL]: RenderUiPart } } };
+const assistantParts: PartComponents = { Text: () => <MarkdownText editable />, Reasoning, Empty: Pending, tools: { Override: RunCard } };
 
 const userParts: PartComponents = { Text: PlainText };
 

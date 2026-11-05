@@ -1,5 +1,5 @@
 import { tool } from "ai";
-import { catalog, RENDER_UI_TOOL, RENDER_UI_TOOL_DESCRIPTION } from "./catalog";
+import { catalog, RENDER_UI_TOOL_DESCRIPTION } from "./catalog";
 import { parseRenderSpec } from "./spec";
 
 export const renderUiTool = tool({
@@ -26,7 +26,3 @@ export const renderUiTool = tool({
   ],
   execute: async (input) => parseRenderSpec(input),
 });
-
-export const chatTools = {
-  [RENDER_UI_TOOL]: renderUiTool,
-};

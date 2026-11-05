@@ -95,3 +95,5 @@ Screenshots: `starters.png`, `filled.png`, `phone-390x844.png`.
 - The mock counts `fail-first` failures for each prompt text. `retry-stop` adds the time to the prompt, so a second run fails three times again.
 - The SDK waits 2 seconds, then 4 seconds, between retries. The **Retry** button shows about 6 seconds after the send.
 - Ctrl+K is the palette shortcut on Linux. On a Mac it is ⌘K.
+
+`browse search-tool` checks the web search settings and cards. See [Web search](./web-search.md).

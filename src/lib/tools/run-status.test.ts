@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { settleInterruptedParts } from "../genui/spec";
-import { toolRunStatus, type ToolRunPart, type ToolRunStatus } from "./run-status";
+import { toolCallRunStatus, toolRunStatus, type ToolRunPart, type ToolRunStatus } from "./run-status";
 
 const cases: Array<{ name: string; part: ToolRunPart; stopped?: boolean; expected: ToolRunStatus }> = [
   { name: "streaming input", part: { state: "input-streaming" }, expected: "running" },
@@ -25,4 +25,20 @@ test("a stopped call has the same status after persistence and reload", () => {
   const saved = settleInterruptedParts([{ type: "tool-web_search", toolCallId: "search-1", state: "input-available", input: { query: "orbit" } }], true);
   assert.deepEqual(saved, [{ type: "tool-web_search", toolCallId: "search-1", state: "output-error", input: { query: "orbit" }, errorText: "Stopped" }]);
   assert.equal(toolRunStatus({ state: "output-error", errorText: "Stopped" }), "cancelled");
+});
+
+test("an unresolved stopped server call is cancelled when assistant-ui reports pending tools", () => {
+  assert.equal(toolCallRunStatus({ status: { type: "requires-action", reason: "tool-calls" }, result: undefined, isError: false }), "cancelled");
+});
+
+test("a pending server call remains running while its turn streams", () => {
+  assert.equal(toolCallRunStatus({ status: { type: "running" }, result: undefined, isError: false }), "running");
+});
+
+test("a stored stopped call remains cancelled after assistant-ui conversion", () => {
+  assert.equal(toolCallRunStatus({ status: { type: "complete" }, result: { error: "Stopped" }, isError: true }), "cancelled");
+});
+
+test("a completed result stays succeeded when the next model step is stopped", () => {
+  assert.equal(toolCallRunStatus({ status: { type: "requires-action", reason: "tool-calls" }, result: { ok: true }, isError: false }), "succeeded");
 });
