@@ -1,0 +1,27 @@
+ARCHITECTURE.md
+  s_c92d9842ddcff6::t_18f6afbfda7b55 21
+CHANGELOG.md
+  s_c92d9842ddcff6::t_e0aac24ae1a0ea 31-32
+src/app/api/chat/route.ts
+  s_c92d9842ddcff6::t_4bc715b291f330 7,123
+src/lib/tools/answer-step.test.ts
+  s_c92d9842ddcff6::t_9bfce13f87f6e7 15,20,51
+src/lib/tools/answer-step.ts
+  s_c92d9842ddcff6::t_7adf709f929c6f 1,3,5-11,13-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c3d75d72d4b6987aa635f767a3b1a00844c6feb7",
+  "prompts": {},
+  "sessions": {
+    "s_c92d9842ddcff6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ab56-8b3c-76d2-a5ba-ee2e9e55496d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
