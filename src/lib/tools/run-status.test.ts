@@ -42,3 +42,9 @@ test("a stored stopped call remains cancelled after assistant-ui conversion", ()
 test("a completed result stays succeeded when the next model step is stopped", () => {
   assert.equal(toolCallRunStatus({ status: { type: "requires-action", reason: "tool-calls" }, result: { ok: true }, isError: false }), "succeeded");
 });
+
+test("an aborted search result is cancelled before and after reload", () => {
+  const result = { ok: false, query: "orbit", error: "Search was stopped" };
+  assert.equal(toolCallRunStatus({ status: { type: "complete" }, result, isError: false }), "cancelled");
+  assert.equal(toolRunStatus({ state: "output-available", output: result }), "cancelled");
+});
