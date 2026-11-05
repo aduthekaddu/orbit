@@ -4,7 +4,7 @@ import { ARTIFACT_INSTRUCTIONS } from "@/lib/artifacts/detect";
 import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
 import { assistantHasVisiblePart, settleInterruptedParts } from "@/lib/genui/spec";
 import { toolsFor } from "@/lib/tools";
-import { searchAnswerStep } from "@/lib/tools/answer-step";
+import { CHAT_STEP_LIMIT, searchAnswerStep } from "@/lib/tools/answer-step";
 import { chatTitle, ensureChat, listMessages, planChatWrite, replyGuard, shouldSaveReply, storedMessageCount, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { startChatTitle } from "@/lib/titles";
@@ -120,7 +120,7 @@ export async function POST(request: Request) {
       instructions: `${RENDER_UI_SYSTEM}\n\n${ARTIFACT_INSTRUCTIONS}${tools.web_search ? "\n\nUse web_search for recent events, prices, or facts you are unsure of. Cite sources as markdown links to result URLs." : ""}`,
       messages: await convertToModelMessages(uiMessages, { tools }),
       tools,
-      stopWhen: stepCountIs(5),
+      stopWhen: stepCountIs(CHAT_STEP_LIMIT),
       prepareStep: tools.web_search ? searchAnswerStep : undefined,
       abortSignal: request.signal,
       ...(allowReasoning ? reasoningOptions(settings.reasoningEffort) : {}),
