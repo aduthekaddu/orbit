@@ -1,0 +1,21 @@
+.agents/skills/verify-orbit/features/sandbox.md
+  s_51f76b6b47de21::t_333d67ed37bf93 26
+.agents/skills/verify-orbit/scenarios/sandbox-real.mjs
+  s_51f76b6b47de21::t_6fa1127f5f9d24 1,11-12,16,26-27,29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "73749d0df6cb93d6ec77abc864fafccb08cc5574",
+  "prompts": {},
+  "sessions": {
+    "s_51f76b6b47de21": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1acb6-e850-7de1-9938-5e46a5f7e771",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
