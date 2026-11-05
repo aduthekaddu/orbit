@@ -423,7 +423,7 @@ const server = http.createServer((req, res) => {
       return;
     }
     if (scenario === "search" || scenario === "search-loop") {
-      if (!body.tools?.length) {
+      if (!body.tools?.some((entry) => entry.function?.name === "web_search")) {
         let history;
         try { history = JSON.parse(prompt); } catch { history = null; }
         const result = Array.isArray(history)
@@ -431,6 +431,15 @@ const server = http.createServer((req, res) => {
           : null;
         const output = result?.output?.type === "json" ? result.output.value : null;
         if (output) {
+          if (prompt.includes("[qa:search-loop] orbit card") && body.tools?.some((entry) => entry.function?.name === "render_ui")) {
+            toolResponse(res, scenario, { root: "card", elements: { card: { type: "Card", props: { title: "Researched orbit" }, children: [] } } });
+            return;
+          }
+          if (prompt.includes("[qa:search-loop] orbit artifact")) {
+            const instructed = body.messages?.some((message) => message.role === "system" && message.content?.includes("fenced code block"));
+            textResponse(res, instructed ? "```html\n<h1>Researched orbit</h1>\n```" : "Artifact instructions missing.");
+            return;
+          }
           const first = output.ok === true ? output.results?.[0] : null;
           textResponse(res, first ? `Found [${first.title}](${first.url}).` : "Search is unavailable.");
           return;
