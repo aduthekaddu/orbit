@@ -3,7 +3,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import test, { type TestContext } from "node:test";
 import { z } from "zod";
 
-const composeEnv = { PATH: process.env.PATH ?? "", ORBIT_SANDBOX: "on" };
+const composeEnv: NodeJS.ProcessEnv = { PATH: process.env.PATH ?? "", NODE_ENV: "test", ORBIT_SANDBOX: "on" };
 const composeSchema = z.object({
   services: z.record(z.string(), z.object({
     environment: z.record(z.string(), z.string()).default({}),
@@ -40,4 +40,17 @@ test("default Compose has no Docker API access even when ORBIT_SANDBOX is set", 
   assert.notEqual(config.services.orbit.environment.ORBIT_SANDBOX, "on");
   assert.equal("sandbox-api" in config.services.orbit.networks, false);
   assert.equal("sandbox-api" in config.networks, false);
+});
+
+test("the explicit sandbox override enables the tool and its private Docker proxy together", (t) => {
+  if (!composeAvailable(t)) return;
+  const config = resolvedCompose(["docker-compose.yml", "docker-compose.sandbox.yml"]);
+  assert.ok(config.services["docker-socket-proxy"]);
+  assert.equal(config.services.orbit.environment.ORBIT_SANDBOX, "on");
+  assert.equal(config.services.orbit.environment.DOCKER_HOST, "tcp://docker-socket-proxy:2375");
+  assert.deepEqual(Object.keys(config.services.orbit.networks).sort(), ["default", "sandbox-api"]);
+  assert.deepEqual(Object.keys(config.services["docker-socket-proxy"].networks), ["sandbox-api"]);
+  assert.equal(config.networks["sandbox-api"].internal, true);
+  assert.equal(config.services["docker-socket-proxy"].environment.CONTAINERS, "1");
+  assert.equal(config.services["docker-socket-proxy"].environment.POST, "1");
 });

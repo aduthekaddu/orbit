@@ -50,6 +50,6 @@ Each run uses a fresh, digest-pinned image and passes source through stdin. The 
 
 Orbit keeps at most 64 KiB each of stdout and stderr. Docker log storage is disabled for these containers. The runner removes the container after success, program failure, timeout, or cancellation. No files last between runs. Images must be pulled separately. A code run never pulls an image.
 
-During development, the server uses the local Docker socket. Docker Compose gives Orbit access through a private socket proxy. Only that proxy mounts `/var/run/docker.sock`. The proxy permits container endpoints and their writes, and denies other Docker API groups.
+During development, the server uses the local Docker socket. The default Compose deployment has no Docker proxy. The optional `docker-compose.sandbox.yml` override enables the tool and connects Orbit to a private socket proxy. Only that proxy mounts `/var/run/docker.sock`. The proxy permits container endpoints and their writes, and denies other Docker API groups.
 
 The proxy does not validate container options. A compromised Orbit process with access to its container-create endpoint could request host mounts or a privileged container. The fixed `containerSpec` function is the boundary that prevents model input from doing that. The proxy reduces API access but does not make a compromised app safe for the host. Container isolation also depends on Docker and the host kernel.

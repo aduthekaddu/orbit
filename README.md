@@ -110,6 +110,12 @@ docker pull python:3.13-slim@sha256:d0a9e379c0c588befb0e427db17ca9731751d281f32c
 docker pull node:22-bookworm-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d
 ```
 
-Set `ORBIT_SANDBOX=on` in the server environment. For Compose, add it to `.env` and recreate Orbit with `docker compose up -d`. For a source build, start with `ORBIT_SANDBOX=on npm start -- -p 3210 -H 127.0.0.1`.
+For Compose, enable the tool and its private Docker proxy with the sandbox override.
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.sandbox.yml up -d --build
+```
+
+The default Compose deployment has no Docker proxy or Docker API connection. For a source build, start with `ORBIT_SANDBOX=on npm start -- -p 3210 -H 127.0.0.1`.
 
 Each run has only the image's standard library. It has no network or persistent files. See [Security](SECURITY.md#code-sandbox) for limits and the Docker proxy trade-off.

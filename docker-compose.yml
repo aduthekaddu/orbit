@@ -13,45 +13,7 @@ services:
       ORBIT_MODEL: ${ORBIT_MODEL:-}
       ORBIT_SEARXNG_URL: ${ORBIT_SEARXNG_URL:-http://searxng:8080}
       ORBIT_TAVILY_API_KEY: ${ORBIT_TAVILY_API_KEY:-}
-      ORBIT_SANDBOX: ${ORBIT_SANDBOX:-off}
-      DOCKER_HOST: tcp://docker-socket-proxy:2375
-    networks:
-      - default
-      - sandbox-api
     command: ["npm", "start", "--", "-p", "3210", "-H", "0.0.0.0"]
-    restart: "no"
-
-  docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    environment:
-      CONTAINERS: "1"
-      POST: "1"
-      AUTH: "0"
-      BUILD: "0"
-      COMMIT: "0"
-      CONFIGS: "0"
-      DISTRIBUTION: "0"
-      EVENTS: "0"
-      EXEC: "0"
-      GRPC: "0"
-      IMAGES: "0"
-      INFO: "0"
-      NETWORKS: "0"
-      NODES: "0"
-      PING: "0"
-      PLUGINS: "0"
-      SECRETS: "0"
-      SERVICES: "0"
-      SESSION: "0"
-      SWARM: "0"
-      SYSTEM: "0"
-      TASKS: "0"
-      VERSION: "0"
-      VOLUMES: "0"
-    networks:
-      - sandbox-api
     restart: "no"
 
   searxng:
@@ -64,7 +26,3 @@ services:
     command:
       - 'export SEARXNG_SECRET="$$(python -c "import secrets; print(secrets.token_hex(32))")"; exec /usr/local/searxng/entrypoint.sh'
     restart: "no"
-
-networks:
-  sandbox-api:
-    internal: true
