@@ -96,12 +96,21 @@ test("a cancelled SDK call leaves concurrent and unrelated requests running", { 
 });
 
 test("a Tavily deadline closes its request and returns a search failure", { timeout: 3000 }, async (t) => {
+  const started = latch();
   const closed = latch();
-  const { client } = await fixture(t, (_query, response) => { response.on("close", closed.release); });
-  const output = await searchWeb({ searxngUrl: "", tavilyApiKey: "test-key-not-real" }, "orbit", undefined, {
-    searxng: async () => [],
-    tavily: async (_key, query) => parseSearchResults(await withTavilySignal(AbortSignal.timeout(100), async () => { await delay(150); return client.search(query, { timeout: 8 }); }), "tavily"),
+  const { client } = await fixture(t, (_query, response) => {
+    response.on("close", closed.release);
+    started.release();
   });
+  const controller = new AbortController();
+  const pending = searchWeb({ searxngUrl: "", tavilyApiKey: "test-key-not-real" }, "orbit", undefined, {
+    searxng: async () => [],
+    tavily: async (_key, query) => parseSearchResults(await withTavilySignal(controller.signal, async () => { await delay(150); return client.search(query, { timeout: 8 }); }), "tavily"),
+  });
+  await started.promise;
+  const timer = setTimeout(() => controller.abort(new DOMException("Search timed out", "TimeoutError")), 100);
+  t.after(() => clearTimeout(timer));
+  const output = await pending;
   assert.deepEqual(output, { ok: false, query: "orbit", error: "Search timed out" });
   assert.equal(await closesSoon(closed.promise), true, "the deadline left the SDK connection open");
 });
