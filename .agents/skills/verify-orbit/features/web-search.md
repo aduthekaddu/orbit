@@ -9,11 +9,14 @@ From the repo root, run these commands after `npm run build`.
 ```sh
 node .agents/skills/verify-orbit/verify.mjs launch --mock
 node .agents/skills/verify-orbit/verify.mjs doctor
+node .agents/skills/verify-orbit/verify.mjs browse settings-search-route
 node .agents/skills/verify-orbit/verify.mjs browse search-tool
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
 The scenario owns its mock search server and closes it even if a check fails. It saves a fake Tavily key to check that the API never returns it and that a blank field keeps it. The scenario then clicks Remove and Save to clear the fake key before sending search requests.
+
+`browse settings-search-route` sends requests directly to the settings route. It checks URL normalization, blank and omitted key preservation, redaction, rejected inputs, and repeatable removal.
 
 ## Proof
 
