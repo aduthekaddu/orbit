@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import { once } from "node:events";
+import { setTimeout as delay } from "node:timers/promises";
 import test, { type TestContext } from "node:test";
 import axios from "axios";
 import { tavily } from "@tavily/core";
@@ -99,7 +100,7 @@ test("a Tavily deadline closes its request and returns a search failure", { time
   const { client } = await fixture(t, (_query, response) => { response.on("close", closed.release); });
   const output = await searchWeb({ searxngUrl: "", tavilyApiKey: "test-key-not-real" }, "orbit", undefined, {
     searxng: async () => [],
-    tavily: async (_key, query) => parseSearchResults(await withTavilySignal(AbortSignal.timeout(100), () => client.search(query, { timeout: 8 })), "tavily"),
+    tavily: async (_key, query) => parseSearchResults(await withTavilySignal(AbortSignal.timeout(100), async () => { await delay(150); return client.search(query, { timeout: 8 }); }), "tavily"),
   });
   assert.deepEqual(output, { ok: false, query: "orbit", error: "Search timed out" });
   assert.equal(await closesSoon(closed.promise), true, "the deadline left the SDK connection open");
