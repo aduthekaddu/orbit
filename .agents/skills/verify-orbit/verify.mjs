@@ -216,6 +216,8 @@ async function startServer() {
       TMPDIR: process.env.TMPDIR || "/tmp",
       NODE_ENV: "production",
       BETTER_AUTH_URL: ORIGIN,
+      ORBIT_SANDBOX: process.env.ORBIT_SANDBOX ?? "off",
+      DOCKER_HOST: process.env.DOCKER_HOST ?? "unix:///var/run/docker.sock",
     },
     detached: true,
     stdio: ["ignore", logFd, logFd],

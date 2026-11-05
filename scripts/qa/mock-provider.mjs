@@ -422,6 +422,13 @@ const server = http.createServer((req, res) => {
       textResponse(res, "Done.");
       return;
     }
+    if (scenario === "run-python" || scenario === "run-escape") {
+      toolResponse(res, scenario, {
+        language: "python",
+        code: scenario === "run-python" ? "print(1+1)" : 'import urllib.request\nurllib.request.urlopen("http://1.1.1.1", timeout=2)',
+      }, "run_code");
+      return;
+    }
     if (scenario === "search" || scenario === "search-loop") {
       if (!body.tools?.some((entry) => entry.function?.name === "web_search")) {
         let history;

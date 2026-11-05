@@ -34,7 +34,7 @@ for (const { language, image, command } of cases) {
         CapDrop: ["ALL"],
         SecurityOpt: ["no-new-privileges"],
         AutoRemove: false,
-        LogConfig: { Type: "none" },
+        LogConfig: { Type: "none", Config: {} },
       },
     });
     assert.ok(!JSON.stringify(spec).includes(code));
