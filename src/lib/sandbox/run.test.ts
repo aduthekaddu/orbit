@@ -114,6 +114,64 @@ finally:
       clearTimeout(timer);
     }
   });
+  for (const pending of ["create", "attach", "start"]) {
+    await t.test(`cancellation returns while Docker ${pending} is pending and removes its late container`, async (t) => {
+      const controller = new AbortController();
+      const entered = Promise.withResolvers<void>();
+      const released = Promise.withResolvers<void>();
+      const removed = Promise.withResolvers<void>();
+      const create = docker.createContainer.bind(docker);
+      t.mock.method(docker, "createContainer", async (options: Docker.ContainerCreateOptions) => {
+        const container = await create(options);
+        const remove = container.remove.bind(container);
+        t.mock.method(container, "remove", async (options: Docker.ContainerRemoveOptions) => {
+          const result = await remove(options);
+          removed.resolve();
+          return result;
+        });
+        if (pending === "create") {
+          entered.resolve();
+          await released.promise;
+        } else if (pending === "attach") {
+          const attach = container.attach.bind(container);
+          t.mock.method(container, "attach", async (options: Docker.ContainerAttachOptions) => {
+            const connection = await attach(options);
+            entered.resolve();
+            await released.promise;
+            return connection;
+          });
+        } else {
+          const start = container.start.bind(container);
+          t.mock.method(container, "start", async () => {
+            const result = await start();
+            entered.resolve();
+            await released.promise;
+            return result;
+          });
+        }
+        return container;
+      });
+      const running = runCode(docker, { language: "python", code: "while True: pass" }, controller.signal)
+        .then(() => null, (error: unknown) => error);
+      let deadline: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await entered.promise;
+        controller.abort();
+        const result = await Promise.race([
+          running,
+          new Promise<"pending">((resolve) => { deadline = setTimeout(() => resolve("pending"), 200); }),
+        ]);
+        assert.notEqual(result, "pending", `cancellation must not wait for Docker ${pending}`);
+        assert.ok(result instanceof Error && result.name === "AbortError");
+      } finally {
+        clearTimeout(deadline);
+        released.resolve();
+        await running;
+        await removed.promise;
+      }
+      assert.deepEqual(await docker.listContainers({ all: true, filters: JSON.stringify({ label: ["orbit.sandbox"] }) }), []);
+    });
+  }
   await t.test("cancellation waits for a pending Docker start before removal", async (t) => {
     const controller = new AbortController();
     const create = docker.createContainer.bind(docker);
