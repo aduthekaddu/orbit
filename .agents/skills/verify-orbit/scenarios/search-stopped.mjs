@@ -20,6 +20,8 @@ export default async function searchStopped({ page, origin, step, shot }) {
       }] });
     })().catch(error => { console.error(error); process.exitCode = 1; });
   `, id], { cwd: path.resolve(".verify/sandbox"), stdio: "pipe" });
+  const stored = await (await page.request.get(`${origin}/api/chats/${id}`)).json();
+  assert.equal(stored.messages.some(({ message }) => message.parts?.some((part) => part.toolCallId === "stopped-search")), true, "stopped search fixture was not saved in the verifier sandbox");
   await page.goto(`${origin}/c/${id}`);
   const card = page.locator('[data-tool-name="web_search"]');
   await card.waitFor();
