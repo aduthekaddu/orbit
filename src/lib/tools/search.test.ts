@@ -119,7 +119,8 @@ test("backend failure is returned without private exception text", async () => {
   assert.equal(JSON.stringify(output).includes("private-provider-detail"), false);
 });
 
-test("a cancelled search does not start the fallback backend", async () => {
+test("a cancelled search does not start the fallback backend", async (t) => {
+  const diagnostic = t.mock.method(console, "warn", () => {});
   const controller = new AbortController();
   let tavilyCalls = 0;
   const backends: SearchBackends = {
@@ -129,6 +130,7 @@ test("a cancelled search does not start the fallback backend", async () => {
   const output = await searchWeb(settings, "orbit", controller.signal, backends);
   assert.equal(output.ok, false);
   assert.equal(tavilyCalls, 0);
+  assert.equal(diagnostic.mock.callCount(), 0);
 });
 
 test("a stalled search returns a failure after its eight second deadline", { timeout: 12_000 }, async (t) => {
@@ -180,4 +182,30 @@ test("caller cancellation closes a pending SearXNG request without fallback", { 
   assert.equal((await output).ok, false);
   await disconnected;
   assert.equal(tavilyCalls, 0);
+});
+
+test("an HTTP search failure logs its backend and status without response data", async (t) => {
+  const diagnostic = t.mock.method(console, "warn", () => {});
+  const local = await fixture(t, { error: "private-provider-detail" }, 503);
+  const output = await searchWeb({ searxngUrl: local.url, tavilyApiKey: "" }, "private-query");
+  assert.deepEqual(output, { ok: false, query: "private-query", error: "Search is unavailable" });
+  assert.equal(diagnostic.mock.callCount(), 1);
+  assert.deepEqual(diagnostic.mock.calls[0]?.arguments, ["web search backend failed", { backend: "searxng", error: "HttpError", status: 503 }]);
+});
+
+test("Tavily failure diagnostics omit exception messages, names, keys and queries", async (t) => {
+  const diagnostic = t.mock.method(console, "warn", () => {});
+  const error = new Error("private-provider-detail");
+  error.name = "private-error-name";
+  await searchWeb({ searxngUrl: "", tavilyApiKey: "test-key-not-real" }, "private-query", undefined, {
+    searxng: async () => [], tavily: async () => { throw error; },
+  });
+  assert.deepEqual(diagnostic.mock.calls.map((call) => call.arguments), [["web search backend failed", { backend: "tavily", error: "Error" }]]);
+});
+
+test("a malformed search response logs a safe failure category", async (t) => {
+  const diagnostic = t.mock.method(console, "warn", () => {});
+  const local = await fixture(t, { results: "private-provider-detail" });
+  await searchWeb({ searxngUrl: local.url, tavilyApiKey: "" }, "private-query");
+  assert.deepEqual(diagnostic.mock.calls.map((call) => call.arguments), [["web search backend failed", { backend: "searxng", error: "ZodError" }]]);
 });
