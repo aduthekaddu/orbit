@@ -19,6 +19,8 @@ Screenshots and output remain under `.verify/evidence/sandbox/` after cleanup. T
 
 `node .agents/skills/verify-orbit/verify.mjs browse sandbox-stopped` saves the runner's stopped error through `upsertMessage` and checks that its card shows Cancelled before and after reload.
 
+`browse sandbox-failure` checks a configuration failure and reload. Launch its server with `ORBIT_SANDBOX=on DOCKER_HOST=tcp://not-the-local-proxy:2375` and `launch --mock`. Require the failed card to identify the configuration error.
+
 ## Real provider
 
 Launch with the sandbox enabled. Pass `ORBIT_BASE_URL`, `ORBIT_API_KEY`, and `ORBIT_MODEL` through the environment, then run `node .agents/skills/verify-orbit/verify.mjs browse sandbox-real`.

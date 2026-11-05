@@ -65,7 +65,7 @@ async function failingDocker(t: TestContext, status: number) {
 async function executeCode(abortSignal?: AbortSignal) {
   const execute = createRunCodeTool().execute;
   assert.ok(execute);
-  return execute({ language: "python", code: "print('private-sandbox-source')" }, { toolCallId: "error-check", messages: [], abortSignal });
+  return execute({ language: "python", code: "print('private-sandbox-source')" }, { toolCallId: "error-check", messages: [], abortSignal, context: {} });
 }
 
 test("an invalid Docker host reports configuration and logs no endpoint or source", async (t) => {
