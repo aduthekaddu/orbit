@@ -1,0 +1,71 @@
+src/lib/tools/metadata.ts
+  s_153d602b5e2cf7::t_4b8259b2ca4b33 2,4-8,11-14,16-17,23,25-26,28-32
+  s_153d602b5e2cf7::t_772fb8e32fd2c8 3
+  s_153d602b5e2cf7::t_888036ed442071 1,15
+  s_153d602b5e2cf7::t_56a1c2adc60360 21-22,24
+scripts/qa/sandbox-timing.ts
+  s_153d602b5e2cf7::t_bfd3ff5c1be0ef 1-37
+src/lib/sandbox/run.ts
+  s_153d602b5e2cf7::t_5c364e672f5156 1-60,65-72,75-77,80-110
+  s_153d602b5e2cf7::t_a3da7d1cfb983e 73-74
+  s_153d602b5e2cf7::t_770e8f843323a9 61-64,78-79
+src/lib/tools/run-code.ts
+  s_153d602b5e2cf7::t_5c364e672f5156 1-20
+docker-compose.yml
+  s_153d602b5e2cf7::t_772fb8e32fd2c8 16-20,24-56,67-70
+src/lib/sandbox/run.test.ts
+  s_153d602b5e2cf7::t_1770a51e22f48f 10-12,72,88-92
+  s_153d602b5e2cf7::t_ecf9ea08522225 95,117-133,177
+  s_153d602b5e2cf7::t_f4b64223614736 4,134-176
+  s_153d602b5e2cf7::t_f875651953f9e9 93-94
+src/lib/sandbox/spec.ts
+  s_153d602b5e2cf7::t_9b47f091ee1e5b 52
+  s_153d602b5e2cf7::t_888036ed442071 22-26
+  s_153d602b5e2cf7::t_5c364e672f5156 1-21,27-51,53-55
+scripts/qa/mock-provider.mjs
+  s_153d602b5e2cf7::t_772fb8e32fd2c8 425-431
+src/lib/sandbox/spec.test.ts
+  s_153d602b5e2cf7::t_1770a51e22f48f 37
+package.json
+  s_153d602b5e2cf7::t_c4c9467923fdbe 48-51
+.agents/skills/verify-orbit/scenarios/sandbox-real.mjs
+  s_153d602b5e2cf7::t_eeed9601ce383e 16-24,27,29-37
+.agents/skills/verify-orbit/verify.mjs
+  s_153d602b5e2cf7::t_772fb8e32fd2c8 219-220
+src/components/tools/code-run.tsx
+  s_153d602b5e2cf7::t_772fb8e32fd2c8 1-44
+.agents/skills/verify-orbit/scenarios/sandbox.mjs
+  s_153d602b5e2cf7::t_888036ed442071 34-35
+  s_153d602b5e2cf7::t_b07baeca97ec9a 2-5
+  s_153d602b5e2cf7::t_347ee2e4ced670 19,24
+src/lib/tools/index.ts
+  s_153d602b5e2cf7::t_772fb8e32fd2c8 6,18
+src/lib/sandbox/images.ts
+  s_153d602b5e2cf7::t_5c364e672f5156 1-10
+src/lib/tools/run-status.ts
+  s_153d602b5e2cf7::t_772fb8e32fd2c8 10,26,36
+  s_153d602b5e2cf7::t_4b8259b2ca4b33 2,16
+src/components/tools/run-card.tsx
+  s_153d602b5e2cf7::t_772fb8e32fd2c8 10,23,26
+  s_153d602b5e2cf7::t_d932bc9f498eb0 28
+.env.example
+  s_153d602b5e2cf7::t_772fb8e32fd2c8 10-11
+src/lib/tools/run-status.test.ts
+  s_153d602b5e2cf7::t_ea2fbbe8e46563 51-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b1f778ba04d93e5192284e7279dfca868108e762",
+  "prompts": {},
+  "sessions": {
+    "s_153d602b5e2cf7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1abaf-3516-7f93-8104-c27a3e8c583c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
