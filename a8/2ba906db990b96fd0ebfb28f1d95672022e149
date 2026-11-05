@@ -1,0 +1,22 @@
+.agents/skills/verify-orbit/features/web-search.md
+  s_c92d9842ddcff6::t_0956354f77b404 12,19
+  s_c92d9842ddcff6::t_8e49d84967919e 20
+.agents/skills/verify-orbit/scenarios/settings-search-route.mjs
+  s_c92d9842ddcff6::t_0956354f77b404 1-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a82ba906db990b96fd0ebfb28f1d95672022e149",
+  "prompts": {},
+  "sessions": {
+    "s_c92d9842ddcff6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ab56-8b3c-76d2-a5ba-ee2e9e55496d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
