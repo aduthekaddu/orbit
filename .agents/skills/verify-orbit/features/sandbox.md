@@ -23,7 +23,7 @@ Screenshots and output remain under `.verify/evidence/sandbox/` after cleanup. T
 
 Launch with the sandbox enabled. Pass `ORBIT_BASE_URL`, `ORBIT_API_KEY`, and `ORBIT_MODEL` through the environment, then run `node .agents/skills/verify-orbit/verify.mjs browse sandbox-real`.
 
-The scenario asks for the SHA-256 of `orbit`. Require a completed `run_code` calculation and a saved text answer equal to `printf orbit | sha256sum`. The screenshot waits for the full hash outside the code card. It writes `real-provider.png` and the check output under `.verify/evidence/sandbox-real/`. It never prints credentials.
+The scenario asks for the SHA-256 of a fresh `orbit-<UUID>` input. Require a completed `run_code` calculation whose source includes that input and does not contain the expected digest as a literal. Both stdout and the saved text answer must match the locally calculated hash. The screenshot waits for the full hash outside the code card. It writes `real-provider.png` and the check output under `.verify/evidence/sandbox-real/`. It never prints credentials.
 
 ## Isolation and timing
 

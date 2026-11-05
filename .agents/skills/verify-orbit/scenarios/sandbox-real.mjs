@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 export default async function sandboxReal({ page, origin, step, shot }) {
   const { ORBIT_API_KEY, ORBIT_BASE_URL, ORBIT_MODEL } = process.env;
@@ -8,11 +8,12 @@ export default async function sandboxReal({ page, origin, step, shot }) {
   const { id } = await (await page.request.post(`${origin}/api/chats`)).json();
   await page.goto(`${origin}/c/${id}`);
   const composer = page.getByPlaceholder("Ask anything");
-  await composer.fill("What is the SHA-256 of the word orbit?");
+  const challenge = `orbit-${randomUUID()}`;
+  await composer.fill(`What is the SHA-256 of the UTF-8 text "${challenge}"? Use run_code with this exact text as a string literal.`);
   await composer.press("Enter");
   const reply = page.locator('[data-message-role="assistant"]').last();
   await reply.getByRole("button", { name: "Regenerate", exact: true }).waitFor({ timeout: 180_000 });
-  const expected = createHash("sha256").update("orbit").digest("hex");
+  const expected = createHash("sha256").update(challenge).digest("hex");
   let parts = [];
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const chat = await (await page.request.get(`${origin}/api/chats/${id}`)).json();
@@ -22,9 +23,10 @@ export default async function sandboxReal({ page, origin, step, shot }) {
   }
   const text = parts.filter((part) => part.type === "text").map((part) => part.text).join("\n");
   const run = parts.find((part) => part.type === "tool-run_code" && part.state === "output-available");
-  console.log(`sha256sum orbit=${expected}`);
+  const source = typeof run?.input?.code === "string" ? run.input.code : "";
+  console.log(`sha256sum ${challenge}=${expected}`);
   console.log(`provider answer=${text}`);
-  step("real provider runs code to compute the hash", run?.output?.exitCode === 0 && run.output.stdout.includes(expected), "no completed hash calculation");
+  step("real provider runs code to compute the hash", source.includes(challenge) && !source.includes(expected) && run?.output?.exitCode === 0 && run.output.stdout.includes(expected), "no completed hash calculation");
   step("real provider hash matches sha256sum", text.includes(expected), "the answer does not contain the correct hash");
   if (text.includes(expected)) {
     await page.waitForFunction((hash) => {
