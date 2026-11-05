@@ -308,7 +308,7 @@ function slowResponse(res) {
   res.on("close", () => clearInterval(timer));
 }
 
-function toolResponse(res, scenario, spec) {
+function toolResponse(res, scenario, spec, toolName = "render_ui") {
   const args = JSON.stringify(spec);
   const id = `call_${scenario}_${Date.now()}`;
   start(res);
@@ -318,7 +318,7 @@ function toolResponse(res, scenario, spec) {
       {
         index: 0,
         delta: {
-          tool_calls: [{ index: 0, id, type: "function", function: { name: "render_ui", arguments: "" } }],
+          tool_calls: [{ index: 0, id, type: "function", function: { name: toolName, arguments: "" } }],
         },
         finish_reason: null,
       },
@@ -416,6 +416,37 @@ const server = http.createServer((req, res) => {
     console.log(`mock request scenario=${scenario}`);
     if (raw.includes("Write a title of at most six words.") && body.stream !== true) {
       jsonTitle(res);
+      return;
+    }
+    if (scenario !== "search" && scenario !== "search-loop" && body.messages?.at(-1)?.role === "tool") {
+      textResponse(res, "Done.");
+      return;
+    }
+    if (scenario === "search" || scenario === "search-loop") {
+      if (!body.tools?.length) {
+        let history;
+        try { history = JSON.parse(prompt); } catch { history = null; }
+        const result = Array.isArray(history)
+          ? history.filter((message) => message.role === "tool").flatMap((message) => Array.isArray(message.content) ? message.content : []).findLast((part) => part.type === "tool-result" && part.toolName === "web_search")
+          : null;
+        const output = result?.output?.type === "json" ? result.output.value : null;
+        if (output) {
+          const first = output.ok === true ? output.results?.[0] : null;
+          textResponse(res, first ? `Found [${first.title}](${first.url}).` : "Search is unavailable.");
+          return;
+        }
+      }
+      const messages = Array.isArray(body.messages) ? body.messages : [];
+      const latestUser = messages.findLastIndex((message) => message.role === "user");
+      const reply = messages.slice(latestUser + 1).findLast((message) => message.role === "tool");
+      if (reply && (scenario !== "search-loop" || body.tool_choice === "none" || !body.tools?.length)) {
+        let output;
+        try { output = JSON.parse(reply.content); } catch { output = null; }
+        const first = output?.ok === true ? output.results?.[0] : null;
+        textResponse(res, first ? `Found [${first.title}](${first.url}).` : "Search is unavailable.");
+      } else {
+        toolResponse(res, scenario, { query: prompt.replace(/\[qa:search(?:-loop)?\]\s*/, "").trim() }, "web_search");
+      }
       return;
     }
     if (scenario === "zebracorn") {
