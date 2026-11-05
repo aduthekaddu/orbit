@@ -30,6 +30,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Fixed
 
+- Verification launch rejects sandbox mode mismatches without replacing the running server.
+
 - Code run source, output, and error text scroll within bounded panels.
 
 - Code run cards show framework failure messages instead of an invalid-result fallback.

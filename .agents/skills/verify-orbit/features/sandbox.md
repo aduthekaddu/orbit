@@ -13,6 +13,8 @@ node .agents/skills/verify-orbit/verify.mjs browse sandbox
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
+For the launch-mode check, launch with `ORBIT_SANDBOX=off`, then run `browse launch-mode`.
+
 Require every printed check to pass. `[qa:run-python]` must create a code card with `print(1+1)`, stdout `2`, exit code `0`, and a duration. The code and output must survive reload. The card must fit a 390 by 844 viewport. `[qa:run-escape]` must show a failed card with a network error.
 
 Screenshots and output remain under `.verify/evidence/sandbox/` after cleanup. The screenshots are `python.png`, `escape.png`, and `mobile.png`.
