@@ -1,0 +1,20 @@
+src/lib/sandbox-verification.test.ts
+  s_51f76b6b47de21::t_2d3db93e4e4d11 7-16,53,60,69
+  s_51f76b6b47de21::t_ea76f74175f230 1-6,17-52,54-59,61-68,70-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3e822b9e7ca5a8c0fb49ceda95bc0dd8413699eb",
+  "prompts": {},
+  "sessions": {
+    "s_51f76b6b47de21": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1acb6-e850-7de1-9938-5e46a5f7e771",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
