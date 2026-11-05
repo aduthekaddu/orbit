@@ -28,6 +28,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Fixed
 
+- Search failures log a safe error type and the SearXNG HTTP status without keys, queries or response data.
+
 - Research requests can still render cards and artifacts after four searches.
 
 - Remove a saved Tavily key from Settings. Blank key fields still keep saved keys.

@@ -20,6 +20,12 @@ export type SearchBackends = {
   tavily: typeof searchTavily;
 };
 
+class SearchHttpError extends Error {
+  constructor(readonly status: number) {
+    super(`SearXNG returned HTTP ${status}`);
+  }
+}
+
 const responseSchema = z.object({
   results: z.array(z.object({
     title: z.string(),
@@ -72,7 +78,7 @@ export async function searchSearxng(url: string, query: string, signal?: AbortSi
   endpoint.searchParams.set("q", query);
   endpoint.searchParams.set("format", "json");
   const response = await fetch(endpoint, { signal: searchSignal(signal) });
-  if (!response.ok) throw new Error("SearXNG is unavailable");
+  if (!response.ok) throw new SearchHttpError(response.status);
   return parseSearchResults(await response.json(), "searxng");
 }
 
@@ -91,16 +97,24 @@ export async function searchWeb(
   backends: SearchBackends = { searxng: searchSearxng, tavily: searchTavily },
 ): Promise<SearchOutput> {
   let timedOut = false;
-  const attempts: Array<() => Promise<SearchResult[]>> = [];
-  if (settings.searxngUrl) attempts.push(() => backends.searxng(settings.searxngUrl, query, signal));
-  if (settings.tavilyApiKey) attempts.push(() => backends.tavily(settings.tavilyApiKey, query, signal));
+  const attempts: Array<{ backend: SearchResult["engine"]; run: () => Promise<SearchResult[]> }> = [];
+  if (settings.searxngUrl) attempts.push({ backend: "searxng", run: () => backends.searxng(settings.searxngUrl, query, signal) });
+  if (settings.tavilyApiKey) attempts.push({ backend: "tavily", run: () => backends.tavily(settings.tavilyApiKey, query, signal) });
   for (const attempt of attempts) {
     if (signal?.aborted) return { ok: false, query, error: "Search was stopped" };
     try {
-      const results = await attempt();
+      const results = await attempt.run();
       if (signal?.aborted) return { ok: false, query, error: "Search was stopped" };
       if (results.length) return { ok: true, query, results };
     } catch (error) {
+      if (signal?.aborted || error instanceof Error && error.name === "AbortError") continue;
+      const category = error instanceof SearchHttpError ? "HttpError"
+        : error instanceof Error && ["TimeoutError", "TypeError", "SyntaxError", "ZodError"].includes(error.name) ? error.name : "Error";
+      console.warn("web search backend failed", {
+        backend: attempt.backend,
+        error: category,
+        ...(error instanceof SearchHttpError ? { status: error.status } : {}),
+      });
       timedOut ||= error instanceof Error && error.name === "TimeoutError";
     }
   }
