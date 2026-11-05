@@ -1,0 +1,19 @@
+src/lib/tools/tavily-signal.test.ts
+  s_c92d9842ddcff6::t_e8d842d9cdc0b5 99,101-106,108,110-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cce81273d7834297557b66f31184d12c7f6c0acf",
+  "prompts": {},
+  "sessions": {
+    "s_c92d9842ddcff6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ab56-8b3c-76d2-a5ba-ee2e9e55496d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
