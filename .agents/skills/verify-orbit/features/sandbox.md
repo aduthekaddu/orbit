@@ -17,6 +17,8 @@ Require every printed check to pass. `[qa:run-python]` must create a code card w
 
 Screenshots and output remain under `.verify/evidence/sandbox/` after cleanup. The screenshots are `python.png`, `escape.png`, and `mobile.png`.
 
+`node .agents/skills/verify-orbit/verify.mjs browse sandbox-stopped` saves the runner's stopped error through `upsertMessage` and checks that its card shows Cancelled before and after reload.
+
 ## Real provider
 
 Launch with the sandbox enabled. Pass `ORBIT_BASE_URL`, `ORBIT_API_KEY`, and `ORBIT_MODEL` through the environment, then run `node .agents/skills/verify-orbit/verify.mjs browse sandbox-real`.

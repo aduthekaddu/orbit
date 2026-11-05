@@ -16,7 +16,7 @@ export function toolRunStatus(part: ToolRunPart, stopped = false, toolName?: str
       if (hasFailedOutput(toolName, part.output)) return "failed";
       return "succeeded";
     case "output-error":
-      return part.errorText === "Stopped" ? "cancelled" : "failed";
+      return part.errorText === "Stopped" || part.errorText === "Code run was stopped" ? "cancelled" : "failed";
     case "input-streaming":
     case "input-available":
       return stopped ? "cancelled" : "running";
