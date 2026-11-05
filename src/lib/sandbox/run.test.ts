@@ -114,6 +114,41 @@ finally:
       clearTimeout(timer);
     }
   });
+  await t.test("the ten second deadline includes pending Docker creation", async (t) => {
+    const entered = Promise.withResolvers<void>();
+    const released = Promise.withResolvers<void>();
+    const removed = Promise.withResolvers<void>();
+    const create = docker.createContainer.bind(docker);
+    t.mock.method(docker, "createContainer", async (options: Docker.ContainerCreateOptions) => {
+      const container = await create(options);
+      const remove = container.remove.bind(container);
+      t.mock.method(container, "remove", async (options: Docker.ContainerRemoveOptions) => {
+        const result = await remove(options);
+        removed.resolve();
+        return result;
+      });
+      entered.resolve();
+      await released.promise;
+      return container;
+    });
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const running = runPython("print(1)");
+    try {
+      await entered.promise;
+      t.mock.timers.tick(10_000);
+      const result = await Promise.race([
+        running,
+        new Promise<"pending">((resolve) => setImmediate(() => resolve("pending"))),
+      ]);
+      assert.notEqual(result, "pending", "creation must count against the ten second deadline");
+      assert.ok(result !== "pending" && result.timedOut);
+    } finally {
+      t.mock.timers.reset();
+      released.resolve();
+      await running;
+      await removed.promise;
+    }
+  });
   for (const pending of ["create", "attach", "start"]) {
     await t.test(`cancellation returns while Docker ${pending} is pending and removes its late container`, async (t) => {
       const controller = new AbortController();
