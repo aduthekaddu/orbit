@@ -11,6 +11,8 @@ node .agents/skills/verify-orbit/verify.mjs launch --mock
 node .agents/skills/verify-orbit/verify.mjs doctor
 node .agents/skills/verify-orbit/verify.mjs browse settings-search-route
 node .agents/skills/verify-orbit/verify.mjs browse search-tool
+node .agents/skills/verify-orbit/verify.mjs browse search-stopped
+node .agents/skills/verify-orbit/verify.mjs browse search-final-ui
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
@@ -29,9 +31,11 @@ Require each printed check to pass.
 - The saved card and its three links survive reload.
 - The card fits at 390 by 844 without page overflow.
 - Stop changes an unfinished card to Cancelled. Reload preserves Cancelled.
+- A completed stopped-search result shows Cancelled and keeps that status after reload.
 - A search failure shows Failed, and the model still answers.
 - Repeated searches use four tool steps and leave the fifth step for an answer with a source link.
+- The fifth step can render a requested card or artifact. Both survive reload.
 
-Screenshots and the real output remain in `.verify/evidence/search-tool/` after cleanup. They include `running.png`, `done.png`, `reloaded.png`, `mobile.png`, `cancelled.png`, `cancelled-reloaded.png`, `failed.png`, `settings.png`, and `final-answer.png`. A run against the earlier app captures `before.png` and fails at the missing SearXNG field.
+Each scenario keeps its output in `.verify/evidence/<scenario>/` after cleanup. The `search-tool` screenshots include `running.png`, `done.png`, `reloaded.png`, `mobile.png`, `cancelled.png`, `cancelled-reloaded.png`, `failed.png`, `settings.png`, and `final-answer.png`. A run against the earlier app captures `before.png` and fails at the missing SearXNG field.
 
 Real provider proof also needs the Compose SearXNG service. Configure its URL in Settings, ask a current-news question, and save the card and cited answer. Stop only the service this run started and repeat the question to check failure. Record the time to the final answer for five real questions separately from this fixed-response recipe.
