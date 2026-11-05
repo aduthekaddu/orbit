@@ -1,0 +1,48 @@
+CHANGELOG.md
+  s_153d602b5e2cf7::t_f26d75ed71894a 11-12
+ARCHITECTURE.md
+  s_153d602b5e2cf7::t_bfd3ff5c1be0ef 21
+  s_153d602b5e2cf7::t_7b023eb907058b 147,149
+  s_153d602b5e2cf7::t_f26d75ed71894a 14,111,137
+  s_153d602b5e2cf7::t_2e57a8ef62a4fb 138
+docs/design.md
+  s_153d602b5e2cf7::t_f26d75ed71894a 100-101
+docs/slices/08.md
+  s_153d602b5e2cf7::t_bfd3ff5c1be0ef 68
+  s_153d602b5e2cf7::t_e7bf045db3bbca 65-66
+README.md
+  s_153d602b5e2cf7::t_f26d75ed71894a 21,97-98,103-115
+  s_153d602b5e2cf7::t_7b023eb907058b 13-14,17-18
+.agents/skills/verify-orbit/features/README.md
+  s_153d602b5e2cf7::t_f26d75ed71894a 39
+.agents/skills/verify-orbit/features/sandbox.md
+  s_153d602b5e2cf7::t_05f82b765b7f27 3
+  s_153d602b5e2cf7::t_0e95ebe8fc9726 24
+  s_153d602b5e2cf7::t_f26d75ed71894a 1-2,4-23,25-32
+docs/roadmap.md
+  s_153d602b5e2cf7::t_f26d75ed71894a 30
+  s_153d602b5e2cf7::t_7b023eb907058b 26-29,45-46,50-51
+docs/slices/README.md
+  s_153d602b5e2cf7::t_7b023eb907058b 10-13
+  s_153d602b5e2cf7::t_f26d75ed71894a 14
+.agents/skills/verify-orbit/SKILL.md
+  s_153d602b5e2cf7::t_f26d75ed71894a 41
+SECURITY.md
+  s_153d602b5e2cf7::t_f26d75ed71894a 43-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "51bf2555d44a7d9207b2127e225c7e0f3a8c05c2",
+  "prompts": {},
+  "sessions": {
+    "s_153d602b5e2cf7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1abaf-3516-7f93-8104-c27a3e8c583c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
