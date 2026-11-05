@@ -64,3 +64,15 @@ test("blank and omitted Tavily keys retain the saved key", () => {
   settings.saveSettings(provider);
   assert.equal(settings.getSettings()?.tavilyApiKey, "test-tavily-key-not-real");
 });
+
+test("an explicit Tavily removal clears the key and disables its search backend", async () => {
+  const provider = { baseUrl: "https://example.com/v1", model: "test-model", reasoningEffort: "medium" as const };
+  settings.saveSettings({ ...provider, apiKey: "test-provider-key-not-real", searxngUrl: "", tavilyApiKey: "test-tavily-key-not-real" });
+  const saved = settings.saveSettings({ ...provider, tavilyApiKey: null });
+  assert.equal(saved.tavilyKeySet, false);
+  const row = settings.getSettings();
+  assert.ok(row);
+  assert.equal(row.tavilyApiKey, "");
+  const { toolsFor } = await import("./tools");
+  assert.equal("web_search" in toolsFor(row), false);
+});

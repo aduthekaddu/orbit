@@ -73,3 +73,10 @@ test("a Tavily key typed during save remains in the field", () => {
 test("a search URL edited during save is not reported as saved", () => {
   assert.equal(appliedSave(submitted, { ...submitted, searxngUrl: "http://127.0.0.1:9999" }).saved, false);
 });
+
+test("a key typed during a removal save stays in the field", () => {
+  const removal = { ...submitted, tavilyApiKey: null };
+  const applied = appliedSave(removal, { ...submitted, tavilyApiKey: "new-test-key" });
+  assert.equal(applied.clearTavilyKey, false);
+  assert.equal(applied.saved, false);
+});

@@ -1,5 +1,3 @@
-import Database from "better-sqlite3";
-import path from "node:path";
 import { startMockSearxng, searchFixtures } from "../../../../scripts/qa/mock-searxng.mjs";
 
 export default async function searchTool({ page, origin, step, shot }) {
@@ -31,9 +29,19 @@ export default async function searchTool({ page, origin, step, shot }) {
     const kept = await (await page.request.get(`${origin}/api/settings`)).json();
     step("a blank Tavily key keeps the stored key", kept.tavilyKeySet === true);
 
-    const database = new Database(path.join(process.cwd(), ".verify/sandbox/data/orbit.db"));
-    database.prepare("update settings set tavily_api_key = '' where id = 1").run();
-    database.close();
+    const remove = page.getByRole("button", { name: "Remove Tavily key", exact: true });
+    if (!step("a saved Tavily key has a Remove action", await remove.count() === 1, "Remove action is missing")) {
+      await shot("remove-missing");
+      return;
+    }
+    await remove.click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await page.getByText("Saved", { exact: true }).waitFor();
+    const removed = await (await page.request.get(`${origin}/api/settings`)).json();
+    step("Remove and Save clear the stored Tavily key", removed.tavilyKeySet === false && removed.keySet === true);
+    await page.reload();
+    step("the removed Tavily key stays absent after reload", await page.getByLabel("Tavily key", { exact: true }).getAttribute("placeholder") === "" && await remove.count() === 0);
+    await shot("key-removed");
 
     const created = await page.request.post(`${origin}/api/chats`);
     const { id } = await created.json();
