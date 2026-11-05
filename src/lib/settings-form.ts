@@ -23,7 +23,7 @@ export type SettingsSnapshot = {
   baseUrl: string;
   apiKey: string;
   searxngUrl: string;
-  tavilyApiKey: string;
+  tavilyApiKey: string | null;
   model: string;
   effort: ReasoningEffort;
 };

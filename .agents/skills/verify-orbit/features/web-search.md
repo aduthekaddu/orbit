@@ -13,7 +13,7 @@ node .agents/skills/verify-orbit/verify.mjs browse search-tool
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
-The scenario owns its mock search server and closes it even if a check fails. It saves a fake Tavily key to check that the API never returns it and that a blank field keeps it. The scenario then clears that fake key directly from the verification database before sending search requests.
+The scenario owns its mock search server and closes it even if a check fails. It saves a fake Tavily key to check that the API never returns it and that a blank field keeps it. The scenario then clicks Remove and Save to clear the fake key before sending search requests.
 
 ## Proof
 

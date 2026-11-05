@@ -28,6 +28,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Fixed
 
+- Remove a saved Tavily key from Settings. Blank key fields still keep saved keys.
+
 - A stopped web search shows Cancelled when its completed result arrives and after reload.
 
 - Search results scroll to and highlight user messages. Replies follow the stream after opening a search result. Search database failures log an error code without message text. (#19)

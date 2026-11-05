@@ -57,7 +57,7 @@ export function saveSettings(input: {
   baseUrl: string;
   apiKey?: string;
   searxngUrl?: string;
-  tavilyApiKey?: string;
+  tavilyApiKey?: string | null;
   model: string;
   reasoningEffort: ReasoningEffort;
 }) {
@@ -71,7 +71,7 @@ export function saveSettings(input: {
     baseUrl,
     apiKey,
     searxngUrl: input.searxngUrl?.trim().replace(/\/+$/, "") ?? current?.searxngUrl ?? "",
-    tavilyApiKey: input.tavilyApiKey?.trim() || current?.tavilyApiKey || "",
+    tavilyApiKey: input.tavilyApiKey === null ? "" : input.tavilyApiKey?.trim() || current?.tavilyApiKey || "",
     model: input.model.trim(),
     reasoningEffort: input.reasoningEffort,
     updatedAt: new Date(),

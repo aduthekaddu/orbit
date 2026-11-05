@@ -10,7 +10,7 @@ const putSchema = z.object({
   baseUrl: z.string().trim().url(),
   apiKey: z.string().optional(),
   searxngUrl: z.union([z.literal(""), z.url({ protocol: /^https?$/ })]).optional(),
-  tavilyApiKey: z.string().optional(),
+  tavilyApiKey: z.string().nullable().optional(),
   model: z.string().trim().min(1).max(200),
   reasoningEffort: z.enum(REASONING_EFFORTS),
 });
