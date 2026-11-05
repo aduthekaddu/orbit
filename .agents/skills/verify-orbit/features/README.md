@@ -36,3 +36,4 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 - [Artifacts](./artifacts.md) previews HTML, SVG and React, checks frame isolation, and restores the selected preview after reload.
 
 - [Web search](./web-search.md) calls a search tool, reads its results, keeps source links after reload, and shows failed and cancelled runs.
+- [Code sandbox](./sandbox.md) runs Python in real containers, shows code and output, rejects a network escape, and checks the real-provider hash.

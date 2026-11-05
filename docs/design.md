@@ -97,3 +97,5 @@ Widgets are cards on the chat column: `bg-card`, `border`, `shadow-card`, `round
 Every tool call uses a bordered card in the chat column. The header shows the tool name and Running, Succeeded, Failed, or Cancelled. Running uses `OrbitMark`. Status comes from the message part, so the same card appears after reload.
 
 Web search results are text links with short snippets. Each result has a bordered square with the domain's first letter. Unknown tools show their JSON output in a collapsed Output disclosure.
+
+Code runs show source, stdout, and stderr in separate code wells with scroll fades. Exit code and duration stay visible. Nonzero exits and timeouts show Failed. Completed code and output survive reload.
