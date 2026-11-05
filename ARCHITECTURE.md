@@ -11,14 +11,14 @@ Orbit is one Next.js process. It serves the pages, the API routes, and the chat 
   <img alt="Orbit stack. The browser runs assistant-ui and json-render. A Docker container runs Next.js, the AI SDK, better-auth, Drizzle, and SQLite. The AI SDK calls an OpenAI-compatible provider. A dashed box holds planned services: SearXNG, Tavily, a Docker sandbox, Ollama, GitHub MCP, and Cloudflare." src="docs/architecture/stack.png">
 </picture>
 
-Solid boxes are shipped. The dashed box is planned, and each node names its slice.
+The diagram predates slice 7. SearXNG and Tavily now connect through the tool registry. The remaining dashed nodes are planned, and each node names its slice.
 
 ## One chat turn, end to end
 
 1. You type in the composer. assistant-ui sends `POST /api/chat` through `orbitChatTransport` in `src/lib/chat-transport.ts`. The transport puts the open chat id on the request, because assistant-ui would otherwise send its own local thread id.
 2. `src/proxy.ts` checks the session cookie. Every page and API route needs a session except `/login`, `/signup`, `/api/auth/*`, and `/api/setup`.
 3. `src/app/api/chat/route.ts` parses the body with zod, loads the settings row, and calls `planChatWrite` in `src/lib/messages.ts`. That function saves the incoming user messages and picks the id the reply will be stored under. It rejects a write planned against an older copy of the chat with `409`.
-4. The route calls `streamText` from the AI SDK with the model from `orbitModel` in `src/lib/provider.ts` and the tools in `src/lib/genui/tool.ts`. Today the only tool is `render_ui`, and the loop stops after one step (`stepCountIs(1)`).
+4. The route calls `streamText` from the AI SDK with the model from `orbitModel` in `src/lib/provider.ts` and the tools from `toolsFor(settings)` in `src/lib/tools/index.ts`. The registry always enables `render_ui` and enables `web_search` when a search backend is configured. The loop stops after at most five model steps. With search enabled, the fifth step receives the completed conversation as JSON data and allows only `render_ui`. It keeps the route instructions so the model can answer with citations, render a card, or write an artifact without searching again.
 5. The stream goes back to the browser as AI SDK UI message parts. Text, reasoning, and tool parts render as they arrive.
 6. When the stream ends, `onEnd` asks `shouldSaveReply` in `src/lib/messages.ts`, then saves the assistant message with `upsertMessage`. It saves only a reply that has a visible part. A regenerate saves a new sibling and keeps the earlier reply.
 7. On reload, `src/app/(app)/c/[id]/page.tsx` loads every message and its parent into the history adapter. The chat opens the path ending at `chats.head_id`.
@@ -107,6 +107,8 @@ statechart docs/architecture/ChatTurn.tla --config docs/architecture/ChatTurn.cf
 | `src/lib/messages.ts` | Chat and message reads and writes. All write planning lives here. |
 | `src/lib/provider.ts` | The model client, reasoning options, the model list, and provider quirks. |
 | `src/lib/settings.ts` | The settings row. `toPublicSettings` is the only shape that leaves the server. |
+| `src/lib/tools/` | The tool registry, SearXNG and Tavily search adapters, browser-safe card metadata, and tool status rules. |
+| `src/components/tools/` | Saved tool run cards, search result links, and the generic JSON disclosure. |
 | `src/lib/genui/` | The `render_ui` tool: the component catalog, the spec parser, and the system prompt. |
 | `src/components/chat/` | Thread, messages, composer, code blocks, inline editors, and the thread map. |
 | `src/lib/artifacts/` | Artifact language detection, prompt instructions and the sandboxed frame document. |
@@ -125,7 +127,7 @@ All state is in `data/orbit.db`. The directory is mode `0700`, and the database 
 | Table | Rows | Notes |
 | --- | --- | --- |
 | `user`, `session`, `account`, `verification` | better-auth's tables | A SQLite trigger, `user_single_row`, rejects a second user. |
-| `settings` | One row, `id = 1` | Base URL, API key, model, and reasoning effort. The key never leaves the server. |
+| `settings` | One row, `id = 1` | Base URL, provider key, model, reasoning effort, SearXNG URL, and Tavily key. Both keys stay on the server. |
 | `chats` | One per conversation | `title` starts as `New chat` and takes the first message's text. `head_id` selects the last written branch. |
 | `messages` | One per user or assistant message | `parts` is the AI SDK parts array as JSON, and reload reads it. `content` is the plain text of the text parts. `parent_id` links each message to its parent. `position` is its depth. Siblings stay in creation order. |
 
@@ -133,7 +135,7 @@ Tool output, generated UI specs, and reasoning all live inside `parts`. A new to
 
 ## Rules that hold across the code
 
-- **The key stays on the server.** `GET /api/settings` returns `keySet: true | false`. Logs pass through `sanitize` in the chat route. Tests and smoke scripts redact `ORBIT_API_KEY`.
+- **The key stays on the server.** `GET /api/settings` returns `keySet` and `tavilyKeySet` booleans. Logs pass through `sanitize` in the chat route. Tests and smoke scripts redact `ORBIT_API_KEY`.
 - **One user.** The auth hook and the database trigger both close signup after the first account.
 - **Validate at the edge.** Routes parse request bodies with zod. Tool input is parsed by the tool's schema and then by `parseRenderSpec`. Code behind those checks trusts its types.
 - **The server owns history.** The client sends its copy of the thread, but `planChatWrite` decides what is stored and refuses a write against a changed chat.
@@ -143,7 +145,7 @@ Tool output, generated UI specs, and reasoning all live inside `parts`. A new to
 
 Each planned slice extends one of these seams. The slice plans in [`docs/slices/`](docs/slices/) give the details.
 
-- **Tools.** `chatTools` in `src/lib/genui/tool.ts` becomes a registry in `src/lib/tools/`. [Slice 7](docs/slices/07.md) raises the step limit so the model can call a tool and then answer. It also adds one run card that every tool shares. The card shows running, succeeded, failed, or cancelled.
+- **Tools.** `toolsFor(settings)` in `src/lib/tools/` builds the enabled tools. [Slice 7](docs/slices/07.md) adds SearXNG search with Tavily as a fallback. Each backend has an eight-second timeout. Tavily cancellation uses a request-scoped signal adapter because the pinned SDK has no signal option. Concurrent requests keep separate signals. The browser shares only card metadata with the registry. Run cards derive running, succeeded, failed, or cancelled from message parts and survive reload. Unknown tools show their output behind a disclosure.
 - **Artifacts.** [Slice 5](docs/slices/05.md) renders HTML, SVG, and React code blocks in a side panel. The code runs in an `<iframe sandbox="allow-scripts">` with a strict Content Security Policy, so it cannot read the app's cookies or call its API.
 - **History.** Messages form a tree. Edits and regenerates add siblings, and the branch picker switches between them. A reload opens the last written branch. Switching alone does not update `head_id`.
 - **Search.** [Slice 6](docs/slices/06.md) adds an FTS5 index (SQLite full-text search) over `messages`, kept in sync by triggers.

@@ -26,7 +26,7 @@ Orbit is a self-hosted chat app for one person, shaped like ChatGPT or Claude, t
 | 4 | [Branching](slices/04.md) | Edit and regenerate keep the old version. Arrows switch between versions. | Draft in #17 |
 | 5 | [Artifact panel](slices/05.md) | HTML, SVG, and React code from the model runs in a side panel. | Draft in #18 |
 | 6 | [Titles and history search](slices/06.md) | Short model-written titles. ⌘K finds any message. | Draft in #19 |
-| 7 | [Web search](slices/07.md) | The model searches through SearXNG or Tavily and cites sources. | Planned |
+| 7 | [Web search](slices/07.md) | The model searches through SearXNG or Tavily and cites sources. | Draft |
 | 8 | [Code sandbox](slices/08.md) | The model runs Python or JavaScript in a locked-down container. | Planned |
 | 9 | [GitHub](slices/09.md) | The model reads your repositories, issues, and pull requests. | Planned |
 | 10 | [Memory](slices/10.md) | Orbit remembers facts across chats. A page lists and edits them. | Planned |

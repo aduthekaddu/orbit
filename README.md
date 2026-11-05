@@ -57,7 +57,7 @@ Planned features are listed in the [roadmap](docs/roadmap.md).
 
 4. Open <http://127.0.0.1:3210> and create your account.
 
-The container stores its data in `./data`. Compose publishes the port on `127.0.0.1` only, so other machines cannot reach it.
+The container stores its data in `./data`. Compose publishes the app on `127.0.0.1:3210` and SearXNG on `127.0.0.1:8888`. Other machines cannot reach either port. Existing databases keep their saved settings. Add `http://searxng:8080` under **Settings > Search** when upgrading a Compose installation.
 
 ### Run from source
 
@@ -87,6 +87,8 @@ Every variable is optional.
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `ORBIT_BASE_URL`, `ORBIT_API_KEY`, `ORBIT_MODEL` | Empty | Fill the provider settings when the database has none yet. |
+| `ORBIT_SEARXNG_URL` | Empty, or `http://searxng:8080` in Compose | Seed the search backend URL on a new database. For a local Next.js server, use `http://127.0.0.1:8888`. |
+| `ORBIT_TAVILY_API_KEY` | Empty | Seed the server-side Tavily key on a new database. Tavily runs when SearXNG fails or returns no results. |
 | `ORBIT_DATA_DIR` | `./data` | Where Orbit keeps `orbit.db` and `auth-secret`. |
 | `BETTER_AUTH_SECRET` | Generated into `data/auth-secret` | The key that signs session cookies. |
 | `BETTER_AUTH_URL` | `http://127.0.0.1:3210` | The URL you open Orbit at. |

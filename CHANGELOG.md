@@ -8,6 +8,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Added
 
+- Search the web through SearXNG or Tavily and answer with source links. Tool cards show running, succeeded, failed, or cancelled and survive reload. Search settings keep the Tavily key on the server. Compose includes SearXNG with JSON search enabled.
+
 - A new chat gets a short title from the model. The command palette finds a message by its text. (#19)
 - Preview HTML, SVG, JSX and TSX code blocks in a sandboxed panel. Switch between Preview and Code, reload, copy or download the source, and send runtime errors to the composer with Fix. The open preview survives a page reload and fills the screen on a phone.
 - Four starter prompts on an empty chat. A click fills the composer and does not send. (#16)
@@ -25,6 +27,14 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - `scripts/qa/genui-qa.cjs` saves screenshots under `.verify/evidence/genui-qa/` instead of `docs/qa/screenshots/`.
 
 ### Fixed
+
+- Search failures log a safe error type and the SearXNG HTTP status without keys, queries or response data.
+
+- Research requests can still render cards and artifacts after four searches.
+
+- Remove a saved Tavily key from Settings. Blank key fields still keep saved keys.
+
+- A stopped web search shows Cancelled when its completed result arrives and after reload.
 
 - Search results scroll to and highlight user messages. Replies follow the stream after opening a search result. Search database failures log an error code without message text. (#19)
 

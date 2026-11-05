@@ -30,6 +30,9 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(initial.model);
   const [effort, setEffort] = useState<ReasoningEffort>(initial.reasoningEffort);
+  const [searxngUrl, setSearxngUrl] = useState(initial.searxngUrl);
+  const [tavilyApiKey, setTavilyApiKey] = useState<string | null>("");
+  const [tavilyKeySet, setTavilyKeySet] = useState(initial.tavilyKeySet);
   const [keySet, setKeySet] = useState(initial.keySet);
   const hasKey = keySet || apiKey.trim().length > 0;
   const [connection, setConnection] = useState<Connection>(() => canLoadStored(initial) ? { status: "checking" } : { status: "idle" });
@@ -38,7 +41,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
   const [saved, setSaved] = useState(false);
   const [pending, setPending] = useState(false);
   const modelLoad = useRef<{ id: number; controller: AbortController | null }>({ id: 0, controller: null });
-  const formValues: SettingsSnapshot = { baseUrl, apiKey, model, effort };
+  const formValues: SettingsSnapshot = { baseUrl, apiKey, model, effort, searxngUrl, tavilyApiKey };
   const latestValues = useRef(formValues);
   latestValues.current = formValues;
 
@@ -98,6 +101,8 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
           apiKey: formValues.apiKey || undefined,
           model: formValues.model,
           reasoningEffort: formValues.effort,
+          searxngUrl: formValues.searxngUrl.trim(),
+          tavilyApiKey: formValues.tavilyApiKey === null ? null : formValues.tavilyApiKey || undefined,
         }),
       });
       const body = (await response.json()) as PublicSettings & { error?: string };
@@ -110,6 +115,8 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
       const applied = appliedSave(formValues, latestValues.current);
       if (applied.applyKeySet) setKeySet(body.keySet);
       if (applied.clearKey) setApiKey("");
+      setTavilyKeySet(body.tavilyKeySet);
+      if (applied.clearTavilyKey) setTavilyApiKey("");
       if (applied.saved) setSaved(true);
     } catch {
       setError("Could not save");
@@ -229,6 +236,24 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
               </ToggleGroup>
             </Row>
           ) : null}
+        </div>
+        <div className="border-y px-5 py-3.5">
+          <h2 className="text-sm font-medium">Search</h2>
+        </div>
+        <div className="divide-y">
+          <Row id="searxngUrl" label="SearXNG URL">
+            <Input id="searxngUrl" value={searxngUrl} autoComplete="off" onChange={(event) => { setError(""); setSearxngUrl(event.target.value); }} />
+          </Row>
+          <Row id="tavilyApiKey" label="Tavily key">
+            <div className="flex min-w-0 items-center gap-2">
+              <Input id="tavilyApiKey" type="password" value={tavilyApiKey ?? ""} placeholder={tavilyKeySet && tavilyApiKey !== null ? "Key set" : ""} autoComplete="off" onChange={(event) => { setError(""); setTavilyApiKey(event.target.value); }} />
+              {tavilyKeySet && tavilyApiKey !== null ? (
+                <Button type="button" variant="ghost" size="sm" aria-label="Remove Tavily key" disabled={pending} onClick={() => { setError(""); setSaved(false); setTavilyApiKey(null); }}>
+                  Remove
+                </Button>
+              ) : null}
+            </div>
+          </Row>
         </div>
         <div className="flex items-center justify-end gap-3 border-t px-5 py-3">
           {error ? (
