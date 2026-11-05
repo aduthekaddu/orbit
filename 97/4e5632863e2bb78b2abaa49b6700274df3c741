@@ -1,0 +1,22 @@
+src/lib/tools/run-status.test.ts
+  s_c92d9842ddcff6::t_4b27c6be45a789 45-50
+.agents/skills/verify-orbit/scenarios/search-stopped.mjs
+  s_c92d9842ddcff6::t_7217d573ab81d6 1-8,15-20,22-34
+  s_c92d9842ddcff6::t_05c40134d13843 9-14,21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "974e5632863e2bb78b2abaa49b6700274df3c741",
+  "prompts": {},
+  "sessions": {
+    "s_c92d9842ddcff6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ab56-8b3c-76d2-a5ba-ee2e9e55496d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
