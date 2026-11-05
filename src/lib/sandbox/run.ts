@@ -48,53 +48,78 @@ export function sandboxDocker(): Docker {
 export async function runCode(docker: Docker, input: RunCodeInput, signal?: AbortSignal): Promise<RunCodeOutput> {
   signal?.throwIfAborted();
   const started = performance.now();
-  const container = await docker.createContainer(containerSpec(input));
-  let attached: Duplex | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let onAbort: (() => void) | undefined;
+  let stopReason: "timed-out" | "cancelled" | undefined;
+  const stopped = new Promise<"timed-out" | "cancelled">((resolve) => {
+    const stop = (reason: "timed-out" | "cancelled") => {
+      stopReason ??= reason;
+      resolve(stopReason);
+    };
+    timer = setTimeout(() => stop("timed-out"), RUN_TIMEOUT_MS);
+    onAbort = () => stop("cancelled");
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) stop("cancelled");
+  });
   const stdout = outputCollector();
   const stderr = outputCollector();
-  try {
-    const connection = await container.attach({ stream: true, stdin: true, stdout: true, stderr: true, hijack: true, abortSignal: signal });
-    if (!(connection instanceof Duplex)) throw new Error("Docker did not provide a duplex attach stream");
-    attached = connection;
-    const outputFinished = new Promise<{ kind: "ended" } | { kind: "failed"; error: Error }>((resolve) => {
-      connection.once("end", () => resolve({ kind: "ended" }));
-      connection.once("error", (error: Error) => resolve({ kind: "failed", error }));
-      connection.once("close", () => resolve({ kind: "failed", error: new Error("Docker output connection closed before ending") }));
-    });
-    docker.modem.demuxStream(connection, stdout.stream, stderr.stream);
-    const stopped = new Promise<"timed-out" | "cancelled">((resolve) => {
-      timer = setTimeout(() => resolve("timed-out"), RUN_TIMEOUT_MS);
-      onAbort = () => resolve("cancelled");
-      signal?.addEventListener("abort", onAbort, { once: true });
-      if (signal?.aborted) resolve("cancelled");
-    });
-    await container.start();
-    signal?.throwIfAborted();
-    const completed = async () => {
-      connection.end(input.code);
-      const result = waitResultSchema.parse(await container.wait());
-      const output = await outputFinished;
-      if (output.kind === "failed") throw output.error;
-      return { kind: "exited", exitCode: result.StatusCode } as const;
-    };
-    const outcome = await Promise.race([completed(), stopped]);
-    if (outcome === "timed-out" || outcome === "cancelled") {
+  const completed = async (): Promise<number | "timed-out" | "cancelled"> => {
+    const container = await docker.createContainer(containerSpec(input));
+    let attached: Duplex | undefined;
+    try {
+      if (stopReason) return stopReason;
+      const connection = await container.attach({ stream: true, stdin: true, stdout: true, stderr: true, hijack: true, abortSignal: signal });
+      if (!(connection instanceof Duplex)) throw new Error("Docker did not provide a duplex attach stream");
+      attached = connection;
+      if (stopReason) return stopReason;
+      const outputFinished = new Promise<{ kind: "ended" } | { kind: "failed"; error: Error }>((resolve) => {
+        connection.once("end", () => resolve({ kind: "ended" }));
+        connection.once("error", (error: Error) => resolve({ kind: "failed", error }));
+        connection.once("close", () => resolve({ kind: "failed", error: new Error("Docker output connection closed before ending") }));
+      });
+      docker.modem.demuxStream(connection, stdout.stream, stderr.stream);
+      await container.start();
+      if (stopReason) return stopReason;
+      const exited = async () => {
+        connection.end(input.code);
+        const result = waitResultSchema.parse(await container.wait());
+        const output = await outputFinished;
+        if (output.kind === "failed") throw output.error;
+        return result.StatusCode;
+      };
+      return await Promise.race([exited(), stopped]);
+    } finally {
+      attached?.destroy();
+      stdout.stream.destroy();
+      stderr.stream.destroy();
       try {
-        await container.kill({ signal: "SIGKILL" });
+        try {
+          if (stopReason) {
+            try {
+              await container.kill({ signal: "SIGKILL" });
+            } catch (error) {
+              if (!(error && typeof error === "object" && "statusCode" in error && error.statusCode === 409)) throw error;
+            }
+          }
+        } finally {
+          await container.remove({ force: true });
+        }
       } catch (error) {
-        if (!(error && typeof error === "object" && "statusCode" in error && error.statusCode === 409)) throw error;
+        const statusCode = error && typeof error === "object" && "statusCode" in error && typeof error.statusCode === "number" ? error.statusCode : undefined;
+        console.error("Sandbox cleanup failed", { statusCode });
+        throw error;
       }
-      await container.wait();
-      if (outcome === "cancelled") throw new DOMException("Code run was stopped", "AbortError");
     }
+  };
+  try {
+    const outcome = await Promise.race([completed(), stopped]);
+    if (outcome === "cancelled") throw new DOMException("Code run was stopped", "AbortError");
     const out = stdout.result();
     const err = stderr.result();
     return {
       stdout: out.text,
       stderr: err.text,
-      exitCode: outcome === "timed-out" ? null : outcome.exitCode,
+      exitCode: outcome === "timed-out" ? null : outcome,
       durationMs: Math.round(performance.now() - started),
       timedOut: outcome === "timed-out",
       truncated: out.truncated || err.truncated,
@@ -102,9 +127,5 @@ export async function runCode(docker: Docker, input: RunCodeInput, signal?: Abor
   } finally {
     clearTimeout(timer);
     if (onAbort) signal?.removeEventListener("abort", onAbort);
-    attached?.destroy();
-    stdout.stream.destroy();
-    stderr.stream.destroy();
-    await container.remove({ force: true });
   }
 }

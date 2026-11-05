@@ -30,6 +30,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Fixed
 
+- Code runs apply the ten-second deadline during Docker setup and respond to Stop while setup is pending. Late containers are removed.
+
 - A stopped code run shows Cancelled before and after reload.
 
 - Search failures log a safe error type and the SearXNG HTTP status without keys, queries or response data.
