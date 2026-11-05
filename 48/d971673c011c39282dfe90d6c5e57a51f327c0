@@ -1,0 +1,21 @@
+.agents/skills/verify-orbit/scenarios/sandbox-failure.mjs
+  s_51f76b6b47de21::t_c22a783f1df8fe 1-17
+src/lib/tools/run-code.test.ts
+  s_51f76b6b47de21::t_7e907a24105b15 2-5,30-118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "48d971673c011c39282dfe90d6c5e57a51f327c0",
+  "prompts": {},
+  "sessions": {
+    "s_51f76b6b47de21": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1acb6-e850-7de1-9938-5e46a5f7e771",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
