@@ -21,6 +21,8 @@ Screenshots and output remain under `.verify/evidence/sandbox/` after cleanup. T
 
 `browse sandbox-failure` checks a configuration failure and reload. Launch its server with `ORBIT_SANDBOX=on DOCKER_HOST=tcp://not-the-local-proxy:2375` and `launch --mock`. Require the failed card to identify the configuration error.
 
+`browse sandbox-tool-error` saves a framework validation error and checks that its reason appears in the failed card before and after reload.
+
 ## Real provider
 
 Launch with the sandbox enabled. Pass `ORBIT_BASE_URL`, `ORBIT_API_KEY`, and `ORBIT_MODEL` through the environment, then run `node .agents/skills/verify-orbit/verify.mjs browse sandbox-real`.

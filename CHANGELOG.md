@@ -30,6 +30,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Fixed
 
+- Code run cards show framework failure messages instead of an invalid-result fallback.
+
 - Default Compose deployments no longer start a Docker socket proxy. Enable the sandbox and its Docker access with the explicit sandbox override.
 
 - Sandbox failures report configuration and proxy errors clearly, and log safe error categories and status codes.

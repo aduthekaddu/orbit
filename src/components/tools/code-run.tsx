@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ScrollFade } from "@/components/ui/scroll-fade";
 import { runCodeInputSchema, runCodeOutputSchema } from "@/lib/sandbox/spec";
 
-const errorSchema = z.object({ ok: z.literal(false), error: z.string() });
+const errorSchema = z.union([z.object({ ok: z.literal(false).optional(), error: z.string() }), z.string().min(1)]);
 
 function CodeText({ text, kind }: { text: string; kind: "source" | "stdout" | "stderr" }) {
   return (
@@ -21,7 +21,7 @@ export function CodeRun({ input, output }: { input: unknown; output: unknown }) 
   return (
     <div className="min-w-0 space-y-3">
       {parsedInput.success && <CodeText text={parsedInput.data.code} kind="source" />}
-      {error.success ? <p className="text-sm text-destructive">{error.data.error}</p> : parsedOutput.success ? (
+      {error.success ? <p className="text-sm text-destructive">{typeof error.data === "string" ? error.data : error.data.error}</p> : parsedOutput.success ? (
         <>
           <div className="min-w-0 space-y-1">
             <p className="text-xs text-muted-foreground">stdout</p>
