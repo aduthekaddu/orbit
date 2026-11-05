@@ -1,0 +1,23 @@
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+export default async function sandboxToolError({ page, origin, step, shot }) {
+  const { id } = await (await page.request.post(`${origin}/api/chats`)).json();
+  const repo = fileURLToPath(new URL("../../../..", import.meta.url));
+  const saved = spawnSync(process.execPath, ["--require", "tsx/cjs", "-e", `
+    const { upsertMessage } = require(${JSON.stringify(`${repo}/src/lib/messages.ts`)});
+    const chat = process.argv[1];
+    upsertMessage(chat, { id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: "Run Ruby code." }] });
+    if (!upsertMessage(chat, { id: crypto.randomUUID(), role: "assistant", parts: [{ type: "tool-run_code", toolCallId: "invalid-code", state: "output-error", input: { language: "ruby", code: "puts 1" }, errorText: "Unsupported language. Use Python or JavaScript." }] })) process.exit(1);
+  `, id], { cwd: `${repo}/.verify/sandbox`, encoding: "utf8" });
+  if (saved.status !== 0) throw new Error("could not save the framework error fixture");
+  await page.goto(`${origin}/c/${id}`);
+  const card = page.locator('[data-tool-name="run_code"]');
+  await card.locator('[data-tool-status="failed"]').waitFor();
+  step("the code card shows the framework failure reason", (await card.innerText()).includes("Unsupported language. Use Python or JavaScript."));
+  await shot("failure");
+  await page.reload();
+  await card.locator('[data-tool-status="failed"]').waitFor();
+  step("the framework failure reason survives reload", (await card.innerText()).includes("Unsupported language. Use Python or JavaScript."));
+  await shot("failure-reloaded");
+}
