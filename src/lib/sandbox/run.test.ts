@@ -207,12 +207,20 @@ finally:
       assert.deepEqual(await docker.listContainers({ all: true, filters: JSON.stringify({ label: ["orbit.sandbox"] }) }), []);
     });
   }
-  await t.test("cancellation waits for a pending Docker start before removal", async (t) => {
+  await t.test("cancellation removes a late-started container only after start settles", async (t) => {
     const controller = new AbortController();
     const create = docker.createContainer.bind(docker);
     let startSettled = false;
+    const removed = Promise.withResolvers<void>();
     t.mock.method(docker, "createContainer", async (options: Docker.ContainerCreateOptions) => {
       const container = await create(options);
+      const remove = container.remove.bind(container);
+      t.mock.method(container, "remove", async (options: Docker.ContainerRemoveOptions) => {
+        assert.equal(startSettled, true);
+        const result = await remove(options);
+        removed.resolve();
+        return result;
+      });
       const start = container.start.bind(container);
       t.mock.method(container, "start", async () => {
         await start();
@@ -223,6 +231,7 @@ finally:
       return container;
     });
     await assert.rejects(runCode(docker, { language: "python", code: "while True: pass" }, controller.signal), { name: "AbortError" });
+    await removed.promise;
     assert.equal(startSettled, true);
   });
   await t.test("cancelling after the Docker output connection closes still removes the container", async (t) => {
@@ -231,8 +240,15 @@ finally:
     let connection: Duplex | undefined;
     let dropTimer: ReturnType<typeof setTimeout> | undefined;
     let deadline: ReturnType<typeof setTimeout> | undefined;
+    const removed = Promise.withResolvers<void>();
     t.mock.method(docker, "createContainer", async (options: Docker.ContainerCreateOptions) => {
       const container = await create(options);
+      const remove = container.remove.bind(container);
+      t.mock.method(container, "remove", async (options: Docker.ContainerRemoveOptions) => {
+        const result = await remove(options);
+        removed.resolve();
+        return result;
+      });
       const attach = container.attach.bind(container);
       const wait = container.wait.bind(container);
       t.mock.method(container, "attach", async (options: Docker.ContainerAttachOptions) => {
@@ -259,6 +275,7 @@ finally:
       ]);
       assert.notEqual(result, "pending", "a dropped output connection must not block cancellation cleanup");
       assert.ok(result instanceof Error && result.name === "AbortError");
+      await removed.promise;
       assert.deepEqual(await docker.listContainers({ all: true, filters: JSON.stringify({ label: ["orbit.sandbox"] }) }), []);
     } finally {
       clearTimeout(deadline);
@@ -266,6 +283,48 @@ finally:
       controller.abort();
       connection?.emit("end");
       await running;
+    }
+  });
+  await t.test("cancellation stops the program and logs safely when container removal is denied", async (t) => {
+    const controller = new AbortController();
+    const executing = Promise.withResolvers<void>();
+    const removalAttempted = Promise.withResolvers<void>();
+    const logs: unknown[][] = [];
+    const create = docker.createContainer.bind(docker);
+    let container: Docker.Container | undefined;
+    let cleanup: (() => Promise<unknown>) | undefined;
+    t.mock.method(console, "error", (...args: unknown[]) => { logs.push(args); });
+    t.mock.method(docker, "createContainer", async (options: Docker.ContainerCreateOptions) => {
+      container = await create(options);
+      const remove = container.remove.bind(container);
+      const wait = container.wait.bind(container);
+      cleanup = () => remove({ force: true });
+      t.mock.method(container, "remove", async () => {
+        removalAttempted.resolve();
+        throw Object.assign(new Error("private program and connection details"), { statusCode: 403 });
+      });
+      t.mock.method(container, "wait", () => {
+        executing.resolve();
+        return wait();
+      });
+      return container;
+    });
+    const running = runCode(docker, { language: "python", code: "while True: pass" }, controller.signal)
+      .then(() => null, (error: unknown) => error);
+    try {
+      await executing.promise;
+      controller.abort();
+      const result = await running;
+      assert.ok(result instanceof Error && result.name === "AbortError");
+      await removalAttempted.promise;
+      assert.ok(container);
+      assert.equal((await container.inspect()).State.Running, false, "a denied removal must not leave untrusted code running");
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.deepEqual(logs, [["Sandbox cleanup failed", { statusCode: 403 }]]);
+    } finally {
+      controller.abort();
+      await running;
+      await cleanup?.();
     }
   });
   await t.test("no sandbox containers remain after success, errors, timeout, or cancellation", async () => {
