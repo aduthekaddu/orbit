@@ -28,6 +28,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Fixed
 
+- A stopped web search shows Cancelled when its completed result arrives and after reload.
+
 - Search results scroll to and highlight user messages. Replies follow the stream after opening a search result. Search database failures log an error code without message text. (#19)
 
 - Keep artifact previews open when canceling a code edit, editing an earlier block or reloading an older branch. Preserve TSX download extensions, support keyboard tabs, show fades on long errors and reveal the composer after Fix on a phone.

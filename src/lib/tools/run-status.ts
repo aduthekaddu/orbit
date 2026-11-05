@@ -9,7 +9,10 @@ export type ToolRunPart =
 export function toolRunStatus(part: ToolRunPart, stopped = false): ToolRunStatus {
   switch (part.state) {
     case "output-available":
-      return part.output && typeof part.output === "object" && "ok" in part.output && part.output.ok === false ? "failed" : "succeeded";
+      if (part.output && typeof part.output === "object" && "ok" in part.output && part.output.ok === false) {
+        return "error" in part.output && part.output.error === "Search was stopped" ? "cancelled" : "failed";
+      }
+      return "succeeded";
     case "output-error":
       return part.errorText === "Stopped" ? "cancelled" : "failed";
     case "input-streaming":
