@@ -154,6 +154,19 @@ node .agents/skills/verify-orbit/verify.mjs cleanup
 
 The scenario runs `[qa:run-python]`, `[qa:run-js]`, `[qa:run-js-exit]`, `[qa:run-ruby]`, and `[qa:run-spin]` with a click on Stop. Require `Python` or `JavaScript` in the header of every card whose tool input was valid, while the run goes, after Stop, after a reload, and at 390 pixels. The Ruby call is rejected before it runs, and the mock repeats it until the step limit, so require every one of its cards to show no language. Require the header to stay on one line with the tag inside it. Require the source and the output to sit on different surfaces. The check prints which part failed.
 
+## Terminal escape sequences
+
+Launch a fresh mock sandbox. Docker must be reachable.
+
+```sh
+node .agents/skills/verify-orbit/verify.mjs cleanup
+ORBIT_SANDBOX=on node .agents/skills/verify-orbit/verify.mjs launch --mock
+node .agents/skills/verify-orbit/verify.mjs browse sandbox-escapes
+node .agents/skills/verify-orbit/verify.mjs cleanup
+```
+
+The scenario runs `[qa:run-color]`, `[qa:run-osc]`, and `[qa:run-html]`. The first prints red text to standard output and bold yellow text to standard error. The second prints a window title, a hyperlink, and an erase code. The third prints HTML-looking text. Require only the plain text in each well, no control character anywhere on the card, no link or image added to the card, and no change to the page title. Require both copy buttons to copy the plain text, and require the same results after a reload and at 390 pixels. The HTML-looking text must show as text.
+
 ## Settings status
 
 Run the check against a server with the sandbox on, then one with it off. Docker is not needed.
