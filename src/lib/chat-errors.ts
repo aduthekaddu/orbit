@@ -1,6 +1,10 @@
 const INPUT_ERROR = /^(?:AI_InvalidToolInputError: )?Invalid input for tool ([\w-]+): (.*)$/s;
 const ISSUES_MARK = "\nError message: ";
 const ISSUE_LIMIT = 3;
+const PART_LIMIT = 40;
+const FIELD_LIMIT = 80;
+const MESSAGE_LIMIT = 120;
+const REASON_LIMIT = 240;
 
 export function sanitize(message: string, secret: string) {
   if (!secret) return message;
@@ -11,12 +15,19 @@ function cleanErrorText(text: string) {
   return text.replace(/AI_[A-Za-z]+Error:\s*/g, "").trim();
 }
 
+function short(text: string, limit: number) {
+  const flat = text.replace(/[\x00-\x1f\x7f\s]+/g, " ");
+  return flat.length > limit ? `${flat.slice(0, limit - 1)}…` : flat;
+}
+
+// Paths can hold keys the model chose, so every part of a reason is bounded.
 function issueLine(issue: unknown): string[] {
   if (!issue || typeof issue !== "object") return [];
   const { path, message } = issue as { path?: unknown; message?: unknown };
   if (typeof message !== "string") return [];
-  const field = Array.isArray(path) ? path.join(".") : "";
-  return [field ? `${field}: ${message}` : message];
+  const field = Array.isArray(path) ? short(path.map((part) => short(String(part), PART_LIMIT)).join("."), FIELD_LIMIT) : "";
+  const reason = short(message, MESSAGE_LIMIT);
+  return [field ? `${field}: ${reason}` : reason];
 }
 
 // The SDK writes the rejected value, then "\nError message: ", then the schema issues as JSON.
@@ -29,7 +40,7 @@ function inputProblem(rest: string) {
   try {
     const issues: unknown = JSON.parse(rest.slice(mark + ISSUES_MARK.length));
     const lines = Array.isArray(issues) ? issues.slice(0, ISSUE_LIMIT).flatMap(issueLine) : [];
-    return lines.length > 0 ? lines.join("; ") : unknown;
+    return lines.length > 0 ? short(lines.join("; "), REASON_LIMIT) : unknown;
   } catch {
     return unknown;
   }
