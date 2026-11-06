@@ -9,8 +9,12 @@ const script = path.join(process.cwd(), "scripts/ci/codeql-gate.sh");
 const hasJq = spawnSync("jq", ["--version"]).status === 0;
 let directory: string;
 
-function sarif(...findings: Array<[string, string]>) {
-  const results = findings.map(([ruleId, uri]) => ({ ruleId, locations: [{ physicalLocation: { artifactLocation: { uri } } }] }));
+function sarif(...findings: Array<[string, string, string?]>) {
+  const results = findings.map(([ruleId, uri, hash]) => ({
+    ruleId,
+    locations: [{ physicalLocation: { artifactLocation: { uri } } }],
+    partialFingerprints: hash ? { primaryLocationLineHash: hash } : {},
+  }));
   fs.writeFileSync(path.join(directory, "javascript.sarif"), JSON.stringify({ runs: [{ results }] }));
 }
 
@@ -61,4 +65,11 @@ test("a listed finding that CodeQL no longer reports is a warning, not a failure
   const result = gate(known("js/file-system-race src/lib/auth.ts\n"));
   assert.equal(result.ok, true);
   assert.match(result.output, /Fixed finding still listed::js\/file-system-race in src\/lib\/auth\.ts/);
+});
+
+test("a second finding of a listed rule in the same file is new when its line differs", { skip: !hasJq && "jq is needed" }, () => {
+  sarif(["js/file-system-race", "src/lib/auth.ts", "aaaa:1"], ["js/file-system-race", "src/lib/auth.ts", "bbbb:1"]);
+  const result = gate(known("js/file-system-race src/lib/auth.ts aaaa:1\n"));
+  assert.equal(result.ok, false, result.output);
+  assert.match(result.output, /New CodeQL finding::js\/file-system-race in src\/lib\/auth\.ts/);
 });
