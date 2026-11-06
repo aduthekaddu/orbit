@@ -6,7 +6,10 @@ import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
 
-const composeEnv: NodeJS.ProcessEnv = { PATH: process.env.PATH ?? "", NODE_ENV: "test", ORBIT_SANDBOX: "on" };
+const composeEnv: NodeJS.ProcessEnv = {
+  PATH: process.env.PATH ?? "", NODE_ENV: "test", ORBIT_SANDBOX: "on",
+  HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, DOCKER_CONFIG: process.env.DOCKER_CONFIG,
+};
 const composeSchema = z.object({
   services: z.record(z.string(), z.object({
     environment: z.record(z.string(), z.string()).default({}),
