@@ -15,6 +15,7 @@ export const runCodeOutputSchema = z.object({
   timedOut: z.boolean(),
   truncated: z.boolean(),
   cancelled: z.boolean().optional(),
+  oomKilled: z.boolean().optional(),
 });
 
 export type RunCodeInput = z.infer<typeof runCodeInputSchema>;

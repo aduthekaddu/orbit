@@ -7,6 +7,15 @@ import { containerSpec, type RunCodeInput, type RunCodeOutput } from "./spec";
 const OUTPUT_LIMIT = 65_536;
 const RUN_TIMEOUT_MS = 10_000;
 const waitResultSchema = z.object({ StatusCode: z.number().int() });
+const SIGKILL_EXIT = 137;
+
+async function killedForMemory(container: Docker.Container): Promise<boolean> {
+  try {
+    return (await container.inspect()).State?.OOMKilled === true;
+  } catch {
+    return false;
+  }
+}
 
 function outputCollector() {
   const bytes = Buffer.alloc(OUTPUT_LIMIT);
@@ -73,6 +82,7 @@ export async function runCode(docker: Docker, input: RunCodeInput, signal?: Abor
   });
   const stdout = outputCollector();
   const stderr = outputCollector();
+  let oomKilled = false;
   const completed = async (): Promise<number | "timed-out" | "cancelled"> => {
     const container = await docker.createContainer(containerSpec(input));
     let attached: Duplex | undefined;
@@ -96,6 +106,7 @@ export async function runCode(docker: Docker, input: RunCodeInput, signal?: Abor
         const output = await outputFinished;
         if (output.kind === "failed") throw output.error;
         clearTimeout(timer);
+        if (result.StatusCode === SIGKILL_EXIT) oomKilled = await killedForMemory(container);
         return result.StatusCode;
       };
       return await Promise.race([exited(), stopped]);
@@ -133,6 +144,7 @@ export async function runCode(docker: Docker, input: RunCodeInput, signal?: Abor
       durationMs: Math.round(performance.now() - started),
       timedOut: outcome === "timed-out",
       truncated: out.truncated || err.truncated,
+      ...(oomKilled ? { oomKilled: true } : {}),
     };
     if (outcome === "cancelled") throw new RunStopped({ ...output, cancelled: true });
     return output;

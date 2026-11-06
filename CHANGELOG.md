@@ -8,6 +8,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Added
 
+- Code run cards name their language, Python or JavaScript, in the header. The tag stays while the run goes, after a failure or Stop, and after you reopen the chat. The output boxes sit on a darker surface than the source.
+
 - Settings shows whether the server turned on the code sandbox. The status is read-only, and the browser cannot change it.
 
 - Copy the source, standard output, or standard error of a code run from its card. The buttons work with the keyboard and on a phone, and show whether the copy worked.
@@ -33,6 +35,10 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - `scripts/qa/genui-qa.cjs` saves screenshots under `.verify/evidence/genui-qa/` instead of `docs/qa/screenshots/`.
 
 ### Fixed
+
+- A code run result states one outcome, such as `Timed out`, `Out of memory (exit 137)`, or `Stopped`, and a separate duration that uses seconds after the first second. The runner records when Docker kills a program for memory, so a program that exits 137 on its own shows `Exit 137`. `Exit killed` and the repeated `Timed out` are gone.
+
+- A code run card hides the standard output or standard error box when it has no text or only blank lines. A run with no output still shows its source, exit status, and duration.
 
 - Stopping a running code card keeps the output the program had printed. The saved card shows Cancelled with that output after you reopen the chat.
 

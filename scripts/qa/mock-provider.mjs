@@ -11,6 +11,14 @@ const sandboxPrograms = new Map([
   ["run-wide", 'print("x" * 150 + "END")'],
   ["run-copy", 'import sys\ndef show():\n    print("  indented ✓ héllo 🚀")\n    print("line two")\n    print("err ✗", file=sys.stderr)\nshow()'],
   ["run-spin", "while True: pass"],
+  ["run-pass", "pass"],
+  ["run-exit", "import sys\nsys.exit(3)"],
+  ["run-exit-high", "import sys\nsys.exit(137)"],
+  ["run-blank", "import sys\nprint()\nprint(file=sys.stderr)"],
+]);
+const javascriptPrograms = new Map([
+  ["run-js", "console.log(1 + 1)"],
+  ["run-js-exit", "process.exit(2)"],
 ]);
 const invalidSandboxCalls = new Map([
   ["run-long", { language: "python", code: "#".repeat(20_001) }],
@@ -444,6 +452,13 @@ const server = http.createServer((req, res) => {
       toolResponse(res, scenario, {
         language: "python",
         code: sandboxPrograms.get(scenario),
+      }, "run_code");
+      return;
+    }
+    if (javascriptPrograms.has(scenario)) {
+      toolResponse(res, scenario, {
+        language: "javascript",
+        code: javascriptPrograms.get(scenario),
       }, "run_code");
       return;
     }

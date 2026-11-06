@@ -52,6 +52,7 @@ export default async function emptyChat({ page, origin, step, shot }) {
   const mobile = await phone.newPage();
   await mobile.goto(chatUrl);
   await mobile.getByRole("textbox").waitFor({ timeout: 10_000 });
+  await mobile.getByRole("button", { name: STARTERS[0], exact: true }).waitFor({ timeout: 15_000 });
   const heights = [];
   for (const label of STARTERS) {
     const box = await mobile.getByRole("button", { name: label, exact: true }).boundingBox({ timeout: 2_000 }).catch(() => null);
