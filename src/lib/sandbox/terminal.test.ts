@@ -25,6 +25,14 @@ test("eight-bit sequences go", () => {
   assert.equal(stripTerminalControls("\u009b31mred\u009b0m \u009d0;title\u009cok"), "red ok");
 });
 
+test("a sequence that another escape interrupts leaves no stray parameters", () => {
+  assert.equal(stripTerminalControls("\u001b[31\u001b[0mred"), "red");
+  assert.equal(stripTerminalControls("a\u001b[38;5\u001b[1mb"), "ab");
+  assert.equal(stripTerminalControls("\u009b31\u009b0mred"), "red");
+  assert.equal(stripTerminalControls("\u001b]0;title\u001b[31mred"), "red");
+  assert.equal(stripTerminalControls("\u001b[31\u0007red"), "red");
+});
+
 test("a sequence cut off by the output limit is dropped", () => {
   assert.equal(stripTerminalControls("ok\u001b[31"), "ok");
   assert.equal(stripTerminalControls("ok\u001b"), "ok");

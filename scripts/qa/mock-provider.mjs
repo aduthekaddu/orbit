@@ -19,6 +19,7 @@ print("\x1b[31mred\x1b[0m")
 print("\x1b[1;33mwarn\x1b[0m", file=sys.stderr)`],
   ["run-osc", String.raw`print("\x1b]0;pwned\x07\x1b]8;;https://example.com/steal\x1b\\click\x1b]8;;\x1b\\ done\x1b[2K")`],
   ["run-html", 'print("<img src=x onerror=alert(1)>")'],
+  ["run-cut", String.raw`print("\x1b[31\x1b[0mred")`],
   ["run-blank", "import sys\nprint()\nprint(file=sys.stderr)"],
 ]);
 const javascriptPrograms = new Map([
