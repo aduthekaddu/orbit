@@ -49,8 +49,10 @@ export default async function sandboxLanguage({ page, origin, step, shot }) {
   await page.goto(`${origin}/c/${id}`);
   const composer = page.getByPlaceholder("Ask anything");
   const cards = page.locator('[data-tool-name="run_code"]');
+  const starts = [];
   for (const run of runs) {
-    const card = cards.nth(await cards.count());
+    starts.push(await cards.count());
+    const card = cards.nth(starts.at(-1));
     await composer.fill(`[qa:${run.tag}]`);
     await composer.press("Enter");
     if (run.stop) {
@@ -67,6 +69,10 @@ export default async function sandboxLanguage({ page, origin, step, shot }) {
     await card.scrollIntoViewIfNeeded();
     await check(step, card, run, run.stop ? "after Stop" : "on desktop");
   }
+  const rejected = runs.findIndex((run) => run.language === null);
+  let bare = starts[rejected + 1] > starts[rejected];
+  for (let index = starts[rejected]; index < starts[rejected + 1]; index += 1) bare = bare && (await inspect(cards.nth(index))).language === null;
+  step("every card of the rejected Ruby call shows no language", bare, `${starts[rejected + 1] - starts[rejected]} cards`);
   const python = await inspect(cards.first());
   step("the source and the output sit on different surfaces", python.sourceColor !== null && python.outputColor !== null && python.sourceColor !== python.outputColor, `source ${python.sourceColor}, output ${python.outputColor}`);
   await cards.first().evaluate((node) => node.scrollIntoView({ block: "center" }));
@@ -75,14 +81,14 @@ export default async function sandboxLanguage({ page, origin, step, shot }) {
   await shot("javascript");
 
   await page.reload();
-  await cards.nth(runs.length - 1).waitFor();
-  for (const [index, run] of runs.entries()) await check(step, cards.nth(index), run, "after reload");
+  await cards.nth(starts.at(-1)).waitFor();
+  for (const [index, run] of runs.entries()) await check(step, cards.nth(starts[index]), run, "after reload");
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(300);
   step("the page fits 390 pixels", await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   for (const [index, run] of runs.entries()) {
-    const card = cards.nth(index);
+    const card = cards.nth(starts[index]);
     await card.evaluate((node) => node.scrollIntoView({ block: "center" }));
     await check(step, card, run, "at 390 pixels");
     if (run.tag === "run-js-exit") await shot("mobile-javascript");

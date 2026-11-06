@@ -8,6 +8,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Added
 
+- Code run cards name their language, Python or JavaScript, in the header. The tag stays while the run goes, after a failure or Stop, and after you reopen the chat. The output boxes sit on a darker surface than the source.
+
 - Settings shows whether the server turned on the code sandbox. The status is read-only, and the browser cannot change it.
 
 - Copy the source, standard output, or standard error of a code run from its card. The buttons work with the keyboard and on a phone, and show whether the copy worked.
