@@ -14,7 +14,11 @@ let repo: string;
 let docsOnly: string;
 let sourceChange: string;
 let sourceAndChangelog: string;
+let sourceAndOldChangelog: string;
+let sourceAndBlankLines: string;
 let base: string;
+
+const changelog = "# Changelog\n\n## [Unreleased]\n\n### Added\n\n## [0.1.0] - 2026-11-01\n\n- An old entry.\n";
 
 function git(...args: string[]) {
   const result = spawnSync("git", args, { cwd: repo, encoding: "utf8" });
@@ -35,9 +39,23 @@ before(() => {
   git("init", "-q", ".");
   git("config", "user.email", "test@example.com");
   git("config", "user.name", "Test");
+  fs.writeFileSync(path.join(repo, "CHANGELOG.md"), changelog);
   base = commit("README.md", "base\n", "base");
   sourceChange = commit("src/a.ts", "x\n", "change src");
-  sourceAndChangelog = commit("CHANGELOG.md", "z\n", "change the changelog");
+  fs.writeFileSync(path.join(repo, "CHANGELOG.md"), changelog.replace("### Added\n", "### Added\n\n- A new entry.\n"));
+  git("add", ".");
+  git("commit", "-q", "-m", "add an entry");
+  sourceAndChangelog = git("rev-parse", "HEAD");
+  git("checkout", "-q", sourceChange);
+  fs.writeFileSync(path.join(repo, "CHANGELOG.md"), `${changelog}- Another old line.\n`);
+  git("add", ".");
+  git("commit", "-q", "-m", "edit a released section");
+  sourceAndOldChangelog = git("rev-parse", "HEAD");
+  git("checkout", "-q", sourceChange);
+  fs.writeFileSync(path.join(repo, "CHANGELOG.md"), changelog.replace("### Added\n", "### Added\n\n\n"));
+  git("add", ".");
+  git("commit", "-q", "-m", "add blank lines under Unreleased");
+  sourceAndBlankLines = git("rev-parse", "HEAD");
   git("checkout", "-q", base);
   docsOnly = commit("docs/a.md", "y\n", "change docs");
 });
@@ -51,6 +69,8 @@ const ready = { TITLE: "fix: keep runs cancelled", HEAD_REF: "fix/keep-cancelled
 const cases: Case[] = [
   { name: "a fix that changes source and the changelog passes", commit: () => sourceAndChangelog, env: ready, ok: true },
   { name: "a fix that changes source without the changelog fails", commit: () => sourceChange, env: ready, ok: false },
+  { name: "a changelog edit outside the Unreleased section does not count", commit: () => sourceAndOldChangelog, env: ready, ok: false },
+  { name: "blank lines under Unreleased do not count", commit: () => sourceAndBlankLines, env: ready, ok: false },
   { name: "the skip-changelog label lets it pass", commit: () => sourceChange, env: { ...ready, LABELS: '["skip-changelog"]' }, ok: true },
   { name: "a draft skips the changelog check", commit: () => sourceChange, env: { ...ready, DRAFT: "true" }, ok: true },
   { name: "a ci title needs no changelog entry", commit: () => sourceChange, env: { ...ready, TITLE: "ci: add a check", HEAD_REF: "ci/add-a-check" }, ok: true },
@@ -68,6 +88,8 @@ const cases: Case[] = [
   { name: "a comment that spans lines is removed before the section check", commit: () => docsOnly, env: { ...ready, BODY: "## Why\n\n<!--\nThe user problem.\n-->\n\n## What changed\n\n- A change.\n\n## How I checked it\n\n- [x] ran it\n" }, ok: false },
   { name: "a draft with the untouched template passes", commit: () => docsOnly, env: { ...ready, BODY: template, DRAFT: "true" }, ok: true },
   { name: "a draft with a bad title still fails", commit: () => docsOnly, env: { ...ready, BODY: template, DRAFT: "true", TITLE: "oops" }, ok: false },
+  { name: "a person on a dependabot branch is still checked", commit: () => docsOnly, env: { TITLE: "Bump x from 1 to 2", HEAD_REF: "dependabot/npm_and_yarn/x-2", BODY: "", DRAFT: "false", LABELS: "[]", ACTOR: "someone" }, ok: false },
+  { name: "ImgBot is exempt because of its author", commit: () => docsOnly, env: { TITLE: "[ImgBot] Optimize images", HEAD_REF: "imgbot", BODY: "", DRAFT: "false", LABELS: "[]", ACTOR: "imgbot[bot]" }, ok: true },
   { name: "a Dependabot pull request is exempt", commit: () => docsOnly, env: { TITLE: "Bump x from 1 to 2", HEAD_REF: "dependabot/npm_and_yarn/x-2", BODY: "", DRAFT: "false", LABELS: "[]", ACTOR: "dependabot[bot]" }, ok: true },
 ];
 
