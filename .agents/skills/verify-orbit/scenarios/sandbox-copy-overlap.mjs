@@ -25,4 +25,23 @@ export default async function sandboxCopyOverlap({ page, origin, step, shot }) {
   });
   step("the end of a long first line stays clear of the copy button", !hidden.overlaps, `text and button overlap by ${hidden.across} by ${hidden.down} pixels`);
   await shot("scrolled-right");
+
+  const mobile = await page.context().browser().newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+  await mobile.addCookies(await page.context().cookies());
+  const phone = await mobile.newPage();
+  await phone.goto(`${origin}/c/${id}`);
+  const phoneCard = phone.locator('[data-tool-name="run_code"]');
+  await phoneCard.locator('[data-tool-status="succeeded"]').waitFor({ timeout: 15_000 });
+  await phoneCard.getByRole("region", { name: "Standard output horizontal scroll", exact: true }).evaluate((element) => { element.scrollLeft = element.scrollWidth; });
+  const tapped = await phoneCard.evaluate((element) => {
+    const text = element.querySelector("[data-code-stdout] code").firstChild;
+    const range = document.createRange();
+    range.setStart(text, text.length - 1);
+    range.setEnd(text, text.length);
+    const box = range.getBoundingClientRect();
+    return document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)?.closest("button")?.getAttribute("aria-label") ?? null;
+  });
+  step("a tap on the last character of the first line does not land on the copy button", tapped === null, `the tap lands on ${tapped}`);
+  await shot("phone-scrolled-right", phone);
+  await mobile.close();
 }

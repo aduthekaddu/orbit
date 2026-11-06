@@ -90,7 +90,7 @@ export default async function sandboxCopy({ page, origin, step, shot }) {
       const box = button.getBoundingClientRect();
       const x = box.x + box.width / 2;
       const y = box.y + box.height / 2;
-      return [[0, 0], [-21, -21], [21, -21], [-21, 21], [21, 21]].map(([dx, dy]) => document.elementFromPoint(x + dx, y + dy)?.closest("button") === button);
+      return [[0, 0], [-21.9, -21.9], [21.9, -21.9], [-21.9, 21.9], [21.9, 21.9]].map(([dx, dy]) => document.elementFromPoint(x + dx, y + dy)?.closest("button") === button);
     });
     step(`${label} has a 44 pixel touch area at 390 pixels`, hits.every(Boolean), JSON.stringify(hits));
   }
