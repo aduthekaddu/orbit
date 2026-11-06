@@ -1,0 +1,37 @@
+.agents/skills/verify-orbit/features/sandbox.md
+  s_e9050b67fdf088::t_8f52f21de3842d 181
+ARCHITECTURE.md
+  s_e9050b67fdf088::t_117a186d6c4c60 133
+CHANGELOG.md
+  s_e9050b67fdf088::t_f73f71fe83e627 11-13
+docs/slices/06.md
+  s_e9050b67fdf088::t_e8225d5f3e2dc1 105
+drizzle/0005_run_source_search.sql
+  s_e9050b67fdf088::t_5c246c84304174 1-15
+drizzle/meta/0005_snapshot.json
+  s_e9050b67fdf088::t_0450115a3fcb2e 1-616
+drizzle/meta/_journal.json
+  s_e9050b67fdf088::t_b5757c0e5bdf34 39-45
+src/lib/db/run-output-search-migration.test.ts
+  s_e9050b67fdf088::t_1efc748d7a5b47 82,84-85
+src/lib/db/run-source-search-migration.test.ts
+  s_e9050b67fdf088::t_404f6c7e872f20 1-92
+src/lib/messages.ts
+  s_e9050b67fdf088::t_27fdf4854ef13f 24,29,32-36,44-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b3641629accef0c3fcf3ba6e9048b165e0fc492c",
+  "prompts": {},
+  "sessions": {
+    "s_e9050b67fdf088": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "342e8e27-0374-4c89-827c-f073c6745b2c",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
