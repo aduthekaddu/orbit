@@ -1,0 +1,23 @@
+CHANGELOG.md
+  s_51f76b6b47de21::t_0527b2bdae0a4d 33-34
+.agents/skills/verify-orbit/features/sandbox.md
+  s_51f76b6b47de21::t_c5d69fb601a5cb 71-74
+next.config.ts
+  s_51f76b6b47de21::t_0527b2bdae0a4d 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "851082a3d8c1fe08052c5068694054416a65d34e",
+  "prompts": {},
+  "sessions": {
+    "s_51f76b6b47de21": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1acb6-e850-7de1-9938-5e46a5f7e771",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
