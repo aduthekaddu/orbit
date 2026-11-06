@@ -31,7 +31,7 @@ function CodeText({ text, kind }: { text: string; kind: keyof typeof codeLabels 
     <div className="relative min-w-0">
       <ScrollFade axis="y" fade="var(--surface-sunken)" className="min-w-0 rounded-md border bg-surface-sunken" scrollerClassName="max-h-tool-content" scrollerLabel={codeLabels[kind]}>
         <ScrollFade axis="x" fade="var(--surface-sunken)" className="min-w-0" scrollerLabel={`${codeLabels[kind]} horizontal scroll`}>
-          <pre data-code-stdout={kind === "stdout" ? "" : undefined} data-code-stderr={kind === "stderr" ? "" : undefined} className="w-max min-w-full p-3 font-mono text-xs leading-5">
+          <pre data-code-stdout={kind === "stdout" ? "" : undefined} data-code-stderr={kind === "stderr" ? "" : undefined} className="w-max min-w-full p-3 pr-9 font-mono text-xs leading-5">
             <code>{text}</code>
           </pre>
         </ScrollFade>
