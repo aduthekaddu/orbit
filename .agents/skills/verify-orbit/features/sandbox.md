@@ -13,19 +13,39 @@ node .agents/skills/verify-orbit/verify.mjs browse sandbox
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
-For the launch-mode check, launch with `ORBIT_SANDBOX=off`, then run `browse launch-mode`.
+For the launch-mode check, run:
+
+```sh
+node .agents/skills/verify-orbit/verify.mjs cleanup
+ORBIT_SANDBOX=off node .agents/skills/verify-orbit/verify.mjs launch --mock
+node .agents/skills/verify-orbit/verify.mjs browse launch-mode
+node .agents/skills/verify-orbit/verify.mjs cleanup
+```
 
 Require every printed check to pass. `[qa:run-python]` must create a code card with `print(1+1)`, stdout `2`, exit code `0`, and a duration. The code and output must survive reload. The card must fit a 390 by 844 viewport. `[qa:run-escape]` must show a failed card with a network error.
 
 Screenshots and output remain under `.verify/evidence/sandbox/` after cleanup. The screenshots are `python.png`, `escape.png`, and `mobile.png`.
 
-`node .agents/skills/verify-orbit/verify.mjs browse sandbox-stopped` saves the runner's stopped error through `upsertMessage` and checks that its card shows Cancelled before and after reload.
+## Saved cards and scrolling
+
+Launch a fresh mock sandbox for these checks.
+
+```sh
+node .agents/skills/verify-orbit/verify.mjs cleanup
+ORBIT_SANDBOX=on node .agents/skills/verify-orbit/verify.mjs launch --mock
+node .agents/skills/verify-orbit/verify.mjs browse sandbox-stopped
+node .agents/skills/verify-orbit/verify.mjs browse sandbox-tool-error
+node .agents/skills/verify-orbit/verify.mjs browse sandbox-scroll
+node .agents/skills/verify-orbit/verify.mjs cleanup
+```
+
+`sandbox-stopped` saves the runner's stopped error through `upsertMessage` and checks Cancelled before and after reload. `sandbox-tool-error` saves a framework validation error and checks that its reason survives reload.
+
+`sandbox-scroll` saves real Docker output near the output limit. Require bounded source, stdout, stderr, and error areas with their last lines reachable by scrolling. It checks keyboard access, horizontal scrolling, and page width on desktop and at 390 pixels.
+
+## Configuration failure
 
 `browse sandbox-failure` checks a configuration failure and reload. Launch its server with `ORBIT_SANDBOX=on DOCKER_HOST=tcp://not-the-local-proxy:2375` and `launch --mock`. Require the failed card to identify the configuration error.
-
-`browse sandbox-tool-error` saves a framework validation error and checks that its reason appears in the failed card before and after reload.
-
-`browse sandbox-scroll` saves real Docker output near the output limit. Require bounded source, stdout, stderr, and error areas with their last lines reachable by scrolling. It checks horizontal scrolling and page width on desktop and at 390 pixels.
 
 ## Real provider
 
