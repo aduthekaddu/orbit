@@ -66,7 +66,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Scan the source
-        # The Dockerfile runs as root. Remove the exclusion when the image runs as a non-root user.
+        # The Dockerfile runs as root (issue #40). Remove the exclusion when the image runs as a non-root user.
         run: |
           docker run --rm --volume "$PWD:/src" --workdir /src \
             --env SEMGREP_SEND_METRICS=off \
