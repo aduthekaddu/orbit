@@ -16,6 +16,7 @@ let sourceChange: string;
 let sourceAndChangelog: string;
 let sourceAndOldChangelog: string;
 let sourceAndBlankLines: string;
+let merged: string;
 let base: string;
 
 const changelog = "# Changelog\n\n## [Unreleased]\n\n### Added\n\n## [0.1.0] - 2026-11-01\n\n- An old entry.\n";
@@ -56,6 +57,13 @@ before(() => {
   git("add", ".");
   git("commit", "-q", "-m", "add blank lines under Unreleased");
   sourceAndBlankLines = git("rev-parse", "HEAD");
+  // The base branch moves on after the pull request was opened. GitHub checks out a merge commit.
+  git("checkout", "-q", "-b", "feature", base);
+  commit("docs/feature.md", "f\n", "document the feature");
+  git("checkout", "-q", "-b", "moved-on", base);
+  commit("src/other.ts", "o\n", "someone else changes src");
+  git("merge", "-q", "--no-ff", "feature", "-m", "merge the feature");
+  merged = git("rev-parse", "HEAD");
   git("checkout", "-q", base);
   docsOnly = commit("docs/a.md", "y\n", "change docs");
 });
@@ -75,6 +83,9 @@ const cases: Case[] = [
   { name: "a draft skips the changelog check", commit: () => sourceChange, env: { ...ready, DRAFT: "true" }, ok: true },
   { name: "a ci title needs no changelog entry", commit: () => sourceChange, env: { ...ready, TITLE: "ci: add a check", HEAD_REF: "ci/add-a-check" }, ok: true },
   { name: "a fix that changes only docs needs no changelog entry", commit: () => docsOnly, env: ready, ok: true },
+  { name: "changes that landed on the base branch after the pull request opened do not count as its own", commit: () => merged, env: ready, ok: true },
+  { name: "a branch with an underscore in its topic fails", commit: () => docsOnly, env: { ...ready, HEAD_REF: "fix/my_feature" }, ok: false },
+  { name: "a branch with a dot in its topic fails", commit: () => docsOnly, env: { ...ready, HEAD_REF: "fix/v1.2" }, ok: false },
   { name: "a title without a type fails", commit: () => docsOnly, env: { ...ready, TITLE: "Keep runs cancelled" }, ok: false },
   { name: "a title with an unknown type fails", commit: () => docsOnly, env: { ...ready, TITLE: "wip: keep runs cancelled" }, ok: false },
   { name: "a title with a scope and a bang passes", commit: () => docsOnly, env: { ...ready, TITLE: "feat(chat)!: drop the old route", HEAD_REF: "feat/drop-route" }, ok: true },
