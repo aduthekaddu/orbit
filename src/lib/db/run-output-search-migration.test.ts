@@ -39,6 +39,7 @@ before(async () => {
   save("old-only-output", 2, "assistant", "", [run("outputonlylegacy\n")]);
   save("old-blank", 3, "assistant", "", [run("\n", "  \n")]);
   save("old-stopped", 4, "assistant", "", [{ type: "tool-run_code", toolCallId: "s", state: "output-error", input: { language: "python", code: "x" }, errorText: "Code run was stopped" }]);
+  save("old-color", 7, "assistant", "", [run("\u001b[31mcolorlegacy\u001b[0m done\n", "\u001b]0;title\u0007warnlegacy\n")]);
   save("old-text", 5, "assistant", "just words", [{ type: "text", text: "just words" }]);
   save("old-user", 6, "user", "run it please", [{ type: "text", text: "run it please" }]);
   db.$client.exec(backfill);
@@ -66,9 +67,16 @@ test("saved output is found by search after the migration", () => {
   assert.deepEqual(search.searchMessages("u1", "outputonlylegacy").map((hit) => hit.messageId), ["old-only-output"]);
 });
 
+test("the migration removes terminal escape sequences from saved output", () => {
+  assert.equal(content("old-color"), "colorlegacy done\n\nwarnlegacy\n");
+  assert.deepEqual(search.searchMessages("u1", "colorlegacy").map((hit) => hit.messageId), ["old-color"]);
+  assert.deepEqual(search.searchMessages("u1", "warnlegacy").map((hit) => hit.messageId), ["old-color"]);
+  assert.doesNotMatch(search.searchMessages("u1", "colorlegacy")[0]?.snippet ?? "", /\u001b|\[31m/);
+});
+
 test("the migration writes the same search text that a new save writes", async () => {
   const { searchTextFromParts } = await import("../messages");
-  for (const id of ["old-both", "old-only-output", "old-blank", "old-stopped", "old-text", "old-user"]) {
+  for (const id of ["old-both", "old-only-output", "old-color", "old-blank", "old-stopped", "old-text", "old-user"]) {
     const row = db.$client.prepare("SELECT parts FROM messages WHERE id = ?").get(id) as { parts: string };
     assert.equal(content(id), searchTextFromParts(JSON.parse(row.parts)), id);
   }
