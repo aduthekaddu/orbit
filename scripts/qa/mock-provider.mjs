@@ -21,6 +21,9 @@ print("\x1b[1;33mwarn\x1b[0m", file=sys.stderr)`],
   ["run-html", 'print("<img src=x onerror=alert(1)>")'],
   ["run-cut", String.raw`print("\x1b[31\x1b[0mred")`],
   ["run-blank", "import sys\nprint()\nprint(file=sys.stderr)"],
+  ["run-token", '# sourceonlytoken5\na = "gizmo"\nb = "wobble7"\nprint(a + b)'],
+  ["run-token-err", 'import sys\nprint("kettle" + "whistle9", file=sys.stderr)'],
+  ["run-token-echo", 'print("echoed" + "token42")'],
 ]);
 const javascriptPrograms = new Map([
   ["run-js", "console.log(1 + 1)"],
@@ -448,6 +451,10 @@ const server = http.createServer((req, res) => {
     }
     if (invalidSandboxCalls.has(scenario)) {
       toolResponse(res, scenario, invalidSandboxCalls.get(scenario), "run_code");
+      return;
+    }
+    if (scenario === "run-token-echo" && body.messages?.at(-1)?.role === "tool") {
+      textResponse(res, "The program printed echoedtoken42.");
       return;
     }
     if (scenario !== "search" && scenario !== "search-loop" && body.messages?.at(-1)?.role === "tool") {
