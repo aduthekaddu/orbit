@@ -11,7 +11,7 @@ async function inspect(card) {
   return card.evaluate((node) => {
     const wells = [...node.querySelectorAll("[data-code-stdout], [data-code-stderr]")];
     const labels = [...node.querySelectorAll("p")].map((p) => p.textContent?.trim());
-    const exit = [...node.querySelectorAll("span")].find((span) => /^(Exit|Timed out|Killed|Stopped)/.test(span.textContent ?? ""));
+    const exit = [...node.querySelectorAll("span")].find((span) => /^(Exit|Timed out|Out of memory|Killed|Stopped)/.test(span.textContent ?? ""));
     const row = exit?.parentElement ? [...exit.parentElement.querySelectorAll("span")].map((span) => span.textContent ?? "").join(" ") : "";
     const duration = /\d+(\.\d)? (ms|s)\b/.exec(row)?.[0];
     return {
@@ -75,7 +75,7 @@ export default async function sandboxEmptyOutput({ page, origin, step, shot }) {
     const card = cards.nth(index);
     await card.scrollIntoViewIfNeeded();
     await check(step, card, run, "at 390 pixels");
-    const inside = await card.getByText(/^(Exit|Timed out|Killed|Stopped)/).first().evaluate((node) => {
+    const inside = await card.getByText(/^(Exit|Timed out|Out of memory|Killed|Stopped)/).first().evaluate((node) => {
       const box = node.parentElement.getBoundingClientRect();
       return box.width > 0 && box.left >= 0 && box.right <= window.innerWidth;
     });

@@ -13,7 +13,7 @@ const runs = [
 
 async function inspect(card) {
   return card.evaluate((node) => {
-    const lead = [...node.querySelectorAll("span")].find((span) => /^(Exit|Timed out|Killed|Stopped)/.test(span.textContent?.trim() ?? ""));
+    const lead = [...node.querySelectorAll("span")].find((span) => /^(Exit|Timed out|Out of memory|Killed|Stopped)/.test(span.textContent?.trim() ?? ""));
     const row = lead?.parentElement ?? null;
     return {
       header: node.querySelector("[data-tool-status]")?.textContent?.trim() ?? null,
@@ -28,7 +28,7 @@ async function check(step, card, run, when) {
   const seen = await inspect(card);
   const label = `${run.name} ${when}`;
   const primary = seen.spans[0] ?? "";
-  step(`${label} states one outcome`, seen.spans.filter((span) => /^(Exit|Timed out|Killed|Stopped)/.test(span)).length === 1, `result ${JSON.stringify(seen.spans)}`);
+  step(`${label} states one outcome`, seen.spans.filter((span) => /^(Exit|Timed out|Out of memory|Killed|Stopped)/.test(span)).length === 1, `result ${JSON.stringify(seen.spans)}`);
   step(`${label} words its outcome as expected`, run.outcome.test(primary), `primary ${JSON.stringify(primary)}`);
   step(`${label} keeps its header status`, seen.header === { succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled" }[run.status], `header ${JSON.stringify(seen.header)}`);
   step(`${label} does not repeat the status in the result`, !/Failed|Succeeded|Cancelled/.test(seen.row), `row ${JSON.stringify(seen.row)}`);
@@ -85,7 +85,7 @@ export default async function sandboxOutcome({ page, origin, step, shot }) {
   for (const [index, run] of runs.entries()) {
     const card = cards.nth(index);
     await card.evaluate((node) => node.scrollIntoView({ block: "center" }));
-    const inside = await card.getByText(/^(Exit|Timed out|Killed|Stopped)/).first().evaluate((node) => {
+    const inside = await card.getByText(/^(Exit|Timed out|Out of memory|Killed|Stopped)/).first().evaluate((node) => {
       const box = node.parentElement.getBoundingClientRect();
       return box.width > 0 && box.left >= 0 && box.right <= window.innerWidth;
     });
