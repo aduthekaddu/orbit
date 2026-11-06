@@ -128,6 +128,31 @@ finally:
       clearTimeout(timer);
     }
   });
+  for (const { name, code, printed } of [
+    { name: "stopping a program keeps what it already printed", code: 'print("before-stop")\nwhile True: pass', printed: "before-stop\n" },
+    { name: "stopping a program that printed nothing keeps an empty result", code: "while True: pass", printed: "" },
+  ]) {
+    await t.test(name, async () => {
+      const controller = new AbortController();
+      const running = runCode(docker, { language: "python", code }, controller.signal);
+      const timer = setTimeout(() => controller.abort(), 1500);
+      try {
+        await assert.rejects(running, (error: unknown) => {
+          assert.ok(error instanceof Error && error.name === "AbortError");
+          const output = (error as { output?: Record<string, unknown> }).output;
+          assert.ok(output, "the stop error must carry the output collected so far");
+          assert.equal(output.stdout, printed);
+          assert.equal(output.stderr, "");
+          assert.equal(output.exitCode, null);
+          assert.equal(output.timedOut, false);
+          assert.equal(output.cancelled, true);
+          return true;
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+    });
+  }
   await t.test("slow cleanup preserves a program that finished before its deadline", async (t) => {
     const removing = Promise.withResolvers<void>();
     const released = Promise.withResolvers<void>();
