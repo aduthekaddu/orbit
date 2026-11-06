@@ -1,0 +1,45 @@
+src/lib/sandbox/spec.ts
+  s_6877932481c8d7::t_a5f789e7ece208 17,23-27,30
+src/lib/tools/metadata.ts
+  s_6877932481c8d7::t_dfde4461ea1a6a 1,8,17
+  s_6877932481c8d7::t_a9cd74bb933461 36-39
+src/lib/tools/stopped-runs.ts
+  s_6877932481c8d7::t_80b18f3923dfea 1-35
+src/lib/tools/run-code.ts
+  s_6877932481c8d7::t_d91e974d324e21 4-5,7-25,29
+src/app/api/chat/route.ts
+  s_6877932481c8d7::t_5b2a144b73f63c 8
+  s_6877932481c8d7::t_beada281d7fbc0 113-114
+  s_6877932481c8d7::t_52dd086a71c33c 141
+src/lib/tools/run-status.ts
+  s_6877932481c8d7::t_6000b7ae78ca2f 2
+  s_6877932481c8d7::t_88a698fa207d09 16
+src/lib/sandbox/run.ts
+  s_6877932481c8d7::t_d1bd90019240d0 35-44
+  s_6877932481c8d7::t_ef66c6c36de18a 129,132,137-138
+src/components/tools/run-card.tsx
+  s_6877932481c8d7::t_23b725cf8d04d8 6
+  s_6877932481c8d7::t_a72971282b3b65 29
+src/lib/tools/stopped-runs.test.ts
+  s_6877932481c8d7::t_e1ca08d69c1e4e 1-86
+src/lib/tools/index.ts
+  s_6877932481c8d7::t_588d1ac4d65fe6 28-29
+  s_6877932481c8d7::t_e4cbe3d28d4af1 7,12
+  s_6877932481c8d7::t_5ba25ef66a3c71 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "246aebf807289d56023ee25be6bb5fc3f1c27282",
+  "prompts": {},
+  "sessions": {
+    "s_6877932481c8d7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3b41b1b5-5e57-4585-9cde-1f4c1aa480f6",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
