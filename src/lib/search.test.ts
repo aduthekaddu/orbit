@@ -158,9 +158,45 @@ test("a reply that repeats the output gives one hit for the message", () => {
   assert.equal(hits[0]?.messageId, "m-dup");
 });
 
-test("source code is not searched", () => {
-  messages.upsertMessage("c1", toolMessage("m-src", { code: "secret_name = 'sourceonlytoken5'", stdout: "ok\n" }), "m-dup");
-  assert.equal(search.searchMessages("u1", "sourceonlytoken5").length, 0);
+test("the source of a code run is found, and the hit opens that message", () => {
+  assert.equal(messages.upsertMessage("c1", toolMessage("m-src", { code: "secret_name = 'sourceonlytoken5'", stdout: "ok\n" }), "m-dup"), true);
+  const hits = search.searchMessages("u1", "sourceonlytoken5");
+  assert.deepEqual(hits.map((hit) => hit.messageId), ["m-src"]);
+  assert.equal(hits[0]?.role, "assistant");
+  assert.match(hits[0]?.snippet ?? "", /\[sourceonlytoken5\]/);
+});
+
+test("the source of a run that was stopped is found", () => {
+  const stopped = {
+    id: "m-stopped",
+    role: "assistant" as const,
+    parts: [
+      { type: "tool-run_code", toolCallId: "call-stopped", state: "output-error", input: { language: "python", code: "while True: stoppedsourcetoken6()" }, errorText: "Code run was stopped" },
+    ],
+  };
+  assert.equal(messages.upsertMessage("c1", stopped, "m-src"), true);
+  assert.deepEqual(search.searchMessages("u1", "stoppedsourcetoken6").map((hit) => hit.messageId), ["m-stopped"]);
+});
+
+test("a message with two runs finds the source of each run in one hit", () => {
+  const first = toolMessage("m-two", { code: "alpharuntoken7()", stdout: "one\n" });
+  const second = toolMessage("m-two", { code: "omegaruntoken8()", stdout: "two\n" });
+  const both = { ...first, parts: [first.parts[0], second.parts[0], first.parts[1]] };
+  assert.equal(messages.upsertMessage("c1", both, "m-stopped"), true);
+  assert.deepEqual(search.searchMessages("u1", "alpharuntoken7").map((hit) => hit.messageId), ["m-two"]);
+  assert.deepEqual(search.searchMessages("u1", "omegaruntoken8").map((hit) => hit.messageId), ["m-two"]);
+});
+
+test("search text is the reply, then the output of each run, then the source of each run", () => {
+  const run = (code: string, stdout: string) => ({ type: "tool-run_code", toolCallId: code, state: "output-available", input: { language: "python", code }, output: { stdout, stderr: "", exitCode: 0, durationMs: 1, timedOut: false, truncated: false } });
+  const parts = [run("src_one()", "first-out\n"), { type: "text", text: "between" }, run("src_two()", "second-out\n")];
+  assert.equal(messages.searchTextFromParts(parts), "between\nfirst-out\n\nsecond-out\n\nsrc_one()\nsrc_two()");
+});
+
+test("a run with blank source adds nothing, and the code of another tool is not read", () => {
+  const blank = { type: "tool-run_code", toolCallId: "b", state: "output-available", input: { language: "python", code: "  \n" }, output: { stdout: "", stderr: "", exitCode: 0, durationMs: 1, timedOut: false, truncated: false } };
+  const other = { type: "tool-web_search", toolCallId: "w", state: "output-available", input: { code: "othertooltoken9" }, output: {} };
+  assert.equal(messages.searchTextFromParts([blank, other, { type: "text", text: "just words" }]), "just words");
 });
 
 test("colored output is found by its words and the snippet has no escape bytes", () => {

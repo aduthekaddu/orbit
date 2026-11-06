@@ -2,6 +2,12 @@ const runs = [
   { tag: "run-token", name: "a token printed to standard output", query: "gizmowobble7", channel: "standard output" },
   { tag: "run-token-err", name: "a token printed to standard error", query: "kettlewhistle9", channel: "standard error" },
   { tag: "run-token-echo", name: "a token that the reply repeats", query: "echoedtoken42", channel: "standard output and the reply" },
+  { tag: "run-js-token", name: "a JavaScript run that prints no token", query: null, channel: "none" },
+];
+
+const sources = [
+  { index: 0, name: "a token only in Python source", query: "sourceonlytoken5" },
+  { index: 3, name: "a token only in JavaScript source", query: "jssourceonlytoken3" },
 ];
 
 async function hits(page, origin, query) {
@@ -30,6 +36,7 @@ export default async function sandboxSearch({ page, origin, step, shot }) {
   step("no prompt or reply says the output tokens", ![...prompts, ...replies].some((message) => /gizmowobble7|kettlewhistle9/.test(JSON.stringify(message.parts.filter((part) => part.type === "text")))), "a token is in message text");
 
   for (const [index, run] of runs.entries()) {
+    if (!run.query) continue;
     const found = await hits(page, origin, run.query);
     const list = found.body?.hits ?? found.body ?? [];
     step(`${run.name} is found by search`, found.status === 200 && Array.isArray(list) && list.length === 1, `status ${found.status}, ${Array.isArray(list) ? list.length : "?"} hits`);
@@ -38,9 +45,13 @@ export default async function sandboxSearch({ page, origin, step, shot }) {
     step(`${run.name} gives one result for ${run.channel}`, Array.isArray(list) && new Set(list.map((entry) => entry.messageId)).size === list.length);
   }
 
-  const source = await hits(page, origin, "sourceonlytoken5");
-  const sourceList = source.body?.hits ?? source.body ?? [];
-  step("source code is not searched", source.status === 200 && Array.isArray(sourceList) && sourceList.length === 0, `${Array.isArray(sourceList) ? sourceList.length : "?"} hits`);
+  for (const source of sources) {
+    const found = await hits(page, origin, source.query);
+    const list = found.body?.hits ?? found.body ?? [];
+    step(`${source.name} is found by search`, found.status === 200 && Array.isArray(list) && list.length === 1, `status ${found.status}, ${Array.isArray(list) ? list.length : "?"} hits`);
+    const hit = Array.isArray(list) ? list[0] : undefined;
+    step(`${source.name} opens the right chat and message`, hit?.chatId === chatId && hit?.messageId === replies[source.index]?.id && hit?.role === "assistant", `hit ${JSON.stringify(hit && { chatId: hit.chatId, messageId: hit.messageId })}`);
+  }
 
   await page.goto(`${origin}/c/${otherId}`);
   await page.getByRole("textbox").click();

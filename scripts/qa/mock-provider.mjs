@@ -28,6 +28,7 @@ print("\x1b[1;33mwarn\x1b[0m", file=sys.stderr)`],
 const javascriptPrograms = new Map([
   ["run-js", "console.log(1 + 1)"],
   ["run-js-exit", "process.exit(2)"],
+  ["run-js-token", "// jssourceonlytoken3\nconsole.log(2 + 3)"],
 ]);
 const invalidSandboxCalls = new Map([
   ["run-long", { language: "python", code: "#".repeat(20_001) }],
