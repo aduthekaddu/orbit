@@ -3,11 +3,12 @@ import { ScrollFade } from "@/components/ui/scroll-fade";
 import { runCodeInputSchema, runCodeOutputSchema } from "@/lib/sandbox/spec";
 
 const errorSchema = z.union([z.object({ ok: z.literal(false).optional(), error: z.string() }), z.string().min(1)]);
+const codeLabels = { source: "Source code", stdout: "Standard output", stderr: "Standard error" };
 
-function CodeText({ text, kind }: { text: string; kind: "source" | "stdout" | "stderr" }) {
+function CodeText({ text, kind }: { text: string; kind: keyof typeof codeLabels }) {
   return (
-    <ScrollFade axis="y" fade="var(--surface-sunken)" className="min-w-0 rounded-md border bg-surface-sunken" scrollerClassName="max-h-tool-content">
-      <ScrollFade axis="x" fade="var(--surface-sunken)" className="min-w-0">
+    <ScrollFade axis="y" fade="var(--surface-sunken)" className="min-w-0 rounded-md border bg-surface-sunken" scrollerClassName="max-h-tool-content" scrollerLabel={codeLabels[kind]}>
+      <ScrollFade axis="x" fade="var(--surface-sunken)" className="min-w-0" scrollerLabel={`${codeLabels[kind]} horizontal scroll`}>
         <pre data-code-stdout={kind === "stdout" ? "" : undefined} data-code-stderr={kind === "stderr" ? "" : undefined} className="w-max min-w-full p-3 font-mono text-xs leading-5">
           <code>{text}</code>
         </pre>
@@ -24,7 +25,7 @@ export function CodeRun({ input, output }: { input: unknown; output: unknown }) 
     <div className="min-w-0 space-y-3">
       {parsedInput.success && <CodeText text={parsedInput.data.code} kind="source" />}
       {error.success ? (
-        <ScrollFade axis="y" fade="var(--card)" className="min-w-0" scrollerClassName="max-h-tool-content">
+        <ScrollFade axis="y" fade="var(--card)" className="min-w-0" scrollerClassName="max-h-tool-content" scrollerLabel="Code error">
           <p className="whitespace-pre-wrap break-words text-sm text-destructive">{typeof error.data === "string" ? error.data : error.data.error}</p>
         </ScrollFade>
       ) : parsedOutput.success ? (

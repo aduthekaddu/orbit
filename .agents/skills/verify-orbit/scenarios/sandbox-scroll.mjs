@@ -31,13 +31,13 @@ export default async function sandboxScroll({ page, origin, step, shot }) {
     const labels = ["Source code", "Source code horizontal scroll", "Standard output", "Standard output horizontal scroll", "Standard error", "Standard error horizontal scroll", "Code error"];
     let named = true;
     for (const label of labels) {
-      const region = page.getByRole("region", { name: label, exact: true });
+      const region = (label === "Code error" ? cards.last() : cards.first()).getByRole("region", { name: label, exact: true });
       named &&= await region.count() === 1 && await region.evaluate((element) => element.tabIndex === 0);
     }
     step(`${name} scrollers have names and explicit keyboard stops`, named);
     if (named) {
-      const source = page.getByRole("region", { name: "Source code horizontal scroll", exact: true });
-      const output = page.getByRole("region", { name: "Standard output", exact: true });
+      const source = cards.first().getByRole("region", { name: "Source code horizontal scroll", exact: true });
+      const output = cards.first().getByRole("region", { name: "Standard output", exact: true });
       await source.focus();
       await page.keyboard.press("Tab");
       const reached = await output.evaluate((element) => document.activeElement === element);
@@ -49,7 +49,7 @@ export default async function sandboxScroll({ page, origin, step, shot }) {
       await source.press("ArrowRight");
       await page.waitForFunction(() => document.querySelector('[aria-label="Source code horizontal scroll"]').scrollLeft > 0);
       step(`${name} Arrow Right scrolls long source lines`, true);
-      const errorRegion = page.getByRole("region", { name: "Code error", exact: true });
+      const errorRegion = cards.last().getByRole("region", { name: "Code error", exact: true });
       await errorRegion.evaluate((element) => { element.scrollTop = 0; });
       await errorRegion.press("PageDown");
       await page.waitForFunction(() => document.querySelector('[aria-label="Code error"]').scrollTop > 0);
