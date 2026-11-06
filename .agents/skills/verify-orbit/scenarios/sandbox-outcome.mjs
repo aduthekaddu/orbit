@@ -5,9 +5,10 @@ const containerRunning = () => execFileSync("docker", ["ps", "--filter", "label=
 const runs = [
   { tag: "run-pass", name: "a success", status: "succeeded", outcome: /^Exit 0$/ },
   { tag: "run-exit", name: "a nonzero exit", status: "failed", outcome: /^Exit 3$/ },
-  { tag: "run-spin", name: "a timeout", status: "failed", outcome: /^Timed out after \d+(\.\d)? s$/, single: true },
-  { tag: "run-oom", name: "a memory kill", status: "failed", outcome: /^Killed \(exit 137\)$/ },
-  { tag: "run-spin", name: "a cancelled run", status: "cancelled", outcome: /^Stopped after \d+(\.\d)? s$/, single: true, stop: true },
+  { tag: "run-exit-high", name: "a program that exits 137 itself", status: "failed", outcome: /^Exit 137$/ },
+  { tag: "run-spin", name: "a timeout", status: "failed", outcome: /^Timed out$/ },
+  { tag: "run-oom", name: "a memory kill", status: "failed", outcome: /^Out of memory \(exit 137\)$/ },
+  { tag: "run-spin", name: "a cancelled run", status: "cancelled", outcome: /^Stopped$/, stop: true },
 ];
 
 async function inspect(card) {
@@ -33,7 +34,7 @@ async function check(step, card, run, when) {
   step(`${label} does not repeat the status in the result`, !/Failed|Succeeded|Cancelled/.test(seen.row), `row ${JSON.stringify(seen.row)}`);
   step(`${label} shows no raw milliseconds over 999`, !/\b\d{4,} ms\b/.test(seen.row), `row ${JSON.stringify(seen.row)}`);
   step(`${label} does not say "Exit killed"`, !/Exit killed/.test(seen.text), "found Exit killed");
-  if (run.single) step(`${label} shows its duration once`, (seen.row.match(/\d+(\.\d)? (ms|s)\b/g) ?? []).length === 1, `row ${JSON.stringify(seen.row)}`);
+  step(`${label} shows its duration once, in its own part`, /^\d+(\.\d)? (ms|s)$/.test(seen.spans[1] ?? "") && seen.spans.length === 2, `result ${JSON.stringify(seen.spans)}`);
   return seen;
 }
 
@@ -62,7 +63,7 @@ export default async function sandboxOutcome({ page, origin, step, shot }) {
     if (run.stop) step(`${run.name} on desktop shows Cancelled in its header`, seen.header === "Cancelled", `header ${JSON.stringify(seen.header)}`);
     rows.push(seen);
     console.log(`${run.name}: header ${JSON.stringify(seen.header)}, result ${JSON.stringify(seen.row)}`);
-    await shot(run.tag === "run-spin" && run.stop ? "cancelled" : run.tag);
+    await shot(run.stop ? "cancelled" : run.tag);
   }
 
   await page.reload();
@@ -73,7 +74,7 @@ export default async function sandboxOutcome({ page, origin, step, shot }) {
     step(`${run.name} after reload keeps the same result text`, run.stop ? seen.header === rows[index].header : seen.row === rows[index].row && seen.header === rows[index].header, `before ${JSON.stringify(rows[index].row)}, after ${JSON.stringify(seen.row)}`);
     step(`${run.name} after reload keeps its status role`, (await card.getByRole("status").count()) === 1);
   }
-  await cards.nth(2).evaluate((node) => node.scrollIntoView({ block: "center" }));
+  await cards.nth(3).evaluate((node) => node.scrollIntoView({ block: "center" }));
   await shot("reloaded");
   await cards.nth(runs.length - 1).evaluate((node) => node.scrollIntoView({ block: "center" }));
   await shot("cancelled-reloaded");

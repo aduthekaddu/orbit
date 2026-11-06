@@ -96,7 +96,8 @@ test("a silent failure and a silent timeout keep their result and show no wells"
   assert.match(failed, /Exit 3/);
   const timedOut = renderToStaticMarkup(<CodeRun input={input} output={{ ...silent, exitCode: null, timedOut: true, durationMs: 10064 }} />);
   assert.doesNotMatch(timedOut, /data-code-stdout|data-code-stderr/);
-  assert.match(timedOut, /Timed out after 10\.1 s/);
+  assert.match(timedOut, /Timed out/);
+  assert.match(timedOut, /10\.1 s/);
 });
 
 test("output made only of blank lines gets no well, like empty output", () => {
@@ -127,12 +128,16 @@ test("a nonzero exit shows its exit code once", () => {
   assert.equal(resultRow(renderToStaticMarkup(<CodeRun input={input} output={{ ...base, exitCode: 3 }} />)), "Exit 3|194 ms");
 });
 
-test("a timeout shows one outcome with its duration in seconds", () => {
-  assert.equal(resultRow(renderToStaticMarkup(<CodeRun input={input} output={{ ...base, exitCode: null, timedOut: true, durationMs: 10064 }} />)), "Timed out after 10.1 s");
+test("a timeout shows one outcome and its duration in seconds", () => {
+  assert.equal(resultRow(renderToStaticMarkup(<CodeRun input={input} output={{ ...base, exitCode: null, timedOut: true, durationMs: 10064 }} />)), "Timed out|10.1 s");
 });
 
-test("a memory kill says killed and keeps the exit code", () => {
-  assert.equal(resultRow(renderToStaticMarkup(<CodeRun input={input} output={{ ...base, exitCode: 137, durationMs: 1312 }} />)), "Killed (exit 137)|1.3 s");
+test("a run the memory limit killed says so and keeps the exit code", () => {
+  assert.equal(resultRow(renderToStaticMarkup(<CodeRun input={input} output={{ ...base, exitCode: 137, oomKilled: true, durationMs: 1312 }} />)), "Out of memory (exit 137)|1.3 s");
+});
+
+test("a program that exits 137 on its own is not called a memory kill", () => {
+  assert.equal(resultRow(renderToStaticMarkup(<CodeRun input={input} output={{ ...base, exitCode: 137, durationMs: 1312 }} />)), "Exit 137|1.3 s");
 });
 
 test("a run with no exit code and no timeout still says killed", () => {
@@ -140,8 +145,8 @@ test("a run with no exit code and no timeout still says killed", () => {
 });
 
 test("a cancelled run shows when it was stopped, whatever its exit code", () => {
-  assert.equal(resultRow(renderToStaticMarkup(<CodeRun input={input} output={{ ...base, exitCode: null, cancelled: true, durationMs: 2012 }} />)), "Stopped after 2.0 s");
-  assert.equal(resultRow(renderToStaticMarkup(<CodeRun input={input} output={{ ...base, exitCode: 0, cancelled: true, durationMs: 40 }} />)), "Stopped after 40 ms");
+  assert.equal(resultRow(renderToStaticMarkup(<CodeRun input={input} output={{ ...base, exitCode: null, cancelled: true, durationMs: 2012 }} />)), "Stopped|2.0 s");
+  assert.equal(resultRow(renderToStaticMarkup(<CodeRun input={input} output={{ ...base, exitCode: 0, cancelled: true, durationMs: 40 }} />)), "Stopped|40 ms");
 });
 
 test("durations under a second stay in milliseconds and the rest use seconds", () => {
@@ -154,7 +159,7 @@ test("durations under a second stay in milliseconds and the rest use seconds", (
 });
 
 test("no outcome repeats the header status words", () => {
-  for (const output of [base, { ...base, exitCode: 3 }, { ...base, exitCode: null, timedOut: true }, { ...base, exitCode: 137 }, { ...base, exitCode: null, cancelled: true }]) {
+  for (const output of [base, { ...base, exitCode: 3 }, { ...base, exitCode: null, timedOut: true }, { ...base, exitCode: 137, oomKilled: true }, { ...base, exitCode: null, cancelled: true }]) {
     assert.doesNotMatch(resultRow(renderToStaticMarkup(<CodeRun input={input} output={output} />)), /Failed|Succeeded|Cancelled/);
   }
 });
