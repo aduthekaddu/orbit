@@ -3,6 +3,7 @@ import { z } from "zod";
 import { useCopy } from "@/components/chat/use-copy";
 import { ScrollFade } from "@/components/ui/scroll-fade";
 import { runCodeInputSchema, runCodeOutputSchema, type RunCodeOutput } from "@/lib/sandbox/spec";
+import { stripTerminalControls } from "@/lib/sandbox/terminal";
 
 const errorSchema = z.union([z.object({ ok: z.literal(false).optional(), error: z.string() }), z.string().min(1)]);
 const codeLabels = { source: "Source code", stdout: "Standard output", stderr: "Standard error" };
@@ -65,6 +66,8 @@ export function CodeRun({ input, output }: { input: unknown; output: unknown }) 
   const parsedOutput = runCodeOutputSchema.safeParse(output);
   const error = errorSchema.safeParse(output);
   const run = parsedOutput.success ? describeRun(parsedOutput.data) : null;
+  const stdout = parsedOutput.success ? stripTerminalControls(parsedOutput.data.stdout) : "";
+  const stderr = parsedOutput.success ? stripTerminalControls(parsedOutput.data.stderr) : "";
   return (
     <div className="min-w-0 space-y-3">
       {parsedInput.success && <CodeText text={parsedInput.data.code} kind="source" />}
@@ -74,16 +77,16 @@ export function CodeRun({ input, output }: { input: unknown; output: unknown }) 
         </ScrollFade>
       ) : parsedOutput.success && run ? (
         <>
-          {parsedOutput.data.stdout.trim() && (
+          {stdout.trim() && (
             <div className="min-w-0 space-y-1">
               <p className="text-xs text-muted-foreground">stdout</p>
-              <CodeText text={parsedOutput.data.stdout} kind="stdout" />
+              <CodeText text={stdout} kind="stdout" />
             </div>
           )}
-          {parsedOutput.data.stderr.trim() && (
+          {stderr.trim() && (
             <div className="min-w-0 space-y-1">
               <p className="text-xs text-muted-foreground">stderr</p>
-              <CodeText text={parsedOutput.data.stderr} kind="stderr" />
+              <CodeText text={stderr} kind="stderr" />
             </div>
           )}
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground num">
