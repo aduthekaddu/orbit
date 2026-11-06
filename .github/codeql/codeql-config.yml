@@ -1,0 +1,6 @@
+name: Orbit CodeQL configuration
+queries:
+  - uses: security-extended
+paths-ignore:
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
