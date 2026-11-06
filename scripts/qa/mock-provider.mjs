@@ -8,6 +8,8 @@ const sandboxPrograms = new Map([
   ["run-timeout", 'print("before-timeout")\nwhile True: pass'],
   ["run-oom", 'print("before-oom")\nx = bytearray(1024 * 1024 * 1024)'],
   ["run-unicode", 'import os\nos.write(1, b"x" * 65534 + b"\\xe2\\x82")'],
+  ["run-wide", 'print("x" * 150 + "END")'],
+  ["run-copy", 'import sys\ndef show():\n    print("  indented ✓ héllo 🚀")\n    print("line two")\n    print("err ✗", file=sys.stderr)\nshow()'],
   ["run-spin", "while True: pass"],
 ]);
 const invalidSandboxCalls = new Map([

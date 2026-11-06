@@ -42,3 +42,25 @@ test("framework error text is escaped instead of rendered as HTML", () => {
   assert.match(html, /&lt;script&gt;bad\(\)&lt;\/script&gt;/);
   assert.doesNotMatch(html, /<script>/);
 });
+
+const finished = { stdout: "  indented ✓\nline two\n", stderr: "warning\n", exitCode: 0, durationMs: 20, timedOut: false, truncated: false };
+
+test("a finished code run offers copy buttons for source, standard output, and standard error", () => {
+  const html = renderToStaticMarkup(<CodeRun input={input} output={finished} />);
+  for (const label of ["Copy source", "Copy standard output", "Copy standard error"]) {
+    assert.match(html, new RegExp(`<button[^>]*aria-label="${label}"`));
+  }
+});
+
+test("a code run with no output channel text offers no copy button for it", () => {
+  const html = renderToStaticMarkup(<CodeRun input={input} output={{ ...finished, stdout: "", stderr: "" }} />);
+  assert.match(html, /aria-label="Copy source"/);
+  assert.doesNotMatch(html, /Copy standard output/);
+  assert.doesNotMatch(html, /Copy standard error/);
+});
+
+test("a running code card offers only the source copy button", () => {
+  const html = renderToStaticMarkup(<CodeRun input={input} output={undefined} />);
+  assert.match(html, /aria-label="Copy source"/);
+  assert.doesNotMatch(html, /Copy standard/);
+});
