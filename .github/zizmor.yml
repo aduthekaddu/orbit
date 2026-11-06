@@ -1,0 +1,4 @@
+rules:
+  # actionlint rejects the `$/` form, so local actions keep the `./` form.
+  self-repository:
+    disable: true
