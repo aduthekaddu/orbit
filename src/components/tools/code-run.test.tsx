@@ -99,3 +99,15 @@ test("a silent failure and a silent timeout keep their result and show no wells"
   assert.match(timedOut, /Timed out/);
   assert.match(timedOut, /10064 ms/);
 });
+
+test("output made only of blank lines gets no well, like empty output", () => {
+  const html = renderToStaticMarkup(<CodeRun input={{ language: "python", code: "print()" }} output={{ ...silent, stdout: "\n", stderr: " \n\t" }} />);
+  assert.doesNotMatch(html, /data-code-stdout|data-code-stderr/);
+  assert.doesNotMatch(html, />stdout<|>stderr</);
+  assert.match(html, /Exit 0/);
+});
+
+test("output with text keeps its leading and trailing blank lines", () => {
+  const html = renderToStaticMarkup(<CodeRun input={input} output={{ ...silent, stdout: "\n  two\n\n" }} />);
+  assert.match(html, /data-code-stdout=""[^>]*><code>\n {2}two\n\n<\/code>/);
+});

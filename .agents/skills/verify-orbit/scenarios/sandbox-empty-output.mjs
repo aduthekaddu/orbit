@@ -4,6 +4,7 @@ const runs = [
   { tag: "run-escape", name: "a failure with standard error only", status: "failed", source: "urllib.request", stdout: false, stderr: true, exit: /Exit 1/ },
   { tag: "run-exit", name: "a silent nonzero exit", status: "failed", source: "sys.exit(3)", stdout: false, stderr: false, exit: /Exit 3/ },
   { tag: "run-spin", name: "a silent timeout", status: "failed", source: "while True: pass", stdout: false, stderr: false, exit: /Timed out/ },
+  { tag: "run-blank", name: "a run that prints only blank lines", status: "succeeded", source: "print()", stdout: false, stderr: false, exit: /Exit 0/ },
 ];
 
 async function inspect(card) {
@@ -15,7 +16,7 @@ async function inspect(card) {
     return {
       stdout: node.querySelectorAll("[data-code-stdout]").length,
       stderr: node.querySelectorAll("[data-code-stderr]").length,
-      emptyWells: wells.filter((well) => !well.textContent).length,
+      emptyWells: wells.filter((well) => !well.textContent?.trim()).length,
       stdoutLabel: labels.includes("stdout"),
       stderrLabel: labels.includes("stderr"),
       copySource: [...node.querySelectorAll("button")].some((button) => button.getAttribute("aria-label") === "Copy source"),
@@ -55,7 +56,7 @@ export default async function sandboxEmptyOutput({ page, origin, step, shot }) {
     await card.scrollIntoViewIfNeeded();
     const seen = await check(step, card, run, "on desktop");
     heights.push(`${run.tag} ${seen.height}px`);
-    if (run.tag === "run-pass" || run.tag === "run-exit" || run.tag === "run-spin") await shot(run.tag);
+    if (run.tag === "run-pass" || run.tag === "run-exit" || run.tag === "run-spin" || run.tag === "run-blank") await shot(run.tag);
   }
   console.log(`card heights ${heights.join(", ")}`);
 
@@ -73,6 +74,7 @@ export default async function sandboxEmptyOutput({ page, origin, step, shot }) {
   for (const [index, run] of runs.entries()) {
     const card = cards.nth(index);
     await card.scrollIntoViewIfNeeded();
+    await check(step, card, run, "at 390 pixels");
     const inside = await card.getByText(/^\d+ ms$/).evaluate((node) => {
       const box = node.getBoundingClientRect();
       return box.width > 0 && box.left >= 0 && box.right <= window.innerWidth;
