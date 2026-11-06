@@ -128,6 +128,19 @@ node .agents/skills/verify-orbit/verify.mjs cleanup
 
 The scenario runs `[qa:run-pass]`, `[qa:run-python]`, `[qa:run-escape]`, `[qa:run-exit]`, `[qa:run-spin]`, and `[qa:run-blank]` in one chat. Their output is empty, stdout only, stderr only, empty with exit 3, empty with a timeout, and blank lines only. Require no empty output well on any card, a well and its label only for a channel with text, and the source, exit status, and duration on every card. A channel with only spaces or line breaks counts as empty. It runs the same checks on each card on desktop, after a reload, and at 390 pixels, and prints the card heights.
 
+## Run outcome
+
+Launch a fresh mock sandbox. Docker must be reachable.
+
+```sh
+node .agents/skills/verify-orbit/verify.mjs cleanup
+ORBIT_SANDBOX=on node .agents/skills/verify-orbit/verify.mjs launch --mock
+node .agents/skills/verify-orbit/verify.mjs browse sandbox-outcome
+node .agents/skills/verify-orbit/verify.mjs cleanup
+```
+
+The scenario runs `[qa:run-pass]`, `[qa:run-exit]`, `[qa:run-spin]`, `[qa:run-oom]`, and `[qa:run-spin]` again with a click on Stop after two seconds. Require one outcome in each result line, worded `Exit 0`, `Exit 3`, `Timed out after 10.0 s`, `Killed (exit 137)`, and `Stopped after 2.2 s`. Require no `Exit killed`, no duration over 999 ms in raw milliseconds, and no `Failed`, `Succeeded`, or `Cancelled` in the result line. The header status must match, and the card must keep one status role after a reload. The timeout and stopped run show their duration once. The live card right after Stop shows Cancelled in its header and no result line, because the AI SDK drops the tool result on Stop. The reloaded card shows the saved result. The check repeats at 390 pixels and prints the header and result line for every card.
+
 ## Settings status
 
 Run the check against a server with the sandbox on, then one with it off. Docker is not needed.

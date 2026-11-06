@@ -34,6 +34,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Fixed
 
+- A code run result states one outcome, such as `Timed out after 10.1 s`, `Killed (exit 137)`, or `Stopped after 2.0 s`, and shows a duration over one second in seconds. `Exit killed` and the repeated `Timed out` are gone.
+
 - A code run card hides the standard output or standard error box when it has no text or only blank lines. A run with no output still shows its source, exit status, and duration.
 
 - Stopping a running code card keeps the output the program had printed. The saved card shows Cancelled with that output after you reopen the chat.
