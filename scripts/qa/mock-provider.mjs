@@ -13,6 +13,7 @@ const sandboxPrograms = new Map([
   ["run-spin", "while True: pass"],
   ["run-pass", "pass"],
   ["run-exit", "import sys\nsys.exit(3)"],
+  ["run-exit-high", "import sys\nsys.exit(137)"],
   ["run-blank", "import sys\nprint()\nprint(file=sys.stderr)"],
 ]);
 const invalidSandboxCalls = new Map([

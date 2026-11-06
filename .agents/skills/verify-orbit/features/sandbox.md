@@ -128,6 +128,19 @@ node .agents/skills/verify-orbit/verify.mjs cleanup
 
 The scenario runs `[qa:run-pass]`, `[qa:run-python]`, `[qa:run-escape]`, `[qa:run-exit]`, `[qa:run-spin]`, and `[qa:run-blank]` in one chat. Their output is empty, stdout only, stderr only, empty with exit 3, empty with a timeout, and blank lines only. Require no empty output well on any card, a well and its label only for a channel with text, and the source, exit status, and duration on every card. A channel with only spaces or line breaks counts as empty. It runs the same checks on each card on desktop, after a reload, and at 390 pixels, and prints the card heights.
 
+## Run outcome
+
+Launch a fresh mock sandbox. Docker must be reachable.
+
+```sh
+node .agents/skills/verify-orbit/verify.mjs cleanup
+ORBIT_SANDBOX=on node .agents/skills/verify-orbit/verify.mjs launch --mock
+node .agents/skills/verify-orbit/verify.mjs browse sandbox-outcome
+node .agents/skills/verify-orbit/verify.mjs cleanup
+```
+
+The scenario runs `[qa:run-pass]`, `[qa:run-exit]`, `[qa:run-exit-high]`, `[qa:run-spin]`, `[qa:run-oom]`, and `[qa:run-spin]` again with a click on Stop after two seconds. Require one outcome in each result line, worded `Exit 0`, `Exit 3`, `Exit 137`, `Timed out`, `Out of memory (exit 137)`, and `Stopped`. `[qa:run-exit-high]` is a program that exits 137 on its own, and it must not be called a memory kill. Each result line has exactly two parts, the outcome and a duration such as `174 ms` or `10.0 s`. The durations vary from run to run, so the scenario checks their shape and not their value. Require no `Exit killed`, no duration over 999 ms in raw milliseconds, and no `Failed`, `Succeeded`, or `Cancelled` in the result line. The header status must match, and the card must keep one status role after a reload. The live card right after Stop shows Cancelled in its header and no result line, because the AI SDK drops the tool result on Stop. The reloaded card shows the saved result. The check repeats at 390 pixels and prints the header and result line for every card.
+
 ## Settings status
 
 Run the check against a server with the sandbox on, then one with it off. Docker is not needed.
