@@ -115,6 +115,22 @@ node .agents/skills/verify-orbit/verify.mjs cleanup
 
 `sandbox-copy-overlap` runs `[qa:run-wide]`, which prints a 153 character first line. After scrolling the well fully right, require the last three characters to clear the copy button. In a 390 pixel touch context, require a tap on the last character not to land on the button.
 
+## Settings status
+
+Run the check against a server with the sandbox on, then one with it off. Docker is not needed.
+
+```sh
+node .agents/skills/verify-orbit/verify.mjs cleanup
+ORBIT_SANDBOX=on node .agents/skills/verify-orbit/verify.mjs launch --mock
+node .agents/skills/verify-orbit/verify.mjs browse settings-sandbox
+node .agents/skills/verify-orbit/verify.mjs cleanup
+ORBIT_SANDBOX=off node .agents/skills/verify-orbit/verify.mjs launch --mock
+node .agents/skills/verify-orbit/verify.mjs browse settings-sandbox
+node .agents/skills/verify-orbit/verify.mjs cleanup
+```
+
+The scenario reads the mode the server was launched with. Require `GET /api/settings` and the Settings page to agree with it, a read-only status under a Code sandbox heading, no key or Docker detail in the response, and no way to change the setting from the browser. It also checks the page at 390 pixels.
+
 ## Real provider
 
 Launch with the sandbox enabled. Pass `ORBIT_BASE_URL`, `ORBIT_API_KEY`, and `ORBIT_MODEL` through the environment, then run `node .agents/skills/verify-orbit/verify.mjs browse sandbox-real`.

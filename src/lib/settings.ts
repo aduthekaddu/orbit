@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { normalizeBaseUrl } from "./base-url";
 import { db } from "./db";
+import { sandboxEnabled } from "./sandbox/enabled";
 import { settings } from "./db/schema";
 
 export const REASONING_EFFORTS = ["low", "medium", "high"] as const;
@@ -22,6 +23,7 @@ export type PublicSettings = {
   keySet: boolean;
   searxngUrl: string;
   tavilyKeySet: boolean;
+  sandbox: boolean;
 };
 
 function asEffort(value: string): ReasoningEffort {
@@ -50,6 +52,7 @@ export function toPublicSettings(row: SettingsRecord | null): PublicSettings {
     keySet: Boolean(row?.apiKey),
     searxngUrl: row?.searxngUrl ?? "",
     tavilyKeySet: Boolean(row?.tavilyApiKey),
+    sandbox: sandboxEnabled(),
   };
 }
 

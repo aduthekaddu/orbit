@@ -5,7 +5,7 @@ import path from "node:path";
 import test, { before, after } from "node:test";
 
 const originalCwd = process.cwd();
-const envNames = ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL", "ORBIT_DATA_DIR", "ORBIT_SEARXNG_URL", "ORBIT_TAVILY_API_KEY"];
+const envNames = ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL", "ORBIT_DATA_DIR", "ORBIT_SEARXNG_URL", "ORBIT_TAVILY_API_KEY", "ORBIT_SANDBOX"];
 const originalEnv = Object.fromEntries(envNames.map((name) => [name, process.env[name]]));
 let sandbox: string;
 let settings: typeof import("./settings");
@@ -49,7 +49,7 @@ test("public settings expose search configuration without either key", () => {
   const value = settings.toPublicSettings(row);
   assert.deepEqual(value, {
     baseUrl: "https://example.com/v1", model: "test-model", reasoningEffort: "medium", keySet: true,
-    searxngUrl: "http://127.0.0.1:8888", tavilyKeySet: true,
+    searxngUrl: "http://127.0.0.1:8888", tavilyKeySet: true, sandbox: false,
   });
   assert.equal(JSON.stringify(value).includes(row.apiKey), false);
   assert.equal(JSON.stringify(value).includes(row.tavilyApiKey), false);
@@ -75,4 +75,23 @@ test("an explicit Tavily removal clears the key and disables its search backend"
   assert.equal(row.tavilyApiKey, "");
   const { toolsFor } = await import("./tools");
   assert.equal("web_search" in toolsFor(row), false);
+});
+
+test("public settings say whether the server enabled the code sandbox and expose no Docker detail", () => {
+  const original = { sandbox: process.env.ORBIT_SANDBOX, docker: process.env.DOCKER_HOST };
+  process.env.DOCKER_HOST = "tcp://private-proxy-not-real:2375";
+  try {
+    for (const value of [undefined, "off", "true", "ON", "on"]) {
+      if (value === undefined) delete process.env.ORBIT_SANDBOX;
+      else process.env.ORBIT_SANDBOX = value;
+      const body = settings.toPublicSettings(null) as { sandbox?: boolean };
+      assert.equal(body.sandbox, value === "on", `ORBIT_SANDBOX=${value}`);
+      assert.equal(JSON.stringify(body).includes("private-proxy-not-real"), false);
+    }
+  } finally {
+    if (original.sandbox === undefined) delete process.env.ORBIT_SANDBOX;
+    else process.env.ORBIT_SANDBOX = original.sandbox;
+    if (original.docker === undefined) delete process.env.DOCKER_HOST;
+    else process.env.DOCKER_HOST = original.docker;
+  }
 });
