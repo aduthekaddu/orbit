@@ -9,13 +9,13 @@ types='feat|fix|docs|refactor|test|chore|perf|ci'
 problems=()
 problem() { problems+=("$1"); }
 
-# Bots write their own titles, branches, and descriptions.
-case "$HEAD_REF" in
-  dependabot/* | imgbot) echo "A bot's pull request. The checks do not apply."; exit 0 ;;
-esac
+# Bots write their own titles, branches, and descriptions. The author decides, not the branch name.
 case "${ACTOR:-}" in
   *"[bot]") echo "A bot's pull request. The checks do not apply."; exit 0 ;;
 esac
+
+# The text under "## [Unreleased]" with all whitespace removed.
+unreleased() { awk '/^## \[Unreleased\]/ {found = 1; next} /^## \[/ {found = 0} found' | tr -d '[:space:]'; }
 
 title_pattern="^($types)(\\([a-z0-9._/-]+\\))?!?: .+"
 if ! [[ $TITLE =~ $title_pattern ]]; then
@@ -62,8 +62,12 @@ if [ "${DRAFT:-false}" != "true" ]; then
     feat | fix | perf)
       changed=$(git diff --name-only "$BASE_SHA...HEAD")
       shipped=$(grep -E '^(src/|drizzle/|Dockerfile$|docker-compose.*\.yml$|next\.config\.ts$|package\.json$)' <<< "$changed" || true)
-      if [ -n "$shipped" ] && ! grep -qxF CHANGELOG.md <<< "$changed" && ! jq --exit-status 'index("skip-changelog")' <<< "${LABELS:-[]}" > /dev/null; then
-        problem "A $type pull request that changes shipped code needs a line under \"## [Unreleased]\" in CHANGELOG.md. If nothing changes for a user, add the skip-changelog label."
+      if [ -n "$shipped" ] && ! jq --exit-status 'index("skip-changelog")' <<< "${LABELS:-[]}" > /dev/null; then
+        before=$(git show "$BASE_SHA:CHANGELOG.md" 2> /dev/null | unreleased)
+        after=$(git show "HEAD:CHANGELOG.md" 2> /dev/null | unreleased)
+        if [ -z "$after" ] || [ "$before" = "$after" ]; then
+          problem "A $type pull request that changes shipped code needs a change under \"## [Unreleased]\" in CHANGELOG.md. If nothing changes for a user, add the skip-changelog label."
+        fi
       fi
       ;;
   esac
