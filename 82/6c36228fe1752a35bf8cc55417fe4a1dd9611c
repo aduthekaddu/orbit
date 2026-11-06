@@ -1,0 +1,30 @@
+.agents/skills/verify-orbit/scenarios/sandbox-output.mjs
+  s_51f76b6b47de21::t_98875e79d61c1c 8,11-12,14
+src/lib/sandbox/images.ts
+  s_51f76b6b47de21::t_196d7eb98fb548 4
+.agents/skills/verify-orbit/features/sandbox.md
+  s_51f76b6b47de21::t_196d7eb98fb548 39,47
+  s_51f76b6b47de21::t_449792a6ec1a7f 48
+CHANGELOG.md
+  s_51f76b6b47de21::t_196d7eb98fb548 33-34
+docs/slices/08.md
+  s_51f76b6b47de21::t_196d7eb98fb548 54
+src/lib/sandbox/spec.test.ts
+  s_51f76b6b47de21::t_196d7eb98fb548 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "826c36228fe1752a35bf8cc55417fe4a1dd9611c",
+  "prompts": {},
+  "sessions": {
+    "s_51f76b6b47de21": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1acb6-e850-7de1-9938-5e46a5f7e771",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
