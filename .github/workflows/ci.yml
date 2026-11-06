@@ -83,6 +83,7 @@ jobs:
           path: |
             .verify/evidence
             .verify/*.log
+          include-hidden-files: true
           retention-days: 7
           if-no-files-found: ignore
 
