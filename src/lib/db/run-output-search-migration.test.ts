@@ -79,8 +79,10 @@ test("the migration keeps the output of several runs in the order of the chat", 
   assert.equal(content("old-two-runs"), "between\nfirst-out\n\nfirst-err\n\nsecond-out\n\nsecond-err\n");
 });
 
-test("the migration writes the same search text that a new save writes", async () => {
+test("this migration and the next one write the same search text that a new save writes", async () => {
   const { searchTextFromParts } = await import("../messages");
+  // A new save also writes the source of each run, which 0005 adds. Run it last, after the checks above.
+  db.$client.exec(fs.readFileSync(path.join(process.cwd(), "drizzle/0005_run_source_search.sql"), "utf8"));
   for (const id of ["old-both", "old-only-output", "old-color", "old-two-runs", "old-blank", "old-stopped", "old-text", "old-user"]) {
     const row = db.$client.prepare("SELECT parts FROM messages WHERE id = ?").get(id) as { parts: string };
     assert.equal(content(id), searchTextFromParts(JSON.parse(row.parts)), id);
