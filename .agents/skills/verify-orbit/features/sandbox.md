@@ -68,6 +68,10 @@ Launch with the sandbox enabled. Pass `ORBIT_BASE_URL`, `ORBIT_API_KEY`, and `OR
 
 The scenario asks for the SHA-256 of a fresh `orbit-<UUID>` input. Require a completed `run_code` calculation whose source includes that input and does not contain the expected digest as a literal. Both stdout and the saved text answer must match the locally calculated hash. The screenshot waits for the full hash outside the code card. It writes `real-provider.png` and the check output under `.verify/evidence/sandbox-real/`. It never prints credentials.
 
+## Production build
+
+Run `node scripts/qa/sandbox-native-build.mjs`. It uses the optional SSH addon if present. Otherwise it creates a temporary asset at that path and removes it after the build. Require the build to pass. This checks native-asset bundling, not SSH cryptography.
+
 ## Isolation and timing
 
 Run `node --import tsx --test src/lib/sandbox/run.test.ts`. It skips with a reason only if Docker is unreachable. A skipped run is not isolation proof. Require every escape case to run and no sandbox containers to remain.
