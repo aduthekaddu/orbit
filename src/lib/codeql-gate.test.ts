@@ -41,28 +41,28 @@ test("a run with no results passes", { skip: !hasJq && "jq is needed" }, () => {
 });
 
 test("a listed finding passes, and comments and blank lines in the list are ignored", { skip: !hasJq && "jq is needed" }, () => {
-  sarif(["js/file-system-race", "src/lib/auth.ts"]);
-  const result = gate(known("# why\n\njs/file-system-race src/lib/auth.ts\n"));
+  sarif(["js/file-system-race", "src/lib/auth.ts", "aaaa:1"]);
+  const result = gate(known("# why\n\njs/file-system-race src/lib/auth.ts aaaa:1\n"));
   assert.equal(result.ok, true, result.output);
   assert.match(result.output, /1 findings, all known/);
 });
 
 test("a finding that is not listed fails and names the rule and file", { skip: !hasJq && "jq is needed" }, () => {
-  sarif(["js/file-system-race", "src/lib/auth.ts"], ["js/sql-injection", "src/lib/messages.ts"]);
-  const result = gate(known("js/file-system-race src/lib/auth.ts\n"));
+  sarif(["js/file-system-race", "src/lib/auth.ts", "aaaa:1"], ["js/sql-injection", "src/lib/messages.ts", "cccc:1"]);
+  const result = gate(known("js/file-system-race src/lib/auth.ts aaaa:1\n"));
   assert.equal(result.ok, false);
   assert.match(result.output, /New CodeQL finding::js\/sql-injection in src\/lib\/messages\.ts/);
   assert.doesNotMatch(result.output, /New CodeQL finding::js\/file-system-race/);
 });
 
 test("the same rule in another file is a new finding", { skip: !hasJq && "jq is needed" }, () => {
-  sarif(["js/file-system-race", "src/lib/other.ts"]);
-  assert.equal(gate(known("js/file-system-race src/lib/auth.ts\n")).ok, false);
+  sarif(["js/file-system-race", "src/lib/other.ts", "aaaa:1"]);
+  assert.equal(gate(known("js/file-system-race src/lib/auth.ts aaaa:1\n")).ok, false);
 });
 
 test("a listed finding that CodeQL no longer reports is a warning, not a failure", { skip: !hasJq && "jq is needed" }, () => {
   sarif();
-  const result = gate(known("js/file-system-race src/lib/auth.ts\n"));
+  const result = gate(known("js/file-system-race src/lib/auth.ts aaaa:1\n"));
   assert.equal(result.ok, true);
   assert.match(result.output, /Fixed finding still listed::js\/file-system-race in src\/lib\/auth\.ts/);
 });
@@ -72,4 +72,12 @@ test("a second finding of a listed rule in the same file is new when its line di
   const result = gate(known("js/file-system-race src/lib/auth.ts aaaa:1\n"));
   assert.equal(result.ok, false, result.output);
   assert.match(result.output, /New CodeQL finding::js\/file-system-race in src\/lib\/auth\.ts/);
+});
+
+test("a listed finding whose line changed is new, and the old line is reported as fixed", { skip: !hasJq && "jq is needed" }, () => {
+  sarif(["js/file-system-race", "src/lib/auth.ts", "bbbb:1"]);
+  const result = gate(known("js/file-system-race src/lib/auth.ts aaaa:1\n"));
+  assert.equal(result.ok, false);
+  assert.match(result.output, /New CodeQL finding::js\/file-system-race in src\/lib\/auth\.ts \(line hash bbbb:1\)/);
+  assert.match(result.output, /Fixed finding still listed::js\/file-system-race in src\/lib\/auth\.ts \(aaaa:1\)/);
 });
