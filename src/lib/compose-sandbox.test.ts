@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import test, { type TestContext } from "node:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { z } from "zod";
 
 const composeEnv: NodeJS.ProcessEnv = { PATH: process.env.PATH ?? "", NODE_ENV: "test", ORBIT_SANDBOX: "on" };
@@ -53,4 +56,48 @@ test("the explicit sandbox override enables the tool and its private Docker prox
   assert.equal(config.networks["sandbox-api"].internal, true);
   assert.equal(config.services["docker-socket-proxy"].environment.CONTAINERS, "1");
   assert.equal(config.services["docker-socket-proxy"].environment.POST, "1");
+});
+
+test("user plugin discovery paths reach both Compose security checks without provider keys", (t) => {
+  const located = spawnSync("which", ["docker"], { encoding: "utf8" });
+  if (located.status !== 0) {
+    t.skip("Docker is not installed.");
+    return;
+  }
+  const dockerPath = located.stdout.trim();
+  const available = spawnSync(dockerPath, ["compose", "version"], { encoding: "utf8" });
+  if (available.status !== 0 && /(?:compose.*not a docker command|unknown command.*compose)/i.test(available.stderr)) {
+    t.skip("Docker Compose is not installed.");
+    return;
+  }
+  assert.equal(available.status, 0);
+  const taskDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-compose-discovery-"));
+  t.after(() => fs.rmSync(taskDir, { recursive: true, force: true }));
+  const calls = path.join(taskDir, "calls");
+  const config = path.join(taskDir, "config");
+  const profile = path.join(taskDir, "profile");
+  fs.mkdirSync(config);
+  fs.mkdirSync(profile);
+  fs.writeFileSync(path.join(taskDir, "docker"), `#!${process.execPath}
+const fs = require("node:fs");
+const { spawnSync } = require("node:child_process");
+if (process.env.HOME !== ${JSON.stringify(process.env.HOME)} || process.env.USERPROFILE !== ${JSON.stringify(profile)} || process.env.DOCKER_CONFIG !== ${JSON.stringify(config)}) {
+  console.error("docker: unknown command: docker compose");
+  process.exit(1);
+}
+if (process.env.ORBIT_API_KEY !== undefined) throw new Error("A provider key reached Docker");
+const args = process.argv.slice(2);
+const result = spawnSync(${JSON.stringify(dockerPath)}, args, { env: process.env, encoding: "utf8" });
+if (args.includes("config") && result.status === 0) fs.appendFileSync(${JSON.stringify(calls)}, "config\\n");
+process.stdout.write(result.stdout ?? "");
+process.stderr.write(result.stderr ?? "");
+process.exit(result.status ?? 1);
+`, { mode: 0o755 });
+  const result = spawnSync(process.execPath, ["--import", "tsx", "--test", "--test-name-pattern=^default Compose|^the explicit sandbox", "src/lib/compose-sandbox.test.ts"], {
+    env: { PATH: `${taskDir}${path.delimiter}${process.env.PATH ?? ""}`, NODE_ENV: "test", HOME: process.env.HOME, USERPROFILE: profile, DOCKER_CONFIG: config, ORBIT_API_KEY: "must-not-forward" },
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, "the Compose checks must pass with user plugin discovery paths");
+  const checked = fs.existsSync(calls) ? fs.readFileSync(calls, "utf8").trim().split("\n").filter(Boolean).length : 0;
+  assert.equal(checked, 2, "both security checks must inspect Compose instead of silently skipping");
 });
