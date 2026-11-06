@@ -10,6 +10,10 @@ const sandboxPrograms = new Map([
   ["run-unicode", 'import os\nos.write(1, b"x" * 65534 + b"\\xe2\\x82")'],
   ["run-spin", "while True: pass"],
 ]);
+const invalidSandboxCalls = new Map([
+  ["run-long", { language: "python", code: "#".repeat(20_001) }],
+  ["run-ruby", { language: "ruby", code: "puts 1" }],
+]);
 
 function allSpec() {
   return {
@@ -424,6 +428,10 @@ const server = http.createServer((req, res) => {
     console.log(`mock request scenario=${scenario}`);
     if (raw.includes("Write a title of at most six words.") && body.stream !== true) {
       jsonTitle(res);
+      return;
+    }
+    if (invalidSandboxCalls.has(scenario)) {
+      toolResponse(res, scenario, invalidSandboxCalls.get(scenario), "run_code");
       return;
     }
     if (scenario !== "search" && scenario !== "search-loop" && body.messages?.at(-1)?.role === "tool") {
