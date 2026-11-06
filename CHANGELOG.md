@@ -36,6 +36,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Fixed
 
+- Code run cards remove terminal escape sequences from standard output and standard error, so a program that prints color codes shows only its text. The copy buttons copy the same cleaned text. Saved cards use the same cleaning when you reopen the chat.
+
 - A code run result states one outcome, such as `Timed out`, `Out of memory (exit 137)`, or `Stopped`, and a separate duration that uses seconds after the first second. The runner records when Docker kills a program for memory, so a program that exits 137 on its own shows `Exit 137`. `Exit killed` and the repeated `Timed out` are gone.
 
 - A code run card hides the standard output or standard error box when it has no text or only blank lines. A run with no output still shows its source, exit status, and duration.
