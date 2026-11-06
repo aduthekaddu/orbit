@@ -64,3 +64,38 @@ test("a running code card offers only the source copy button", () => {
   assert.match(html, /aria-label="Copy source"/);
   assert.doesNotMatch(html, /Copy standard/);
 });
+
+const silent = { stdout: "", stderr: "", exitCode: 0, durationMs: 20, timedOut: false, truncated: false };
+
+test("a silent run shows no output wells and no output labels", () => {
+  const html = renderToStaticMarkup(<CodeRun input={{ language: "python", code: "pass" }} output={silent} />);
+  assert.doesNotMatch(html, /data-code-stdout|data-code-stderr/);
+  assert.doesNotMatch(html, />stdout<|>stderr</);
+  assert.match(html, /Copy source/);
+  assert.match(html, /Exit 0/);
+  assert.match(html, /20 ms/);
+});
+
+test("a run with only standard output hides the empty standard error well", () => {
+  const html = renderToStaticMarkup(<CodeRun input={input} output={{ ...silent, stdout: "2\n" }} />);
+  assert.match(html, /data-code-stdout=""[^>]*><code>2\n<\/code>/);
+  assert.doesNotMatch(html, /data-code-stderr/);
+  assert.doesNotMatch(html, />stderr</);
+});
+
+test("a run with only standard error hides the empty standard output well", () => {
+  const html = renderToStaticMarkup(<CodeRun input={input} output={{ ...silent, stderr: "boom\n", exitCode: 1 }} />);
+  assert.match(html, /data-code-stderr=""[^>]*><code>boom\n<\/code>/);
+  assert.doesNotMatch(html, /data-code-stdout/);
+  assert.doesNotMatch(html, />stdout</);
+});
+
+test("a silent failure and a silent timeout keep their result and show no wells", () => {
+  const failed = renderToStaticMarkup(<CodeRun input={input} output={{ ...silent, exitCode: 3 }} />);
+  assert.doesNotMatch(failed, /data-code-stdout|data-code-stderr/);
+  assert.match(failed, /Exit 3/);
+  const timedOut = renderToStaticMarkup(<CodeRun input={input} output={{ ...silent, exitCode: null, timedOut: true, durationMs: 10064 }} />);
+  assert.doesNotMatch(timedOut, /data-code-stdout|data-code-stderr/);
+  assert.match(timedOut, /Timed out/);
+  assert.match(timedOut, /10064 ms/);
+});

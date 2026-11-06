@@ -11,6 +11,8 @@ const sandboxPrograms = new Map([
   ["run-wide", 'print("x" * 150 + "END")'],
   ["run-copy", 'import sys\ndef show():\n    print("  indented ✓ héllo 🚀")\n    print("line two")\n    print("err ✗", file=sys.stderr)\nshow()'],
   ["run-spin", "while True: pass"],
+  ["run-pass", "pass"],
+  ["run-exit", "import sys\nsys.exit(3)"],
 ]);
 const invalidSandboxCalls = new Map([
   ["run-long", { language: "python", code: "#".repeat(20_001) }],
