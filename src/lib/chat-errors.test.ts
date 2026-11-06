@@ -30,7 +30,9 @@ async function rejectedCall(input: string) {
   const result = streamText({ model, prompt: "run it", tools, stopWhen: stepCountIs(1) });
   const logged: string[] = [];
   const original = console.error;
-  console.error = (...args: unknown[]) => { logged.push(args.map(String).join(" ")); };
+  console.error = (label: unknown, ...details: unknown[]) => {
+    if (label === "chat stream error") logged.push(details.map(String).join(" "));
+  };
   const saved: string[] = [];
   try {
     const stream = toUIMessageStream({ stream: result.stream, tools, onError: (error) => streamErrorMessage(error, "sk-test-secret") });
