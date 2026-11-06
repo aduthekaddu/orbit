@@ -114,6 +114,40 @@ finally:
       clearTimeout(timer);
     }
   });
+  await t.test("slow cleanup preserves a program that finished before its deadline", async (t) => {
+    const removing = Promise.withResolvers<void>();
+    const released = Promise.withResolvers<void>();
+    const removed = Promise.withResolvers<void>();
+    const create = docker.createContainer.bind(docker);
+    t.mock.method(docker, "createContainer", async (options: Docker.ContainerCreateOptions) => {
+      const container = await create(options);
+      const remove = container.remove.bind(container);
+      t.mock.method(container, "remove", async (options: Docker.ContainerRemoveOptions) => {
+        removing.resolve();
+        await released.promise;
+        const result = await remove(options);
+        removed.resolve();
+        return result;
+      });
+      return container;
+    });
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const running = runPython("print(1)");
+    try {
+      await removing.promise;
+      t.mock.timers.tick(10_000);
+      released.resolve();
+      const result = await running;
+      assert.equal(result.timedOut, false, "cleanup must not turn a finished program into a timeout");
+      assert.equal(result.exitCode, 0);
+      assert.equal(result.stdout, "1\n");
+    } finally {
+      t.mock.timers.reset();
+      released.resolve();
+      await running;
+      await removed.promise;
+    }
+  });
   await t.test("the ten second deadline includes pending Docker creation", async (t) => {
     const entered = Promise.withResolvers<void>();
     const released = Promise.withResolvers<void>();
