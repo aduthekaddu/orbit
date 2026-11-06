@@ -8,6 +8,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Added
 
+- Conversation search finds the standard output and standard error of code runs, so a result that only the program printed can be found by its text. A result opens the right chat and message. A migration adds the output of earlier runs to search. Source code is not searched.
+
 - Code run cards name their language, Python or JavaScript, in the header. The tag stays while the run goes, after a failure or Stop, and after you reopen the chat. The output boxes sit on a darker surface than the source.
 
 - Settings shows whether the server turned on the code sandbox. The status is read-only, and the browser cannot change it.

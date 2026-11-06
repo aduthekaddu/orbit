@@ -167,6 +167,19 @@ node .agents/skills/verify-orbit/verify.mjs cleanup
 
 The scenario runs `[qa:run-color]`, `[qa:run-osc]`, `[qa:run-cut]`, and `[qa:run-html]`. The first prints red text to standard output and bold yellow text to standard error. The second prints a window title, a hyperlink, and an erase code. The third prints a color code that another escape interrupts, which must leave no stray digits. The fourth prints HTML-looking text. Require only the plain text in each well, no control character anywhere on the card, no link or image added to the card, and no page title set by the program. Require both copy buttons to copy the plain text, and require the same results after a reload and at 390 pixels. The HTML-looking text must show as text.
 
+## Search the output
+
+Launch a fresh mock sandbox. Docker must be reachable.
+
+```sh
+node .agents/skills/verify-orbit/verify.mjs cleanup
+ORBIT_SANDBOX=on node .agents/skills/verify-orbit/verify.mjs launch --mock
+node .agents/skills/verify-orbit/verify.mjs browse sandbox-search
+node .agents/skills/verify-orbit/verify.mjs cleanup
+```
+
+The scenario runs `[qa:run-token]`, `[qa:run-token-err]`, and `[qa:run-token-echo]`. Each program builds its token from two strings, so the finished token is not in the program text. The first two print to standard output and standard error and the prompt and reply do not contain the token. The third prints a token that its reply repeats. Require each token to give exactly one search hit, in the right chat and on the assistant message that holds the run card. Require no hit for a token that is only in the source of the first program. Require the Ctrl+K palette to show a Messages result and open the message with its run card, and require the same hit after the chat is reopened and on a phone.
+
 ## Settings status
 
 Run the check against a server with the sandbox on, then one with it off. Docker is not needed.
