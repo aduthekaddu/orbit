@@ -26,7 +26,8 @@ export default async function settingsSandbox({ page, origin, step, shot }) {
   const text = shown ? (await status.innerText()).trim() : "";
   step(`Settings shows the code sandbox ${label}`, shown && text === label && (await status.getAttribute("data-sandbox-status")) === (expected ? "on" : "off"), `status ${shown ? JSON.stringify(text) : "missing"}`);
   step("the status sits under a Code sandbox heading", (await page.getByRole("heading", { name: "Code sandbox" }).count()) === 1);
-  const controls = '[data-sandbox-status] :is(input, button, select, textarea, [role="switch"], [role="combobox"], [role="checkbox"], [role="radio"], [role="button"])';
+  const interactive = 'input, button, select, textarea, [tabindex], [role="switch"], [role="combobox"], [role="checkbox"], [role="radio"], [role="button"]';
+  const controls = `[data-sandbox-status]:is(${interactive}), [data-sandbox-status] :is(${interactive})`;
   const editable = (await page.locator(controls).count()) + (await page.locator(':is(input, select, textarea)[name*="sandbox" i]').count());
   const tag = shown ? await status.evaluate((element) => element.tagName) : "";
   step("the status is read-only", shown && editable === 0 && !["INPUT", "BUTTON", "SELECT", "TEXTAREA"].includes(tag), `${editable} controls, element ${tag}`);
