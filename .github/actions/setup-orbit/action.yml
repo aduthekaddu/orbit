@@ -1,0 +1,23 @@
+name: Set up Orbit
+description: Install Node.js and the locked dependencies, and optionally build the app.
+inputs:
+  node-version:
+    description: Node.js major version.
+    default: "22"
+  build:
+    description: Run `npm run build` after the install.
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+    - name: Install dependencies
+      shell: bash
+      run: npm ci
+    - name: Build
+      if: inputs.build == 'true'
+      shell: bash
+      run: npm run build
