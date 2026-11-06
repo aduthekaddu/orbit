@@ -30,6 +30,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Fixed
 
+- Run Python unbuffered so early prints remain available after timeouts or memory kills.
+
 - Code run content areas have named keyboard stops and a visible focus ring for scrolling with the keyboard.
 
 - Completed code runs keep their result when container cleanup takes longer than the execution deadline.

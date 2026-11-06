@@ -36,12 +36,15 @@ ORBIT_SANDBOX=on node .agents/skills/verify-orbit/verify.mjs launch --mock
 node .agents/skills/verify-orbit/verify.mjs browse sandbox-stopped
 node .agents/skills/verify-orbit/verify.mjs browse sandbox-tool-error
 node .agents/skills/verify-orbit/verify.mjs browse sandbox-scroll
+node .agents/skills/verify-orbit/verify.mjs browse sandbox-output
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
 `sandbox-stopped` saves the runner's stopped error through `upsertMessage` and checks Cancelled before and after reload. `sandbox-tool-error` saves a framework validation error and checks that its reason survives reload.
 
 `sandbox-scroll` saves real Docker output near the output limit. Require bounded source, stdout, stderr, and error areas with their last lines reachable by scrolling. It checks keyboard access, horizontal scrolling, and page width on desktop and at 390 pixels.
+
+`sandbox-output` runs Python through the chat tool and checks early stdout after a timeout, a memory kill, and reload.
 
 ## Configuration failure
 

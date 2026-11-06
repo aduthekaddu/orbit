@@ -5,12 +5,13 @@ export default async function sandboxOutput({ page, origin, step, shot }) {
   const composer = page.getByPlaceholder("Ask anything");
   const cards = page.locator('[data-tool-name="run_code"]');
   for (const [scenario, marker] of [["run-timeout", "before-timeout"], ["run-oom", "before-oom"]]) {
+    const card = cards.nth(await cards.count());
     await composer.fill(`[qa:${scenario}]`);
     await composer.press("Enter");
-    await cards.last().locator('[data-tool-status="failed"]').waitFor({ timeout: 25_000 });
-    step(`${scenario} keeps output printed before termination`, await cards.last().locator('[data-code-stdout]').textContent() === `${marker}\n`);
+    await card.locator('[data-tool-status="failed"]').waitFor({ timeout: 25_000 });
+    step(`${scenario} keeps output printed before termination`, await card.locator('[data-code-stdout]').textContent() === `${marker}\n`);
     await page.getByRole("button", { name: "Send", exact: true }).waitFor();
-    await cards.last().scrollIntoViewIfNeeded();
+    await card.scrollIntoViewIfNeeded();
     await shot(scenario);
   }
   await page.reload();
