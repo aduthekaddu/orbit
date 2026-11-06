@@ -13,8 +13,13 @@ cd "$(dirname "$0")/../.." || exit 1
 image=ghcr.io/google/osv-scanner@sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0
 base_lockfile=${1:-}
 
-# OSV-Scanner exits 1 when it finds vulnerabilities, which is not an error here.
+# OSV-Scanner exits 1 when it finds vulnerabilities, which is not an error here. A test can set
+# OSV_FIXTURE_DIR to a folder holding head.json and base.json, and the scan reads those instead.
 scan() {
+  if [ -n "${OSV_FIXTURE_DIR:-}" ]; then
+    cat "$OSV_FIXTURE_DIR/$2.json"
+    return
+  fi
   local directory name
   directory=$(cd "$(dirname "$1")" && pwd)
   name=$(basename "$1")
@@ -33,10 +38,10 @@ report() {
   jq --raw-output '.[] | "  \(.id)  \(.name)@\(.version)\(if .dev then "  (dev)" else "" end)"'
 }
 
-head_vulnerabilities=$(scan package-lock.json | flatten)
+head_vulnerabilities=$(scan package-lock.json head | flatten)
 
 if [ -n "$base_lockfile" ]; then
-  base_vulnerabilities=$(scan "$base_lockfile" | flatten)
+  base_vulnerabilities=$(scan "$base_lockfile" base | flatten)
   added=$(jq --null-input --argjson head "$head_vulnerabilities" --argjson base "$base_vulnerabilities" \
     '[$head[] | . as $found | select(any($base[]; .id == $found.id and .name == $found.name and ((.dev | not) or $found.dev)) | not)]')
   if [ "$(jq length <<< "$added")" -gt 0 ]; then
