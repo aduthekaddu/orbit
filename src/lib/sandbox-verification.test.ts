@@ -18,7 +18,7 @@ const scenarioUrl = pathToFileURL(path.resolve(".agents/skills/verify-orbit/scen
 
 type Program = (input: string, digest: string) => { language: "python" | "javascript"; code: string };
 
-async function checkHashScenario(program: Program) {
+async function checkHashScenario(program: Program, result: { exitCode?: number; stdout?: string; answer?: string } = {}) {
   const checks = new Map<string, boolean>();
   let prompt = "";
   let input = "orbit";
@@ -28,8 +28,8 @@ async function checkHashScenario(program: Program) {
       put: async () => ({ ok: () => true }),
       post: async () => ({ json: async () => ({ id: "hash-check" }) }),
       get: async () => ({ json: async () => ({ messages: [{ message: { role: "assistant", parts: [
-        { type: "tool-run_code", state: "output-available", input: program(input, digest), output: { exitCode: 0, stdout: `${digest}\n` } },
-        { type: "text", text: digest },
+        { type: "tool-run_code", state: "output-available", input: program(input, digest), output: { exitCode: result.exitCode ?? 0, stdout: result.stdout ?? `${digest}\n` } },
+        { type: "text", text: result.answer ?? digest },
       ] } }] }) }),
     },
     goto: async () => {},
@@ -71,4 +71,24 @@ test("hash verification uses a fresh input for every attempt", async () => {
   const first = await checkHashScenario(program);
   const second = await checkHashScenario(program);
   assert.notEqual(first.prompt, second.prompt);
+});
+
+const calculation: Program = (input) => ({ language: "python", code: `import hashlib\nprint(hashlib.sha256(b"${input}").hexdigest())` });
+
+test("hash verification rejects incorrect tool output even with a correct answer", async () => {
+  const result = await checkHashScenario(calculation, { stdout: "incorrect digest" });
+  assert.equal(result.checks.get("real provider runs code to compute the hash"), false);
+  assert.equal(result.checks.get("real provider hash matches sha256sum"), true);
+});
+
+test("hash verification rejects a nonzero exit even with the correct digest", async () => {
+  const result = await checkHashScenario(calculation, { exitCode: 7 });
+  assert.equal(result.checks.get("real provider runs code to compute the hash"), false);
+  assert.equal(result.checks.get("real provider hash matches sha256sum"), true);
+});
+
+test("hash verification rejects a wrong saved answer even with a correct calculation", async () => {
+  const result = await checkHashScenario(calculation, { answer: "incorrect digest" });
+  assert.equal(result.checks.get("real provider runs code to compute the hash"), true);
+  assert.equal(result.checks.get("real provider hash matches sha256sum"), false);
 });
