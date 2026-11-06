@@ -50,7 +50,7 @@ if [ "${DRAFT:-false}" != "true" ]; then
       problem "The description is missing the \"$heading\" section from the pull request template."
     fi
   done
-  for heading in "## Why" "## What changed"; do
+  for heading in "## Why" "## What changed" "## How I checked it"; do
     section=$(awk -v heading="$heading" '$0 == heading {found = 1; next} /^## / {found = 0} found' <<< "$stripped" | tr -d '[:space:]')
     if grep -qxF "$heading" <<< "$stripped" && [ -z "$section" ]; then
       problem "The \"$heading\" section of the description is empty."
@@ -65,7 +65,7 @@ if [ "${DRAFT:-false}" != "true" ]; then
       # the pull request opened. A checkout that is not a merge compares with BASE_SHA.
       if git rev-parse --verify --quiet "HEAD^2" > /dev/null; then base=$(git rev-parse "HEAD^1"); else base=$BASE_SHA; fi
       changed=$(git diff --name-only "$base" HEAD)
-      shipped=$(grep -E '^(src/|drizzle/|Dockerfile$|docker-compose.*\.yml$|next\.config\.ts$|package\.json$)' <<< "$changed" || true)
+      shipped=$(grep -E '^(src/|drizzle/|searxng/|Dockerfile$|docker-compose.*\.yml$|next\.config\.ts$|package\.json$)' <<< "$changed" || true)
       if [ -n "$shipped" ] && ! jq --exit-status 'index("skip-changelog")' <<< "${LABELS:-[]}" > /dev/null; then
         before=$(git show "$base:CHANGELOG.md" 2> /dev/null | unreleased)
         after=$(git show "HEAD:CHANGELOG.md" 2> /dev/null | unreleased)
