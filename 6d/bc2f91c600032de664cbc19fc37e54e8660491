@@ -1,0 +1,35 @@
+.github/codeql/codeql-config.yml
+  s_6877932481c8d7::t_2f0b534f2b7dca 1-6
+.github/codeql/known-findings.txt
+  s_6877932481c8d7::t_bc1ac3507ca1d1 1-12
+.github/workflows/codeql.yml
+  s_e9050b67fdf088::t_ef39d3a2bd148e 33,48-49
+scripts/ci/codeql-gate.sh
+  s_e9050b67fdf088::t_cbc59165be26ab 1-30
+src/lib/codeql-gate.test.ts
+  s_6877932481c8d7::t_c49cc0618ca34a 1-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6dbc2f91c600032de664cbc19fc37e54e8660491",
+  "prompts": {},
+  "sessions": {
+    "s_6877932481c8d7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3b41b1b5-5e57-4585-9cde-1f4c1aa480f6",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    },
+    "s_e9050b67fdf088": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "342e8e27-0374-4c89-827c-f073c6745b2c",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
