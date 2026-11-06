@@ -14,9 +14,10 @@ export default async function sandboxCopyOverlap({ page, origin, step, shot }) {
     const code = element.querySelector("[data-code-stdout] code");
     const button = element.querySelector('button[aria-label="Copy standard output"]');
     const text = code.firstChild;
+    const last = text.data.trimEnd().length;
     const range = document.createRange();
-    range.setStart(text, text.length - 3);
-    range.setEnd(text, text.length);
+    range.setStart(text, last - 3);
+    range.setEnd(text, last);
     const end = range.getBoundingClientRect();
     const covered = button.getBoundingClientRect();
     const across = Math.min(end.right, covered.right) - Math.max(end.left, covered.left);
@@ -35,13 +36,14 @@ export default async function sandboxCopyOverlap({ page, origin, step, shot }) {
   await phoneCard.getByRole("region", { name: "Standard output horizontal scroll", exact: true }).evaluate((element) => { element.scrollLeft = element.scrollWidth; });
   const tapped = await phoneCard.evaluate((element) => {
     const text = element.querySelector("[data-code-stdout] code").firstChild;
+    const last = text.data.trimEnd().length;
     const range = document.createRange();
-    range.setStart(text, text.length - 1);
-    range.setEnd(text, text.length);
+    range.setStart(text, last - 1);
+    range.setEnd(text, last);
     const box = range.getBoundingClientRect();
-    return document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)?.closest("button")?.getAttribute("aria-label") ?? null;
+    return document.elementFromPoint(box.right - 1, box.top + box.height / 2)?.closest("button")?.getAttribute("aria-label") ?? null;
   });
-  step("a tap on the last character of the first line does not land on the copy button", tapped === null, `the tap lands on ${tapped}`);
+  step("a tap on the right edge of the last character of the first line does not land on the copy button", tapped === null, `the tap lands on ${tapped}`);
   await shot("phone-scrolled-right", phone);
   await mobile.close();
 }
