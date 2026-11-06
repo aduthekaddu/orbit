@@ -3,8 +3,13 @@ import test from "node:test";
 import Docker from "dockerode";
 import { Duplex } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
+import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } from "ai";
+import { MockLanguageModelV4 } from "ai/test";
+import { createRunCodeTool } from "../tools/run-code";
+import { createStoppedRuns } from "../tools/stopped-runs";
 import { runCode } from "./run";
 import { waitForRunningSandbox } from "./wait-for-running";
+import type { RunCodeOutput } from "./spec";
 
 test("sandbox programs run inside real isolated containers", { timeout: 90_000 }, async (t) => {
   const docker = new Docker();
@@ -155,6 +160,51 @@ finally:
       }
     });
   }
+  await t.test("stopping a run_code call through the AI SDK keeps what it printed", async () => {
+    const stopped = createStoppedRuns();
+    const tools = { run_code: createRunCodeTool(stopped) };
+    const model = new MockLanguageModelV4({
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          chunks: [
+            { type: "stream-start", warnings: [] },
+            { type: "tool-call", toolCallId: "call-1", toolName: "run_code", input: JSON.stringify({ language: "python", code: 'print("before-stop")\nwhile True: pass' }) },
+            {
+              type: "finish",
+              finishReason: { unified: "tool-calls", raw: undefined },
+              usage: {
+                inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 1, text: 1, reasoning: undefined },
+              },
+            },
+          ],
+        }),
+      }),
+    });
+    const controller = new AbortController();
+    const result = streamText({ model, prompt: "run it", tools, stopWhen: stepCountIs(3), abortSignal: controller.signal });
+    let saved: unknown;
+    let aborted = false;
+    const stream = toUIMessageStream({
+      stream: result.stream,
+      tools,
+      onError: () => "failed",
+      onEnd: async ({ responseMessage, isAborted }) => {
+        aborted = isAborted;
+        saved = await stopped.apply(responseMessage.parts);
+      },
+    });
+    const stopAfterStart = waitForRunningSandbox(docker).then(() => delay(1000)).then(() => controller.abort());
+    try {
+      for await (const chunk of stream as unknown as AsyncIterable<unknown>) void chunk;
+    } finally {
+      await stopAfterStart;
+    }
+    assert.equal(aborted, true);
+    const part = (saved as Array<Record<string, unknown>>).find((entry) => entry.type === "tool-run_code");
+    assert.equal(part?.state, "output-available");
+    assert.deepEqual({ ...(part?.output as RunCodeOutput), durationMs: 0 }, { stdout: "before-stop\n", stderr: "", exitCode: null, durationMs: 0, timedOut: false, truncated: false, cancelled: true });
+  });
   await t.test("slow cleanup preserves a program that finished before its deadline", async (t) => {
     const removing = Promise.withResolvers<void>();
     const released = Promise.withResolvers<void>();
