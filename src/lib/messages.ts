@@ -21,15 +21,19 @@ export function textFromParts(parts: unknown): string {
 }
 
 // What search sees for a message: its text, then the standard output and standard
-// error of each finished code run. The source of a run is left out.
+// error of each finished code run, then the source of each code run.
 export function searchTextFromParts(parts: unknown): string {
   const text = textFromParts(parts);
   if (!Array.isArray(parts)) return text;
   const output: string[] = [];
+  const source: string[] = [];
   for (const part of parts) {
     if (!part || typeof part !== "object") continue;
-    const record = part as { type?: string; state?: string; output?: unknown };
-    if (record.type !== "tool-run_code" || record.state !== "output-available") continue;
+    const record = part as { type?: string; state?: string; input?: unknown; output?: unknown };
+    if (record.type !== "tool-run_code") continue;
+    const code = (record.input as { code?: unknown } | null | undefined)?.code;
+    if (typeof code === "string" && code.trim()) source.push(code);
+    if (record.state !== "output-available") continue;
     const result = runCodeOutputSchema.safeParse(record.output);
     if (!result.success) continue;
     for (const channel of [result.data.stdout, result.data.stderr]) {
@@ -37,7 +41,8 @@ export function searchTextFromParts(parts: unknown): string {
       if (clean.trim()) output.push(clean);
     }
   }
-  return output.length === 0 ? text : [text, ...output].filter((piece) => piece !== "").join("\n");
+  const pieces = [...output, ...source];
+  return pieces.length === 0 ? text : [text, ...pieces].filter((piece) => piece !== "").join("\n");
 }
 
 export function ensureChat(id: string, userId: string) {
