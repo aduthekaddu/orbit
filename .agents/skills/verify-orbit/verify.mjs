@@ -187,6 +187,11 @@ function assertOurServer() {
 async function launch({ mock }) {
   const state = readState();
   if (state && alive(state.pid) && procCwd(state.pid) === sandbox) {
+    const sandboxEnabled = process.env.ORBIT_SANDBOX === "on";
+    if (state.sandboxEnabled !== sandboxEnabled) {
+      const runningMode = typeof state.sandboxEnabled === "boolean" ? state.sandboxEnabled ? "on" : "off" : "unknown";
+      fail(`sandbox mode mismatch. Running=${runningMode} requested=${sandboxEnabled ? "on" : "off"}. Run node .agents/skills/verify-orbit/verify.mjs cleanup, then launch again with ORBIT_SANDBOX=${sandboxEnabled ? "on" : "off"}.`);
+    }
     console.log(`already starting or running pid=${state.pid} origin=${ORIGIN}`);
   } else {
     await startServer();
@@ -206,6 +211,7 @@ async function startServer() {
   makeSandbox();
   fs.mkdirSync(verifyDir, { recursive: true });
   const logFd = fs.openSync(logPath, "w");
+  const sandboxEnabled = process.env.ORBIT_SANDBOX === "on";
   const child = spawn("npm", ["start", "--", "-p", String(PORT), "-H", "127.0.0.1"], {
     cwd: sandbox,
     env: {
@@ -216,13 +222,15 @@ async function startServer() {
       TMPDIR: process.env.TMPDIR || "/tmp",
       NODE_ENV: "production",
       BETTER_AUTH_URL: ORIGIN,
+      ORBIT_SANDBOX: sandboxEnabled ? "on" : "off",
+      DOCKER_HOST: process.env.DOCKER_HOST ?? "unix:///var/run/docker.sock",
     },
     detached: true,
     stdio: ["ignore", logFd, logFd],
   });
   child.unref();
   fs.closeSync(logFd);
-  fs.writeFileSync(statePath, JSON.stringify({ pid: child.pid, port: PORT, sandbox, origin: ORIGIN }, null, 2));
+  fs.writeFileSync(statePath, JSON.stringify({ pid: child.pid, port: PORT, sandbox, origin: ORIGIN, sandboxEnabled }, null, 2));
   try {
     const ready = await waitReady();
     console.log(`ready origin=${ORIGIN} pid=${child.pid} signupOpen=${ready.signupOpen ? "yes" : "no"}`);

@@ -3,6 +3,7 @@ import type { SettingsRecord } from "../settings";
 import { renderUiTool } from "../genui/tool";
 import { cardFor, type ToolCardKind, type ToolName } from "./metadata";
 import { createSearchTool } from "./search";
+import { createRunCodeTool } from "./run-code";
 
 export type ToolEntry = {
   name: string;
@@ -14,6 +15,7 @@ export type ToolEntry = {
 const implementations = {
   render_ui: { enabled: () => true, create: () => renderUiTool },
   web_search: { enabled: (settings) => Boolean(settings.searxngUrl || settings.tavilyApiKey), create: createSearchTool },
+  run_code: { enabled: () => process.env.ORBIT_SANDBOX === "on", create: createRunCodeTool },
 } satisfies Record<ToolName, Pick<ToolEntry, "enabled" | "create">>;
 
 const entries: ToolEntry[] = Object.entries(implementations).map(([name, implementation]) => ({

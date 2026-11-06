@@ -8,6 +8,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Added
 
+- Run Python and JavaScript through `run_code` when the server sets `ORBIT_SANDBOX=on`. Each run uses a fresh container with no network, a read-only root filesystem, a non-root user, and resource limits. Saved cards show code, stdout, stderr, exit code, and duration.
+
 - Search the web through SearXNG or Tavily and answer with source links. Tool cards show running, succeeded, failed, or cancelled and survive reload. Search settings keep the Tavily key on the server. Compose includes SearXNG with JSON search enabled.
 
 - A new chat gets a short title from the model. The command palette finds a message by its text. (#19)
@@ -27,6 +29,32 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - `scripts/qa/genui-qa.cjs` saves screenshots under `.verify/evidence/genui-qa/` instead of `docs/qa/screenshots/`.
 
 ### Fixed
+
+- Verification fixtures ignore shell data-directory settings and use the isolated test database.
+
+- Build the sandbox route when Dockerode's optional SSH native addon is installed.
+
+- Flush incomplete UTF-8 output and mark it truncated when it reaches the byte cap.
+
+- Run Python unbuffered so early prints remain available after timeouts or memory kills.
+
+- Code run content areas have named keyboard stops and a visible focus ring for scrolling with the keyboard.
+
+- Completed code runs keep their result when container cleanup takes longer than the execution deadline.
+
+- Verification launch rejects sandbox mode mismatches without replacing the running server.
+
+- Code run source, output, and error text scroll within bounded panels.
+
+- Code run cards show framework failure messages instead of an invalid-result fallback.
+
+- Default Compose deployments no longer start a Docker socket proxy. Enable the sandbox and its Docker access with the explicit sandbox override.
+
+- Sandbox failures report configuration and proxy errors clearly, and log safe error categories and status codes.
+
+- Code runs apply the ten-second deadline during Docker setup and respond to Stop while setup is pending. Late containers are removed.
+
+- A stopped code run shows Cancelled before and after reload.
 
 - Search failures log a safe error type and the SearXNG HTTP status without keys, queries or response data.
 

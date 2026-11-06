@@ -10,10 +10,15 @@ Orbit is a self-hosted chat app, shaped like ChatGPT or Claude, for one person w
 - Show the model's reasoning in a collapsible **Thought** section, with a low, medium, or high effort setting.
 - Render cards, tables, metrics, lists, and callouts that the model builds with the `render_ui` tool.
 - Edit a sent message and run it again, or edit a reply or a single code block in place.
+- Keep earlier prompts and replies when editing or regenerating, and switch versions with the message arrows.
+- Preview HTML, SVG, JSX, and TSX code in a sandboxed panel.
 - Stop a reply mid-stream and keep the text that arrived.
 - Find chats with the command palette (⌘K or Ctrl+K) and move around with keyboard shortcuts.
+- Find a message by its text and give new chats short model-written titles.
+- Search the web through SearXNG or Tavily and answer with source links.
 - Keep chats, settings, and the account in `data/orbit.db`. The API key stays on the server.
 - Work on a phone at 390 px wide.
+- Run short Python and JavaScript programs in isolated containers when the operator enables the code sandbox.
 - Serve one account. Signup closes after the first one.
 
 Planned features are listed in the [roadmap](docs/roadmap.md).
@@ -89,7 +94,28 @@ Every variable is optional.
 | `ORBIT_BASE_URL`, `ORBIT_API_KEY`, `ORBIT_MODEL` | Empty | Fill the provider settings when the database has none yet. |
 | `ORBIT_SEARXNG_URL` | Empty, or `http://searxng:8080` in Compose | Seed the search backend URL on a new database. For a local Next.js server, use `http://127.0.0.1:8888`. |
 | `ORBIT_TAVILY_API_KEY` | Empty | Seed the server-side Tavily key on a new database. Tavily runs when SearXNG fails or returns no results. |
+| `ORBIT_SANDBOX` | Off | Source builds use `on` to enable `run_code`. Compose requires the [sandbox override](#enable-the-code-sandbox). |
+| `DOCKER_HOST` | Local Docker socket for source builds | Configure the local connection for source builds. Default Compose omits it. The sandbox override sets a private proxy. Remote Docker hosts are unsupported. |
 | `ORBIT_DATA_DIR` | `./data` | Where Orbit keeps `orbit.db` and `auth-secret`. |
 | `BETTER_AUTH_SECRET` | Generated into `data/auth-secret` | The key that signs session cookies. |
 | `BETTER_AUTH_URL` | `http://127.0.0.1:3210` | The URL you open Orbit at. |
 | `ORBIT_TRUSTED_ORIGINS` | Empty | Extra origins, separated by commas, that may sign in. Needed when you serve Orbit on another port or host. |
+
+### Enable the code sandbox
+
+Pull both pinned images before the first run.
+
+```sh
+docker pull python:3.13-slim@sha256:d0a9e379c0c588befb0e427db17ca9731751d281f32c6cb1a90a1277b680bdad
+docker pull node:22-bookworm-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d
+```
+
+For Compose, enable the tool and its private Docker proxy with the sandbox override.
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.sandbox.yml up -d --build
+```
+
+The default Compose deployment has no Docker proxy or Docker API connection. For a source build, start with `ORBIT_SANDBOX=on npm start -- -p 3210 -H 127.0.0.1`.
+
+Each run has only the image's standard library. It has no network or persistent files. See [Security](SECURITY.md#code-sandbox) for limits and the Docker proxy trade-off.

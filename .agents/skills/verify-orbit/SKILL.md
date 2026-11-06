@@ -20,7 +20,7 @@ Done when the command prints `ready` and `signupOpen=yes` on an empty sandbox.
 3. The command symlinks the build into `.verify/sandbox`, creates an empty `.verify/sandbox/data`, and starts `npm start -- -p 3210 -H 127.0.0.1` with that cwd.
 4. Ready means `GET /api/setup` returns JSON with a boolean `signupOpen`. A live port alone is not ready.
 
-A second launch while that sandbox server is healthy prints `already running` and leaves the data directory in place.
+A second launch reuses a healthy sandbox server when the requested sandbox mode matches its recorded mode. A mismatch or unknown recorded mode exits with a cleanup instruction and leaves the server and data in place. Run `cleanup`, then launch with the intended `ORBIT_SANDBOX` value.
 
 `launch --mock` also starts `scripts/qa/mock-provider.mjs` on `127.0.0.1:3299` and saves settings for it as `verify@orbit.local`. Done when it also prints `mock ready` and `settings baseUrl=http://127.0.0.1:3299/v1 model=mock-genui keySet=yes`. That account blocks `drive signup` and `drive chat` on the same sandbox.
 
@@ -38,7 +38,7 @@ The helper is the harness. Prefer the commands below over ad hoc curls. Page che
 - Sign in. `node .agents/skills/verify-orbit/verify.mjs drive signin`
 - Settings. `node .agents/skills/verify-orbit/verify.mjs drive settings`
 - Chat. `node .agents/skills/verify-orbit/verify.mjs drive chat`
-- Browser. `node .agents/skills/verify-orbit/verify.mjs browse <scenario>`, with `<scenario>` one of `retry-stop`, `palette`, `settings-short`, `empty-chat`, `branches`, `search`, `search-tool`, `artifacts`, `artifacts-real`, or `artifact-review`. See `features/browse.md`.
+- Browser. `node .agents/skills/verify-orbit/verify.mjs browse <scenario>`. See `features/browse.md` and the [feature map](features/README.md). Sandbox recipes are in [Code sandbox](features/sandbox.md).
 
 Feature recipes live in `features/`. Read `features/README.md` first. Drive one feature from that map. A proof that uses a different entry point does not cover the ones you skipped.
 
