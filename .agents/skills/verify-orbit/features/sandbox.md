@@ -126,7 +126,7 @@ node .agents/skills/verify-orbit/verify.mjs browse sandbox-empty-output
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
-The scenario runs `[qa:run-pass]`, `[qa:run-python]`, `[qa:run-escape]`, `[qa:run-exit]`, and `[qa:run-spin]` in one chat. Their output is empty, stdout only, stderr only, empty with exit 3, and empty with a timeout. Require no empty output well on any card, a well and its label only for a channel with text, and the source, exit status, and duration on every card. It checks each card on desktop, after a reload, and at 390 pixels, and prints the card heights.
+The scenario runs `[qa:run-pass]`, `[qa:run-python]`, `[qa:run-escape]`, `[qa:run-exit]`, `[qa:run-spin]`, and `[qa:run-blank]` in one chat. Their output is empty, stdout only, stderr only, empty with exit 3, empty with a timeout, and blank lines only. Require no empty output well on any card, a well and its label only for a channel with text, and the source, exit status, and duration on every card. A channel with only spaces or line breaks counts as empty. It runs the same checks on each card on desktop, after a reload, and at 390 pixels, and prints the card heights.
 
 ## Settings status
 

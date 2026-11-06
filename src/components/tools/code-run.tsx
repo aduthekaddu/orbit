@@ -54,13 +54,13 @@ export function CodeRun({ input, output }: { input: unknown; output: unknown }) 
         </ScrollFade>
       ) : parsedOutput.success ? (
         <>
-          {parsedOutput.data.stdout && (
+          {parsedOutput.data.stdout.trim() && (
             <div className="min-w-0 space-y-1">
               <p className="text-xs text-muted-foreground">stdout</p>
               <CodeText text={parsedOutput.data.stdout} kind="stdout" />
             </div>
           )}
-          {parsedOutput.data.stderr && (
+          {parsedOutput.data.stderr.trim() && (
             <div className="min-w-0 space-y-1">
               <p className="text-xs text-muted-foreground">stderr</p>
               <CodeText text={parsedOutput.data.stderr} kind="stderr" />
