@@ -162,7 +162,8 @@ async function waitReady() {
   let last = "no response";
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(`${ORIGIN}/api/setup`);
+      // The sandbox server listens on loopback, so plain http is intended.
+      const response = await fetch(`${ORIGIN}/api/setup`); // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request
       const text = await response.text();
       if (response.ok) {
         const body = JSON.parse(text);
@@ -318,7 +319,8 @@ function doctor() {
   if (!listeners.some((pid) => procCwd(pid) === sandbox)) {
     fail(`nothing from the sandbox is listening on ${ORIGIN}.`);
   }
-  return fetch(`${ORIGIN}/api/setup`).then(async (response) => {
+  // The sandbox server listens on loopback, so plain http is intended.
+  return fetch(`${ORIGIN}/api/setup`).then(async (response) => { // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request
     const text = await response.text();
     if (!response.ok) fail(`GET /api/setup status ${response.status}`);
     const body = JSON.parse(text);

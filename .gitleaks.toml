@@ -1,0 +1,9 @@
+title = "Orbit gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "A fake secret that a test writes to a temporary file to check its permissions"
+targetRules = ["generic-api-key"]
+paths = ['''src/lib/auth-secret\.test\.ts''']
