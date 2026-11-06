@@ -46,7 +46,7 @@ The [code sandbox](docs/slices/08.md) runs server-side code in a separate contai
 
 `run_code` is off unless the server sets `ORBIT_SANDBOX=on`. The browser cannot enable it. The model can supply only Python or JavaScript source, capped at 20,000 characters.
 
-Each run uses a fresh, digest-pinned image and passes source through stdin. The container runs as `65534:65534` with no network, no host mounts, and a read-only root filesystem. Its only writable scratch space is a 64 MiB `/tmp` mount with `noexec` and `nosuid`. The limits are one CPU, 256 MiB of memory with no swap, 64 processes, and ten seconds. The container drops all capabilities and disallows new privileges.
+Each run uses a fresh container from a digest-pinned image and passes source through stdin. The container runs as `65534:65534` with no network, no host mounts, and a read-only root filesystem. Its only writable scratch space is a 64 MiB `/tmp` mount with `noexec` and `nosuid`. The limits are one CPU, 256 MiB of memory with no swap, 64 processes, and ten seconds. The container drops all capabilities and disallows new privileges.
 
 Orbit keeps at most 64 KiB each of stdout and stderr. Docker log storage is disabled for these containers. The runner removes the container after success, program failure, timeout, or cancellation. No files last between runs. Images must be pulled separately. A code run never pulls an image.
 
