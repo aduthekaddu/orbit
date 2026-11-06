@@ -1,0 +1,21 @@
+src/components/tools/code-run.tsx
+  s_e9050b67fdf088::t_1dc5a6b635aa2d 57-68
+.agents/skills/verify-orbit/scenarios/sandbox-stop-output.mjs
+  s_e9050b67fdf088::t_54879380981cf0 45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "432e2c4c456c6041ad4aa3869476d956eacac1cb",
+  "prompts": {},
+  "sessions": {
+    "s_e9050b67fdf088": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "342e8e27-0374-4c89-827c-f073c6745b2c",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
