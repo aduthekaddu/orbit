@@ -23,6 +23,10 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 - Report an unreachable path with the command and the unmet precondition.
 - A skipped entry point is not verified by a different path.
 
+## CI
+
+`scripts/qa/ci-e2e.sh core|browse|sandbox` runs these recipes the way GitHub Actions does, one suite per job. It finds scenarios by file name, so a new scenario joins the `browse` suite, or the `sandbox` suite when its name starts with `sandbox`. Name a scenario that needs a real provider `*-real` and CI skips it.
+
 ## Features
 
 - [Sign up](./signup.md) creates the only account, opens a chat, and closes signup.

@@ -23,7 +23,7 @@ Preconditions:
 
 - **Open the form.** Visit `/signup`. The drive checks HTTP 200 and the text `Create account`.
 - **Create the account.** The drive posts name `Verify`, email `verify@orbit.local`, and the fixture password to `/api/auth/sign-up/email` with `Origin: http://127.0.0.1:3210`. Status 200.
-- **Land in a chat.** `GET /` with the session cookie returns 302 or 307 to `/c/<id>`. `GET` that path returns 200 and the text `Ask anything`.
+- **Land in a chat.** `GET /` with the session cookie returns 302 or 307 to `/c/<id>`. `GET` that path returns 200 and the text `Connect a provider`. Launch gives the server no provider settings, so the first chat shows the provider form and not the composer.
 - **See the chat in the list.** `GET /api/chats` returns 200 and at least one chat. The same request without a cookie returns 401.
 - **Read the database.** `.verify/sandbox/data/orbit.db` has 1 row in `user` and at least 1 row in `chats`.
 - **Second account.** A signup for `other@orbit.local` returns 403.
