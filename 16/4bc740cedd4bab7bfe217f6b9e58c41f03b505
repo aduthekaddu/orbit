@@ -1,0 +1,23 @@
+src/components/tools/code-run.tsx
+  s_e9050b67fdf088::t_39759def2069c5 6,69-70,80,83,86,89
+src/lib/sandbox/terminal.test.ts
+  s_e9050b67fdf088::t_7cc924f412b1ec 1-52
+src/lib/sandbox/terminal.ts
+  s_e9050b67fdf088::t_9bbfff32ff9eee 1-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "164bc740cedd4bab7bfe217f6b9e58c41f03b505",
+  "prompts": {},
+  "sessions": {
+    "s_e9050b67fdf088": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "342e8e27-0374-4c89-827c-f073c6745b2c",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
