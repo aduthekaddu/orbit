@@ -25,6 +25,17 @@ Tests live next to the code as `*.test.ts` and `*.test.tsx`, and run with Node's
 
 A change that users can see also needs a live check. The [verify-orbit skill](.agents/skills/verify-orbit/SKILL.md) starts a server with an empty database in `.verify/sandbox` and drives each feature through the same requests the pages send. Its `features/` folder has one recipe per feature.
 
+## Automated checks
+
+GitHub Actions runs the checks on every pull request and every push to `main`, and once a week. The workflows live in `.github/workflows/`. The `CI` workflow runs these jobs, and the last one, `CI passed`, succeeds only when all of them do.
+
+- **Typecheck, test, build.** `npm run typecheck`, `npm test`, and `npm run build` on Node 22, which the Docker image uses, and on Node 24. The tests run the sandbox against real Docker, so the job pulls the pinned images first.
+- **End to end.** The verify-orbit drives and browser scenarios, in three suites. Each suite starts its own server and keeps its screenshots and logs as a workflow artifact for seven days. Run one locally with `scripts/qa/ci-e2e.sh core`, `browse`, or `sandbox`, after `npm run build` and with nothing on port 3210. The browse and sandbox suites find scenarios by name, so a new scenario runs without an edit. Scenarios that need a real provider are not run.
+- **Docker image.** Lints the Dockerfile, validates both Compose files, builds the image, starts it, and waits for `/api/setup`.
+- **Workflow files.** `actionlint` and `zizmor` check the workflows themselves.
+
+Every action is pinned to a commit SHA and every tool image to a digest. Update a pin on purpose, and keep the version comment next to it.
+
 ## Change the database
 
 1. Edit `src/lib/db/schema.ts`.
