@@ -2,7 +2,7 @@ name: Pull request checks
 
 on:
   pull_request:
-    types: [opened, edited, reopened, synchronize, ready_for_review, labeled, unlabeled]
+    types: [opened, edited, reopened, synchronize, ready_for_review, converted_to_draft, labeled, unlabeled]
 
 permissions: {}
 

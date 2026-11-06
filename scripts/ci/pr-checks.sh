@@ -22,7 +22,7 @@ if ! [[ $TITLE =~ $title_pattern ]]; then
   problem "The title must start with a type and a colon, such as \"fix: keep stopped runs cancelled\". The types are ${types//|/, }. Squash merge makes the title the commit subject on main."
 fi
 
-branch_pattern="^($types)/[a-z0-9][a-z0-9._-]*$"
+branch_pattern="^($types)/[a-z0-9]+(-[a-z0-9]+)*$"
 if ! [[ $HEAD_REF =~ $branch_pattern ]]; then
   problem "The branch \"$HEAD_REF\" must be named <type>/<kebab-topic>, such as fix/palette-escape. The types are ${types//|/, }."
 fi
@@ -60,10 +60,14 @@ if [ "${DRAFT:-false}" != "true" ]; then
   type=${TITLE%%[(:!]*}
   case $type in
     feat | fix | perf)
-      changed=$(git diff --name-only "$BASE_SHA...HEAD")
+      # GitHub checks out a merge of the pull request into the current base branch, and the first
+      # parent of that merge is the base. Comparing with it leaves out what landed on the base after
+      # the pull request opened. A checkout that is not a merge compares with BASE_SHA.
+      if git rev-parse --verify --quiet "HEAD^2" > /dev/null; then base=$(git rev-parse "HEAD^1"); else base=$BASE_SHA; fi
+      changed=$(git diff --name-only "$base" HEAD)
       shipped=$(grep -E '^(src/|drizzle/|Dockerfile$|docker-compose.*\.yml$|next\.config\.ts$|package\.json$)' <<< "$changed" || true)
       if [ -n "$shipped" ] && ! jq --exit-status 'index("skip-changelog")' <<< "${LABELS:-[]}" > /dev/null; then
-        before=$(git show "$BASE_SHA:CHANGELOG.md" 2> /dev/null | unreleased)
+        before=$(git show "$base:CHANGELOG.md" 2> /dev/null | unreleased)
         after=$(git show "HEAD:CHANGELOG.md" 2> /dev/null | unreleased)
         if [ -z "$after" ] || [ "$before" = "$after" ]; then
           problem "A $type pull request that changes shipped code needs a change under \"## [Unreleased]\" in CHANGELOG.md. If nothing changes for a user, add the skip-changelog label."
