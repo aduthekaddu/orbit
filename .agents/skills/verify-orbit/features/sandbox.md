@@ -86,6 +86,19 @@ node .agents/skills/verify-orbit/verify.mjs cleanup
 
 Require the failed card to identify the configuration error. Cleanup ensures this launch uses the requested endpoint.
 
+## Stop keeps output
+
+Launch a fresh mock sandbox. Docker must be reachable.
+
+```sh
+node .agents/skills/verify-orbit/verify.mjs cleanup
+ORBIT_SANDBOX=on node .agents/skills/verify-orbit/verify.mjs launch --mock
+node .agents/skills/verify-orbit/verify.mjs browse sandbox-stop-output
+node .agents/skills/verify-orbit/verify.mjs cleanup
+```
+
+`[qa:run-timeout]` prints `before-timeout` and then loops. `[qa:run-spin]` prints nothing. The scenario waits two seconds and clicks Stop in Chrome. Require the saved part to be a completed result with `cancelled` set and the output printed before Stop, and require the reopened card to show Cancelled with that output. The check also requires that no sandbox container remains.
+
 ## Settings status
 
 Run the check against a server with the sandbox on, then one with it off. Docker is not needed.

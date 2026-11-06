@@ -14,14 +14,20 @@ export const runCodeOutputSchema = z.object({
   durationMs: z.number().nonnegative(),
   timedOut: z.boolean(),
   truncated: z.boolean(),
+  cancelled: z.boolean().optional(),
 });
 
 export type RunCodeInput = z.infer<typeof runCodeInputSchema>;
 export type RunCodeOutput = z.infer<typeof runCodeOutputSchema>;
 
+export function hasStoppedCodeOutput(output: unknown): boolean {
+  const parsed = runCodeOutputSchema.safeParse(output);
+  return parsed.success && parsed.data.cancelled === true;
+}
+
 export function hasFailedCodeOutput(output: unknown): boolean {
   const parsed = runCodeOutputSchema.safeParse(output);
-  return parsed.success && (parsed.data.timedOut || parsed.data.exitCode !== 0);
+  return parsed.success && !parsed.data.cancelled && (parsed.data.timedOut || parsed.data.exitCode !== 0);
 }
 
 export function containerSpec(input: RunCodeInput): Docker.ContainerCreateOptions {
