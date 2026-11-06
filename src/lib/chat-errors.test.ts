@@ -74,6 +74,7 @@ test("input that is not JSON is rejected without echoing its text", async () => 
   const { saved, logged } = await rejectedCall(`{"language":"python","code":"${"#".repeat(20_001)}`);
   assertConcise(saved, "#".repeat(100));
   assertConcise(logged, "#".repeat(100));
+  for (const text of [...saved, ...logged]) assert.match(text, /not valid JSON/);
 });
 
 test("a long layout key with line breaks is shortened in saved errors and logs", async () => {
