@@ -46,14 +46,12 @@ function formatDuration(durationMs: number) {
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
 }
 
-const SIGKILL_EXIT = 137;
-
 function describeRun(output: RunCodeOutput) {
   const duration = formatDuration(output.durationMs);
-  if (output.cancelled) return { primary: `Stopped after ${duration}`, failed: false };
-  if (output.timedOut) return { primary: `Timed out after ${duration}`, failed: true };
+  if (output.cancelled) return { primary: "Stopped", duration, failed: false };
+  if (output.timedOut) return { primary: "Timed out", duration, failed: true };
+  if (output.oomKilled) return { primary: `Out of memory (exit ${output.exitCode})`, duration, failed: true };
   if (output.exitCode === null) return { primary: "Killed", duration, failed: true };
-  if (output.exitCode === SIGKILL_EXIT) return { primary: `Killed (exit ${output.exitCode})`, duration, failed: true };
   return { primary: `Exit ${output.exitCode}`, duration, failed: output.exitCode !== 0 };
 }
 
@@ -85,7 +83,7 @@ export function CodeRun({ input, output }: { input: unknown; output: unknown }) 
           )}
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground num">
             <span className={run.failed ? "text-destructive" : undefined}>{run.primary}</span>
-            {run.duration && <span>{run.duration}</span>}
+            <span>{run.duration}</span>
             {parsedOutput.data.truncated && <span>Output truncated</span>}
           </div>
         </>
