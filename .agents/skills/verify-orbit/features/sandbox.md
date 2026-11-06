@@ -99,6 +99,22 @@ node .agents/skills/verify-orbit/verify.mjs cleanup
 
 `[qa:run-timeout]` prints `before-timeout` and then loops. `[qa:run-spin]` prints nothing. The scenario waits two seconds and clicks Stop in Chrome. Require the saved part to be a completed result with `cancelled` set and the output printed before Stop, and require the reopened card to show Cancelled with that output. The check also requires that no sandbox container remains.
 
+## Copy buttons
+
+Launch a fresh mock sandbox. Docker must be reachable.
+
+```sh
+node .agents/skills/verify-orbit/verify.mjs cleanup
+ORBIT_SANDBOX=on node .agents/skills/verify-orbit/verify.mjs launch --mock
+node .agents/skills/verify-orbit/verify.mjs browse sandbox-copy
+node .agents/skills/verify-orbit/verify.mjs browse sandbox-copy-overlap
+node .agents/skills/verify-orbit/verify.mjs cleanup
+```
+
+`[qa:run-copy]` prints indented text with accented letters, a check mark, and an emoji to standard output and standard error. The scenario clicks each copy button in Chrome and reads the clipboard. Require the clipboard to equal the saved text exactly, including indentation, line breaks, and Unicode. It also requires Enter and Space to copy, a confirmation after a copy, `Copy failed` when the clipboard rejects the write, and a 44 pixel touch area in a 390 pixel touch context.
+
+`sandbox-copy-overlap` runs `[qa:run-wide]`, which prints a 153 character first line. After scrolling the well fully right, require the last three characters to clear the copy button. In a 390 pixel touch context, require a tap on the last character not to land on the button.
+
 ## Settings status
 
 Run the check against a server with the sandbox on, then one with it off. Docker is not needed.

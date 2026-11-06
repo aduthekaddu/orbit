@@ -41,6 +41,9 @@ export default async function sandboxScroll({ page, origin, step, shot }) {
       const output = cards.first().getByRole("region", { name: "Standard output", exact: true });
       await source.focus();
       await page.keyboard.press("Tab");
+      const copyStop = await cards.first().getByRole("button", { name: "Copy source", exact: true }).evaluate((element) => document.activeElement === element);
+      step(`${name} Tab from the source reaches its copy button`, copyStop);
+      await page.keyboard.press("Tab");
       const reached = await output.evaluate((element) => document.activeElement === element);
       await output.evaluate((element) => { element.scrollTop = 0; });
       await output.press("PageDown");

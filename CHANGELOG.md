@@ -10,6 +10,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 - Settings shows whether the server turned on the code sandbox. The status is read-only, and the browser cannot change it.
 
+- Copy the source, standard output, or standard error of a code run from its card. The buttons work with the keyboard and on a phone, and show whether the copy worked.
+
 - Run Python and JavaScript through `run_code` when the server sets `ORBIT_SANDBOX=on`. Each run uses a fresh container with no network, a read-only root filesystem, a non-root user, and resource limits. Saved cards show code, stdout, stderr, exit code, and duration.
 
 - Search the web through SearXNG or Tavily and answer with source links. Tool cards show running, succeeded, failed, or cancelled and survive reload. Search settings keep the Tavily key on the server. Compose includes SearXNG with JSON search enabled.
