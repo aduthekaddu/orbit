@@ -5,6 +5,7 @@ import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
 import { assistantHasVisiblePart, settleInterruptedParts } from "@/lib/genui/spec";
 import { toolsFor } from "@/lib/tools";
 import { CHAT_STEP_LIMIT, searchAnswerStep } from "@/lib/tools/answer-step";
+import { createStoppedRuns } from "@/lib/tools/stopped-runs";
 import { chatTitle, ensureChat, listMessages, planChatWrite, replyGuard, shouldSaveReply, storedMessageCount, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { startChatTitle } from "@/lib/titles";
@@ -109,7 +110,8 @@ export async function POST(request: Request) {
 
   try {
     const allowReasoning = modelAllowsReasoning(settings.baseUrl, settings.model);
-    const tools = toolsFor(settings);
+    const stopped = createStoppedRuns();
+    const tools = toolsFor(settings, stopped);
     const result = streamText({
       model: orbitModel({
         baseUrl: settings.baseUrl,
@@ -136,7 +138,7 @@ export async function POST(request: Request) {
       onError: (error) => streamErrorMessage(error, settings.apiKey),
       onEnd: async ({ responseMessage, isAborted, outcome }) => {
         const interrupted = isAborted || outcome.status !== "completed";
-        const parts = settleInterruptedParts(responseMessage.parts, interrupted);
+        const parts = settleInterruptedParts(interrupted ? await stopped.apply(responseMessage.parts) : responseMessage.parts, interrupted);
         const visible = assistantHasVisiblePart(parts);
         if (!visible) {
           const types = Array.isArray(responseMessage.parts)
