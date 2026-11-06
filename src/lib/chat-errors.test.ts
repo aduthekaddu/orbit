@@ -3,17 +3,18 @@ import test from "node:test";
 import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { streamErrorMessage } from "./chat-errors";
+import { renderUiTool } from "./genui/tool";
 import { createRunCodeTool } from "./tools/run-code";
 
 type Chunk = { type: string; errorText?: string };
 
-async function rejectedCall(input: string) {
+async function rejectedCall(input: string, toolName: "run_code" | "render_ui" = "run_code") {
   const model = new MockLanguageModelV4({
     doStream: async () => ({
       stream: simulateReadableStream({
         chunks: [
           { type: "stream-start", warnings: [] },
-          { type: "tool-call", toolCallId: "call-1", toolName: "run_code", input },
+          { type: "tool-call", toolCallId: "call-1", toolName, input },
           {
             type: "finish",
             finishReason: { unified: "tool-calls", raw: undefined },
@@ -26,7 +27,7 @@ async function rejectedCall(input: string) {
       }),
     }),
   });
-  const tools = { run_code: createRunCodeTool() };
+  const tools = { run_code: createRunCodeTool(), render_ui: renderUiTool };
   const result = streamText({ model, prompt: "run it", tools, stopWhen: stepCountIs(1) });
   const logged: string[] = [];
   const original = console.error;
@@ -45,12 +46,13 @@ async function rejectedCall(input: string) {
   return { saved, logged };
 }
 
-function assertConcise(texts: string[], repeated: string) {
+function assertConcise(texts: string[], repeated: string, toolName = "run_code") {
   assert.ok(texts.length > 0, "the rejected call produced no error text");
   for (const text of texts) {
     assert.ok(text.length <= 300, `error text is ${text.length} characters`);
     assert.ok(!text.includes(repeated), "error text repeats the rejected input");
-    assert.match(text, /run_code/);
+    assert.ok(!/[\r\n]/.test(text), "error text has a line break");
+    assert.match(text, new RegExp(toolName));
   }
 }
 
@@ -72,6 +74,15 @@ test("input that is not JSON is rejected without echoing its text", async () => 
   const { saved, logged } = await rejectedCall(`{"language":"python","code":"${"#".repeat(20_001)}`);
   assertConcise(saved, "#".repeat(100));
   assertConcise(logged, "#".repeat(100));
+});
+
+test("a long layout key with line breaks is shortened in saved errors and logs", async () => {
+  const key = "k\nk".repeat(2_000);
+  const layout = { root: key, elements: { [key]: { type: "NotAComponent", props: {}, children: [] } } };
+  const { saved, logged } = await rejectedCall(JSON.stringify(layout), "render_ui");
+  assertConcise(saved, "k\nk\nk", "render_ui");
+  for (const text of saved) assert.match(text, /elements\..*\.type: Invalid option/);
+  assertConcise(logged, "k\nk\nk", "render_ui");
 });
 
 test("other failures keep their messages", () => {
