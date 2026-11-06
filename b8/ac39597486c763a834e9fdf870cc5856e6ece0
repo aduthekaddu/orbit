@@ -1,0 +1,20 @@
+src/lib/compose-sandbox.test.ts
+  s_51f76b6b47de21::t_7c630b5adc828e 4-6,60-102
+  s_51f76b6b47de21::t_026d7130f6d3b0 103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b8ac39597486c763a834e9fdf870cc5856e6ece0",
+  "prompts": {},
+  "sessions": {
+    "s_51f76b6b47de21": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1acb6-e850-7de1-9938-5e46a5f7e771",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
