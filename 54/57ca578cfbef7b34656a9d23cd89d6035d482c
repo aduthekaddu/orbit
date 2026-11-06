@@ -1,0 +1,39 @@
+src/lib/chat-stopped-runs.ts
+  s_b182bd069c8bb4::t_abc05144468df8 1-3,5,8,13-16,18-22,24,27-33,36,38-44
+  s_b182bd069c8bb4::t_6f2c1e14c4aeab 4,6-7,9-12,17,23,25-26,34-35,37
+src/components/chat/chat-panel.tsx
+  s_b182bd069c8bb4::t_c11fdb1f523ab3 62,64
+  s_b182bd069c8bb4::t_0d7fd2be33a963 76
+  s_b182bd069c8bb4::t_3b90dde5ab8b5d 32
+  s_b182bd069c8bb4::t_fd03b905c06380 3,7,9,14
+ARCHITECTURE.md
+  s_b182bd069c8bb4::t_27f717cdb05d2d 137
+CHANGELOG.md
+  s_b182bd069c8bb4::t_4a4035f37617b7 41-42
+src/lib/chat-stopped-runs.test.ts
+  s_b182bd069c8bb4::t_2eebbe7ca63d16 1-56
+src/components/chat/stopped-run-sync.tsx
+  s_b182bd069c8bb4::t_aa4004dd305cbb 1-37
+.agents/skills/verify-orbit/scenarios/sandbox-stop-output.mjs
+  s_b182bd069c8bb4::t_4ab8881684e998 112
+  s_b182bd069c8bb4::t_a3e95b76bf721a 118-119
+.agents/skills/verify-orbit/features/sandbox.md
+  s_b182bd069c8bb4::t_abcb93d59d9a3f 144
+  s_b182bd069c8bb4::t_d66cbb052875a7 100-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5457ca578cfbef7b34656a9d23cd89d6035d482c",
+  "prompts": {},
+  "sessions": {
+    "s_b182bd069c8bb4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bfaa4b56-60ce-4e19-812f-4a7738bedf03",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": null
+    }
+  }
+}
