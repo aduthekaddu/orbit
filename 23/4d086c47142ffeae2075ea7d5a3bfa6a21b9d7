@@ -1,0 +1,27 @@
+src/components/settings/settings-form.tsx
+  s_6877932481c8d7::t_74e7419e8a2a6f 258-264
+src/lib/sandbox/enabled.ts
+  s_6877932481c8d7::t_1be43a08f4f39e 1-3
+src/lib/settings.test.ts
+  s_6877932481c8d7::t_e70acafee30493 8,52
+src/lib/settings.ts
+  s_6877932481c8d7::t_e0854fa2e6fa65 4,26,55
+src/lib/tools/index.ts
+  s_6877932481c8d7::t_de5fad40932181 6,19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "234d086c47142ffeae2075ea7d5a3bfa6a21b9d7",
+  "prompts": {},
+  "sessions": {
+    "s_6877932481c8d7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3b41b1b5-5e57-4585-9cde-1f4c1aa480f6",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
