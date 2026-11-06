@@ -111,7 +111,7 @@ jobs:
         run: docker run --detach --name orbit-ci --publish 127.0.0.1:3210:3210 orbit:ci
       - name: Wait for the setup route
         run: |
-          curl --fail --silent --show-error --retry 60 --retry-delay 2 --retry-connrefused \
+          curl --fail --silent --show-error --retry 60 --retry-delay 2 --retry-all-errors \
             http://127.0.0.1:3210/api/setup | tee setup.json
           jq --exit-status '.signupOpen == true' setup.json
       - name: Show the container logs
