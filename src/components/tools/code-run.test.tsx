@@ -167,3 +167,26 @@ test("no outcome repeats the header status words", () => {
 test("truncated output keeps its note beside the outcome", () => {
   assert.equal(resultRow(renderToStaticMarkup(<CodeRun input={input} output={{ ...base, truncated: true }} />)), "Exit 0|194 ms|Output truncated");
 });
+
+test("terminal color sequences in standard output show only the text", () => {
+  const html = renderToStaticMarkup(<CodeRun input={input} output={{ ...silent, stdout: "\u001b[31mred\u001b[0m\n" }} />);
+  assert.match(html, /data-code-stdout=""[^>]*><code>red\n<\/code>/);
+  assert.doesNotMatch(html, /\u001b|\[31m|\[0m/);
+});
+
+test("terminal sequences in standard error show only the text", () => {
+  const html = renderToStaticMarkup(<CodeRun input={input} output={{ ...silent, stderr: "\u001b[1;31mError:\u001b[0m bad\u001b]0;title\u0007\n", exitCode: 1 }} />);
+  assert.match(html, /data-code-stderr=""[^>]*><code>Error: bad\n<\/code>/);
+  assert.doesNotMatch(html, /\u001b|\u0007|title/);
+});
+
+test("output that is only a sequence gets no well", () => {
+  const html = renderToStaticMarkup(<CodeRun input={input} output={{ ...silent, stdout: "\u001b[2J\u001b[H" }} />);
+  assert.doesNotMatch(html, /data-code-stdout/);
+});
+
+test("output stays escaped as text after the sequences are removed", () => {
+  const html = renderToStaticMarkup(<CodeRun input={input} output={{ ...silent, stdout: "\u001b[32m<img src=x onerror=alert(1)>\u001b[0m\n" }} />);
+  assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.doesNotMatch(html, /<img/);
+});
