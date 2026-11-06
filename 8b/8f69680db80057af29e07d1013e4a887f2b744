@@ -1,0 +1,38 @@
+src/components/chat/stopped-run-sync.tsx
+  s_b182bd069c8bb4::t_aa4004dd305cbb 1-37
+src/lib/chat-stopped-runs.test.ts
+  s_b182bd069c8bb4::t_2eebbe7ca63d16 1-56
+CHANGELOG.md
+  s_b182bd069c8bb4::t_4a4035f37617b7 41-42
+ARCHITECTURE.md
+  s_b182bd069c8bb4::t_27f717cdb05d2d 137
+.agents/skills/verify-orbit/scenarios/sandbox-stop-output.mjs
+  s_b182bd069c8bb4::t_a3e95b76bf721a 118-119
+  s_b182bd069c8bb4::t_4ab8881684e998 112
+src/lib/chat-stopped-runs.ts
+  s_b182bd069c8bb4::t_abc05144468df8 1-43
+src/components/chat/chat-panel.tsx
+  s_b182bd069c8bb4::t_fd03b905c06380 3,7,9,14
+  s_b182bd069c8bb4::t_3b90dde5ab8b5d 32
+  s_b182bd069c8bb4::t_0d7fd2be33a963 76
+  s_b182bd069c8bb4::t_c11fdb1f523ab3 62,64
+.agents/skills/verify-orbit/features/sandbox.md
+  s_b182bd069c8bb4::t_d66cbb052875a7 100-102
+  s_b182bd069c8bb4::t_abcb93d59d9a3f 144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8b8f69680db80057af29e07d1013e4a887f2b744",
+  "prompts": {},
+  "sessions": {
+    "s_b182bd069c8bb4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bfaa4b56-60ce-4e19-812f-4a7738bedf03",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
