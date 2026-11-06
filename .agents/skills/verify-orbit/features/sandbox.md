@@ -165,7 +165,7 @@ node .agents/skills/verify-orbit/verify.mjs browse sandbox-escapes
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
-The scenario runs `[qa:run-color]`, `[qa:run-osc]`, and `[qa:run-html]`. The first prints red text to standard output and bold yellow text to standard error. The second prints a window title, a hyperlink, and an erase code. The third prints HTML-looking text. Require only the plain text in each well, no control character anywhere on the card, no link or image added to the card, and no change to the page title. Require both copy buttons to copy the plain text, and require the same results after a reload and at 390 pixels. The HTML-looking text must show as text.
+The scenario runs `[qa:run-color]`, `[qa:run-osc]`, `[qa:run-cut]`, and `[qa:run-html]`. The first prints red text to standard output and bold yellow text to standard error. The second prints a window title, a hyperlink, and an erase code. The third prints a color code that another escape interrupts, which must leave no stray digits. The fourth prints HTML-looking text. Require only the plain text in each well, no control character anywhere on the card, no link or image added to the card, and no page title set by the program. Require both copy buttons to copy the plain text, and require the same results after a reload and at 390 pixels. The HTML-looking text must show as text.
 
 ## Settings status
 
