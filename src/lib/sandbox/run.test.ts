@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import Docker from "dockerode";
 import { Duplex } from "node:stream";
+import { setTimeout as delay } from "node:timers/promises";
 import { runCode } from "./run";
+import { waitForRunningSandbox } from "./wait-for-running";
 
 test("sandbox programs run inside real isolated containers", { timeout: 90_000 }, async (t) => {
   const docker = new Docker();
@@ -135,7 +137,7 @@ finally:
     await t.test(name, async () => {
       const controller = new AbortController();
       const running = runCode(docker, { language: "python", code }, controller.signal);
-      const timer = setTimeout(() => controller.abort(), 1500);
+      const stopped = waitForRunningSandbox(docker).then(() => delay(1000)).then(() => controller.abort());
       try {
         await assert.rejects(running, (error: unknown) => {
           assert.ok(error instanceof Error && error.name === "AbortError");
@@ -149,7 +151,7 @@ finally:
           return true;
         });
       } finally {
-        clearTimeout(timer);
+        await stopped;
       }
     });
   }

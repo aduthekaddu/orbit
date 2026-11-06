@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Docker from "dockerode";
+import { setTimeout as delay } from "node:timers/promises";
 import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { RunStopped } from "../sandbox/run";
 import type { RunCodeOutput } from "../sandbox/spec";
+import { waitForRunningSandbox } from "../sandbox/wait-for-running";
 import { createRunCodeTool } from "./run-code";
 import { createStoppedRuns } from "./stopped-runs";
 
@@ -73,11 +75,11 @@ test("stopping a real run_code call through the AI SDK keeps what it printed", {
       saved = await stopped.apply(responseMessage.parts);
     },
   });
-  const timer = setTimeout(() => controller.abort(), 1500);
+  const stopAfterStart = waitForRunningSandbox(new Docker()).then(() => delay(1000)).then(() => controller.abort());
   try {
     for await (const chunk of stream as unknown as AsyncIterable<unknown>) void chunk;
   } finally {
-    clearTimeout(timer);
+    await stopAfterStart;
   }
   assert.equal(aborted, true);
   const part = (saved as Array<Record<string, unknown>>).find((entry) => entry.type === "tool-run_code");

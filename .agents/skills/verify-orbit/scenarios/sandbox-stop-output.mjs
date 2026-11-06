@@ -5,6 +5,8 @@ const cases = [
   { scenario: "run-spin", printed: "" },
 ];
 
+const containerRunning = () => execFileSync("docker", ["ps", "--filter", "label=orbit.sandbox=true", "--filter", "status=running", "--format", "{{.ID}}"], { encoding: "utf8" }).trim() !== "";
+
 export default async function sandboxStopOutput({ page, origin, step, shot }) {
   await page.request.put(`${origin}/api/settings`, { data: { baseUrl: "http://127.0.0.1:3299/v1", apiKey: "test-key-not-real", model: "mock-genui", reasoningEffort: "low" } });
   const card = page.locator('[data-tool-name="run_code"]');
@@ -15,7 +17,9 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
     await composer.fill(`[qa:${scenario}]`);
     await composer.press("Enter");
     await card.locator('[data-tool-status="running"]').waitFor({ timeout: 15_000 });
-    await page.waitForTimeout(2_000);
+    const started = Date.now();
+    while (!containerRunning() && Date.now() - started < 20_000) await page.waitForTimeout(50);
+    await page.waitForTimeout(1_000);
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await card.locator('[data-tool-status="cancelled"]').waitFor({ timeout: 8_000 });
     step(`${scenario} Stop turns the running card to Cancelled`, true);
