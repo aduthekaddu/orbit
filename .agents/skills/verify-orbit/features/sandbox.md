@@ -60,6 +60,19 @@ node .agents/skills/verify-orbit/verify.mjs cleanup
 
 Require all three scenarios to pass and leave the alternate directory untouched.
 
+## Rejected tool input
+
+The tool never runs for these calls, so Docker is not needed. Launch a fresh mock server.
+
+```sh
+node .agents/skills/verify-orbit/verify.mjs cleanup
+ORBIT_SANDBOX=on node .agents/skills/verify-orbit/verify.mjs launch --mock
+node .agents/skills/verify-orbit/verify.mjs browse sandbox-validation
+node .agents/skills/verify-orbit/verify.mjs cleanup
+```
+
+`[qa:run-long]` repeats a 20,001 character program and `[qa:run-ruby]` repeats an unsupported language until the step limit. Require every saved error to stay under 400 characters, name the reason, and leave out the program. The card must show the same reason before and after a reload. The check prints the saved error lengths and the message size.
+
 ## Configuration failure
 
 Start a fresh server with the invalid Docker endpoint, then check the failed card and reload.
