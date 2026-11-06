@@ -29,7 +29,22 @@ fi
 
 # A draft is still being written, so the description and changelog checks wait for it to be ready.
 if [ "${DRAFT:-false}" != "true" ]; then
-  stripped=$(printf '%s' "${BODY:-}" | sed -e ':a' -e 's/<!--[^>]*-->//g;/<!--/{N;ba' -e '}')
+  # Windows line endings come from the web editor. Drop the HTML comments from the template, which can span lines and contain ">".
+  stripped=$(printf '%s' "${BODY:-}" | tr -d '\r' | awk '
+    {
+      line = $0
+      out = ""
+      while (length(line) > 0) {
+        if (in_comment) {
+          end = index(line, "-->")
+          if (end == 0) { line = "" } else { line = substr(line, end + 3); in_comment = 0 }
+        } else {
+          start = index(line, "<!--")
+          if (start == 0) { out = out line; line = "" } else { out = out substr(line, 1, start - 1); line = substr(line, start + 4); in_comment = 1 }
+        }
+      }
+      print out
+    }')
   for heading in "## Why" "## What changed" "## How I checked it"; do
     if ! grep -qxF "$heading" <<< "$stripped"; then
       problem "The description is missing the \"$heading\" section from the pull request template."
