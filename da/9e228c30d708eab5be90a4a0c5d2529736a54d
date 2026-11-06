@@ -1,0 +1,19 @@
+.agents/skills/verify-orbit/scenarios/sandbox-stop-output.mjs
+  s_b182bd069c8bb4::t_4e143be5e476f6 10-32,40,43-58,78-79,87-120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "da9e228c30d708eab5be90a4a0c5d2529736a54d",
+  "prompts": {},
+  "sessions": {
+    "s_b182bd069c8bb4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bfaa4b56-60ce-4e19-812f-4a7738bedf03",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
