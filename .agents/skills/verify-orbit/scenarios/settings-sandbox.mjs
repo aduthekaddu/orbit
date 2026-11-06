@@ -1,17 +1,23 @@
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
+const publicFields = ["baseUrl", "keySet", "model", "reasoningEffort", "sandbox", "searxngUrl", "tavilyKeySet"];
+const provider = { baseUrl: "http://127.0.0.1:3299/v1", model: "mock-genui", reasoningEffort: "low" };
+
 export default async function settingsSandbox({ page, origin, step, shot }) {
   const state = JSON.parse(fs.readFileSync(fileURLToPath(new URL("../../../../.verify/server.json", import.meta.url)), "utf8"));
   const expected = state.sandboxEnabled === true;
   const label = expected ? "On" : "Off";
 
+  const seeded = await page.request.put(`${origin}/api/settings`, { data: { ...provider, apiKey: "test-key-not-real" } });
+  step("valid provider settings are saved before the checks", seeded.ok(), `PUT ${seeded.status()}`);
   const body = await (await page.request.get(`${origin}/api/settings`)).json();
   step(`GET /api/settings reports the sandbox ${label}`, body.sandbox === expected, `sandbox ${JSON.stringify(body.sandbox)}`);
-  step("settings expose no key or Docker connection detail", !("apiKey" in body) && !/docker|socket|proxy/i.test(JSON.stringify(body)), Object.keys(body).join(","));
-  const put = await page.request.put(`${origin}/api/settings`, { data: { baseUrl: body.baseUrl, model: body.model, reasoningEffort: body.reasoningEffort, sandbox: !expected } });
+  const fields = Object.keys(body).sort();
+  step("settings expose only the known fields and no Docker connection detail", JSON.stringify(fields) === JSON.stringify(publicFields) && !/docker|socket|proxy/i.test(JSON.stringify(body)), fields.join(","));
+  const put = await page.request.put(`${origin}/api/settings`, { data: { ...provider, sandbox: !expected } });
   const after = await (await page.request.get(`${origin}/api/settings`)).json();
-  step("the browser cannot change the sandbox setting", after.sandbox === expected, `PUT ${put.status()}, sandbox ${JSON.stringify(after.sandbox)}`);
+  step("the browser cannot change the sandbox setting", put.ok() && after.sandbox === expected, `PUT ${put.status()}, sandbox ${JSON.stringify(after.sandbox)}`);
 
   await page.goto(`${origin}/settings`);
   await page.getByRole("heading", { name: "Provider" }).waitFor({ timeout: 15_000 });
@@ -20,8 +26,10 @@ export default async function settingsSandbox({ page, origin, step, shot }) {
   const text = shown ? (await status.innerText()).trim() : "";
   step(`Settings shows the code sandbox ${label}`, shown && text === label && (await status.getAttribute("data-sandbox-status")) === (expected ? "on" : "off"), `status ${shown ? JSON.stringify(text) : "missing"}`);
   step("the status sits under a Code sandbox heading", (await page.getByRole("heading", { name: "Code sandbox" }).count()) === 1);
-  const editable = await page.locator('[data-sandbox-status] input, [data-sandbox-status] button, input[name*="sandbox" i]').count();
-  step("the status is read-only", shown && editable === 0 && !["INPUT", "BUTTON", "SELECT"].includes(await status.evaluate((element) => element.tagName)));
+  const controls = '[data-sandbox-status] :is(input, button, select, textarea, [role="switch"], [role="combobox"], [role="checkbox"], [role="radio"], [role="button"])';
+  const editable = (await page.locator(controls).count()) + (await page.locator(':is(input, select, textarea)[name*="sandbox" i]').count());
+  const tag = shown ? await status.evaluate((element) => element.tagName) : "";
+  step("the status is read-only", shown && editable === 0 && !["INPUT", "BUTTON", "SELECT", "TEXTAREA"].includes(tag), `${editable} controls, element ${tag}`);
   await shot("desktop");
 
   await page.setViewportSize({ width: 390, height: 844 });
