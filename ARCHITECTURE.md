@@ -130,7 +130,7 @@ All state is in `data/orbit.db`. The directory is mode `0700`, and the database 
 | `user`, `session`, `account`, `verification` | better-auth's tables | A SQLite trigger, `user_single_row`, rejects a second user. |
 | `settings` | One row, `id = 1` | Base URL, provider key, model, reasoning effort, SearXNG URL, and Tavily key. Both keys stay on the server. |
 | `chats` | One per conversation | `title` starts as `New chat` and takes the first message's text. `head_id` selects the last written branch. |
-| `messages` | One per user or assistant message | `parts` is the AI SDK parts array as JSON, and reload reads it. `content` is the plain text of the text parts. `parent_id` links each message to its parent. `position` is its depth. Siblings stay in creation order. |
+| `messages` | One per user or assistant message | `parts` is the AI SDK parts array as JSON, and reload reads it. `content` is the plain text of the text parts, followed by the standard output and standard error of finished code runs. Search reads `content`. Source code is left out. `parent_id` links each message to its parent. `position` is its depth. Siblings stay in creation order. |
 
 Tool output, generated UI specs, and reasoning all live inside `parts`. A new tool needs no new table unless it stores something outside a message.
 

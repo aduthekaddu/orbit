@@ -6,6 +6,7 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { eq } from "drizzle-orm";
 import { readEnv } from "../env";
 import { dataDirectory } from "../paths";
+import { stripTerminalControls } from "../sandbox/terminal";
 import { withMigrationLock } from "./migration-lock";
 import * as schema from "./schema";
 
@@ -21,6 +22,8 @@ const sqlite = new Database(dbPath);
 sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("foreign_keys = ON");
 sqlite.pragma("busy_timeout = 5000");
+// Migration 0004 calls this to clean saved code output the way new saves do.
+sqlite.function("orbit_clean_output", { deterministic: true }, (text) => (typeof text === "string" ? stripTerminalControls(text) : null));
 
 function restrictDbFile(name: "orbit.db" | "orbit.db-wal" | "orbit.db-shm") {
   try {

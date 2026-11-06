@@ -118,3 +118,60 @@ test("a hit off the stored head opens that path and leaves the head", () => {
   assert.deepEqual(path, ["u-root", "a-side"]);
   assert.equal(head?.headId, "a-active");
 });
+
+function toolMessage(id: string, run: { stdout?: string; stderr?: string; code?: string }, reply = "Ran it.") {
+  return {
+    id,
+    role: "assistant" as const,
+    parts: [
+      {
+        type: "tool-run_code",
+        toolCallId: `call-${id}`,
+        state: "output-available",
+        input: { language: "python", code: run.code ?? "print('x')" },
+        output: { stdout: run.stdout ?? "", stderr: run.stderr ?? "", exitCode: 0, durationMs: 12, timedOut: false, truncated: false },
+      },
+      { type: "text", text: reply },
+    ],
+  };
+}
+
+test("text that only a code run printed is found, and the hit opens that message", () => {
+  assert.equal(messages.upsertMessage("c1", toolMessage("m-out", { stdout: "rainbow-" + "gizmo7\n" }), null), true);
+  const hits = search.searchMessages("u1", "rainbow-gizmo7");
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0]?.messageId, "m-out");
+  assert.equal(hits[0]?.chatTitle, "Notes");
+  assert.match(hits[0]?.snippet ?? "", /\[rainbow-gizmo7\]/);
+});
+
+test("standard error is found too", () => {
+  messages.upsertMessage("c1", toolMessage("m-err", { stderr: "Traceback: wobbly" + "kettle9 failed\n" }), "m-out");
+  const hits = search.searchMessages("u1", "wobblykettle9");
+  assert.deepEqual(hits.map((hit) => hit.messageId), ["m-err"]);
+});
+
+test("a reply that repeats the output gives one hit for the message", () => {
+  messages.upsertMessage("c1", toolMessage("m-dup", { stdout: "echoedtoken42\n" }, "The program printed echoedtoken42."), "m-err");
+  const hits = search.searchMessages("u1", "echoedtoken42");
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0]?.messageId, "m-dup");
+});
+
+test("source code is not searched", () => {
+  messages.upsertMessage("c1", toolMessage("m-src", { code: "secret_name = 'sourceonlytoken5'", stdout: "ok\n" }), "m-dup");
+  assert.equal(search.searchMessages("u1", "sourceonlytoken5").length, 0);
+});
+
+test("colored output is found by its words and the snippet has no escape bytes", () => {
+  messages.upsertMessage("c1", toolMessage("m-ansi", { stdout: "\u001b[31mcrimsonword8\u001b[0m\n" }), "m-src");
+  const hits = search.searchMessages("u1", "crimsonword8");
+  assert.equal(hits.length, 1);
+  assert.doesNotMatch(hits[0]?.snippet ?? "", /\u001b|\[31m/);
+});
+
+test("a reopened chat still finds output-only text after the message is saved again", () => {
+  const again = toolMessage("m-out", { stdout: "rainbow-" + "gizmo7\n" });
+  assert.equal(messages.upsertMessage("c1", again, null), true);
+  assert.deepEqual(search.searchMessages("u1", "rainbow-gizmo7").map((hit) => hit.messageId), ["m-out"]);
+});
