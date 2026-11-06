@@ -73,6 +73,19 @@ node .agents/skills/verify-orbit/verify.mjs cleanup
 
 Require the failed card to identify the configuration error. Cleanup ensures this launch uses the requested endpoint.
 
+## Copy buttons
+
+Launch a fresh mock sandbox. Docker must be reachable.
+
+```sh
+node .agents/skills/verify-orbit/verify.mjs cleanup
+ORBIT_SANDBOX=on node .agents/skills/verify-orbit/verify.mjs launch --mock
+node .agents/skills/verify-orbit/verify.mjs browse sandbox-copy
+node .agents/skills/verify-orbit/verify.mjs cleanup
+```
+
+`[qa:run-copy]` prints indented text with accented letters, a check mark, and an emoji to standard output and standard error. The scenario clicks each copy button in Chrome and reads the clipboard. Require the clipboard to equal the saved text exactly, including indentation, line breaks, and Unicode. It also requires Enter and Space to copy, a confirmation after a copy, `Copy failed` when the clipboard rejects the write, and a 44 pixel touch area in a 390 pixel touch context.
+
 ## Real provider
 
 Launch with the sandbox enabled. Pass `ORBIT_BASE_URL`, `ORBIT_API_KEY`, and `ORBIT_MODEL` through the environment, then run `node .agents/skills/verify-orbit/verify.mjs browse sandbox-real`.
