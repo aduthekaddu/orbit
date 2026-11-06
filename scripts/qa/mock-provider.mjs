@@ -2,6 +2,12 @@ import http from "node:http";
 
 const PORT = Number(process.env.MOCK_PORT ?? 3299);
 const MODEL = process.env.MOCK_MODEL ?? "mock-genui";
+const sandboxPrograms = new Map([
+  ["run-python", "print(1+1)"],
+  ["run-escape", 'import urllib.request\nurllib.request.urlopen("http://1.1.1.1", timeout=2)'],
+  ["run-timeout", 'print("before-timeout")\nwhile True: pass'],
+  ["run-oom", 'print("before-oom")\nx = bytearray(1024 * 1024 * 1024)'],
+]);
 
 function allSpec() {
   return {
@@ -422,10 +428,10 @@ const server = http.createServer((req, res) => {
       textResponse(res, "Done.");
       return;
     }
-    if (scenario === "run-python" || scenario === "run-escape") {
+    if (sandboxPrograms.has(scenario)) {
       toolResponse(res, scenario, {
         language: "python",
-        code: scenario === "run-python" ? "print(1+1)" : 'import urllib.request\nurllib.request.urlopen("http://1.1.1.1", timeout=2)',
+        code: sandboxPrograms.get(scenario),
       }, "run_code");
       return;
     }

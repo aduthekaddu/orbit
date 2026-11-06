@@ -45,8 +45,9 @@ test("sandbox programs run inside real isolated containers", { timeout: 90_000 }
     assert.equal(result.exitCode, 0);
   });
   await t.test("allocating 1 GiB is killed by the memory limit", async () => {
-    const result = await runPython("x = bytearray(1024 * 1024 * 1024)");
+    const result = await runPython('print("before-oom")\nx = bytearray(1024 * 1024 * 1024)');
     assert.ok(result.exitCode === 137 || result.exitCode === null);
+    assert.equal(result.stdout, "before-oom\n");
   });
   await t.test("a fork loop reaches the process limit while Docker stays responsive", async () => {
     const result = await runPython(`import os, time
@@ -73,10 +74,11 @@ finally:
   });
   await t.test("an infinite loop times out within 12 seconds", async () => {
     const started = performance.now();
-    const result = await runPython("while True: pass");
+    const result = await runPython('print("before-timeout")\nwhile True: pass');
     assert.equal(result.timedOut, true);
     assert.equal(result.exitCode, null);
     assert.ok(performance.now() - started < 12_000);
+    assert.equal(result.stdout, "before-timeout\n");
   });
   await t.test("stdout and stderr each stop at 64 KiB without blocking the program", async () => {
     const result = await runPython('import sys\nsys.stdout.write("x" * 200000)\nsys.stderr.write("y" * 200000)');
