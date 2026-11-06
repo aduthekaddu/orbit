@@ -1,0 +1,21 @@
+.agents/skills/verify-orbit/features/sandbox.md
+  s_6877932481c8d7::t_6c849ef8f00e76 63-75
+CHANGELOG.md
+  s_6877932481c8d7::t_3b9a15b9023f23 33-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1f2580ecd1c82303681d76e11bffb6f9f46db590",
+  "prompts": {},
+  "sessions": {
+    "s_6877932481c8d7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3b41b1b5-5e57-4585-9cde-1f4c1aa480f6",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
