@@ -30,6 +30,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Fixed
 
+- Stopping a running code card keeps the output the program had printed. The saved card shows Cancelled with that output after you reopen the chat.
+
 - Verification fixtures ignore shell data-directory settings and use the isolated test database.
 
 - Build the sandbox route when Dockerode's optional SSH native addon is installed.
