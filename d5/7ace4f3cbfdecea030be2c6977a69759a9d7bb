@@ -1,0 +1,31 @@
+scripts/ci/osv-gate.sh
+  s_6877932481c8d7::t_05cbd44cc1b086 1-61
+.agents/skills/verify-orbit/scenarios/artifacts.mjs
+  s_6877932481c8d7::t_391d8112c9e442 64-65
+.agents/skills/verify-orbit/verify.mjs
+  s_6877932481c8d7::t_5fefd66e91e507 165-166,322-323
+.github/workflows/codeql.yml
+  s_6877932481c8d7::t_25d0a7315b6d15 1-53
+.github/workflows/security.yml
+  s_6877932481c8d7::t_8e0e99aae98e67 1-93
+.github/zizmor.yml
+  s_6877932481c8d7::t_7ce87818295021 1-4
+.gitleaks.toml
+  s_6877932481c8d7::t_69576f659d3aeb 1-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d57ace4f3cbfdecea030be2c6977a69759a9d7bb",
+  "prompts": {},
+  "sessions": {
+    "s_6877932481c8d7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3b41b1b5-5e57-4585-9cde-1f4c1aa480f6",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
