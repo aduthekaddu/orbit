@@ -109,11 +109,14 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
     const firstShown = await picker.getByText("1 / 2", { exact: true }).waitFor({ timeout: 5_000 }).then(() => true, () => false);
     const first = await card.locator("span", { hasText: /^Stopped$/ }).first().waitFor({ timeout: 5_000 }).then(() => true, () => false);
     step("Previous opens the first version with its Stopped line", firstShown && first, `picker ${firstShown}, line ${first}`);
+    await page.waitForTimeout(500);
     await shot("branch-previous");
     await picker.getByRole("button", { name: "Next", exact: true }).click();
     const secondShown = await picker.getByText("2 / 2", { exact: true }).waitFor({ timeout: 5_000 }).then(() => true, () => false);
     const again = await card.locator("span", { hasText: /^Stopped$/ }).first().waitFor({ timeout: 5_000 }).then(() => true, () => false);
     step("Next returns to the second version with its Stopped line", secondShown && again, `picker ${secondShown}, line ${again}`);
+    await page.waitForTimeout(500);
+    await shot("branch-next");
   }
   await page.waitForTimeout(2_500);
   const left = execFileSync("docker", ["ps", "-a", "--filter", "label=orbit.sandbox=true", "--format", "{{.ID}}"], { encoding: "utf8" }).trim();
