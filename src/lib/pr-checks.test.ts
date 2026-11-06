@@ -17,6 +17,7 @@ let sourceAndChangelog: string;
 let sourceAndOldChangelog: string;
 let sourceAndBlankLines: string;
 let merged: string;
+let searxngChange: string;
 let base: string;
 
 const changelog = "# Changelog\n\n## [Unreleased]\n\n### Added\n\n## [0.1.0] - 2026-11-01\n\n- An old entry.\n";
@@ -36,6 +37,7 @@ function commit(file: string, text: string, message: string) {
 }
 
 before(() => {
+  if (!tools) return;
   repo = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-pr-checks-"));
   git("init", "-q", ".");
   git("config", "user.email", "test@example.com");
@@ -65,10 +67,14 @@ before(() => {
   git("merge", "-q", "--no-ff", "feature", "-m", "merge the feature");
   merged = git("rev-parse", "HEAD");
   git("checkout", "-q", base);
+  searxngChange = commit("searxng/settings.yml", "use_default_settings: true\n", "change the search engine settings");
+  git("checkout", "-q", base);
   docsOnly = commit("docs/a.md", "y\n", "change docs");
 });
 
-after(() => fs.rmSync(repo, { recursive: true, force: true }));
+after(() => {
+  if (repo) fs.rmSync(repo, { recursive: true, force: true });
+});
 
 type Case = { name: string; commit: () => string; env: Record<string, string>; ok: boolean };
 
@@ -84,6 +90,8 @@ const cases: Case[] = [
   { name: "a ci title needs no changelog entry", commit: () => sourceChange, env: { ...ready, TITLE: "ci: add a check", HEAD_REF: "ci/add-a-check" }, ok: true },
   { name: "a fix that changes only docs needs no changelog entry", commit: () => docsOnly, env: ready, ok: true },
   { name: "changes that landed on the base branch after the pull request opened do not count as its own", commit: () => merged, env: ready, ok: true },
+  { name: "a fix that changes only the SearXNG settings needs a changelog entry", commit: () => searxngChange, env: ready, ok: false },
+  { name: "a ready pull request with an empty How I checked it fails", commit: () => docsOnly, env: { ...ready, BODY: "## Why\n\nA real reason.\n\n## What changed\n\n- A change.\n\n## How I checked it\n\n<!-- Commands you ran. -->\n" }, ok: false },
   { name: "a branch with an underscore in its topic fails", commit: () => docsOnly, env: { ...ready, HEAD_REF: "fix/my_feature" }, ok: false },
   { name: "a branch with a dot in its topic fails", commit: () => docsOnly, env: { ...ready, HEAD_REF: "fix/v1.2" }, ok: false },
   { name: "a title without a type fails", commit: () => docsOnly, env: { ...ready, TITLE: "Keep runs cancelled" }, ok: false },
