@@ -100,6 +100,18 @@ finally:
     assert.equal(result.exitCode, 1);
     assert.match(result.stderr, /ValueError: program failed/);
   });
+  await t.test("an incomplete UTF-8 character at the output limit is marked truncated", async () => {
+    const result = await runPython('import os\nos.write(1, b"x" * 65534 + b"\\xe2\\x82")');
+    assert.equal(result.exitCode, 0);
+    assert.equal(Buffer.byteLength(result.stdout), 65534);
+    assert.equal(result.truncated, true);
+  });
+  await t.test("an incomplete UTF-8 character below the limit is flushed as replacement text", async () => {
+    const result = await runPython('import os\nos.write(1, b"x\\xe2\\x82")');
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.stdout, "x\uFFFD");
+    assert.equal(result.truncated, false);
+  });
   await t.test("a fresh container cannot read the prior run's tmp file", async () => {
     assert.equal((await runPython('open("/tmp/orbit-test", "w").write("private")')).exitCode, 0);
     const result = await runPython('open("/tmp/orbit-test").read()');

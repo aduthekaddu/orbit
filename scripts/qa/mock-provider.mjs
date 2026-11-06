@@ -7,6 +7,7 @@ const sandboxPrograms = new Map([
   ["run-escape", 'import urllib.request\nurllib.request.urlopen("http://1.1.1.1", timeout=2)'],
   ["run-timeout", 'print("before-timeout")\nwhile True: pass'],
   ["run-oom", 'print("before-oom")\nx = bytearray(1024 * 1024 * 1024)'],
+  ["run-unicode", 'import os\nos.write(1, b"x" * 65534 + b"\\xe2\\x82")'],
 ]);
 
 function allSpec() {
