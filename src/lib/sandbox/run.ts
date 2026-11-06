@@ -24,7 +24,7 @@ function outputCollector() {
   return {
     stream,
     result() {
-      const decoded = new StringDecoder("utf8").write(bytes.subarray(0, length));
+      const decoded = new StringDecoder("utf8").end(bytes.subarray(0, length));
       const normalized = Buffer.from(decoded);
       truncated ||= normalized.length > OUTPUT_LIMIT;
       return { text: new StringDecoder("utf8").write(normalized.subarray(0, OUTPUT_LIMIT)), truncated };

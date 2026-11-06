@@ -37,6 +37,7 @@ node .agents/skills/verify-orbit/verify.mjs browse sandbox-stopped
 node .agents/skills/verify-orbit/verify.mjs browse sandbox-tool-error
 node .agents/skills/verify-orbit/verify.mjs browse sandbox-scroll
 node .agents/skills/verify-orbit/verify.mjs browse sandbox-output
+node .agents/skills/verify-orbit/verify.mjs browse sandbox-unicode
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
@@ -45,6 +46,8 @@ node .agents/skills/verify-orbit/verify.mjs cleanup
 `sandbox-scroll` saves real Docker output near the output limit. Require bounded source, stdout, stderr, and error areas with their last lines reachable by scrolling. It checks keyboard access, horizontal scrolling, and page width on desktop and at 390 pixels.
 
 `sandbox-output` runs Python through the chat tool and checks early stdout after a timeout, a memory kill, and reload.
+
+`sandbox-unicode` checks incomplete UTF-8 at the output cap and requires the truncation marker to survive reload.
 
 ## Configuration failure
 

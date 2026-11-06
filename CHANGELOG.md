@@ -30,6 +30,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Fixed
 
+- Flush incomplete UTF-8 output and mark it truncated when it reaches the byte cap.
+
 - Run Python unbuffered so early prints remain available after timeouts or memory kills.
 
 - Code run content areas have named keyboard stops and a visible focus ring for scrolling with the keyboard.
