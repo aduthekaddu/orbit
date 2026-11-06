@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Scans package-lock.json for known vulnerabilities with OSV-Scanner.
 #
-#   scripts/ci/osv-gate.sh <base-lockfile>   pull requests: fail only for vulnerabilities this change adds
+#   scripts/ci/osv-gate.sh <base-lockfile>   pull requests: fail only for vulnerabilities this change adds, which
+#                                            includes a dev dependency that becomes a production one
 #   scripts/ci/osv-gate.sh                   pushes and schedules: fail for any vulnerability in a
 #                                            production dependency, and warn about dev dependencies
 #
@@ -37,7 +38,7 @@ head_vulnerabilities=$(scan package-lock.json | flatten)
 if [ -n "$base_lockfile" ]; then
   base_vulnerabilities=$(scan "$base_lockfile" | flatten)
   added=$(jq --null-input --argjson head "$head_vulnerabilities" --argjson base "$base_vulnerabilities" \
-    '[$head[] | . as $found | select(any($base[]; .id == $found.id and .name == $found.name) | not)]')
+    '[$head[] | . as $found | select(any($base[]; .id == $found.id and .name == $found.name and ((.dev | not) or $found.dev)) | not)]')
   if [ "$(jq length <<< "$added")" -gt 0 ]; then
     echo "::error title=New vulnerabilities::this change adds known vulnerabilities to package-lock.json"
     report <<< "$added"
