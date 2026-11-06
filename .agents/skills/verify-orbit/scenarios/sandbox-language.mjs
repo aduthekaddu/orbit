@@ -58,6 +58,8 @@ export default async function sandboxLanguage({ page, origin, step, shot }) {
     if (run.stop) {
       await card.locator('[data-tool-status="running"]').waitFor({ timeout: 15_000 });
       await check(step, card, run, "while running");
+      await page.waitForTimeout(400);
+      await card.evaluate((node) => node.scrollIntoView({ block: "center" }));
       await shot("running");
       const started = Date.now();
       while (!containerRunning() && Date.now() - started < 20_000) await page.waitForTimeout(50);
