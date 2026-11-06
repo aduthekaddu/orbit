@@ -1,0 +1,13 @@
+# Findings that CodeQL reports today and that are not fixed yet. Each line is a rule id, a file, and the
+# line hash from the result's fingerprint. The failure message prints the line to add.
+# The CodeQL job fails for any finding that is not listed here, and warns about a line that no
+# longer matches anything, so delete a line when its finding is fixed.
+
+# plainText in the search adapter removes tags in one pass, so nested tags like <scr<b>ipt> leave a tag behind.
+js/incomplete-multi-character-sanitization src/lib/tools/search.ts 2ed12a66c48874ba:1
+
+# authSecret checks that the secret file exists and then reads or creates it, so two starting processes can race.
+js/file-system-race src/lib/auth.ts cc44d132a31f9da8:1
+
+# The native build probe checks for an addon file and then creates it. It only runs in development and CI.
+js/file-system-race scripts/qa/sandbox-native-build.mjs 35a0931e370156b:1

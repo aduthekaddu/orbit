@@ -61,7 +61,8 @@ export default async function artifacts({ page, origin, step, shot }) {
   await frame.getByRole("button", { name: "Change color" }).click();
   step("HTML button responds to a click", await frame.getByRole("button", { name: "Change color" }).evaluate(node => node.style.backgroundColor === "green"));
   await security(frame, origin, "HTML", step);
-  await page.evaluate(() => window.postMessage({ type: "orbit-artifact-error", message: "Forged artifact error" }, "*"));
+  // The forged message goes to the page itself, so the wildcard target is the point of the check.
+  await page.evaluate(() => window.postMessage({ type: "orbit-artifact-error", message: "Forged artifact error" }, "*")); // nosemgrep: javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration
   await page.waitForTimeout(100);
   step("parent ignores error messages from another window", !await page.getByRole("alert").filter({ hasText: "Forged artifact error" }).count());
   await shot("html");
