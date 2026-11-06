@@ -3,6 +3,7 @@
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { OrbitMark } from "@/components/orbit-mark";
 import { RenderUiPart } from "@/components/genui/render-ui";
+import { hasStoppedCodeOutput } from "@/lib/sandbox/spec";
 import { cardFor } from "@/lib/tools/metadata";
 import { toolCallRunStatus, type ToolRunStatus } from "@/lib/tools/run-status";
 import { SearchResults } from "./search-results";
@@ -25,7 +26,7 @@ export function RunCard(props: ToolCallMessagePartProps) {
       </div>
       {(kind === "code" || status !== "running" && status !== "cancelled") && (
         <div className="min-w-0 p-3">
-          {kind === "code" ? <CodeRun input={props.args} output={status === "cancelled" ? undefined : props.result} /> : kind === "genui" ? <RenderUiPart {...props} /> : props.isError ? <p className="text-sm text-destructive">Tool failed</p> : kind === "search" ? <SearchResults output={props.result} /> : <GenericOutput output={props.result} />}
+          {kind === "code" ? <CodeRun input={props.args} output={status === "cancelled" && !hasStoppedCodeOutput(props.result) ? undefined : props.result} /> : kind === "genui" ? <RenderUiPart {...props} /> : props.isError ? <p className="text-sm text-destructive">Tool failed</p> : kind === "search" ? <SearchResults output={props.result} /> : <GenericOutput output={props.result} />}
         </div>
       )}
     </section>

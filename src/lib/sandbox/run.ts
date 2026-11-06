@@ -32,6 +32,16 @@ function outputCollector() {
   };
 }
 
+export class RunStopped extends Error {
+  readonly output: RunCodeOutput;
+
+  constructor(output: RunCodeOutput) {
+    super("Code run was stopped");
+    this.name = "AbortError";
+    this.output = output;
+  }
+}
+
 export function sandboxDocker(): Docker {
   const endpoint = process.env.DOCKER_HOST;
   if (!endpoint || endpoint === "unix:///var/run/docker.sock") {
@@ -114,17 +124,18 @@ export async function runCode(docker: Docker, input: RunCodeInput, signal?: Abor
   };
   try {
     const outcome = await Promise.race([completed(), stopped]);
-    if (outcome === "cancelled") throw new DOMException("Code run was stopped", "AbortError");
     const out = stdout.result();
     const err = stderr.result();
-    return {
+    const output: RunCodeOutput = {
       stdout: out.text,
       stderr: err.text,
-      exitCode: outcome === "timed-out" ? null : outcome,
+      exitCode: typeof outcome === "number" ? outcome : null,
       durationMs: Math.round(performance.now() - started),
       timedOut: outcome === "timed-out",
       truncated: out.truncated || err.truncated,
     };
+    if (outcome === "cancelled") throw new RunStopped({ ...output, cancelled: true });
+    return output;
   } finally {
     clearTimeout(timer);
     if (onAbort) signal?.removeEventListener("abort", onAbort);

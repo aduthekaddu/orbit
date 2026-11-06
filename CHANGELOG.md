@@ -32,6 +32,10 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Fixed
 
+- Stopping a running code card keeps the output the program had printed. The saved card shows Cancelled with that output after you reopen the chat.
+
+- Rejected tool input saves and shows a short reason instead of repeating the rejected input. A 20,001 character program no longer copies itself into every saved error and server log line.
+
 - Verification fixtures ignore shell data-directory settings and use the isolated test database.
 
 - Build the sandbox route when Dockerode's optional SSH native addon is installed.

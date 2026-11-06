@@ -1,10 +1,12 @@
 import { convertToModelMessages, createUIMessageStreamResponse, stepCountIs, streamText, toUIMessageStream, type UIMessage } from "ai";
 import { z } from "zod";
 import { ARTIFACT_INSTRUCTIONS } from "@/lib/artifacts/detect";
+import { sanitize, streamErrorMessage } from "@/lib/chat-errors";
 import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
 import { assistantHasVisiblePart, settleInterruptedParts } from "@/lib/genui/spec";
 import { toolsFor } from "@/lib/tools";
 import { CHAT_STEP_LIMIT, searchAnswerStep } from "@/lib/tools/answer-step";
+import { createStoppedRuns } from "@/lib/tools/stopped-runs";
 import { chatTitle, ensureChat, listMessages, planChatWrite, replyGuard, shouldSaveReply, storedMessageCount, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { startChatTitle } from "@/lib/titles";
@@ -28,25 +30,6 @@ const bodySchema = z.object({
   editMessageId: z.string().min(1).max(100).optional(),
   messageId: z.string().min(1).max(100).optional(),
 });
-
-function sanitize(message: string, secret: string) {
-  if (!secret) return message;
-  return message.split(secret).join("[redacted]");
-}
-
-function cleanErrorText(text: string) {
-  return text.replace(/AI_[A-Za-z]+Error:\s*/g, "").trim();
-}
-
-function streamErrorMessage(error: unknown, secret: string) {
-  if (typeof error === "string") return sanitize(cleanErrorText(error), secret);
-  const message = error instanceof Error ? error.message : "The model request failed";
-  console.error("chat stream error", sanitize(message, secret));
-  if (error instanceof Error && error.name === "AI_InvalidToolInputError") {
-    return sanitize(cleanErrorText(message), secret);
-  }
-  return "The model request failed";
-}
 
 export async function POST(request: Request) {
   const session = await getSession();
@@ -109,7 +92,8 @@ export async function POST(request: Request) {
 
   try {
     const allowReasoning = modelAllowsReasoning(settings.baseUrl, settings.model);
-    const tools = toolsFor(settings);
+    const stopped = createStoppedRuns();
+    const tools = toolsFor(settings, stopped);
     const result = streamText({
       model: orbitModel({
         baseUrl: settings.baseUrl,
@@ -136,7 +120,7 @@ export async function POST(request: Request) {
       onError: (error) => streamErrorMessage(error, settings.apiKey),
       onEnd: async ({ responseMessage, isAborted, outcome }) => {
         const interrupted = isAborted || outcome.status !== "completed";
-        const parts = settleInterruptedParts(responseMessage.parts, interrupted);
+        const parts = settleInterruptedParts(interrupted ? await stopped.apply(responseMessage.parts) : responseMessage.parts, interrupted);
         const visible = assistantHasVisiblePart(parts);
         if (!visible) {
           const types = Array.isArray(responseMessage.parts)

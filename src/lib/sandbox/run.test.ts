@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import Docker from "dockerode";
 import { Duplex } from "node:stream";
+import { setTimeout as delay } from "node:timers/promises";
+import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } from "ai";
+import { MockLanguageModelV4 } from "ai/test";
+import { createRunCodeTool } from "../tools/run-code";
+import { createStoppedRuns } from "../tools/stopped-runs";
 import { runCode } from "./run";
+import { waitForRunningSandbox } from "./wait-for-running";
+import type { RunCodeOutput } from "./spec";
 
 test("sandbox programs run inside real isolated containers", { timeout: 90_000 }, async (t) => {
   const docker = new Docker();
@@ -127,6 +134,76 @@ finally:
     } finally {
       clearTimeout(timer);
     }
+  });
+  for (const { name, code, printed } of [
+    { name: "stopping a program keeps what it already printed", code: 'print("before-stop")\nwhile True: pass', printed: "before-stop\n" },
+    { name: "stopping a program that printed nothing keeps an empty result", code: "while True: pass", printed: "" },
+  ]) {
+    await t.test(name, async () => {
+      const controller = new AbortController();
+      const running = runCode(docker, { language: "python", code }, controller.signal);
+      const stopped = waitForRunningSandbox(docker).then(() => delay(1000)).then(() => controller.abort());
+      try {
+        await assert.rejects(running, (error: unknown) => {
+          assert.ok(error instanceof Error && error.name === "AbortError");
+          const output = (error as { output?: Record<string, unknown> }).output;
+          assert.ok(output, "the stop error must carry the output collected so far");
+          assert.equal(output.stdout, printed);
+          assert.equal(output.stderr, "");
+          assert.equal(output.exitCode, null);
+          assert.equal(output.timedOut, false);
+          assert.equal(output.cancelled, true);
+          return true;
+        });
+      } finally {
+        await stopped;
+      }
+    });
+  }
+  await t.test("stopping a run_code call through the AI SDK keeps what it printed", async () => {
+    const stopped = createStoppedRuns();
+    const tools = { run_code: createRunCodeTool(stopped) };
+    const model = new MockLanguageModelV4({
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          chunks: [
+            { type: "stream-start", warnings: [] },
+            { type: "tool-call", toolCallId: "call-1", toolName: "run_code", input: JSON.stringify({ language: "python", code: 'print("before-stop")\nwhile True: pass' }) },
+            {
+              type: "finish",
+              finishReason: { unified: "tool-calls", raw: undefined },
+              usage: {
+                inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 1, text: 1, reasoning: undefined },
+              },
+            },
+          ],
+        }),
+      }),
+    });
+    const controller = new AbortController();
+    const result = streamText({ model, prompt: "run it", tools, stopWhen: stepCountIs(3), abortSignal: controller.signal });
+    let saved: unknown;
+    let aborted = false;
+    const stream = toUIMessageStream({
+      stream: result.stream,
+      tools,
+      onError: () => "failed",
+      onEnd: async ({ responseMessage, isAborted }) => {
+        aborted = isAborted;
+        saved = await stopped.apply(responseMessage.parts);
+      },
+    });
+    const stopAfterStart = waitForRunningSandbox(docker).then(() => delay(1000)).then(() => controller.abort());
+    try {
+      for await (const chunk of stream as unknown as AsyncIterable<unknown>) void chunk;
+    } finally {
+      await stopAfterStart;
+    }
+    assert.equal(aborted, true);
+    const part = (saved as Array<Record<string, unknown>>).find((entry) => entry.type === "tool-run_code");
+    assert.equal(part?.state, "output-available");
+    assert.deepEqual({ ...(part?.output as RunCodeOutput), durationMs: 0 }, { stdout: "before-stop\n", stderr: "", exitCode: null, durationMs: 0, timedOut: false, truncated: false, cancelled: true });
   });
   await t.test("slow cleanup preserves a program that finished before its deadline", async (t) => {
     const removing = Promise.withResolvers<void>();
