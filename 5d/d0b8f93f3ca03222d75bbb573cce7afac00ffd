@@ -1,0 +1,32 @@
+scripts/qa/ci-e2e.sh
+  s_6877932481c8d7::t_a7b380124189a6 1-105,108
+  s_6877932481c8d7::t_5bdfc777443261 106-107,109-118
+.github/workflows/ci.yml
+  s_6877932481c8d7::t_39f158bf787580 1-158
+.agents/skills/verify-orbit/features/README.md
+  s_6877932481c8d7::t_2b5dbc7dd4138b 26-29
+.github/actions/setup-orbit/action.yml
+  s_6877932481c8d7::t_f96262db9bd866 1-23
+.github/zizmor.yml
+  s_6877932481c8d7::t_fc6941a03f929f 1-4
+.hadolint.yaml
+  s_6877932481c8d7::t_896e45766c5057 1-2
+CONTRIBUTING.md
+  s_6877932481c8d7::t_410e6324b34d41 28-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5dd0b8f93f3ca03222d75bbb573cce7afac00ffd",
+  "prompts": {},
+  "sessions": {
+    "s_6877932481c8d7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3b41b1b5-5e57-4585-9cde-1f4c1aa480f6",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
