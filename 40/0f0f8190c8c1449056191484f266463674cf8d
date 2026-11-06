@@ -1,0 +1,21 @@
+src/components/tools/code-run.tsx
+  s_e9050b67fdf088::t_0196b2f38fb204 11-15,26,37-38
+src/components/tools/run-card.tsx
+  s_e9050b67fdf088::t_a010b4f2372b34 6,17-18,22,27-29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "400f0f8190c8c1449056191484f266463674cf8d",
+  "prompts": {},
+  "sessions": {
+    "s_e9050b67fdf088": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "342e8e27-0374-4c89-827c-f073c6745b2c",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
