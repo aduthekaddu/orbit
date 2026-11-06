@@ -40,7 +40,8 @@ export default async function sandboxCopy({ page, origin, step, shot }) {
     }
     await clear();
     await button.click();
-    await card.locator('[aria-live="polite"]').filter({ hasText: done }).waitFor({ state: "attached", timeout: 3_000 }).catch(() => {});
+    const confirmed = await card.locator('[aria-live="polite"]').filter({ hasText: done }).waitFor({ state: "attached", timeout: 3_000 }).then(() => true, () => false);
+    step(`${label} confirms the copy`, confirmed);
     const copied = await clipboard();
     step(`${label} copies the saved text exactly`, copied === saved(part), `clipboard ${JSON.stringify(copied)}`);
     if (label === "Copy standard output") await shot("copied");
@@ -83,8 +84,15 @@ export default async function sandboxCopy({ page, origin, step, shot }) {
   const phoneCard = phone.locator('[data-tool-name="run_code"]');
   await phoneCard.locator('[data-tool-status="succeeded"]').waitFor({ timeout: 15_000 });
   for (const { label } of channels) {
-    const box = await phoneCard.getByRole("button", { name: label }).boundingBox();
-    step(`${label} has a 44 pixel touch target at 390 pixels`, Boolean(box) && box.width >= 44 && box.height >= 44, JSON.stringify(box));
+    const target = phoneCard.getByRole("button", { name: label });
+    await target.scrollIntoViewIfNeeded();
+    const hits = await target.evaluate((button) => {
+      const box = button.getBoundingClientRect();
+      const x = box.x + box.width / 2;
+      const y = box.y + box.height / 2;
+      return [[0, 0], [-21, -21], [21, -21], [-21, 21], [21, 21]].map(([dx, dy]) => document.elementFromPoint(x + dx, y + dy)?.closest("button") === button);
+    });
+    step(`${label} has a 44 pixel touch area at 390 pixels`, hits.every(Boolean), JSON.stringify(hits));
   }
   const fits = await phone.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
   step("the card with its copy buttons fits the 390 pixel page", fits);
