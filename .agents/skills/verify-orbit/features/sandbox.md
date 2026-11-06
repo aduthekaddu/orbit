@@ -81,12 +81,13 @@ Launch a fresh mock sandbox. Docker must be reachable.
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ORBIT_SANDBOX=on node .agents/skills/verify-orbit/verify.mjs launch --mock
 node .agents/skills/verify-orbit/verify.mjs browse sandbox-copy
+node .agents/skills/verify-orbit/verify.mjs browse sandbox-copy-overlap
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
 `[qa:run-copy]` prints indented text with accented letters, a check mark, and an emoji to standard output and standard error. The scenario clicks each copy button in Chrome and reads the clipboard. Require the clipboard to equal the saved text exactly, including indentation, line breaks, and Unicode. It also requires Enter and Space to copy, a confirmation after a copy, `Copy failed` when the clipboard rejects the write, and a 44 pixel touch area in a 390 pixel touch context.
 
-Run `node .agents/skills/verify-orbit/verify.mjs browse sandbox-copy-overlap` on the same server. `[qa:run-wide]` prints a 153 character first line. After scrolling the well fully right, require the last three characters to clear the copy button.
+`sandbox-copy-overlap` runs `[qa:run-wide]`, which prints a 153 character first line. After scrolling the well fully right, require the last three characters to clear the copy button. In a 390 pixel touch context, require a tap on the last character not to land on the button.
 
 ## Real provider
 
