@@ -20,10 +20,18 @@ scan() {
     cat "$OSV_FIXTURE_DIR/$2.json"
     return
   fi
-  local directory name
+  local directory name code=0 errors
   directory=$(cd "$(dirname "$1")" && pwd)
   name=$(basename "$1")
-  docker run --rm --volume "$directory:/scan:ro" "$image" scan source --lockfile "/scan/$name" --format json 2> /dev/null || [ $? -eq 1 ]
+  errors=$(mktemp)
+  docker run --rm --volume "$directory:/scan:ro" "$image" scan source --lockfile "/scan/$name" --format json 2> "$errors" || code=$?
+  if [ "$code" -gt 1 ]; then
+    echo "::error title=OSV-Scanner::the scan of $1 failed with exit code $code" >&2
+    cat "$errors" >&2
+    rm -f "$errors"
+    return 1
+  fi
+  rm -f "$errors"
 }
 
 # One object per vulnerable package and advisory: id, name, version, and whether it is dev only.
