@@ -81,6 +81,26 @@ export default async function sandboxSearch({ page, origin, step, shot }) {
   const againList = again.body?.hits ?? again.body ?? [];
   step("the output is still found after the chat is reopened", Array.isArray(againList) && againList.length === 1 && againList[0]?.messageId === replies[0].id);
 
+  await page.goto(`${origin}/c/${otherId}`);
+  await page.getByRole("textbox").click();
+  await page.keyboard.press("Control+K");
+  await dialog.waitFor({ timeout: 5_000 });
+  await dialog.locator("input").fill("jssourceonlytoken3");
+  await dialog.getByText("jssourceonlytoken3").first().waitFor({ timeout: 5_000 }).catch(() => {});
+  const sourceShown = await dialog.getByText("jssourceonlytoken3").first().isVisible().catch(() => false);
+  await shot(sourceShown ? "source-results" : "source-before");
+  step("the palette shows a Messages result for a token that is only in source", sourceShown && (await dialog.getByText("Messages", { exact: true }).isVisible().catch(() => false)), "no source result");
+  if (sourceShown) {
+    await dialog.getByText("jssourceonlytoken3").first().click();
+    await page.waitForURL(new RegExp(`/c/${chatId}\\?m=${replies[3].id}`), { timeout: 10_000 });
+    const target = page.locator(`[data-message-id="${replies[3].id}"]`);
+    await target.waitFor({ timeout: 10_000 });
+    await target.evaluate((node) => node.scrollIntoView({ block: "center" }));
+    step("opening the source result shows the message with the run card", (await target.locator('[data-tool-name="run_code"]').count()) === 1);
+    await dialog.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => {});
+    await shot("source-opened");
+  }
+
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${origin}/c/${otherId}`);
   await page.getByRole("textbox").click();
@@ -90,4 +110,9 @@ export default async function sandboxSearch({ page, origin, step, shot }) {
   await dialog.getByText("kettlewhistle9").first().waitFor({ timeout: 5_000 }).catch(() => {});
   step("the phone palette shows the standard error result", await dialog.getByText("kettlewhistle9").first().isVisible().catch(() => false));
   await shot("mobile");
+  await dialog.locator("input").fill("sourceonlytoken5");
+  await dialog.getByText("sourceonlytoken5").first().waitFor({ timeout: 5_000 }).catch(() => {});
+  step("the phone palette shows the source result", await dialog.getByText("sourceonlytoken5").first().isVisible().catch(() => false));
+  step("the phone page fits 390 pixels", await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  await shot("source-mobile");
 }
