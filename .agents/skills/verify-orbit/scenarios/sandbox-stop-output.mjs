@@ -42,7 +42,7 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
     const stdout = (await wells.count()) > 0 ? await wells.first().textContent() : null;
     const text = (await card.innerText()).replace(/\s+/g, " ");
     step(`${scenario} reopened card is Cancelled and shows its source`, text.includes("while True: pass") && !text.includes("Failed"), text.slice(0, 160));
-    step(`${scenario} reopened card shows the saved output`, stdout === printed, `stdout was ${JSON.stringify(stdout)}`);
+    step(`${scenario} reopened card ${printed === "" ? "shows no output well" : "shows the saved output"}`, printed === "" ? (await wells.count()) === 0 : stdout === printed, `stdout was ${JSON.stringify(stdout)}`);
     await card.scrollIntoViewIfNeeded();
     await shot(`${scenario}-stopped`);
 

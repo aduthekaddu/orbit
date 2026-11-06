@@ -54,14 +54,18 @@ export function CodeRun({ input, output }: { input: unknown; output: unknown }) 
         </ScrollFade>
       ) : parsedOutput.success ? (
         <>
-          <div className="min-w-0 space-y-1">
-            <p className="text-xs text-muted-foreground">stdout</p>
-            <CodeText text={parsedOutput.data.stdout} kind="stdout" />
-          </div>
-          <div className="min-w-0 space-y-1">
-            <p className="text-xs text-muted-foreground">stderr</p>
-            <CodeText text={parsedOutput.data.stderr} kind="stderr" />
-          </div>
+          {parsedOutput.data.stdout && (
+            <div className="min-w-0 space-y-1">
+              <p className="text-xs text-muted-foreground">stdout</p>
+              <CodeText text={parsedOutput.data.stdout} kind="stdout" />
+            </div>
+          )}
+          {parsedOutput.data.stderr && (
+            <div className="min-w-0 space-y-1">
+              <p className="text-xs text-muted-foreground">stderr</p>
+              <CodeText text={parsedOutput.data.stderr} kind="stderr" />
+            </div>
+          )}
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground num">
             <span>Exit {parsedOutput.data.exitCode ?? "killed"}</span>
             <span>{Math.round(parsedOutput.data.durationMs)} ms</span>
