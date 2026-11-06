@@ -76,3 +76,22 @@ test("an explicit Tavily removal clears the key and disables its search backend"
   const { toolsFor } = await import("./tools");
   assert.equal("web_search" in toolsFor(row), false);
 });
+
+test("public settings say whether the server enabled the code sandbox and expose no Docker detail", () => {
+  const original = { sandbox: process.env.ORBIT_SANDBOX, docker: process.env.DOCKER_HOST };
+  process.env.DOCKER_HOST = "tcp://private-proxy-not-real:2375";
+  try {
+    for (const value of [undefined, "off", "true", "ON", "on"]) {
+      if (value === undefined) delete process.env.ORBIT_SANDBOX;
+      else process.env.ORBIT_SANDBOX = value;
+      const body = settings.toPublicSettings(null) as { sandbox?: boolean };
+      assert.equal(body.sandbox, value === "on", `ORBIT_SANDBOX=${value}`);
+      assert.equal(JSON.stringify(body).includes("private-proxy-not-real"), false);
+    }
+  } finally {
+    if (original.sandbox === undefined) delete process.env.ORBIT_SANDBOX;
+    else process.env.ORBIT_SANDBOX = original.sandbox;
+    if (original.docker === undefined) delete process.env.DOCKER_HOST;
+    else process.env.DOCKER_HOST = original.docker;
+  }
+});
