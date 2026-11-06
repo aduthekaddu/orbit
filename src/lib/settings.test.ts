@@ -5,7 +5,7 @@ import path from "node:path";
 import test, { before, after } from "node:test";
 
 const originalCwd = process.cwd();
-const envNames = ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL", "ORBIT_DATA_DIR", "ORBIT_SEARXNG_URL", "ORBIT_TAVILY_API_KEY"];
+const envNames = ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL", "ORBIT_DATA_DIR", "ORBIT_SEARXNG_URL", "ORBIT_TAVILY_API_KEY", "ORBIT_SANDBOX"];
 const originalEnv = Object.fromEntries(envNames.map((name) => [name, process.env[name]]));
 let sandbox: string;
 let settings: typeof import("./settings");
@@ -49,7 +49,7 @@ test("public settings expose search configuration without either key", () => {
   const value = settings.toPublicSettings(row);
   assert.deepEqual(value, {
     baseUrl: "https://example.com/v1", model: "test-model", reasoningEffort: "medium", keySet: true,
-    searxngUrl: "http://127.0.0.1:8888", tavilyKeySet: true,
+    searxngUrl: "http://127.0.0.1:8888", tavilyKeySet: true, sandbox: false,
   });
   assert.equal(JSON.stringify(value).includes(row.apiKey), false);
   assert.equal(JSON.stringify(value).includes(row.tavilyApiKey), false);

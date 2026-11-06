@@ -255,6 +255,13 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
             </div>
           </Row>
         </div>
+        <div className="flex items-center justify-between gap-3 border-t px-5 py-3.5">
+          <h2 className="text-sm font-medium">Code sandbox</h2>
+          <span data-sandbox-status={initial.sandbox ? "on" : "off"} className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className={cn("size-1.5 rounded-full", initial.sandbox ? "bg-positive" : "bg-muted-foreground/40")} />
+            {initial.sandbox ? "On" : "Off"}
+          </span>
+        </div>
         <div className="flex items-center justify-end gap-3 border-t px-5 py-3">
           {error ? (
             <p role="alert" className="mr-auto flex min-w-0 items-center gap-2 text-xs text-destructive">
