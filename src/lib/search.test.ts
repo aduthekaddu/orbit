@@ -142,7 +142,7 @@ test("text that only a code run printed is found, and the hit opens that message
   assert.equal(hits.length, 1);
   assert.equal(hits[0]?.messageId, "m-out");
   assert.equal(hits[0]?.chatTitle, "Notes");
-  assert.match(hits[0]?.snippet ?? "", /\[rainbow\]/);
+  assert.match(hits[0]?.snippet ?? "", /\[rainbow-gizmo7\]/);
 });
 
 test("standard error is found too", () => {

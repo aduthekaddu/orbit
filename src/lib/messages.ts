@@ -5,6 +5,8 @@ import { db } from "./db";
 import { assistantHasVisiblePart } from "./genui/spec";
 import { chats, messages } from "./db/schema";
 import { isPath, pathTo, toRepository, type StoredMessage } from "./chat-tree";
+import { runCodeOutputSchema } from "./sandbox/spec";
+import { stripTerminalControls } from "./sandbox/terminal";
 
 export function textFromParts(parts: unknown): string {
   if (!Array.isArray(parts)) return "";
@@ -16,6 +18,26 @@ export function textFromParts(parts: unknown): string {
       return "";
     })
     .join("");
+}
+
+// What search sees for a message: its text, then the standard output and standard
+// error of each finished code run. The source of a run is left out.
+export function searchTextFromParts(parts: unknown): string {
+  const text = textFromParts(parts);
+  if (!Array.isArray(parts)) return text;
+  const output: string[] = [];
+  for (const part of parts) {
+    if (!part || typeof part !== "object") continue;
+    const record = part as { type?: string; state?: string; output?: unknown };
+    if (record.type !== "tool-run_code" || record.state !== "output-available") continue;
+    const result = runCodeOutputSchema.safeParse(record.output);
+    if (!result.success) continue;
+    for (const channel of [result.data.stdout, result.data.stderr]) {
+      const clean = stripTerminalControls(channel);
+      if (clean.trim()) output.push(clean);
+    }
+  }
+  return output.length === 0 ? text : [text, ...output].filter((piece) => piece !== "").join("\n");
 }
 
 export function ensureChat(id: string, userId: string) {
@@ -97,7 +119,7 @@ export function upsertMessage(
         .where(and(eq(messages.id, expected.id), eq(messages.chatId, chatId))).get();
       if (!current || current.content !== expected.content || current.parts !== expected.parts) return false;
     }
-    const content = textFromParts(message.parts);
+    const content = searchTextFromParts(message.parts);
     const parts = JSON.stringify(message.parts ?? []);
     const existing = tx.select().from(messages).where(eq(messages.id, message.id)).get();
     if (existing) {
@@ -142,7 +164,7 @@ export function persistIncoming(chatId: string, incoming: IncomingMessage[]): Wr
       if (!saved) {
         if (message !== tail || message.role !== "user" || !Array.isArray(message.parts)) return "stale";
       } else if (saved.role !== message.role || (saved.role === "user" && message.parts &&
-        (saved.content !== textFromParts(message.parts) || saved.parts !== JSON.stringify(message.parts)))) {
+        (saved.content !== searchTextFromParts(message.parts) || saved.parts !== JSON.stringify(message.parts)))) {
         return "stale";
       }
     }
@@ -195,7 +217,7 @@ export function updateMessageText(chatId: string, messageId: string, text: strin
   const parts = partIndex == null ? replaceTextParts(current, text) : replaceTextPart(current, partIndex, text);
   if (!parts) return false;
   db.update(messages)
-    .set({ content: textFromParts(parts), parts: JSON.stringify(parts) })
+    .set({ content: searchTextFromParts(parts), parts: JSON.stringify(parts) })
     .where(eq(messages.id, messageId))
     .run();
   return true;
