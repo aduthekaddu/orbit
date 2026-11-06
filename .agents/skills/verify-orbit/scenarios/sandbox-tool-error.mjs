@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { fixtureProcessOptions } from "../fixture-process.mjs";
 
 export default async function sandboxToolError({ page, origin, step, shot }) {
   const { id } = await (await page.request.post(`${origin}/api/chats`)).json();
@@ -9,7 +10,7 @@ export default async function sandboxToolError({ page, origin, step, shot }) {
     const chat = process.argv[1];
     upsertMessage(chat, { id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: "Run Ruby code." }] });
     if (!upsertMessage(chat, { id: crypto.randomUUID(), role: "assistant", parts: [{ type: "tool-run_code", toolCallId: "invalid-code", state: "output-error", input: { language: "ruby", code: "puts 1" }, errorText: "Unsupported language. Use Python or JavaScript." }] })) process.exit(1);
-  `, id], { cwd: `${repo}/.verify/sandbox`, encoding: "utf8" });
+  `, id], fixtureProcessOptions(repo));
   if (saved.status !== 0) throw new Error("could not save the framework error fixture");
   await page.goto(`${origin}/c/${id}`);
   const card = page.locator('[data-tool-name="run_code"]');

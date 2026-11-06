@@ -49,6 +49,17 @@ node .agents/skills/verify-orbit/verify.mjs cleanup
 
 `sandbox-unicode` checks incomplete UTF-8 at the output cap and requires the truncation marker to survive reload.
 
+To check that fixture processes ignore a shell data-directory override, run:
+
+```sh
+node .agents/skills/verify-orbit/verify.mjs cleanup
+ORBIT_SANDBOX=on node .agents/skills/verify-orbit/verify.mjs launch --mock
+node scripts/qa/sandbox-fixture-isolation.mjs
+node .agents/skills/verify-orbit/verify.mjs cleanup
+```
+
+Require all three scenarios to pass and leave the alternate directory untouched.
+
 ## Configuration failure
 
 Start a fresh server with the invalid Docker endpoint, then check the failed card and reload.

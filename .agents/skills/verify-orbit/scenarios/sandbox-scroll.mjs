@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { fixtureProcessOptions } from "../fixture-process.mjs";
 
 export default async function sandboxScroll({ page, origin, step, shot }) {
   const { id } = await (await page.request.post(`${origin}/api/chats`)).json();
@@ -20,7 +21,7 @@ export default async function sandboxScroll({ page, origin, step, shot }) {
         { type: "tool-run_code", toolCallId: "long-error", state: "output-error", input: { language: "python", code: "pass" }, errorText: "Long framework failure\\n" + "x".repeat(8000) + "\\nEND-ERROR" }
       ] })) process.exit(1);
     })().catch(() => process.exit(1));
-  `, id], { cwd: `${repo}/.verify/sandbox`, encoding: "utf8" });
+  `, id], fixtureProcessOptions(repo));
   if (saved.status !== 0) throw new Error("could not save real Docker output for the scrolling check");
   await page.goto(`${origin}/c/${id}`);
   const cards = page.locator('[data-tool-name="run_code"]');

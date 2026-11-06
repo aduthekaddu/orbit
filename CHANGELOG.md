@@ -30,6 +30,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Fixed
 
+- Verification fixtures ignore shell data-directory settings and use the isolated test database.
+
 - Build the sandbox route when Dockerode's optional SSH native addon is installed.
 
 - Flush incomplete UTF-8 output and mark it truncated when it reaches the byte cap.
