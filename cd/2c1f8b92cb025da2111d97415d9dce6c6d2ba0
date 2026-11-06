@@ -1,0 +1,23 @@
+.github/codeql/known-findings.txt
+  s_6877932481c8d7::t_24c2663d5be2b3 1-2,7,10,13
+scripts/ci/codeql-gate.sh
+  s_6877932481c8d7::t_d5061eb9e5c8fe 6-9,15-16,22-23,27-28
+src/lib/codeql-gate.test.ts
+  s_6877932481c8d7::t_eb01a097f714b1 44-45,51-52,59-60,65,76-83
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cd2c1f8b92cb025da2111d97415d9dce6c6d2ba0",
+  "prompts": {},
+  "sessions": {
+    "s_6877932481c8d7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3b41b1b5-5e57-4585-9cde-1f4c1aa480f6",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
