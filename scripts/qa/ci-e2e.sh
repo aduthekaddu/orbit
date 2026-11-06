@@ -26,6 +26,23 @@ esac
 
 verify() { node .agents/skills/verify-orbit/verify.mjs "$@"; }
 
+# `verify cleanup` deletes the server log, and a launch overwrites it. Copy the logs into the
+# evidence folder first, so a failed run still has them.
+log_count=0
+save_logs() {
+  local file
+  for file in .verify/server.log .verify/mock.log; do
+    [ -f "$file" ] || continue
+    log_count=$((log_count + 1))
+    mkdir -p .verify/evidence/logs
+    cp "$file" ".verify/evidence/logs/$log_count-$(basename "$file")"
+  done
+}
+cleanup_server() {
+  save_logs
+  verify cleanup
+}
+
 die() {
   failures+=("$*")
   exit 1
@@ -66,7 +83,7 @@ is_sandbox() {
 }
 
 finish() {
-  verify cleanup > /dev/null 2>&1 || true
+  cleanup_server > /dev/null 2>&1 || true
   if ((${#failures[@]} > 0)); then
     echo
     echo "Failed in the $suite suite:"
@@ -77,7 +94,7 @@ finish() {
 }
 trap finish EXIT
 
-verify cleanup
+cleanup_server
 
 case $suite in
   core)
@@ -106,10 +123,10 @@ case $suite in
       check verify browse "$name"
     done
     check node scripts/qa/sandbox-fixture-isolation.mjs
-    verify cleanup
+    cleanup_server
     ORBIT_SANDBOX=on DOCKER_HOST=tcp://not-the-local-proxy:2375 verify launch --mock || die "launch with an invalid Docker endpoint"
     check verify browse sandbox-failure
-    verify cleanup
+    cleanup_server
     if [ -n "$(docker ps -aq --filter label=orbit.sandbox)" ]; then
       echo "::error title=verify-orbit::sandbox containers remain after the suite"
       failures+=("sandbox containers remain")

@@ -74,15 +74,13 @@ jobs:
         run: scripts/qa/ci-e2e.sh "$SUITE"
       - name: Show the server logs
         if: failure()
-        run: tail -n 150 .verify/server.log .verify/mock.log || true
+        run: tail -n 150 .verify/evidence/logs/*.log || true
       - name: Keep the evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: evidence-${{ matrix.suite }}
-          path: |
-            .verify/evidence
-            .verify/*.log
+          path: .verify/evidence
           include-hidden-files: true
           retention-days: 7
           if-no-files-found: ignore
