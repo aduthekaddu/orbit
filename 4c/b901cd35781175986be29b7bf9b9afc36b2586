@@ -1,0 +1,23 @@
+.agents/skills/verify-orbit/scenarios/sandbox-escapes.mjs
+  s_e9050b67fdf088::t_0ea89ca718e224 4,21,27,29,46,62
+scripts/qa/mock-provider.mjs
+  s_e9050b67fdf088::t_152048a2bfa9f3 22
+src/lib/sandbox/terminal.test.ts
+  s_e9050b67fdf088::t_6ff70f49029d98 28-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4cb901cd35781175986be29b7bf9b9afc36b2586",
+  "prompts": {},
+  "sessions": {
+    "s_e9050b67fdf088": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "342e8e27-0374-4c89-827c-f073c6745b2c",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
