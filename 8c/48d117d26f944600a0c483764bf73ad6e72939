@@ -1,0 +1,25 @@
+src/components/ui/scroll-fade.tsx
+  s_51f76b6b47de21::t_8ea2797a6ce6c7 26,34,69-72
+CHANGELOG.md
+  s_51f76b6b47de21::t_8ea2797a6ce6c7 33-34
+src/components/tools/code-run.tsx
+  s_51f76b6b47de21::t_8ea2797a6ce6c7 6,8,10-11,28
+.agents/skills/verify-orbit/scenarios/sandbox-scroll.mjs
+  s_51f76b6b47de21::t_79156c31ee1f1f 34,39-40,52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8c48d117d26f944600a0c483764bf73ad6e72939",
+  "prompts": {},
+  "sessions": {
+    "s_51f76b6b47de21": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1acb6-e850-7de1-9938-5e46a5f7e771",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
