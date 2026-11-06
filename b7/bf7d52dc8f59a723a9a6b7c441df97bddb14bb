@@ -1,0 +1,21 @@
+src/lib/sandbox/run.ts
+  s_51f76b6b47de21::t_d6aebfe61e5eb6 88
+CHANGELOG.md
+  s_51f76b6b47de21::t_d6aebfe61e5eb6 33-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b7bf7d52dc8f59a723a9a6b7c441df97bddb14bb",
+  "prompts": {},
+  "sessions": {
+    "s_51f76b6b47de21": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1acb6-e850-7de1-9938-5e46a5f7e771",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
