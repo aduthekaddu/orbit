@@ -1,0 +1,19 @@
+drizzle/0004_run_output_search.sql
+  s_e9050b67fdf088::t_72078f1374ba76 4-6,8,10,14-16,18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f53fe240d3abd0a6a92933b23ecc7b16e7892c58",
+  "prompts": {},
+  "sessions": {
+    "s_e9050b67fdf088": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "342e8e27-0374-4c89-827c-f073c6745b2c",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
