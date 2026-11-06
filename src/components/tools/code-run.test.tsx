@@ -111,3 +111,55 @@ test("output with text keeps its leading and trailing blank lines", () => {
   const html = renderToStaticMarkup(<CodeRun input={input} output={{ ...silent, stdout: "\n  two\n\n" }} />);
   assert.match(html, /data-code-stdout=""[^>]*><code>\n {2}two\n\n<\/code>/);
 });
+
+const base = { stdout: "", stderr: "", exitCode: 0, durationMs: 194, timedOut: false, truncated: false };
+
+function resultRow(html: string) {
+  const match = /<div[^>]*>((?:<span[^>]*>[^<]*<\/span>)+)<\/div>/.exec(html);
+  assert.ok(match, "the card has a result row");
+  return match[1].replace(/<[^>]+>/g, "|").replace(/\|+/g, "|").replace(/^\||\|$/g, "");
+}
+
+test("a success shows its exit code and a duration in milliseconds", () => {
+  assert.equal(resultRow(renderToStaticMarkup(<CodeRun input={input} output={base} />)), "Exit 0|194 ms");
+});
+
+test("a nonzero exit shows its exit code once", () => {
+  assert.equal(resultRow(renderToStaticMarkup(<CodeRun input={input} output={{ ...base, exitCode: 3 }} />)), "Exit 3|194 ms");
+});
+
+test("a timeout shows one outcome with its duration in seconds", () => {
+  assert.equal(resultRow(renderToStaticMarkup(<CodeRun input={input} output={{ ...base, exitCode: null, timedOut: true, durationMs: 10064 }} />)), "Timed out after 10.1 s");
+});
+
+test("a memory kill says killed and keeps the exit code", () => {
+  assert.equal(resultRow(renderToStaticMarkup(<CodeRun input={input} output={{ ...base, exitCode: 137, durationMs: 1312 }} />)), "Killed (exit 137)|1.3 s");
+});
+
+test("a run with no exit code and no timeout still says killed", () => {
+  assert.equal(resultRow(renderToStaticMarkup(<CodeRun input={input} output={{ ...base, exitCode: null }} />)), "Killed|194 ms");
+});
+
+test("a cancelled run shows when it was stopped, whatever its exit code", () => {
+  assert.equal(resultRow(renderToStaticMarkup(<CodeRun input={input} output={{ ...base, exitCode: null, cancelled: true, durationMs: 2012 }} />)), "Stopped after 2.0 s");
+  assert.equal(resultRow(renderToStaticMarkup(<CodeRun input={input} output={{ ...base, exitCode: 0, cancelled: true, durationMs: 40 }} />)), "Stopped after 40 ms");
+});
+
+test("durations under a second stay in milliseconds and the rest use seconds", () => {
+  const text = (durationMs: number) => resultRow(renderToStaticMarkup(<CodeRun input={input} output={{ ...base, durationMs }} />));
+  assert.equal(text(0), "Exit 0|0 ms");
+  assert.equal(text(999.4), "Exit 0|999 ms");
+  assert.equal(text(999.6), "Exit 0|1.0 s");
+  assert.equal(text(1000), "Exit 0|1.0 s");
+  assert.equal(text(10064), "Exit 0|10.1 s");
+});
+
+test("no outcome repeats the header status words", () => {
+  for (const output of [base, { ...base, exitCode: 3 }, { ...base, exitCode: null, timedOut: true }, { ...base, exitCode: 137 }, { ...base, exitCode: null, cancelled: true }]) {
+    assert.doesNotMatch(resultRow(renderToStaticMarkup(<CodeRun input={input} output={output} />)), /Failed|Succeeded|Cancelled/);
+  }
+});
+
+test("truncated output keeps its note beside the outcome", () => {
+  assert.equal(resultRow(renderToStaticMarkup(<CodeRun input={input} output={{ ...base, truncated: true }} />)), "Exit 0|194 ms|Output truncated");
+});
