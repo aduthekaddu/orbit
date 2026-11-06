@@ -1,0 +1,23 @@
+.agents/skills/verify-orbit/features/signup.md
+  s_6877932481c8d7::t_a2253113409005 26
+.agents/skills/verify-orbit/verify.mjs
+  s_6877932481c8d7::t_2ada70e1d4e347 486
+CONTRIBUTING.md
+  s_6877932481c8d7::t_043896b0653921 32-33,37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f0229de32a623f588d7695265edf164cfa368e5f",
+  "prompts": {},
+  "sessions": {
+    "s_6877932481c8d7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3b41b1b5-5e57-4585-9cde-1f4c1aa480f6",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
