@@ -2,7 +2,7 @@
 # Scans package-lock.json for known vulnerabilities with OSV-Scanner.
 #
 #   scripts/ci/osv-gate.sh <base-lockfile>   pull requests: fail only for vulnerabilities this change adds, which
-#                                            includes a dev dependency that becomes a production one
+#                                            includes another copy and a dev dependency that becomes a production one
 #   scripts/ci/osv-gate.sh                   pushes and schedules: fail for any vulnerability in a
 #                                            production dependency, and warn about dev dependencies
 #
@@ -42,8 +42,17 @@ head_vulnerabilities=$(scan package-lock.json head | flatten)
 
 if [ -n "$base_lockfile" ]; then
   base_vulnerabilities=$(scan "$base_lockfile" base | flatten)
-  added=$(jq --null-input --argjson head "$head_vulnerabilities" --argjson base "$base_vulnerabilities" \
-    '[$head[] | . as $found | select(any($base[]; .id == $found.id and .name == $found.name and ((.dev | not) or $found.dev)) | not)]')
+  # Count each advisory per package. It is new when it affects more copies than before, or more
+  # production copies, which covers a dev dependency that becomes a production one. A bump from one
+  # vulnerable version to another keeps the counts, so it passes.
+  added=$(jq --null-input --argjson head "$head_vulnerabilities" --argjson base "$base_vulnerabilities" '
+    def tally: group_by([.id, .name]) | map({key: [.[0].id, .[0].name], total: length, production: (map(select(.dev | not)) | length)});
+    ($base | tally) as $before
+    | [($head | tally)[] | . as $entry
+        | (($before | map(select(.key == $entry.key)) | .[0]) // {total: 0, production: 0}) as $old
+        | select($entry.total > $old.total or $entry.production > $old.production)
+        | $entry.key] as $keys
+    | [$head[] | . as $found | select($keys | any(. == [$found.id, $found.name]))]')
   if [ "$(jq length <<< "$added")" -gt 0 ]; then
     echo "::error title=New vulnerabilities::this change adds known vulnerabilities to package-lock.json"
     report <<< "$added"
