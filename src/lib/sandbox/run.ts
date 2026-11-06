@@ -85,6 +85,7 @@ export async function runCode(docker: Docker, input: RunCodeInput, signal?: Abor
         const result = waitResultSchema.parse(await container.wait());
         const output = await outputFinished;
         if (output.kind === "failed") throw output.error;
+        clearTimeout(timer);
         return result.StatusCode;
       };
       return await Promise.race([exited(), stopped]);
