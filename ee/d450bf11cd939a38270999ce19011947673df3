@@ -1,0 +1,24 @@
+.agents/skills/verify-orbit/scenarios/sandbox-empty-output.mjs
+  s_e9050b67fdf088::t_74fb8038ea5178 1-81
+  s_e9050b67fdf088::t_fb26da9c8438af 82-83
+scripts/qa/mock-provider.mjs
+  s_e9050b67fdf088::t_9a640408cccfad 14-15
+src/components/tools/code-run.test.tsx
+  s_e9050b67fdf088::t_4aca0d0f364270 67-101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eed450bf11cd939a38270999ce19011947673df3",
+  "prompts": {},
+  "sessions": {
+    "s_e9050b67fdf088": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "342e8e27-0374-4c89-827c-f073c6745b2c",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
