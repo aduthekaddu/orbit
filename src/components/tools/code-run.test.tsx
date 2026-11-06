@@ -96,8 +96,7 @@ test("a silent failure and a silent timeout keep their result and show no wells"
   assert.match(failed, /Exit 3/);
   const timedOut = renderToStaticMarkup(<CodeRun input={input} output={{ ...silent, exitCode: null, timedOut: true, durationMs: 10064 }} />);
   assert.doesNotMatch(timedOut, /data-code-stdout|data-code-stderr/);
-  assert.match(timedOut, /Timed out/);
-  assert.match(timedOut, /10064 ms/);
+  assert.match(timedOut, /Timed out after 10\.1 s/);
 });
 
 test("output made only of blank lines gets no well, like empty output", () => {

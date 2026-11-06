@@ -11,8 +11,9 @@ async function inspect(card) {
   return card.evaluate((node) => {
     const wells = [...node.querySelectorAll("[data-code-stdout], [data-code-stderr]")];
     const labels = [...node.querySelectorAll("p")].map((p) => p.textContent?.trim());
-    const exit = [...node.querySelectorAll("span")].find((span) => /^Exit /.test(span.textContent ?? ""));
-    const duration = [...node.querySelectorAll("span")].find((span) => /^\d+ ms$/.test(span.textContent ?? ""));
+    const exit = [...node.querySelectorAll("span")].find((span) => /^(Exit|Timed out|Killed|Stopped)/.test(span.textContent ?? ""));
+    const row = exit?.parentElement ? [...exit.parentElement.querySelectorAll("span")].map((span) => span.textContent ?? "").join(" ") : "";
+    const duration = /\d+(\.\d)? (ms|s)\b/.exec(row)?.[0];
     return {
       stdout: node.querySelectorAll("[data-code-stdout]").length,
       stderr: node.querySelectorAll("[data-code-stderr]").length,
@@ -21,8 +22,7 @@ async function inspect(card) {
       stderrLabel: labels.includes("stderr"),
       copySource: [...node.querySelectorAll("button")].some((button) => button.getAttribute("aria-label") === "Copy source"),
       exit: exit?.textContent ?? null,
-      duration: duration?.textContent ?? null,
-      timedOut: /Timed out/.test(node.innerText),
+      duration: duration ?? null,
       text: node.innerText,
       height: Math.round(node.getBoundingClientRect().height),
     };
@@ -36,7 +36,7 @@ async function check(step, card, run, when) {
   step(`${label} ${run.stdout ? "shows" : "hides"} the standard output well`, seen.stdout === (run.stdout ? 1 : 0) && seen.stdoutLabel === run.stdout, `wells ${seen.stdout}, label ${seen.stdoutLabel}`);
   step(`${label} ${run.stderr ? "shows" : "hides"} the standard error well`, seen.stderr === (run.stderr ? 1 : 0) && seen.stderrLabel === run.stderr, `wells ${seen.stderr}, label ${seen.stderrLabel}`);
   step(`${label} keeps its source`, seen.copySource && seen.text.includes(run.source), "source missing");
-  step(`${label} keeps its exit status and duration`, run.exit.test(`${seen.exit} ${seen.timedOut ? "Timed out" : ""}`) && seen.duration !== null, `exit ${JSON.stringify(seen.exit)}, duration ${JSON.stringify(seen.duration)}`);
+  step(`${label} keeps its exit status and duration`, run.exit.test(seen.exit ?? "") && seen.duration !== null, `exit ${JSON.stringify(seen.exit)}, duration ${JSON.stringify(seen.duration)}`);
   return seen;
 }
 
@@ -75,8 +75,8 @@ export default async function sandboxEmptyOutput({ page, origin, step, shot }) {
     const card = cards.nth(index);
     await card.scrollIntoViewIfNeeded();
     await check(step, card, run, "at 390 pixels");
-    const inside = await card.getByText(/^\d+ ms$/).evaluate((node) => {
-      const box = node.getBoundingClientRect();
+    const inside = await card.getByText(/^(Exit|Timed out|Killed|Stopped)/).first().evaluate((node) => {
+      const box = node.parentElement.getBoundingClientRect();
       return box.width > 0 && box.left >= 0 && box.right <= window.innerWidth;
     });
     step(`${run.name} keeps its result inside the 390 pixel page`, inside);
