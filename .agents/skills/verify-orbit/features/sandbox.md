@@ -45,7 +45,16 @@ node .agents/skills/verify-orbit/verify.mjs cleanup
 
 ## Configuration failure
 
-`browse sandbox-failure` checks a configuration failure and reload. Launch its server with `ORBIT_SANDBOX=on DOCKER_HOST=tcp://not-the-local-proxy:2375` and `launch --mock`. Require the failed card to identify the configuration error.
+Start a fresh server with the invalid Docker endpoint, then check the failed card and reload.
+
+```sh
+node .agents/skills/verify-orbit/verify.mjs cleanup
+ORBIT_SANDBOX=on DOCKER_HOST=tcp://not-the-local-proxy:2375 node .agents/skills/verify-orbit/verify.mjs launch --mock
+node .agents/skills/verify-orbit/verify.mjs browse sandbox-failure
+node .agents/skills/verify-orbit/verify.mjs cleanup
+```
+
+Require the failed card to identify the configuration error. Cleanup ensures this launch uses the requested endpoint.
 
 ## Real provider
 
