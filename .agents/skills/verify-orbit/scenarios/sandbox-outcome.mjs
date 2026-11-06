@@ -73,15 +73,17 @@ export default async function sandboxOutcome({ page, origin, step, shot }) {
     step(`${run.name} after reload keeps the same result text`, run.stop ? seen.header === rows[index].header : seen.row === rows[index].row && seen.header === rows[index].header, `before ${JSON.stringify(rows[index].row)}, after ${JSON.stringify(seen.row)}`);
     step(`${run.name} after reload keeps its status role`, (await card.getByRole("status").count()) === 1);
   }
-  await cards.nth(2).scrollIntoViewIfNeeded();
+  await cards.nth(2).evaluate((node) => node.scrollIntoView({ block: "center" }));
   await shot("reloaded");
+  await cards.nth(runs.length - 1).evaluate((node) => node.scrollIntoView({ block: "center" }));
+  await shot("cancelled-reloaded");
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(300);
   step("the page fits 390 pixels", await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   for (const [index, run] of runs.entries()) {
     const card = cards.nth(index);
-    await card.scrollIntoViewIfNeeded();
+    await card.evaluate((node) => node.scrollIntoView({ block: "center" }));
     const inside = await card.getByText(/^(Exit|Timed out|Killed|Stopped)/).first().evaluate((node) => {
       const box = node.parentElement.getBoundingClientRect();
       return box.width > 0 && box.left >= 0 && box.right <= window.innerWidth;
