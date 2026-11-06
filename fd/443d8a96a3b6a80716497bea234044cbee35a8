@@ -1,0 +1,53 @@
+.agents/skills/verify-orbit/features/sandbox.md
+  s_6877932481c8d7::t_5fab90cb33b3ff 89-101
+.agents/skills/verify-orbit/scenarios/sandbox-stop-output.mjs
+  s_6877932481c8d7::t_53bdfa102ba003 1-53
+ARCHITECTURE.md
+  s_6877932481c8d7::t_6f20a523704105 137
+CHANGELOG.md
+  s_6877932481c8d7::t_75653b0886ae36 35-36
+scripts/qa/mock-provider.mjs
+  s_6877932481c8d7::t_fdf8ae179dae38 11
+src/app/api/chat/route.ts
+  s_6877932481c8d7::t_0a9b7dcdc3680b 9,95-96,123
+src/components/tools/run-card.tsx
+  s_6877932481c8d7::t_f27badaef0ca31 6,29
+src/lib/sandbox/run.test.ts
+  s_6877932481c8d7::t_d1deb493b3c738 5-9,11-12,138-207
+src/lib/sandbox/run.ts
+  s_6877932481c8d7::t_508e5bb96b5071 35-44,129,132,137-138
+src/lib/sandbox/spec.ts
+  s_6877932481c8d7::t_889607362fbdbf 17,23-27,30
+src/lib/sandbox/wait-for-running.ts
+  s_6877932481c8d7::t_fe42a595b1c632 1-11
+src/lib/tools/index.ts
+  s_6877932481c8d7::t_6089b5f1c3dd22 8,13,20,29-30
+src/lib/tools/metadata.ts
+  s_6877932481c8d7::t_6c39df4dca0495 1,8,17,36-39
+src/lib/tools/run-code.ts
+  s_6877932481c8d7::t_57037478e7a3e1 4-5,7-25,29
+src/lib/tools/run-status.test.ts
+  s_6877932481c8d7::t_1374d8af793eb0 68-73
+src/lib/tools/run-status.ts
+  s_6877932481c8d7::t_30d57efbee53aa 2,16
+src/lib/tools/stopped-runs.test.ts
+  s_6877932481c8d7::t_11fc84224e07f6 1-29
+src/lib/tools/stopped-runs.ts
+  s_6877932481c8d7::t_ab08a1c1ba2ab3 1-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fd443d8a96a3b6a80716497bea234044cbee35a8",
+  "prompts": {},
+  "sessions": {
+    "s_6877932481c8d7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3b41b1b5-5e57-4585-9cde-1f4c1aa480f6",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
