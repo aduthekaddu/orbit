@@ -1,5 +1,5 @@
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
-import { hasFailedOutput } from "./metadata";
+import { hasFailedOutput, hasStoppedOutput } from "./metadata";
 
 export type ToolRunStatus = "running" | "succeeded" | "failed" | "cancelled";
 export type ToolRunPart =
@@ -13,6 +13,7 @@ export function toolRunStatus(part: ToolRunPart, stopped = false, toolName?: str
       if (part.output && typeof part.output === "object" && "ok" in part.output && part.output.ok === false) {
         return "error" in part.output && part.output.error === "Search was stopped" ? "cancelled" : "failed";
       }
+      if (hasStoppedOutput(toolName, part.output)) return "cancelled";
       if (hasFailedOutput(toolName, part.output)) return "failed";
       return "succeeded";
     case "output-error":

@@ -65,3 +65,9 @@ test("an aborted code run stays cancelled after persistence and reload", () => {
   assert.equal(toolRunStatus(part), "cancelled");
   assert.equal(toolCallRunStatus({ toolName: "run_code", status: { type: "complete" }, result: { error: part.errorText }, isError: true }), "cancelled");
 });
+
+test("a stopped code run that saved its output is cancelled, not failed", () => {
+  const result = { stdout: "before-stop\n", stderr: "", exitCode: null, durationMs: 1500, timedOut: false, truncated: false, cancelled: true };
+  assert.equal(toolRunStatus({ state: "output-available", output: result }, false, "run_code"), "cancelled");
+  assert.equal(toolCallRunStatus({ toolName: "run_code", status: { type: "complete" }, result, isError: false }), "cancelled");
+});

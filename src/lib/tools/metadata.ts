@@ -1,10 +1,11 @@
-import { hasFailedCodeOutput } from "../sandbox/spec";
+import { hasFailedCodeOutput, hasStoppedCodeOutput } from "../sandbox/spec";
 
 export type ToolCardKind = "genui" | "search" | "code" | "generic";
 
 type ToolCardDefinition = {
   card: ToolCardKind;
   failedOutput?: (output: unknown) => boolean;
+  stoppedOutput?: (output: unknown) => boolean;
 };
 
 export const toolCards = {
@@ -13,6 +14,7 @@ export const toolCards = {
   run_code: {
     card: "code",
     failedOutput: hasFailedCodeOutput,
+    stoppedOutput: hasStoppedCodeOutput,
   },
 } satisfies Record<string, ToolCardDefinition>;
 
@@ -30,4 +32,8 @@ export function cardFor(name: string): ToolCardKind {
 
 export function hasFailedOutput(name: string | undefined, output: unknown): boolean {
   return definitionFor(name ?? "")?.failedOutput?.(output) ?? false;
+}
+
+export function hasStoppedOutput(name: string | undefined, output: unknown): boolean {
+  return definitionFor(name ?? "")?.stoppedOutput?.(output) ?? false;
 }
