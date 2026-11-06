@@ -1,0 +1,23 @@
+.agents/skills/verify-orbit/scenarios/sandbox-output.mjs
+  s_51f76b6b47de21::t_86899a5e70e9a4 1-20
+scripts/qa/mock-provider.mjs
+  s_51f76b6b47de21::t_e1f32aa4ec67a7 5-10,431,434
+src/lib/sandbox/run.test.ts
+  s_51f76b6b47de21::t_b04841deab889e 48,50,77,81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ea9a7b8751850f1176f3b121694349845d04b556",
+  "prompts": {},
+  "sessions": {
+    "s_51f76b6b47de21": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1acb6-e850-7de1-9938-5e46a5f7e771",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
