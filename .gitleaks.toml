@@ -7,7 +7,7 @@ useDefault = true
 description = "A fake secret that a test wrote to a temporary file in these three commits"
 condition = "AND"
 targetRules = ["generic-api-key"]
-paths = ['''src/lib/auth-secret\.test\.ts''']
+paths = ['''^src/lib/auth-secret\.test\.ts$''']
 commits = [
   "13faa2361717bd68ab232ea664e3816cc8e61344",
   "f5e63fb3530eaf32f5a9ad39534a5afb7ead7652",
