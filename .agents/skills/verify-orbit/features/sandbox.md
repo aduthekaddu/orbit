@@ -115,6 +115,19 @@ node .agents/skills/verify-orbit/verify.mjs cleanup
 
 `sandbox-copy-overlap` runs `[qa:run-wide]`, which prints a 153 character first line. After scrolling the well fully right, require the last three characters to clear the copy button. In a 390 pixel touch context, require a tap on the last character not to land on the button.
 
+## Empty output
+
+Launch a fresh mock sandbox. Docker must be reachable.
+
+```sh
+node .agents/skills/verify-orbit/verify.mjs cleanup
+ORBIT_SANDBOX=on node .agents/skills/verify-orbit/verify.mjs launch --mock
+node .agents/skills/verify-orbit/verify.mjs browse sandbox-empty-output
+node .agents/skills/verify-orbit/verify.mjs cleanup
+```
+
+The scenario runs `[qa:run-pass]`, `[qa:run-python]`, `[qa:run-escape]`, `[qa:run-exit]`, `[qa:run-spin]`, and `[qa:run-blank]` in one chat. Their output is empty, stdout only, stderr only, empty with exit 3, empty with a timeout, and blank lines only. Require no empty output well on any card, a well and its label only for a channel with text, and the source, exit status, and duration on every card. A channel with only spaces or line breaks counts as empty. It runs the same checks on each card on desktop, after a reload, and at 390 pixels, and prints the card heights.
+
 ## Settings status
 
 Run the check against a server with the sandbox on, then one with it off. Docker is not needed.
