@@ -125,7 +125,8 @@ export const messages = sqliteTable(
 export const memories = sqliteTable(
   "memories",
   {
-    id: text("id").primaryKey(),
+    seq: integer("seq").primaryKey({ autoIncrement: true }),
+    id: text("id").notNull().unique(),
     kind: text("kind").notNull(),
     text: text("text").notNull(),
     textNorm: text("text_norm").notNull(),
