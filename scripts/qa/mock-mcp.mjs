@@ -49,6 +49,7 @@ function createMcp() {
 export async function startMockMcp({ port = 0 } = {}) {
   const sessions = new Map();
   const requests = [];
+  const timers = new Set();
   let listCount = 0;
   let callCount = 0;
   let closeCount = 0;
@@ -88,11 +89,17 @@ export async function startMockMcp({ port = 0 } = {}) {
     }
     if (mode === "slow-list" && method === "tools/list") {
       await new Promise((resolve) => {
-        const timer = setTimeout(resolve, 15_000);
-        request.on("close", () => {
+        const timer = setTimeout(finish, 15_000);
+        timers.add(timer);
+        function finish() {
           clearTimeout(timer);
+          timers.delete(timer);
+          request.off("close", finish);
+          request.off("aborted", finish);
           resolve();
-        });
+        }
+        request.on("close", finish);
+        request.on("aborted", finish);
       });
       if (!response.headersSent) response.writeHead(499).end();
       return;
@@ -133,6 +140,8 @@ export async function startMockMcp({ port = 0 } = {}) {
     callCount: () => callCount,
     closeCount: () => closeCount,
     close: () => new Promise((resolve) => {
+      for (const timer of timers) clearTimeout(timer);
+      timers.clear();
       server.closeAllConnections();
       server.close(resolve);
     }),

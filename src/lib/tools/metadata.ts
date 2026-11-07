@@ -1,6 +1,6 @@
 import { hasFailedCodeOutput, hasStoppedCodeOutput } from "../sandbox/spec";
 
-export type ToolCardKind = "genui" | "search" | "code" | "generic";
+export type ToolCardKind = "genui" | "search" | "code" | "github" | "generic";
 
 type ToolCardDefinition = {
   card: ToolCardKind;
@@ -27,6 +27,7 @@ function definitionFor(name: string): ToolCardDefinition | undefined {
 }
 
 export function cardFor(name: string): ToolCardKind {
+  if (name.startsWith("github_")) return "github";
   return definitionFor(name)?.card ?? "generic";
 }
 

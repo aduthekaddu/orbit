@@ -85,6 +85,8 @@ export const settings = sqliteTable("settings", {
   apiKey: text("api_key").notNull().default(""),
   searxngUrl: text("searxng_url").notNull().default(""),
   tavilyApiKey: text("tavily_api_key").notNull().default(""),
+  githubToken: text("github_token").notNull().default(""),
+  githubMcpUrl: text("github_mcp_url").notNull().default(""),
   model: text("model").notNull().default(""),
   reasoningEffort: text("reasoning_effort").notNull().default("medium"),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),

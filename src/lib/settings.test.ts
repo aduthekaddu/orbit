@@ -5,7 +5,7 @@ import path from "node:path";
 import test, { before, after } from "node:test";
 
 const originalCwd = process.cwd();
-const envNames = ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL", "ORBIT_DATA_DIR", "ORBIT_SEARXNG_URL", "ORBIT_TAVILY_API_KEY", "ORBIT_SANDBOX"];
+const envNames = ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL", "ORBIT_DATA_DIR", "ORBIT_SEARXNG_URL", "ORBIT_TAVILY_API_KEY", "ORBIT_GITHUB_TOKEN", "ORBIT_SANDBOX"];
 const originalEnv = Object.fromEntries(envNames.map((name) => [name, process.env[name]]));
 let sandbox: string;
 let settings: typeof import("./settings");
@@ -37,6 +37,24 @@ test("search-only environment settings seed a row without a model provider", () 
   assert.equal(row.tavilyApiKey, "test-tavily-key-not-real");
 });
 
+test("public settings report a GitHub token without returning it", () => {
+  const row = {
+    baseUrl: "https://example.com/v1",
+    apiKey: "test-provider-key-not-real",
+    model: "test-model",
+    reasoningEffort: "medium" as const,
+    searxngUrl: "",
+    tavilyApiKey: "",
+    githubToken: "good-token",
+    githubMcpUrl: "http://127.0.0.1:9/mcp",
+  };
+  const value = settings.toPublicSettings(row);
+  assert.equal(value.githubTokenSet, true);
+  assert.equal(value.githubMcpUrl, "http://127.0.0.1:9/mcp");
+  assert.equal(JSON.stringify(value).includes("good-token"), false);
+  assert.equal("githubToken" in value, false);
+});
+
 test("public settings expose search configuration without either key", () => {
   const row = {
     baseUrl: "https://example.com/v1",
@@ -45,14 +63,27 @@ test("public settings expose search configuration without either key", () => {
     reasoningEffort: "medium" as const,
     searxngUrl: "http://127.0.0.1:8888",
     tavilyApiKey: "test-tavily-key-not-real",
+    githubToken: "",
+    githubMcpUrl: "",
   };
   const value = settings.toPublicSettings(row);
   assert.deepEqual(value, {
     baseUrl: "https://example.com/v1", model: "test-model", reasoningEffort: "medium", keySet: true,
-    searxngUrl: "http://127.0.0.1:8888", tavilyKeySet: true, sandbox: false,
+    searxngUrl: "http://127.0.0.1:8888", tavilyKeySet: true, githubTokenSet: false, githubMcpUrl: "https://api.githubcopilot.com/mcp/", sandbox: false,
   });
   assert.equal(JSON.stringify(value).includes(row.apiKey), false);
   assert.equal(JSON.stringify(value).includes(row.tavilyApiKey), false);
+});
+
+test("a blank GitHub token keeps the stored token and an empty MCP URL uses the default", () => {
+  const provider = { baseUrl: "https://example.com/v1", apiKey: "test-provider-key-not-real", model: "test-model", reasoningEffort: "medium" as const };
+  settings.saveSettings({ ...provider, githubToken: "good-token", githubMcpUrl: "http://127.0.0.1:9/mcp" });
+  const cleared = settings.saveSettings({ ...provider, githubToken: "  ", githubMcpUrl: "" });
+  assert.equal(settings.getSettings()?.githubToken, "good-token");
+  assert.equal(settings.getSettings()?.githubMcpUrl, "");
+  assert.equal(cleared.githubTokenSet, true);
+  assert.equal(cleared.githubMcpUrl, "https://api.githubcopilot.com/mcp/");
+  assert.equal(JSON.stringify(cleared).includes("good-token"), false);
 });
 
 test("blank and omitted Tavily keys retain the saved key", () => {

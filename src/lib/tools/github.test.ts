@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { startMockMcp } from "../../../scripts/qa/mock-mcp.mjs";
 import { githubLinks } from "./github-links";
-import { githubTools, openGithubTurn } from "./github";
+import { checkGithub, githubTools, openGithubTurn } from "./github";
 
 const toolOptions = {
   toolCallId: "github-test",
   messages: [],
   abortSignal: new AbortController().signal,
+  context: undefined,
 };
 
 async function withMock(run: (mock: Awaited<ReturnType<typeof startMockMcp>>) => Promise<void>) {
@@ -122,6 +123,61 @@ test("a wrong token leaves the turn with no GitHub tools", { timeout: 20_000 }, 
       console.error = original;
     }
   });
+});
+
+test("check reports the GitHub login and a rejected token", { timeout: 20_000 }, async () => {
+  await withMock(async (mock) => {
+    const ok = await checkGithub({ token: mock.token, mcpUrl: mock.url });
+    assert.deepEqual(ok, { ok: true, login: "octocat" });
+    assert.equal(JSON.stringify(ok).includes(mock.token), false);
+    assert.equal(mock.openSessions(), 0);
+    const bad = await checkGithub({ token: "wrong-token", mcpUrl: mock.url });
+    assert.deepEqual(bad, { ok: false, error: "GitHub rejected the token." });
+    assert.equal(JSON.stringify(bad).includes("wrong-token"), false);
+  });
+});
+
+test("a turn merges GitHub tools when a token is set and closes the client", { timeout: 20_000 }, async () => {
+  await withMock(async (mock) => {
+    const { toolsForTurn } = await import("./index");
+    const opened = await toolsForTurn({
+      baseUrl: "http://127.0.0.1:3299/v1",
+      apiKey: "test-key-not-real",
+      model: "mock-genui",
+      reasoningEffort: "low",
+      searxngUrl: "",
+      tavilyApiKey: "",
+      githubToken: mock.token,
+      githubMcpUrl: mock.url,
+    });
+    try {
+      assert.equal("render_ui" in opened.tools, true);
+      assert.equal("github_list_issues" in opened.tools, true);
+      assert.equal("web_search" in opened.tools, false);
+    } finally {
+      await opened.close();
+    }
+    assert.equal(mock.openSessions(), 0);
+    await opened.close();
+    assert.equal(mock.closeCount(), 1);
+  });
+});
+
+test("a turn without a GitHub token does not open GitHub", async () => {
+  const { toolsForTurn } = await import("./index");
+  const opened = await toolsForTurn({
+    baseUrl: "http://127.0.0.1:3299/v1",
+    apiKey: "test-key-not-real",
+    model: "mock-genui",
+    reasoningEffort: "low",
+    searxngUrl: "",
+    tavilyApiKey: "",
+    githubToken: "",
+    githubMcpUrl: "",
+  });
+  assert.equal(Object.keys(opened.tools).some((name) => name.startsWith("github_")), false);
+  assert.equal("render_ui" in opened.tools, true);
+  await opened.close();
 });
 
 test("issue, pull request, and file results become links and other results stay unstructured", () => {

@@ -43,6 +43,13 @@
       "when": 1793986096093,
       "tag": "0005_run_source_search",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794076165644,
+      "tag": "0006_petite_shinko_yamashiro",
+      "breakpoints": true
     }
   ]
 }

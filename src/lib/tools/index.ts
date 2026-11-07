@@ -3,6 +3,7 @@ import type { SettingsRecord } from "../settings";
 import { renderUiTool } from "../genui/tool";
 import { cardFor, type ToolCardKind, type ToolName } from "./metadata";
 import { createSearchTool } from "./search";
+import { openGithubTurn } from "./github";
 import { sandboxEnabled } from "../sandbox/enabled";
 import { createRunCodeTool } from "./run-code";
 import { createStoppedRuns, type StoppedRuns } from "./stopped-runs";
@@ -28,4 +29,9 @@ const entries: ToolEntry[] = Object.entries(implementations).map(([name, impleme
 
 export function toolsFor(settings: SettingsRecord, stopped: StoppedRuns = createStoppedRuns()): ToolSet {
   return Object.fromEntries(entries.filter((entry) => entry.enabled(settings)).map((entry) => [entry.name, entry.create(settings, stopped)]));
+}
+
+export async function toolsForTurn(settings: SettingsRecord, stopped: StoppedRuns = createStoppedRuns(), signal?: AbortSignal): Promise<{ tools: ToolSet; close: () => Promise<void> }> {
+  const github = await openGithubTurn(settings, signal);
+  return { tools: { ...toolsFor(settings, stopped), ...github.tools }, close: github.close };
 }
