@@ -1,0 +1,21 @@
+src/lib/tools/github.ts
+  s_902183d8365d34::t_c72dee26f4a4ee 1-121
+src/lib/tools/github-links.ts
+  s_902183d8365d34::t_cd10d4748997bf 1-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e3d7cd695a92f501fa2de81ea00815269169d84f",
+  "prompts": {},
+  "sessions": {
+    "s_902183d8365d34": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1b732-1aae-7992-b8c0-e6c428c815fb",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
