@@ -48,3 +48,14 @@ test("a card whose tool input was rejected names no language", () => {
 test("other tools show no language", () => {
   assert.equal(header(render({ toolName: "web_search", args: { query: "orbit" } })), "Web search|Running");
 });
+
+test("a remember card shows the saved text", () => {
+  const html = render({
+    toolName: "remember",
+    args: { text: "I deploy to Fly.io", kind: "fact" },
+    result: { id: "mem-1", text: "I deploy to Fly.io" },
+    status: { type: "complete" },
+  });
+  assert.match(html, /I deploy to Fly\.io/);
+  assert.doesNotMatch(html, /<summary[^>]*>Output<\/summary>/);
+});
