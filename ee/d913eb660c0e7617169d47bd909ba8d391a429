@@ -1,0 +1,31 @@
+.agents/skills/verify-orbit/features/github.md
+  s_7b5304e6fd73e1::t_170b2ac0104454 32
+.agents/skills/verify-orbit/scenarios/github.mjs
+  s_7b5304e6fd73e1::t_eb362f63a4e12b 82-90
+CHANGELOG.md
+  s_7b5304e6fd73e1::t_a81ca3746e29cc 7
+src/app/api/settings/route.ts
+  s_7b5304e6fd73e1::t_8c6293b73916cc 15
+src/components/settings/settings-form.tsx
+  s_7b5304e6fd73e1::t_8eddabdbe24d85 36,111,297-302
+src/lib/settings-form.ts
+  s_7b5304e6fd73e1::t_97f1f8747d5f29 27
+src/lib/settings.ts
+  s_7b5304e6fd73e1::t_d1f8ea5b37b40c 73,89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eed913eb660c0e7617169d47bd909ba8d391a429",
+  "prompts": {},
+  "sessions": {
+    "s_7b5304e6fd73e1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "907a3c83-9003-47cc-99db-55f5e3841229",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
