@@ -1,0 +1,24 @@
+src/lib/memory/recall.ts
+  s_aaeb471ca118ad::t_3e09e933cb4c22 1-66
+src/lib/memory/embed.ts
+  s_aaeb471ca118ad::t_1f7dc71adc7205 1-83
+src/lib/memory/store.ts
+  s_aaeb471ca118ad::t_c4fe112d91d38d 1-252
+  s_aaeb471ca118ad::t_9ce094da91af08 253-255
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "11aa1b1c9c0b60a8004ca34a856437fa0dd3511b",
+  "prompts": {},
+  "sessions": {
+    "s_aaeb471ca118ad": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1b734-90e8-7c70-8980-711968354a5f",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
