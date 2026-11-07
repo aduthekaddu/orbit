@@ -1,0 +1,14 @@
+.agents/skills/verify-orbit/scenarios/settings-sandbox.mjs
+  h_9f68edf4527855 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "260e28f03a2c0ad3e0c450a6e940399e4bc9b122",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
