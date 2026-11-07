@@ -3,8 +3,8 @@ import http from "node:http";
 import test from "node:test";
 import { checkGithub, githubMcpTarget } from "./github";
 
-const production = {} as NodeJS.ProcessEnv;
-const fixture = { ORBIT_GITHUB_MCP_FIXTURE: "1" } as NodeJS.ProcessEnv;
+const production: NodeJS.ProcessEnv = { NODE_ENV: "test" };
+const fixture: NodeJS.ProcessEnv = { NODE_ENV: "test", ORBIT_GITHUB_MCP_FIXTURE: "1" };
 
 test("the GitHub token can go only to GitHub MCP hosts over HTTPS", () => {
   for (const url of ["https://api.githubcopilot.com/mcp/", "https://github.com/mcp/", "https://api.github.com/mcp", ""]) {

@@ -6,6 +6,7 @@ export type MockMcpRequest = {
   authorized: boolean;
   readonly: string;
   toolsets: string;
+  tools: string;
 };
 
 export type MockMcp = {
