@@ -184,7 +184,7 @@ export function MemoryList({
                     <span className="text-2xs font-medium text-muted-foreground">{KIND_LABEL[memory.kind]}</span>
                     <span className="num text-2xs text-muted-foreground">{memory.lastUsedAt ? `Used ${formatWhen(memory.lastUsedAt)}` : formatWhen(memory.createdAt)}</span>
                   </div>
-                  <p className="text-sm text-foreground">{memory.text}</p>
+                  <p className="break-words text-sm text-foreground">{memory.text}</p>
                   <div className="flex items-center justify-between gap-3">
                     {href ? (
                       <Link href={href} className="truncate text-sm text-foreground underline decoration-sun underline-offset-4">
