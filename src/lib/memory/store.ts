@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { memories } from "../db/schema";
-import { toMatchQuery } from "../search";
+import { toMatchQuery, toOrMatchQuery } from "../search";
 
 export const MEMORY_KINDS = ["fact", "preference", "summary"] as const;
 export type MemoryKind = (typeof MEMORY_KINDS)[number];
@@ -157,7 +157,7 @@ export function writeVectors(rows: { rowid: number; text: string; vector: number
 }
 
 export function textMatchIds(query: string, limit = 20): string[] {
-  const match = toMatchQuery(query.trim());
+  const match = toOrMatchQuery(query.trim());
   if (!match) return [];
   try {
     const rows = db.$client

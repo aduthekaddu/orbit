@@ -19,15 +19,25 @@ type SearchRow = {
   snippet: string;
 };
 
+function quotedToken(token: string): string {
+  return `"${token.replaceAll('"', '""')}"`;
+}
+
 export function toMatchQuery(input: string): string | null {
   const tokens = input.split(" ").filter((token) => token.length > 0);
   if (tokens.length === 0) return null;
   return tokens
     .map((token, index) => {
-      const quoted = `"${token.replaceAll('"', '""')}"`;
+      const quoted = quotedToken(token);
       return index === tokens.length - 1 ? `${quoted}*` : quoted;
     })
     .join(" ");
+}
+
+export function toOrMatchQuery(input: string): string | null {
+  const tokens = input.split(" ").filter((token) => token.length > 0);
+  if (tokens.length === 0) return null;
+  return tokens.map((token) => quotedToken(token)).join(" OR ");
 }
 
 export function searchMessages(userId: string, q: string): SearchHit[] {
