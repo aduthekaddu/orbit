@@ -8,6 +8,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Changed
 
+- A question like "Where do I host things?" now finds the memory "I deploy everything to Fly.io". Orbit puts the labels `nomic-embed-text` expects in front of each question and each saved memory, and a vector must be within L2 distance 0.97 of the question. Memory vectors made before this are cleared once and made again the next time the Memory page opens or a chat ends.
 - A saved memory sent with a later chat is quoted notes on the user message. It is not a system instruction. The remember card shows the saved text. A vector that is far from the question is left out. Forget runs only when it is given an id.
 - A full question can find a memory from one shared word when Ollama is down. Common words such as "is", "the", and "and" do not count, so an unrelated question no longer brings back unrelated memories.
 - A hung Ollama no longer holds a chat turn or a memory search for 5 seconds. The last Ollama result is reused for 15 seconds, and a chat asks for a vector for at most 1 second. Search still reads SQLite.
