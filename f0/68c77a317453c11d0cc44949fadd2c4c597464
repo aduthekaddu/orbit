@@ -1,0 +1,27 @@
+src/lib/tools/github.test.ts
+  s_7b5304e6fd73e1::t_b569f0b1ed87a2 4,209-216,220-224,226-232,235-256
+  s_7b5304e6fd73e1::t_3a37057d5f3cd2 3
+  s_7b5304e6fd73e1::t_5d6a36fd20c26f 217-219
+  s_7b5304e6fd73e1::t_cec7858256790f 225
+  s_7b5304e6fd73e1::t_96e939574881d7 233-234
+  s_7b5304e6fd73e1::t_a19e00715fc555 257-259
+  s_7b5304e6fd73e1::t_a0c63a7bba8226 260-262
+scripts/qa/mock-mcp.mjs
+  s_7b5304e6fd73e1::t_e82cb0b97245d8 49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f068c77a317453c11d0cc44949fadd2c4c597464",
+  "prompts": {},
+  "sessions": {
+    "s_7b5304e6fd73e1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "907a3c83-9003-47cc-99db-55f5e3841229",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
