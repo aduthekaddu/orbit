@@ -78,6 +78,21 @@ test("an existing database gains memory tables and keeps its user", () => {
   db.close();
 });
 
+test("a memory's vector stays on that memory after vacuum", async () => {
+  const { store, embed } = requireStore();
+  const saved = store.saveMemory({ text: "Vacuum keeps the vectorkey token", kind: "fact" });
+  assert.equal((await embed.embedPending()).ok, true);
+  const { db } = await import("../db");
+  const pk = db.$client.prepare("SELECT type AS type FROM pragma_table_info('memories') WHERE pk = 1").get() as { type: string };
+  assert.equal(pk.type, "INTEGER");
+  const before = db.$client.prepare("SELECT rowid AS rowid FROM memories WHERE id = ?").get(saved.id) as { rowid: number };
+  db.$client.exec("VACUUM");
+  const after = db.$client.prepare("SELECT rowid AS rowid FROM memories WHERE id = ?").get(saved.id) as { rowid: number };
+  assert.equal(after.rowid, before.rowid);
+  const joined = db.$client.prepare("SELECT memories.text AS text FROM memories_vec JOIN memories ON memories.rowid = memories_vec.rowid WHERE memories.id = ?").get(saved.id) as { text: string };
+  assert.equal(joined.text, "Vacuum keeps the vectorkey token");
+});
+
 test("save stores a memory and a repeated fact returns the same id", () => {
   const { store } = requireStore();
   const first = store.saveMemory({ text: "I deploy to Fly.io", kind: "fact" });
