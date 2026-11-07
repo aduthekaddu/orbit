@@ -1,0 +1,20 @@
+.env.example
+  h_9f68edf4527855 10-13
+CHANGELOG.md
+  h_9f68edf4527855 17-18
+README.md
+  h_9f68edf4527855 106,114-123
+docker-compose.yml
+  h_9f68edf4527855 18-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "21b103e195f7a50045d50ef1b5f50d434d4290c2",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
