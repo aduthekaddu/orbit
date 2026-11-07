@@ -18,6 +18,7 @@ export function hasOpenCodeRun(message: UIMessage): boolean {
 }
 
 // The AI SDK drops the tool result of a stopped request, so the live card has none.
+// Sending a new message before the saved result arrives makes assistant-ui close the run with its own error instead.
 // The server saves the result after the stop. Copy it onto the matching live parts and leave everything else as it is.
 export function restoreStoppedRuns(live: UIMessage[], saved: UIMessage): UIMessage[] {
   const results = new Map<string, unknown>();
@@ -31,10 +32,12 @@ export function restoreStoppedRuns(live: UIMessage[], saved: UIMessage): UIMessa
     if (message.id !== saved.id) return message;
     let restored = false;
     const parts = message.parts.map((part) => {
-      const callId = openCallId(part);
-      if (!callId || !results.has(callId)) return part;
+      const run = asRunPart(part);
+      if (!run?.toolCallId || run.state === "output-available" || !results.has(run.toolCallId)) return part;
       restored = true;
-      return { ...part, state: "output-available", output: results.get(callId) } as typeof part;
+      const result: Record<string, unknown> = { ...run, state: "output-available", output: results.get(run.toolCallId) };
+      delete result.errorText;
+      return result as typeof part;
     });
     if (!restored) return message;
     changed = true;

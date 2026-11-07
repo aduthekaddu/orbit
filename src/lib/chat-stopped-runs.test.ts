@@ -49,6 +49,12 @@ test("another reply, another call id, or a saved copy that is missing leaves the
   assert.equal(next[1], live[1]);
 });
 
+test("a run that assistant-ui closed when a new message was sent gets the saved result", () => {
+  const closed = { ...openRun("call-1"), state: "output-error", errorText: "User cancelled tool call by sending a new message." };
+  const next = restoreStoppedRuns([message("a", "assistant", [closed])], message("a", "assistant", [savedRun("call-1")]));
+  assert.deepEqual(next[0].parts[0], savedRun("call-1"));
+});
+
 test("a run that already has its result is not touched", () => {
   const finished = { ...savedRun("call-1"), output: { ...stoppedOutput, stdout: "newer\n" } };
   const live = [message("a", "assistant", [finished])];

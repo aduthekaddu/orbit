@@ -103,6 +103,8 @@ The scenario then regenerates a stopped run and stops it again. Require the 2 / 
 
 Last, it clicks Regenerate the moment Stop lands, before the first card has its saved result, and stops the new run. Require Previous to show 1 / 2 with a `Stopped` line on the first card.
 
+It also types a message while a `[qa:run-timeout]` run is going, clicks Stop, and sends the message at once. Require the stopped card to show Cancelled, a `Stopped` line, and `before-timeout`, not the error assistant-ui sets when a message is sent over an open tool call.
+
 ## Copy buttons
 
 Launch a fresh mock sandbox. Docker must be reachable.

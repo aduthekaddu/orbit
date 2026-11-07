@@ -40,7 +40,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Fixed
 
-- After you press Stop on a running code card, the open chat shows the same card a reload shows: Cancelled, the Stopped line with its duration, and the output the program had printed. Before, the card stayed bare until you reloaded the page. Your draft in the composer and the version you are viewing stay as they are.
+- After you press Stop on a running code card, the open chat shows the same card a reload shows: Cancelled, the Stopped line with its duration, and the output the program had printed. Before, the card stayed bare until you reloaded the page. Your draft in the composer and the version you are viewing stay as they are. This also holds when you press Regenerate or send a message right after Stop.
 
 - Code run cards remove terminal escape sequences from standard output and standard error, so a program that prints color codes shows only its text. The copy buttons copy the same cleaned text. Saved cards use the same cleaning when you reopen the chat.
 
