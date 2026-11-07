@@ -42,7 +42,7 @@ The `Security` and `CodeQL` workflows run on every pull request, every push to `
 
 - **Secrets.** `gitleaks` scans the whole git history and redacts what it finds. `.gitleaks.toml` allows one fake secret that a test wrote in three old commits. Do not put a real key in a test. Make a fake one at run time.
 - **Dependencies.** OSV-Scanner reads `package-lock.json` through `scripts/ci/osv-gate.sh`. On a pull request it fails only for vulnerabilities the change adds, which includes another copy of a vulnerable package and a dev dependency that becomes a production one. On `main` and on the weekly run it fails for a vulnerable production dependency and only warns about dev dependencies.
-- **Semgrep.** Scans the source and the Docker files with the TypeScript, React, Next.js, OWASP, secrets, and Docker rule packs. It does not check that the Dockerfile sets a non-root user until the image runs as one (issue #40).
+- **Semgrep.** Scans the source and the Docker files with the TypeScript, React, Next.js, OWASP, secrets, and Docker rule packs. The Dockerfile scan includes the non-root user rule.
 - **CodeQL.** Runs the `security-extended` queries. The SARIF results are a workflow artifact. `scripts/ci/codeql-gate.sh` fails for any finding that is not in `.github/codeql/known-findings.txt`. A finding is a rule, a file, and a line hash, so a second finding in a listed file is new. Fix a finding. Do not list it. Delete a line from the file when its finding is gone, and the job warns until you do.
 
 ## Change the database

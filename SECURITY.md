@@ -19,6 +19,7 @@ Orbit is built for one person on their own machine. These are the protections it
 - **Every page and API route needs a session**, except the login and signup pages, `/api/auth/*`, and `/api/setup`.
 - **Local files are private.** The data directory is mode `0700`. The database and `data/auth-secret` are mode `0600`.
 - **Local only by default.** Docker Compose publishes port 3210 on `127.0.0.1`, so other machines cannot reach Orbit.
+- **The Docker server is not root.** The process runs as the `node` user. The entrypoint may start as root only to give the data directory to that user, and it drops root before the server listens.
 
 ## Known limits
 

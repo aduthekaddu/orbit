@@ -12,7 +12,13 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
+COPY docker/entrypoint.sh /usr/local/bin/orbit-entrypoint
+RUN chmod 755 /usr/local/bin/orbit-entrypoint \
+  && mkdir -p /app/data \
+  && chown node:node /app/data
+
 ENV NODE_ENV=production
 EXPOSE 3210
-
+USER node
+ENTRYPOINT ["orbit-entrypoint"]
 CMD ["npm", "start", "--", "-p", "3210", "-H", "0.0.0.0"]

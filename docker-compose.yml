@@ -1,6 +1,8 @@
 services:
   orbit:
     build: .
+    # The entrypoint starts as root to give ./data to uid 1000, then drops to node.
+    user: "0:0"
     ports:
       - "127.0.0.1:3210:3210"
     volumes:

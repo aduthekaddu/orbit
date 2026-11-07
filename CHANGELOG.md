@@ -6,6 +6,10 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 - Keep earlier prompts and replies when editing or regenerating. Switch versions with the message arrows. Reload opens the last written branch.
 
+### Changed
+
+- The Docker server runs as the `node` user. On start, Compose gives `./data` to that user and drops root before the server listens.
+
 ### Added
 
 - Conversation search finds the source of code runs, so code the model ran can be found by a name or a word in it. This includes a run you stopped. A migration adds the source of earlier runs to search.

@@ -62,7 +62,7 @@ Planned features are listed in the [roadmap](docs/roadmap.md).
 
 4. Open <http://127.0.0.1:3210> and create your account.
 
-The container stores its data in `./data`. Compose publishes the app on `127.0.0.1:3210` and SearXNG on `127.0.0.1:8888`. Other machines cannot reach either port. Existing databases keep their saved settings. Add `http://searxng:8080` under **Settings > Search** when upgrading a Compose installation.
+The server process runs as the `node` user, uid 1000. Compose starts the entrypoint as root so it can give `./data` to that user, then drops root before the server listens. After the first start, `./data` is owned by uid 1000. The container stores its data in `./data`. Compose publishes the app on `127.0.0.1:3210` and SearXNG on `127.0.0.1:8888`. Other machines cannot reach either port. Existing databases keep their saved settings. Add `http://searxng:8080` under **Settings > Search** when upgrading a Compose installation.
 
 ### Run from source
 
