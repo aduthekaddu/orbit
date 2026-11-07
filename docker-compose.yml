@@ -15,6 +15,7 @@ services:
       ORBIT_MODEL: ${ORBIT_MODEL:-}
       ORBIT_SEARXNG_URL: ${ORBIT_SEARXNG_URL:-http://searxng:8080}
       ORBIT_TAVILY_API_KEY: ${ORBIT_TAVILY_API_KEY:-}
+      ORBIT_GITHUB_TOKEN: ${ORBIT_GITHUB_TOKEN:-}
     command: ["npm", "start", "--", "-p", "3210", "-H", "0.0.0.0"]
     restart: "no"
 

@@ -15,6 +15,7 @@ Only the latest commit on `main` gets security fixes.
 Orbit is built for one person on their own machine. These are the protections it has today:
 
 - **The provider key stays on the server.** The API never returns it. `GET /api/settings` reports only whether a key is set, and the chat route removes the key from error text before it logs.
+- **The GitHub token stays on the server.** `GET /api/settings` reports `githubTokenSet` and the MCP URL, never the token. GitHub tools are read-only and limited to repositories, issues, and pull requests. A check calls `get_me` and returns the login or an error, not the token.
 - **One account.** An auth hook and a SQLite trigger both reject a second signup.
 - **Every page and API route needs a session**, except the login and signup pages, `/api/auth/*`, and `/api/setup`.
 - **Local files are private.** The data directory is mode `0700`. The database and `data/auth-secret` are mode `0600`.
@@ -24,6 +25,7 @@ Orbit is built for one person on their own machine. These are the protections it
 ## Known limits
 
 - The database stores the provider key in plain text. Anyone who can read `data/orbit.db` can read the key.
+- The database stores the GitHub token in plain text, the same way. Use a fine-grained personal access token that can only read the repositories you want Orbit to see. Orbit does not use GitHub sign-in.
 - Sign-in relies on better-auth's default rate limits. Orbit adds no lockout of its own. Keep it on `127.0.0.1`, or behind an access layer such as Cloudflare Access, which is planned in [slice 12](docs/slices/12.md).
 - Model output is untrusted. Markdown renders without raw HTML. Generated UI specs are checked against a fixed component catalog before they render.
 
