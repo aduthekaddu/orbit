@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AssistantRuntimeProvider, type ThreadHistoryAdapter } from "@assistant-ui/react";
 import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
-import type { UIMessage } from "ai";
 import { focusedHead, type toRepository } from "@/lib/chat-tree";
 import { hasOpenCodeRun } from "@/lib/chat-stopped-runs";
 import { orbitChatTransport } from "@/lib/chat-transport";
@@ -29,7 +28,7 @@ export function ChatPanel({
 }) {
   const router = useRouter();
   const editMessageId = useRef<string | null>(null);
-  const [stopped, setStopped] = useState<UIMessage | null>(null);
+  const [stopped, setStopped] = useState<string[]>([]);
   const history = useMemo<ThreadHistoryAdapter>(() => ({
     async load() { throw new Error("Chat history requires the ai-sdk/v6 format"); },
     async append() {},
@@ -61,7 +60,7 @@ export function ChatPanel({
     transport: orbitChatTransport(chatId, { editMessageId: () => { const id = editMessageId.current; editMessageId.current = null; return id; } }),
     onFinish: ({ message, isAbort }) => {
       router.refresh();
-      if (isAbort && hasOpenCodeRun(message)) setStopped(message);
+      if (isAbort && hasOpenCodeRun(message)) setStopped((ids) => [...ids, message.id]);
     },
   });
 

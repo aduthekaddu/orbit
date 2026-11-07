@@ -101,6 +101,8 @@ node .agents/skills/verify-orbit/verify.mjs cleanup
 
 The scenario then regenerates a stopped run and stops it again. Require the 2 / 2 picker, a `Stopped` line on the second card, and a `Stopped` line on both cards when Previous and Next switch between the versions.
 
+Last, it clicks Regenerate the moment Stop lands, before the first card has its saved result, and stops the new run. Require Previous to show 1 / 2 with a `Stopped` line on the first card.
+
 ## Copy buttons
 
 Launch a fresh mock sandbox. Docker must be reachable.
