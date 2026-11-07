@@ -88,6 +88,21 @@ test("recall with Ollama down still returns a full text match", async () => {
   }
 });
 
+test("a full question finds the memory that shares one word when Ollama is down", async () => {
+  const { recall, store } = modules();
+  const deploy = store.saveMemory({ text: "I deploy everything to Fly.io", kind: "fact" });
+  store.saveMemory({ text: "My favorite language is Go", kind: "preference" });
+  store.saveMemory({ text: "I prefer dark mode in every editor", kind: "preference" });
+  process.env.ORBIT_OLLAMA_URL = "http://127.0.0.1:9";
+  try {
+    const hits = await recall.recall("Where do I deploy things?", 3);
+    assert.equal(hits[0]?.memory.id, deploy.id);
+    assert.equal(hits[0]?.via, "text");
+  } finally {
+    if (mock) process.env.ORBIT_OLLAMA_URL = mock.url;
+  }
+});
+
 test("the instruction block keeps three memories and says to use them only when relevant", () => {
   const { recall } = modules();
   const block = recall.recalledInstructions([
