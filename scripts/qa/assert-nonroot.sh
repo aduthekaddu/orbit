@@ -93,7 +93,6 @@ if [ "${1:-}" = "--running" ]; then
 fi
 
 image=${1:-orbit:ci}
-volume=$prefix-data
 
 echo "== start as the default user"
 start "$prefix-node" "$image"
@@ -111,27 +110,45 @@ if check_container "$prefix-sleep" 3 >/dev/null 2>&1; then
   fail "the check passed a container that runs no server"
 fi
 
+# An earlier image ran as root, so its data directory belongs to root. Any
+# arguments after the directory go to docker run, such as --env ORBIT_DATA_DIR.
+check_root_owned_data() {
+  local label=$1 dir=$2 volume=$prefix-$1 owners code
+  shift 2
+  local run_args=("$@")
+  docker volume create "$volume" >/dev/null
+  volumes+=("$volume")
+  docker run --rm --user 0:0 --entrypoint sh --volume "$volume:$dir" "$image" -c \
+    "chown root:root $dir && chmod 700 $dir && touch $dir/earlier-run && chmod 600 $dir/earlier-run"
+
+  start "$prefix-$label-plain" ${run_args[@]+"${run_args[@]}"} --volume "$volume:$dir" "$image"
+  code=$(timeout 30 docker wait "$prefix-$label-plain") || fail "docker run kept running with $dir it cannot use"
+  [ "$code" != "0" ] || fail "docker run exited 0 with $dir it cannot use"
+  docker logs "$prefix-$label-plain" 2>&1 | grep -q -- '--user 0:0' || fail "the error does not say how to repair $dir"
+  docker logs "$prefix-$label-plain" 2>&1 | grep -q -- "cannot change $dir," || fail "the error does not name $dir"
+  echo "docker run stopped with exit code $code and printed the repair steps for $dir"
+
+  start "$prefix-$label-repair" --user 0:0 ${run_args[@]+"${run_args[@]}"} --volume "$volume:$dir" "$image"
+  check_container "$prefix-$label-repair" 40 || fail "the root start did not repair $dir"
+  setup_responds "$prefix-$label-repair" || fail "the repaired $dir does not answer /api/setup"
+  owners=$(docker exec "$prefix-$label-repair" stat -c %u "$dir" "$dir/earlier-run" | sort -u | tr '\n' ' ')
+  [ "$owners" = "1000 " ] || fail "$dir is owned by uid(s) $owners, not 1000"
+  docker rm --force "$prefix-$label-repair" >/dev/null
+
+  start "$prefix-$label-again" ${run_args[@]+"${run_args[@]}"} --volume "$volume:$dir" "$image"
+  check_container "$prefix-$label-again" 40 || fail "docker run fails on the repaired $dir"
+  setup_responds "$prefix-$label-again" || fail "docker run on the repaired $dir does not answer /api/setup"
+}
+
 echo "== data volume made by an earlier image that ran as root"
-docker volume create "$volume" >/dev/null
-volumes+=("$volume")
-docker run --rm --user 0:0 --entrypoint sh --volume "$volume:/app/data" "$image" -c \
-  'chown root:root /app/data && chmod 700 /app/data && touch /app/data/earlier-run && chmod 600 /app/data/earlier-run'
+check_root_owned_data default /app/data
 
-start "$prefix-plain" --volume "$volume:/app/data" "$image"
-code=$(timeout 30 docker wait "$prefix-plain") || fail "docker run kept running with a data directory it cannot use"
-[ "$code" != "0" ] || fail "docker run exited 0 with a data directory it cannot use"
-docker logs "$prefix-plain" 2>&1 | grep -q -- '--user 0:0' || fail "the error does not say how to repair the volume"
-echo "docker run stopped with exit code $code and printed the repair steps"
+echo "== data volume at ORBIT_DATA_DIR made by an earlier image that ran as root"
+check_root_owned_data custom /srv/orbit-data --env ORBIT_DATA_DIR=/srv/orbit-data
 
-start "$prefix-repair" --user 0:0 --volume "$volume:/app/data" "$image"
-check_container "$prefix-repair" 40 || fail "the root start did not repair the volume"
-setup_responds "$prefix-repair" || fail "the repaired volume does not answer /api/setup"
-owners=$(docker exec "$prefix-repair" stat -c %u /app/data /app/data/earlier-run | sort -u | tr '\n' ' ')
-[ "$owners" = "1000 " ] || fail "the volume is owned by uid(s) $owners, not 1000"
-docker rm --force "$prefix-repair" >/dev/null
-
-start "$prefix-again" --volume "$volume:/app/data" "$image"
-check_container "$prefix-again" 40 || fail "docker run fails on the repaired volume"
-setup_responds "$prefix-again" || fail "docker run on the repaired volume does not answer /api/setup"
+echo "== ORBIT_DATA_DIR that does not exist yet"
+start "$prefix-new-dir" --env ORBIT_DATA_DIR=/tmp/orbit-data "$image"
+check_container "$prefix-new-dir" 40 || fail "the start with a new ORBIT_DATA_DIR runs a root server"
+setup_responds "$prefix-new-dir" || fail "the start with a new ORBIT_DATA_DIR does not answer /api/setup"
 
 echo "all start paths run a non-root server"
