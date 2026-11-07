@@ -1,0 +1,32 @@
+.agents/skills/verify-orbit/features/memory.md
+  h_9f68edf4527855 5
+.agents/skills/verify-orbit/scenarios/memory.mjs
+  h_9f68edf4527855 19-24,27,29,44-45,89-95,97
+CHANGELOG.md
+  h_9f68edf4527855 11-12
+docs/design.md
+  h_9f68edf4527855 99
+docs/slices/10.md
+  h_9f68edf4527855 19,79-80,124,132
+src/app/api/chat/route.ts
+  h_9f68edf4527855 8,100,117
+src/components/tools/run-card.tsx
+  h_9f68edf4527855 19-24,28,40
+src/lib/memory/recall.ts
+  h_9f68edf4527855 1,9,13,15-20,22,25-36
+src/lib/memory/store.ts
+  h_9f68edf4527855 179-180,185,192-193
+src/lib/tools/memory.ts
+  h_9f68edf4527855 31,51-56,59,61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9bee76f3fc04b8ffde9fe8b287b7b505d521dc1c",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
