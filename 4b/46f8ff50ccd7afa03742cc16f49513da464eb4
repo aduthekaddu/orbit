@@ -1,0 +1,20 @@
+CHANGELOG.md
+  h_9f68edf4527855 53
+src/app/api/chat/route.ts
+  h_9f68edf4527855 81,106,137,174
+src/lib/chat-errors.ts
+  h_9f68edf4527855 9-22,65
+src/lib/tools/github.ts
+  h_9f68edf4527855 3,63-78,130,157,159
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4b46f8ff50ccd7afa03742cc16f49513da464eb4",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
