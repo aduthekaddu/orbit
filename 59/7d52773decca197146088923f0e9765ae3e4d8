@@ -1,0 +1,19 @@
+scripts/qa/assert-nonroot.sh
+  s_13b5efd5788697::t_eebeea6e9ed398 2-4,7-9,12-14,17-21,26-29,31-35,38-43,47,54-57,59-77,79-80,82-92,95-96,98-111,114-137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "597d52773decca197146088923f0e9765ae3e4d8",
+  "prompts": {},
+  "sessions": {
+    "s_13b5efd5788697": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "67a73745-fddd-44da-b5de-57c820216118",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
