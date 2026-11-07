@@ -1,0 +1,22 @@
+scripts/qa/mock-mcp.mjs
+  s_902183d8365d34::t_f52c47f28c5076 1-150
+  s_902183d8365d34::t_86b7310d24f1f5 151
+src/lib/tools/github.test.ts
+  s_902183d8365d34::t_e51d79fd3a57e6 1-138
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1ac6374d98adfb616e1a782f9f4a72a4ee27b034",
+  "prompts": {},
+  "sessions": {
+    "s_902183d8365d34": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1b732-1aae-7992-b8c0-e6c428c815fb",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
