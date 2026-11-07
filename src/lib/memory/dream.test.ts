@@ -53,6 +53,7 @@ function startMockProvider(): Promise<{ url: string; stop: () => Promise<void> }
 }
 
 before(async () => {
+  process.env.ORBIT_QA_TAGS = "1";
   try {
     ollama = await startMockOllama();
     process.env.ORBIT_OLLAMA_URL = ollama.url;
@@ -232,6 +233,25 @@ test("two runs started at once produce one claim", async () => {
   assert.equal(final.added, 1);
   const requests = fs.readFileSync(requestLog, "utf8").split("\n").filter((line) => line.includes('"scenario":"dream"'));
   assert.equal(requests.length, 1);
+});
+
+test("a failed final embed pass marks the run failed", async () => {
+  const api = requireDream();
+  await resetChats();
+  const store = await import("./store");
+  const date = "2099-07-07";
+  store.saveMemory({ text: "I keep a kayak in the garage", kind: "fact" });
+  await seedChat("I paddle on Sundays", at(date, 12));
+  const live = process.env.ORBIT_OLLAMA_URL;
+  process.env.ORBIT_OLLAMA_URL = "http://127.0.0.1:1";
+  try {
+    const row = await api.runDream({ manual: true, date, now: new Date(at(date, 16)) });
+    assert.ok(row);
+    assert.equal(row.state, "failed");
+    assert.match(row.error ?? "", /Ollama/);
+  } finally {
+    process.env.ORBIT_OLLAMA_URL = live;
+  }
 });
 
 test("a worker that lost the lease writes nothing", async () => {

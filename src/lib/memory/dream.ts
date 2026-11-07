@@ -214,7 +214,7 @@ function loadMessages(chatId: string, start: number, end: number, inherited: boo
     .prepare(
       `SELECT id, role, parts, created_at AS createdAt FROM messages
        WHERE chat_id = ? AND created_at > ? AND created_at <= ? AND role IN ('user', 'assistant')
-       ORDER BY created_at`,
+       ORDER BY created_at LIMIT 100`,
     )
     .all(chatId, start, end) as ChatMessage[];
 }
@@ -240,8 +240,9 @@ function promptFor(messages: ChatMessage[]): string {
       const text = messageText(message.parts);
       return text ? [`msg ${message.id} ${message.role}: ${text}`] : [];
     });
-  const tag = lines.some((line) => line.includes("[qa:dream-fail]")) ? "[qa:dream-fail]" : "[qa:dream]";
-  return `${tag}\nExtract lasting facts and preferences the user stated. Ignore questions, tasks, and guesses. Return json {"candidates":[{"kind":"fact","text":"...","sourceMessageId":"the message id"}]}. kind is fact or preference. At most 10 items.\n${lines.join("\n")}`;
+  const qa = process.env.ORBIT_QA_TAGS === "1";
+  const tag = qa ? `${lines.some((line) => line.includes("[qa:dream-fail]")) ? "[qa:dream-fail]" : "[qa:dream]"}\n` : "";
+  return `${tag}Extract lasting facts and preferences the user stated. Ignore questions, tasks, and guesses. Return json {"candidates":[{"kind":"fact","text":"...","sourceMessageId":"the message id"}]}. kind is fact or preference. At most 10 items.\n${lines.join("\n")}`;
 }
 
 function nearest(vector: number[]): { id: string; similarity: number } | null {
@@ -430,9 +431,9 @@ export async function runDream(input: { now?: Date; date?: string; manual?: bool
       const outcome = await dreamChat(chatId, { date, owner });
       if (outcome === "lost") return readRun(date);
     }
-    if (!markDone(date, owner)) return readRun(date);
     const embedded = await embedPending();
     if (!embedded.ok) failOwned(date, owner, embedded.error);
+    if (!markDone(date, owner)) return readRun(date);
     const final = readRun(date);
     if (final) {
       console.log(JSON.stringify({ dream: final.date, state: final.state, chats: final.chatIds.length, added: final.added, merged: final.merged }));
