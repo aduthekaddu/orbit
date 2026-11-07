@@ -1,0 +1,21 @@
+docs/slices/README.md
+  s_83f94070ff11f0::t_7ff6be0cbd0932 14
+docs/roadmap.md
+  s_83f94070ff11f0::t_7ff6be0cbd0932 30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "65e3b6ad10d2c71e46307284ed0b8bd5d1f44086",
+  "prompts": {},
+  "sessions": {
+    "s_83f94070ff11f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "50795560-e1ec-42f6-b608-025d75ac5544",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
