@@ -1,0 +1,21 @@
+src/components/tools/run-card.tsx
+  s_23446b3face73f::t_b22324bddf4234 28
+src/lib/tools/metadata.ts
+  s_23446b3face73f::t_00e5dbbe0df613 11-14,23-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9ed7d0a16d79d832bd68253966470180bb401948",
+  "prompts": {},
+  "sessions": {
+    "s_23446b3face73f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e62df905-b1d7-47b7-9434-485e41c9c4da",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
