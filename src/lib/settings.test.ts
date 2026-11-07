@@ -75,6 +75,19 @@ test("public settings expose search configuration without either key", () => {
   assert.equal(JSON.stringify(value).includes(row.tavilyApiKey), false);
 });
 
+test("an explicit GitHub token removal clears the stored token", async () => {
+  const provider = { baseUrl: "https://example.com/v1", apiKey: "test-provider-key-not-real", model: "test-model", reasoningEffort: "medium" as const };
+  settings.saveSettings({ ...provider, githubToken: "good-token", githubMcpUrl: "https://api.githubcopilot.com/mcp/" });
+  const removed = settings.saveSettings({ ...provider, githubToken: null });
+  assert.equal(removed.githubTokenSet, false);
+  assert.equal(settings.getSettings()?.githubToken, "");
+  assert.equal(JSON.stringify(removed).includes("good-token"), false);
+  const { openGithubTurn } = await import("./tools/github");
+  const opened = await openGithubTurn({ githubToken: settings.getSettings()?.githubToken ?? "", githubMcpUrl: "https://api.githubcopilot.com/mcp/" });
+  assert.deepEqual(Object.keys(opened.tools), []);
+  await opened.close();
+});
+
 test("a blank GitHub token keeps the stored token and an empty MCP URL uses the default", () => {
   const provider = { baseUrl: "https://example.com/v1", apiKey: "test-provider-key-not-real", model: "test-model", reasoningEffort: "medium" as const };
   settings.saveSettings({ ...provider, githubToken: "good-token", githubMcpUrl: "http://127.0.0.1:9/mcp" });
