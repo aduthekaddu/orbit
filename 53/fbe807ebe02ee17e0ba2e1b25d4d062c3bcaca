@@ -1,0 +1,16 @@
+src/lib/memory/store.ts
+  h_9f68edf4527855 4,160
+src/lib/search.ts
+  h_9f68edf4527855 22-25,31,37-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "53fbe807ebe02ee17e0ba2e1b25d4d062c3bcaca",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
