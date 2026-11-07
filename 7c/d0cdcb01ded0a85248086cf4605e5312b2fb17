@@ -1,0 +1,21 @@
+src/components/memory/visible-memories.ts
+  s_aaeb471ca118ad::t_cbf3f6695cc6c0 1-6
+src/components/memory/visible-memories.test.ts
+  s_aaeb471ca118ad::t_1085eee1ef7eee 1-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7cd0cdcb01ded0a85248086cf4605e5312b2fb17",
+  "prompts": {},
+  "sessions": {
+    "s_aaeb471ca118ad": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1b734-90e8-7c70-8980-711968354a5f",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
