@@ -1,0 +1,18 @@
+CHANGELOG.md
+  h_9f68edf4527855 15
+src/components/memory/memory-list.tsx
+  h_9f68edf4527855 9,104
+src/components/memory/save-error.ts
+  h_9f68edf4527855 1-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4c88ed96d61dcb87bf5240bafb1322f56888ea8d",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
