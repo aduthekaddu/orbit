@@ -143,6 +143,25 @@ test("check asks for get_me when the chat toolsets omit it", { timeout: 20_000 }
   });
 });
 
+test("check does not return the GitHub token when the server echoes it", { timeout: 20_000 }, async () => {
+  await withMock(async (mock) => {
+    const checked = await checkGithub({ token: mock.token, mcpUrl: `${mock.url}?mode=echo-token` });
+    assert.equal(JSON.stringify(checked).includes(mock.token), false);
+  });
+});
+
+test("a GitHub tool result does not include the token when the server echoes it", { timeout: 20_000 }, async () => {
+  await withMock(async (mock) => {
+    const opened = await githubTools({ token: mock.token, mcpUrl: `${mock.url}?mode=echo-token` });
+    try {
+      const result = await opened.tools.github_list_issues?.execute?.({ owner: "aduthekaddu", repo: "orbit" }, toolOptions);
+      assert.equal(JSON.stringify(result).includes(mock.token), false);
+    } finally {
+      await opened.close();
+    }
+  });
+});
+
 test("check reports the GitHub login and a rejected token", { timeout: 20_000 }, async () => {
   await withMock(async (mock) => {
     const ok = await checkGithub({ token: mock.token, mcpUrl: mock.url });
