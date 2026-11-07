@@ -1,0 +1,21 @@
+src/lib/chat-stopped-runs.test.ts
+  s_83f94070ff11f0::t_185c7465288e71 52-57
+src/lib/chat-stopped-runs.ts
+  s_83f94070ff11f0::t_81fddecac0fcba 21,35-36,38-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8f9a5800d9a431c1a5a992788768bfdf797fbba4",
+  "prompts": {},
+  "sessions": {
+    "s_83f94070ff11f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "50795560-e1ec-42f6-b608-025d75ac5544",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
