@@ -145,4 +145,31 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
   await page.waitForTimeout(2_500);
   const quickLeft = execFileSync("docker", ["ps", "-a", "--filter", "label=orbit.sandbox=true", "--format", "{{.ID}}"], { encoding: "utf8" }).trim();
   step("regenerate right after Stop leaves no sandbox container", quickLeft === "", quickLeft);
+
+  // Send a message typed during the run the moment Stop lands. The stopped card still gets its saved result.
+  const sent = (await (await page.request.post(`${origin}/api/chats`)).json()).id;
+  await page.goto(`${origin}/c/${sent}`);
+  const composer = page.getByPlaceholder("Ask anything");
+  await composer.fill("[qa:run-timeout]");
+  await composer.press("Enter");
+  await card.locator('[data-tool-status="running"]').waitFor({ timeout: 15_000 });
+  const sentStarted = Date.now();
+  while (!containerRunning() && Date.now() - sentStarted < 20_000) await page.waitForTimeout(50);
+  await page.waitForTimeout(1_000);
+  await composer.fill("sent right after Stop");
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await card.locator('[data-tool-status="cancelled"]').waitFor({ timeout: 8_000 });
+  const sentEarly = (await card.locator("span", { hasText: /^Stopped$/ }).count()) === 0;
+  await composer.press("Enter");
+  console.log(`message sent before the Stopped line: ${sentEarly}`);
+  await page.locator('[data-message-role="assistant"]').nth(1).getByText("Done.", { exact: true }).waitFor({ timeout: 15_000 });
+  const sentLanded = await card.locator("span", { hasText: /^Stopped$/ }).first().waitFor({ timeout: 15_000 }).then(() => true, () => false);
+  const sentCard = await inspect(card);
+  console.log(`send after Stop card ${JSON.stringify(sentCard)}`);
+  step("a message sent right after Stop leaves the stopped card its Stopped line and output", sentLanded && sentCard.header === "Cancelled" && sentCard.stdout === "before-timeout\n", JSON.stringify(sentCard));
+  await card.scrollIntoViewIfNeeded();
+  await shot("send-after-stop");
+  await page.waitForTimeout(2_500);
+  const sentLeft = execFileSync("docker", ["ps", "-a", "--filter", "label=orbit.sandbox=true", "--format", "{{.ID}}"], { encoding: "utf8" }).trim();
+  step("a message sent right after Stop leaves no sandbox container", sentLeft === "", sentLeft);
 }
