@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AssistantRuntimeProvider, type ThreadHistoryAdapter } from "@assistant-ui/react";
 import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
 import { focusedHead, type toRepository } from "@/lib/chat-tree";
+import { hasOpenCodeRun } from "@/lib/chat-stopped-runs";
 import { orbitChatTransport } from "@/lib/chat-transport";
 import { ArtifactProvider } from "@/components/artifacts/use-artifact";
 import { ArtifactWorkspace } from "@/components/artifacts/artifact-panel";
 import { ChatIdProvider } from "./chat-id";
+import { StoppedRunSync } from "./stopped-run-sync";
 import { Thread } from "./thread";
 
 export function ChatPanel({
@@ -26,6 +28,7 @@ export function ChatPanel({
 }) {
   const router = useRouter();
   const editMessageId = useRef<string | null>(null);
+  const [stopped, setStopped] = useState<string[]>([]);
   const history = useMemo<ThreadHistoryAdapter>(() => ({
     async load() { throw new Error("Chat history requires the ai-sdk/v6 format"); },
     async append() {},
@@ -55,8 +58,9 @@ export function ChatPanel({
     id: chatId,
     adapters: { history },
     transport: orbitChatTransport(chatId, { editMessageId: () => { const id = editMessageId.current; editMessageId.current = null; return id; } }),
-    onFinish: () => {
+    onFinish: ({ message, isAbort }) => {
       router.refresh();
+      if (isAbort && hasOpenCodeRun(message)) setStopped((ids) => [...ids, message.id]);
     },
   });
 
@@ -68,6 +72,7 @@ export function ChatPanel({
     <AssistantRuntimeProvider runtime={runtime}>
       <ChatIdProvider chatId={chatId} onEdit={(id) => { editMessageId.current = id; }}>
         <ArtifactProvider>
+          <StoppedRunSync chatId={chatId} stopped={stopped} />
           <ArtifactWorkspace>
             <Thread ready={ready} model={model} focusMessageId={focusMessageId} />
           </ArtifactWorkspace>

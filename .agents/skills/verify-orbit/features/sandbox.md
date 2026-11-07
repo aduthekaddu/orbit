@@ -97,7 +97,15 @@ node .agents/skills/verify-orbit/verify.mjs browse sandbox-stop-output
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
-`[qa:run-timeout]` prints `before-timeout` and then loops. `[qa:run-spin]` prints nothing. The scenario waits two seconds and clicks Stop in Chrome. Require the saved part to be a completed result with `cancelled` set and the output printed before Stop, and require the reopened card to show Cancelled with that output. The check also requires that no sandbox container remains.
+`[qa:run-timeout]` prints `before-timeout` and then loops. `[qa:run-spin]` prints nothing. The scenario waits two seconds and clicks Stop in Chrome, then types a draft in the composer before the saved result arrives. Require the live card, with no reload, to show Cancelled, a `Stopped` line with its duration, and the output printed before Stop. Require the draft, the messages on screen, and the branch to stay as they were, and no branch picker to appear. Require the saved part to be a completed result with `cancelled` set and the output printed before Stop, and require the reopened card to show the same header, result line, and output as the live card. The check also requires that no sandbox container remains.
+
+The scenario then regenerates a stopped run and stops it again. Require the 2 / 2 picker, a `Stopped` line on the second card, and a `Stopped` line on both cards when Previous and Next switch between the versions.
+
+Last, it clicks Regenerate the moment Stop lands, before the first card has its saved result, and stops the new run. Require Previous to show 1 / 2 with a `Stopped` line on the first card.
+
+It also types a message while a `[qa:run-timeout]` run is going, clicks Stop, and sends the message at once. Require the stopped card to show Cancelled, a `Stopped` line, and `before-timeout`, not the error assistant-ui sets when a message is sent over an open tool call.
+
+For these two steps the scenario holds the page's reads of the saved chat until just after the click, so the click always lands before the saved result. Require the card to have no `Stopped` line at the click and at least one held read.
 
 ## Copy buttons
 
@@ -139,7 +147,7 @@ node .agents/skills/verify-orbit/verify.mjs browse sandbox-outcome
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
-The scenario runs `[qa:run-pass]`, `[qa:run-exit]`, `[qa:run-exit-high]`, `[qa:run-spin]`, `[qa:run-oom]`, and `[qa:run-spin]` again with a click on Stop after two seconds. Require one outcome in each result line, worded `Exit 0`, `Exit 3`, `Exit 137`, `Timed out`, `Out of memory (exit 137)`, and `Stopped`. `[qa:run-exit-high]` is a program that exits 137 on its own, and it must not be called a memory kill. Each result line has exactly two parts, the outcome and a duration such as `174 ms` or `10.0 s`. The durations vary from run to run, so the scenario checks their shape and not their value. Require no `Exit killed`, no duration over 999 ms in raw milliseconds, and no `Failed`, `Succeeded`, or `Cancelled` in the result line. The header status must match, and the card must keep one status role after a reload. The live card right after Stop shows Cancelled in its header and no result line, because the AI SDK drops the tool result on Stop. The reloaded card shows the saved result. The check repeats at 390 pixels and prints the header and result line for every card.
+The scenario runs `[qa:run-pass]`, `[qa:run-exit]`, `[qa:run-exit-high]`, `[qa:run-spin]`, `[qa:run-oom]`, and `[qa:run-spin]` again with a click on Stop after two seconds. Require one outcome in each result line, worded `Exit 0`, `Exit 3`, `Exit 137`, `Timed out`, `Out of memory (exit 137)`, and `Stopped`. `[qa:run-exit-high]` is a program that exits 137 on its own, and it must not be called a memory kill. Each result line has exactly two parts, the outcome and a duration such as `174 ms` or `10.0 s`. The durations vary from run to run, so the scenario checks their shape and not their value. Require no `Exit killed`, no duration over 999 ms in raw milliseconds, and no `Failed`, `Succeeded`, or `Cancelled` in the result line. The header status must match, and the card must keep one status role after a reload. Right after Stop the live card shows Cancelled in its header, and the saved result line follows a moment later. The AI SDK drops the tool result on Stop, so the open chat asks the server for the saved reply. `sandbox-stop-output` checks the live result line, and this scenario checks the reloaded one. The check repeats at 390 pixels and prints the header and result line for every card.
 
 ## Language in the header
 
