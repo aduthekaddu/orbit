@@ -12,6 +12,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - A full question can find a memory from one shared word when Ollama is down.
 - A hung Ollama no longer holds a chat turn or a memory search for 5 seconds. The last Ollama result is reused for 15 seconds, and a chat asks for a vector for at most 1 second. Search still reads SQLite.
 - Each memory has a stable row number, so its vector stays attached after vacuum.
+- Editing a memory shows the server's reason when the save is refused.
 
 - The Docker server runs as the `node` user. On start, Compose gives `./data` to that user and drops root before the server listens. A directory set with `ORBIT_DATA_DIR` gets the same repair.
 - A `docker run` start needs `--user 0:0` once to give an older root-owned data directory to that user. Without it, the container stops and prints the steps instead of answering every request with a 500.

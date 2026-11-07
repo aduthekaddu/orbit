@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { memoryWriteError } from "./save-error";
 import { visibleMemories } from "./visible-memories";
 
 type MemoryKind = "fact" | "preference" | "summary";
@@ -100,7 +101,7 @@ export function MemoryList({
         body: JSON.stringify({ text: draft, kind }),
       });
       if (!response.ok) {
-        setError("Could not save");
+        setError(memoryWriteError(await response.json().catch(() => null)));
         return;
       }
       setEditing(null);
