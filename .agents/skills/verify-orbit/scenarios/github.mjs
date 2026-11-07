@@ -86,7 +86,7 @@ export default async function github({ page, origin, step, shot }) {
     await page.getByRole("button", { name: "Save", exact: true }).click();
     const savedLabel = await page.getByText("Saved", { exact: true }).waitFor({ timeout: 10_000 }).then(() => true, () => false);
     const removedText = await (await page.request.get(`${origin}/api/settings`)).text();
-    const removed = JSON.parse(removedText) as { githubTokenSet?: boolean };
+    const removed = JSON.parse(removedText);
     step("Remove clears the saved GitHub token", savedLabel && removed.githubTokenSet === false && !removedText.includes(mock.token));
   } finally {
     await mock.close();
