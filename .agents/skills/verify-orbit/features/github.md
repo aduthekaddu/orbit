@@ -13,7 +13,7 @@ node .agents/skills/verify-orbit/verify.mjs browse github
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
-The scenario owns its mock MCP server and closes it even if a check fails. It saves a fake token and checks that the API never returns it. The model URL defaults to `http://127.0.0.1:3299/v1`. Set `ORBIT_QA_PROVIDER` when that port is already taken.
+The scenario owns its mock MCP server and closes it even if a check fails. It saves a fake token and checks that the API never returns it. Launch sets `ORBIT_GITHUB_MCP_FIXTURE=1` on the verify server so that server can send the fake token to the local fixture. A normal server leaves the variable unset and refuses that URL. The model URL defaults to `http://127.0.0.1:3299/v1`. Set `ORBIT_QA_PROVIDER` when that port is already taken.
 
 ## Proof
 

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { sanitize } from "@/lib/chat-errors";
 import { getSettings } from "@/lib/settings";
-import { checkGithub } from "@/lib/tools/github";
+import { checkGithub, githubMcpTarget } from "@/lib/tools/github";
 import { getSession, unauthorized } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 const checkSchema = z.object({
   token: z.string().optional(),
-  mcpUrl: z.union([z.literal(""), z.url({ protocol: /^https?$/ })]).optional(),
+  mcpUrl: z.string().optional().refine((value) => value === undefined || githubMcpTarget(value).ok),
 });
 
 export async function POST(request: Request) {

@@ -1,7 +1,30 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
-import { checkGithub } from "./github";
+import { checkGithub, githubMcpTarget } from "./github";
+
+const production = {} as NodeJS.ProcessEnv;
+const fixture = { ORBIT_GITHUB_MCP_FIXTURE: "1" } as NodeJS.ProcessEnv;
+
+test("the GitHub token can go only to GitHub MCP hosts over HTTPS", () => {
+  for (const url of ["https://api.githubcopilot.com/mcp/", "https://github.com/mcp/", "https://api.github.com/mcp", ""]) {
+    assert.equal(githubMcpTarget(url, production).ok, true, url || "default");
+  }
+  for (const url of [
+    "http://api.github.com/mcp",
+    "https://api.github.com:444/mcp",
+    "https://evil.example/mcp",
+    "https://api.github.com.evil.example/mcp",
+    "https://user:secret@api.github.com/mcp",
+    "http://127.0.0.1:9/mcp",
+    "http://169.254.169.254/mcp",
+  ]) {
+    assert.equal(githubMcpTarget(url, production).ok, false, url);
+  }
+  assert.equal(githubMcpTarget("http://127.0.0.1:9/mcp", fixture).ok, true);
+  assert.equal(githubMcpTarget("http://localhost:9/mcp", fixture).ok, true);
+  assert.equal(githubMcpTarget("https://evil.example/mcp", fixture).ok, false);
+});
 
 test("an arbitrary MCP URL does not receive the GitHub token", { timeout: 20_000 }, async () => {
   const hits: string[] = [];
@@ -16,7 +39,7 @@ test("an arbitrary MCP URL does not receive the GitHub token", { timeout: 20_000
   try {
     const result = await checkGithub({ token, mcpUrl: `http://127.0.0.1:${address.port}/mcp` });
     assert.equal(hits.length, 0);
-    assert.equal(result.ok, false);
+    assert.deepEqual(result, { ok: false, error: "GitHub MCP URL is not allowed." });
     assert.equal(JSON.stringify(result).includes(token), false);
   } finally {
     server.closeAllConnections();

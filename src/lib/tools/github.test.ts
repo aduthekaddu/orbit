@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { startMockMcp } from "../../../scripts/qa/mock-mcp.mjs";
+
+process.env.ORBIT_GITHUB_MCP_FIXTURE = "1";
 import { githubLinks } from "./github-links";
 import { checkGithub, githubTools, openGithubTurn } from "./github";
 

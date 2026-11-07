@@ -6,6 +6,15 @@ import { githubLogin } from "./github-links";
 export const DEFAULT_GITHUB_MCP_URL = "https://api.githubcopilot.com/mcp/";
 export const GITHUB_TOOLSETS = "repos,issues,pull_requests";
 export const GITHUB_CHECK_TOOLS = "get_me";
+const GITHUB_MCP_HOSTS = new Set(["api.githubcopilot.com", "github.com", "api.github.com"]);
+const GITHUB_MCP_URL_ERROR = "GitHub MCP URL is not allowed.";
+
+export class GithubMcpUrlError extends Error {
+  constructor() {
+    super(GITHUB_MCP_URL_ERROR);
+    this.name = "GithubMcpUrlError";
+  }
+}
 const LIST_CACHE_MS = 5 * 60 * 1000;
 const PREFIX = "github_";
 
@@ -26,6 +35,23 @@ const listCache = new Map<string, { expires: number; definitions: ListPage }>();
 export function resolveGithubMcpUrl(value: string | undefined): string {
   const trimmed = value?.trim() ?? "";
   return trimmed || DEFAULT_GITHUB_MCP_URL;
+}
+
+export function githubMcpTarget(value: string | undefined, env: NodeJS.ProcessEnv = process.env): { ok: true; url: string } | { ok: false; error: string } {
+  let url: URL;
+  try {
+    url = new URL(resolveGithubMcpUrl(value));
+  } catch {
+    return { ok: false, error: GITHUB_MCP_URL_ERROR };
+  }
+  if (url.username || url.password) return { ok: false, error: GITHUB_MCP_URL_ERROR };
+  const host = url.hostname.toLowerCase().replace(/\.$/, "");
+  const loopback = host === "127.0.0.1" || host === "localhost" || host === "::1";
+  if (env.ORBIT_GITHUB_MCP_FIXTURE === "1" && loopback && (url.protocol === "http:" || url.protocol === "https:")) {
+    return { ok: true, url: url.toString() };
+  }
+  if (url.protocol !== "https:" || url.port || !GITHUB_MCP_HOSTS.has(host)) return { ok: false, error: GITHUB_MCP_URL_ERROR };
+  return { ok: true, url: url.toString() };
 }
 
 export function githubFailureText(error: unknown, token: string): string {
@@ -50,7 +76,9 @@ async function listedTools(client: MCPClient, signal?: AbortSignal): Promise<Lis
 }
 
 export async function githubTools(settings: GithubSettings, input?: { signal?: AbortSignal; now?: number; tools?: string }): Promise<McpToolSet> {
-  const mcpUrl = resolveGithubMcpUrl(settings.mcpUrl);
+  const target = githubMcpTarget(settings.mcpUrl);
+  if (!target.ok) throw new GithubMcpUrlError();
+  const mcpUrl = target.url;
   const token = settings.token;
   const extraTools = input?.tools ?? "";
   let client: MCPClient | undefined;
@@ -119,6 +147,7 @@ export async function checkGithub(settings: GithubSettings, signal?: AbortSignal
     }
   } catch (error) {
     if (signal?.aborted) throw error;
+    if (error instanceof GithubMcpUrlError) return { ok: false, error: error.message };
     return { ok: false, error: githubFailureText(error, settings.token) };
   }
 }
