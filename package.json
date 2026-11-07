@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test \"src/**/*.test.ts\" \"src/**/*.test.tsx\"",
     "db:generate": "drizzle-kit generate",
-    "smoke": "tsx scripts/smoke.ts"
+    "smoke": "tsx scripts/smoke.ts",
+    "dream": "tsx scripts/dream.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "3.0.82",

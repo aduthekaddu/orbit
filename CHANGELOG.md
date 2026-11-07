@@ -23,6 +23,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Added
 
+- Once a night, Orbit reads the day's chats and saves lasting facts and preferences on the Memory page. A second run the same night does not add them again. Near-duplicates update the older memory. The page shows when the last run finished, or the error.
+
 - Orbit remembers a fact or a preference from one chat and can use it in a later chat. The Memory page lists, searches, edits, and deletes those memories. Vectors come from Ollama. When Ollama is down, text search still works and the page shows the error.
 
 - Conversation search finds the source of code runs, so code the model ran can be found by a name or a word in it. This includes a run you stopped. A migration adds the source of earlier runs to search.

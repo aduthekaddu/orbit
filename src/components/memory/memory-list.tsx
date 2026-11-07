@@ -42,9 +42,11 @@ function sourceHref(memory: MemoryItem) {
 export function MemoryList({
   initial,
   embeddings,
+  dreamStatus = null,
 }: {
   initial: MemoryItem[];
   embeddings: { ok: true } | { ok: false; error: string };
+  dreamStatus?: string | null;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -133,6 +135,7 @@ export function MemoryList({
   return (
     <div className="mx-auto w-full max-w-widget px-6 py-10">
       <h1 className="mb-6 text-xl font-semibold tracking-tight">Memory</h1>
+      {dreamStatus ? <p className="mb-4 text-sm text-muted-foreground num">{dreamStatus}</p> : null}
       <p className={status.ok ? "mb-4 text-sm text-positive" : "mb-4 text-sm text-destructive"}>{status.ok ? "Embeddings on" : status.error}</p>
       <Input aria-label="Search" placeholder="Search" value={query} onChange={(event) => setQuery(event.target.value)} className="mb-4" />
       {error && <p className="mb-3 text-sm text-destructive">{error}</p>}

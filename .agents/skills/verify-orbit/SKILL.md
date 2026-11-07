@@ -38,6 +38,7 @@ The helper is the harness. Prefer the commands below over ad hoc curls. Page che
 - Sign in. `node .agents/skills/verify-orbit/verify.mjs drive signin`
 - Settings. `node .agents/skills/verify-orbit/verify.mjs drive settings`
 - Chat. `node .agents/skills/verify-orbit/verify.mjs drive chat`
+- Dreaming. `node .agents/skills/verify-orbit/verify.mjs drive dream`
 - Browser. `node .agents/skills/verify-orbit/verify.mjs browse <scenario>`. See `features/browse.md` and the [feature map](features/README.md). Sandbox recipes are in [Code sandbox](features/sandbox.md).
 
 Feature recipes live in `features/`. Read `features/README.md` first. Drive one feature from that map. A proof that uses a different entry point does not cover the ones you skipped.
@@ -62,6 +63,6 @@ Run cleanup after a failed drive too, so the port is free. Then confirm the evid
 
 ## Helpers
 
-`node .agents/skills/verify-orbit/verify.mjs` with one of `launch [--mock]`, `doctor`, `cleanup`, `drive` plus `signup`, `signin`, `settings`, or `chat`, or `browse` plus a scenario name.
+`node .agents/skills/verify-orbit/verify.mjs` with one of `launch [--mock]`, `doctor`, `cleanup`, `drive` plus `signup`, `signin`, `settings`, `chat`, or `dream`, or `browse` plus a scenario name.
 
 The script is the only helper. Browse scenarios live in `scenarios/`. Feature files name these commands and the visible result.
