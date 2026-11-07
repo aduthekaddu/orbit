@@ -108,6 +108,8 @@ jobs:
         run: docker build --tag orbit:ci .
       - name: Start the image
         run: docker run --detach --name orbit-ci --publish 127.0.0.1:3210:3210 orbit:ci
+      - name: Require a non-root server process
+        run: scripts/qa/assert-nonroot.sh --running orbit-ci
       - name: Wait for the setup route
         run: |
           curl --fail --silent --show-error --retry 60 --retry-delay 2 --retry-all-errors \
