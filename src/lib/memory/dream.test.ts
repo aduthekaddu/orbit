@@ -1,0 +1,253 @@
+import assert from "node:assert/strict";
+import { spawn, type ChildProcess } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import test, { before, after } from "node:test";
+import Database from "better-sqlite3";
+import { startMockOllama } from "./ollama-harness";
+
+const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-dream-"));
+const requestLog = path.join(dataDir, "mock-requests.jsonl");
+process.env.ORBIT_DATA_DIR = dataDir;
+process.env.MOCK_REQUEST_LOG = requestLog;
+delete process.env.ORBIT_OLLAMA_URL;
+delete process.env.ORBIT_BASE_URL;
+delete process.env.ORBIT_API_KEY;
+delete process.env.ORBIT_MODEL;
+
+type DreamModule = typeof import("./dream");
+
+let dream: DreamModule | undefined;
+let importError = "";
+let ollama: { url: string; stop: () => Promise<void> } | undefined;
+let provider: { url: string; stop: () => Promise<void> } | undefined;
+
+function startMockProvider(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const child: ChildProcess = spawn(process.execPath, [path.join(process.cwd(), "scripts/qa/mock-provider.mjs")], {
+    env: { ...process.env, MOCK_PORT: "0" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("mock provider did not listen")), 5_000);
+    let buffer = "";
+    child.stdout?.on("data", (chunk: Buffer) => {
+      buffer += chunk.toString();
+      const match = /mock provider on http:\/\/127\.0\.0\.1:(\d+)\/v1/.exec(buffer);
+      if (!match) return;
+      clearTimeout(timer);
+      resolve({
+        url: `http://127.0.0.1:${match[1]}/v1`,
+        stop: () =>
+          new Promise((done) => {
+            child.once("exit", () => done());
+            child.kill("SIGTERM");
+          }),
+      });
+    });
+    child.once("exit", (code) => {
+      clearTimeout(timer);
+      reject(new Error(`mock provider exited ${code ?? "null"}`));
+    });
+  });
+}
+
+before(async () => {
+  try {
+    ollama = await startMockOllama();
+    process.env.ORBIT_OLLAMA_URL = ollama.url;
+    provider = await startMockProvider();
+    dream = await import("./dream");
+    const { db } = await import("../db");
+    const schema = await import("../db/schema");
+    db.insert(schema.user).values({ id: "dream-user", name: "Dream", email: "dream@orbit.local", emailVerified: true }).run();
+    db.insert(schema.settings)
+      .values({
+        id: 1,
+        baseUrl: provider.url,
+        apiKey: "test-key-not-real",
+        model: "mock-genui",
+        reasoningEffort: "medium",
+        updatedAt: new Date(),
+      })
+      .run();
+  } catch (error) {
+    importError = error instanceof Error ? error.message : String(error);
+  }
+});
+
+after(async () => {
+  await provider?.stop();
+  await ollama?.stop();
+});
+
+function requireDream() {
+  assert.equal(importError, "", `dream run is missing: ${importError}`);
+  if (!dream || !provider) throw new Error("dream run is missing");
+  return dream;
+}
+
+async function resetChats() {
+  const { db } = await import("../db");
+  db.$client.exec("DELETE FROM memories_vec; DELETE FROM memories; DELETE FROM memory_runs; DELETE FROM messages; DELETE FROM chats;");
+}
+
+async function seedChat(text: string, createdAt: number) {
+  const { db } = await import("../db");
+  const { createChat, upsertMessage } = await import("../messages");
+  const chat = createChat("dream-user");
+  const messageId = crypto.randomUUID();
+  assert.equal(upsertMessage(chat.id, { id: messageId, role: "user", parts: [{ type: "text", text }] }), true);
+  db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(createdAt, messageId);
+  return { chatId: chat.id, messageId };
+}
+
+function at(date: string, hour: number): number {
+  return Date.parse(`${date}T${String(hour).padStart(2, "0")}:00:00Z`);
+}
+
+function memoryTexts(): string[] {
+  const database = new Database(path.join(dataDir, "orbit.db"), { readonly: true });
+  try {
+    const rows = database.prepare("SELECT text FROM memories ORDER BY created_at, rowid").all() as { text: string }[];
+    return rows.map((row) => row.text);
+  } finally {
+    database.close();
+  }
+}
+
+test("a run adds facts the user stated", async () => {
+  const api = requireDream();
+  await resetChats();
+  fs.writeFileSync(requestLog, "");
+  const date = "2099-05-01";
+  const now = new Date(at(date, 16));
+  const first = await seedChat("I live in Lisbon", at(date, 12));
+  const second = await seedChat("I prefer dark mode", at(date, 13));
+  const third = await seedChat("My bike is blue", at(date, 14));
+  const row = await api.runDream({ manual: true, date, now });
+  assert.ok(row);
+  assert.equal(row.state, "done");
+  assert.equal(row.added, 3);
+  assert.equal(row.merged, 0);
+  assert.deepEqual(memoryTexts().sort(), ["I live in Lisbon", "I prefer dark mode", "My bike is blue"].sort());
+  assert.equal(row.chatIds.includes(first.chatId) && row.chatIds.includes(second.chatId) && row.chatIds.includes(third.chatId), true);
+  assert.equal(row.error, null);
+  assert.equal(api.formatDreamStatus(row).includes("I live in Lisbon"), false);
+  assert.match(api.formatDreamStatus(row), /3 chats, 3 added, 0 merged/);
+});
+
+test("a second run on the same date adds nothing", async () => {
+  const api = requireDream();
+  await resetChats();
+  const date = "2099-05-02";
+  const now = new Date(at(date, 16));
+  await seedChat("I live in Lisbon", at(date, 12));
+  const first = await api.runDream({ manual: true, date, now });
+  assert.ok(first);
+  const before = memoryTexts().length;
+  const second = await api.runDream({ manual: true, date, now: new Date(at(date, 18)) });
+  assert.ok(second);
+  assert.equal(second.state, "done");
+  assert.equal(second.added, first.added);
+  assert.equal(memoryTexts().length, before);
+});
+
+test("a run restarted after the first chat adds nothing twice", async () => {
+  const api = requireDream();
+  await resetChats();
+  const { db } = await import("../db");
+  const date = "2099-04-04";
+  const now = new Date(at(date, 16));
+  const left = await seedChat("I keep a spare key with Ana", at(date, 12));
+  const right = await seedChat("The studio door code is 4412", at(date, 13));
+  const owner = "worker-a";
+  assert.equal(api.tryClaim(db.$client, { date, owner, now, chatIds: [left.chatId, right.chatId] }), true);
+  assert.equal(await api.dreamChat(left.chatId, { date, owner }), "done");
+  db.$client.prepare("UPDATE memory_runs SET lease_until = ? WHERE date = ?").run(now.getTime() - 1_000, date);
+  const before = memoryTexts().length;
+  const finished = await api.runDream({ manual: true, date, now: new Date(at(date, 18)) });
+  assert.ok(finished);
+  assert.equal(finished.state, "done");
+  assert.deepEqual(finished.doneChatIds.sort(), [left.chatId, right.chatId].sort());
+  assert.equal(memoryTexts().length, before + 1);
+  assert.equal(finished.added, 2);
+  assert.equal(memoryTexts().filter((text) => text === "I keep a spare key with Ana").length, 1);
+});
+
+test("a near-duplicate candidate merges into the older memory", async () => {
+  const api = requireDream();
+  await resetChats();
+  const { db } = await import("../db");
+  const store = await import("./store");
+  const embed = await import("./embed");
+  const saved = store.saveMemory({ text: "Deploy targets Fly.io", kind: "fact" });
+  db.$client.prepare("UPDATE memories SET created_at = ? WHERE id = ?").run(Date.parse("2099-06-01T08:00:00Z"), saved.id);
+  assert.equal((await embed.embedPending()).ok, true);
+  const date = "2099-06-01";
+  const chat = await seedChat("I host everything on Fly.io for production deploys", at(date, 12));
+  const before = memoryTexts().length;
+  const row = await api.runDream({ manual: true, date, now: new Date(at(date, 16)) });
+  assert.ok(row);
+  assert.equal(memoryTexts().length, before);
+  assert.equal(store.getMemory(saved.id)?.text, "I host everything on Fly.io for production deploys");
+  assert.equal(row.merged >= 1, true);
+  assert.equal(row.chatIds.includes(chat.chatId), true);
+});
+
+test("a failed chat leaves the night done and the next night retries that chat", async () => {
+  const api = requireDream();
+  await resetChats();
+  const date = "2099-01-01";
+  const good = await seedChat("I read on the train", at(date, 12));
+  const bad = await seedChat("[qa:dream-fail] I live on the moon", at(date, 13));
+  const row = await api.runDream({ manual: true, date, now: new Date(at(date, 16)) });
+  assert.ok(row);
+  assert.equal(row.state, "done");
+  assert.equal(row.doneChatIds.includes(good.chatId), true);
+  assert.equal(row.retryChatIds.includes(bad.chatId), true);
+  assert.equal(row.doneChatIds.includes(bad.chatId), false);
+  assert.equal(memoryTexts().includes("I live on the moon"), false);
+  assert.equal(memoryTexts().includes("I read on the train"), true);
+  const next = await api.runDream({ manual: true, date: "2099-01-02", now: new Date(at("2099-01-02", 16)) });
+  assert.ok(next);
+  assert.equal(next.chatIds.includes(bad.chatId), true);
+  assert.equal(next.chatIds.includes(good.chatId), false);
+});
+
+test("two runs started at once produce one claim", async () => {
+  const api = requireDream();
+  await resetChats();
+  fs.writeFileSync(requestLog, "");
+  const date = "2099-02-02";
+  const chat = await seedChat("I take the late ferry", at(date, 12));
+  const now = new Date(at(date, 16));
+  const [left, right] = await Promise.all([api.runDream({ manual: true, date, now }), api.runDream({ manual: true, date, now })]);
+  assert.ok(left && right);
+  const final = api.getRun(date);
+  assert.ok(final);
+  assert.equal(final.state, "done");
+  assert.equal(final.chatIds.includes(chat.chatId), true);
+  assert.equal(memoryTexts().filter((text) => text === "I take the late ferry").length, 1);
+  assert.equal(final.added, 1);
+  const requests = fs.readFileSync(requestLog, "utf8").split("\n").filter((line) => line.includes('"scenario":"dream"'));
+  assert.equal(requests.length, 1);
+});
+
+test("a worker that lost the lease writes nothing", async () => {
+  const api = requireDream();
+  await resetChats();
+  const { db } = await import("../db");
+  const date = "2099-03-03";
+  const now = new Date(at(date, 16));
+  const chat = await seedChat("I water the lemon tree on Sundays", at(date, 12));
+  assert.equal(api.tryClaim(db.$client, { date, owner: "worker-a", now, chatIds: [chat.chatId] }), true);
+  db.$client.prepare("UPDATE memory_runs SET lease_until = ? WHERE date = ?").run(now.getTime() - 1_000, date);
+  assert.equal(api.tryClaim(db.$client, { date, owner: "worker-b", now: new Date(now.getTime() + 1_000), chatIds: [chat.chatId] }), true);
+  const before = memoryTexts().length;
+  assert.equal(await api.dreamChat(chat.chatId, { date, owner: "worker-a" }), "lost");
+  assert.equal(memoryTexts().length, before);
+  const row = api.getRun(date);
+  assert.equal(row?.owner, "worker-b");
+  assert.deepEqual(row?.doneChatIds, []);
+});
