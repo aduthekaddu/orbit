@@ -1,0 +1,48 @@
+.agents/skills/verify-orbit/SKILL.md
+  h_9f68edf4527855 41,66
+.agents/skills/verify-orbit/features/README.md
+  h_9f68edf4527855 45
+.agents/skills/verify-orbit/features/dreaming.md
+  h_9f68edf4527855 1-7
+.agents/skills/verify-orbit/verify.mjs
+  h_9f68edf4527855 698-881,899-900,904
+.env.example
+  h_9f68edf4527855 14-16
+CHANGELOG.md
+  h_9f68edf4527855 17-18
+drizzle/0007_memory_runs.sql
+  h_9f68edf4527855 1-14
+drizzle/meta/0007_snapshot.json
+  h_9f68edf4527855 1-811
+drizzle/meta/_journal.json
+  h_9f68edf4527855 53-59
+package.json
+  h_9f68edf4527855 13-14
+scripts/dream.ts
+  h_9f68edf4527855 1-47
+scripts/qa/mock-provider.mjs
+  h_9f68edf4527855 318-354,504-512,625-627
+src/app/(app)/memory/page.tsx
+  h_9f68edf4527855 3,13,16
+src/components/memory/memory-list.tsx
+  h_9f68edf4527855 44,48,137
+src/instrumentation.ts
+  h_9f68edf4527855 4-5
+src/lib/db/schema.ts
+  h_9f68edf4527855 139-153
+src/lib/memory/dream.ts
+  h_9f68edf4527855 1-445
+src/lib/memory/schedule.ts
+  h_9f68edf4527855 1-116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "888fff7974b78892f6928b40963eff343ca49a06",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
