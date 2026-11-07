@@ -1,0 +1,21 @@
+src/lib/memory/embed.ts
+  s_93b22d92d4f2aa::t_082a264fa6845e 12-15,32,39,64,107,120
+src/lib/memory/embed.test.ts
+  s_93b22d92d4f2aa::t_082a264fa6845e 44,57,67,82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "849ac847319fdf2d100a1a61fcd9c742906f9ad1",
+  "prompts": {},
+  "sessions": {
+    "s_93b22d92d4f2aa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "45c4590c-eb44-4ccb-95bc-f312197e035b",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
