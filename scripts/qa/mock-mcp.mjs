@@ -46,6 +46,7 @@ function createMcp(headers, mode, token) {
       inputSchema: { owner: z.string(), repo: z.string() },
     }, async () => ({
       content: [{ type: "text", text: JSON.stringify(mode === "echo-token" ? { issues: [issue], echoed: token } : { issues: [issue] }) }],
+      ...(mode === "echo-key" ? { structuredContent: { [token]: { title: issue.title } } } : {}),
     }));
   }
   if (enabled("get_pull_request", "pull_requests")) {

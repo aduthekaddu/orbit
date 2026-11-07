@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } from "ai";
+import { MockLanguageModelV4 } from "ai/test";
 import { startMockMcp } from "../../../scripts/qa/mock-mcp.mjs";
 
 process.env.ORBIT_GITHUB_MCP_FIXTURE = "1";
@@ -198,6 +200,60 @@ test("a GitHub tool result does not include the token when the server echoes it"
     try {
       const result = await opened.tools.github_list_issues?.execute?.({ owner: "aduthekaddu", repo: "orbit" }, toolOptions);
       assert.equal(JSON.stringify(result).includes(mock.token), false);
+    } finally {
+      await opened.close();
+    }
+  });
+});
+
+test("a structured tool result does not carry the token as a field name into the chat", { timeout: 20_000 }, async () => {
+  await withMock(async (mock) => {
+    const opened = await githubTools({ token: mock.token, mcpUrl: `${mock.url}?mode=echo-key` });
+    try {
+      const tool = opened.tools.github_list_issues;
+      assert.ok(tool?.execute);
+      const model = new MockLanguageModelV4({
+        doStream: async () => ({
+          stream: simulateReadableStream({
+            chunks: [
+              { type: "stream-start", warnings: [] },
+              {
+                type: "tool-call",
+                toolCallId: "call-github-key",
+                toolName: "github_list_issues",
+                input: JSON.stringify({ owner: "aduthekaddu", repo: "orbit" }),
+              },
+              {
+                type: "finish",
+                finishReason: { unified: "tool-calls", raw: undefined },
+                usage: {
+                  inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 1, text: 1, reasoning: undefined },
+                },
+              },
+            ],
+          }),
+        }),
+      });
+      const result = streamText({
+        model,
+        prompt: "list issues",
+        tools: { github_list_issues: tool },
+        stopWhen: stepCountIs(1),
+      });
+      const chunks: string[] = [];
+      let saved = "";
+      const stream = toUIMessageStream({
+        stream: result.stream,
+        tools: { github_list_issues: tool },
+        onEnd: ({ responseMessage }) => {
+          saved = JSON.stringify(responseMessage.parts ?? []);
+        },
+      });
+      for await (const chunk of stream as AsyncIterable<unknown>) chunks.push(JSON.stringify(chunk));
+      const boundary = `${chunks.join("\n")}\n${saved}`;
+      assert.match(boundary, /Migration lock/);
+      assert.equal(boundary.includes(mock.token), false);
     } finally {
       await opened.close();
     }
