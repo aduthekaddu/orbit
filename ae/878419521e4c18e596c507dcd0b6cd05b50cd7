@@ -1,0 +1,24 @@
+src/lib/memory/recall.test.ts
+  s_23446b3face73f::t_ec76d58c1204ec 107-118
+  s_23446b3face73f::t_17599758fef571 99-101
+  s_23446b3face73f::t_c12d42ce9fa652 102-106
+src/lib/search.test.ts
+  s_23446b3face73f::t_af62a17e9c1ca8 36-45,47-49
+  s_23446b3face73f::t_aa0d27e30f5a8b 46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ae878419521e4c18e596c507dcd0b6cd05b50cd7",
+  "prompts": {},
+  "sessions": {
+    "s_23446b3face73f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e62df905-b1d7-47b7-9434-485e41c9c4da",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
