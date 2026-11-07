@@ -1,0 +1,16 @@
+src/lib/chat-errors.test.ts
+  h_9f68edf4527855 96
+src/lib/tools/github.test.ts
+  h_9f68edf4527855 146-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f8f8d3b8ad3db9543ea1678ef0b0ed6d00dc4c84",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
