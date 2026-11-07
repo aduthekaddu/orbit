@@ -1,0 +1,25 @@
+drizzle/0008_memories_reembed.sql
+  s_93b22d92d4f2aa::t_485fe0c38ba9f0 1
+src/lib/memory/store.test.ts
+  s_93b22d92d4f2aa::t_e9e9d3652fa857 124-153
+drizzle/meta/0008_snapshot.json
+  s_93b22d92d4f2aa::t_92d8535edf0e44 1-731
+drizzle/meta/_journal.json
+  s_93b22d92d4f2aa::t_7bf4a558a4ea16 60-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "46cc93a9991ee3404827cf531e0b9fe06f0b60dd",
+  "prompts": {},
+  "sessions": {
+    "s_93b22d92d4f2aa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "45c4590c-eb44-4ccb-95bc-f312197e035b",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
