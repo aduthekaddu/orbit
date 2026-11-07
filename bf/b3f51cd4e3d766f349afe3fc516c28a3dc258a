@@ -1,0 +1,19 @@
+.agents/skills/verify-orbit/scenarios/memory.mjs
+  s_23446b3face73f::t_9f9f05b71c6851 51-54,152-170,174-175,178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bfb3f51cd4e3d766f349afe3fc516c28a3dc258a",
+  "prompts": {},
+  "sessions": {
+    "s_23446b3face73f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e62df905-b1d7-47b7-9434-485e41c9c4da",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
