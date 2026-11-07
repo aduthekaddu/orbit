@@ -105,6 +105,8 @@ Last, it clicks Regenerate the moment Stop lands, before the first card has its 
 
 It also types a message while a `[qa:run-timeout]` run is going, clicks Stop, and sends the message at once. Require the stopped card to show Cancelled, a `Stopped` line, and `before-timeout`, not the error assistant-ui sets when a message is sent over an open tool call.
 
+For these two steps the scenario holds the page's reads of the saved chat until just after the click, so the click always lands before the saved result. Require the card to have no `Stopped` line at the click and at least one held read.
+
 ## Copy buttons
 
 Launch a fresh mock sandbox. Docker must be reachable.

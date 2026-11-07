@@ -18,6 +18,22 @@ const inspect = (card) => card.evaluate((node) => {
   };
 });
 
+// Holds the page's reads of a saved chat, so an action lands before the saved result can reach the card.
+async function holdSavedChat(page, id) {
+  const held = [];
+  let holding = true;
+  await page.route((url) => url.pathname === `/api/chats/${id}`, (route) => {
+    if (holding && route.request().method() === "GET") held.push(route);
+    else route.continue();
+  });
+  return async () => {
+    holding = false;
+    const count = held.length;
+    await Promise.all(held.splice(0).map((route) => route.continue().catch(() => {})));
+    return count;
+  };
+}
+
 async function startAndStop(page, card, tag) {
   const composer = page.getByPlaceholder("Ask anything");
   await composer.fill(`[qa:${tag}]`);
@@ -125,10 +141,12 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
   // Regenerate the moment Stop lands, before the saved result can reach the first version.
   const quick = (await (await page.request.post(`${origin}/api/chats`)).json()).id;
   await page.goto(`${origin}/c/${quick}`);
+  const releaseQuick = await holdSavedChat(page, quick);
   await startAndStop(page, card, "run-spin");
   const early = (await card.locator("span", { hasText: /^Stopped$/ }).count()) === 0;
   await regenerate.click();
-  console.log(`quick regenerate clicked before the first Stopped line: ${early}`);
+  const quickHeld = await releaseQuick();
+  step("Regenerate is clicked before the first version has its saved result", early && quickHeld > 0, `no Stopped line ${early}, held reads ${quickHeld}`);
   await card.locator('[data-tool-status="running"]').waitFor({ timeout: 15_000 });
   const quickStarted = Date.now();
   while (!containerRunning() && Date.now() - quickStarted < 20_000) await page.waitForTimeout(50);
@@ -149,6 +167,7 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
   // Send a message typed during the run the moment Stop lands. The stopped card still gets its saved result.
   const sent = (await (await page.request.post(`${origin}/api/chats`)).json()).id;
   await page.goto(`${origin}/c/${sent}`);
+  const releaseSent = await holdSavedChat(page, sent);
   const composer = page.getByPlaceholder("Ask anything");
   await composer.fill("[qa:run-timeout]");
   await composer.press("Enter");
@@ -161,7 +180,9 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
   await card.locator('[data-tool-status="cancelled"]').waitFor({ timeout: 8_000 });
   const sentEarly = (await card.locator("span", { hasText: /^Stopped$/ }).count()) === 0;
   await composer.press("Enter");
-  console.log(`message sent before the Stopped line: ${sentEarly}`);
+  await page.getByText("sent right after Stop", { exact: true }).waitFor({ timeout: 5_000 });
+  const sentHeld = await releaseSent();
+  step("the message is sent before the stopped card has its saved result", sentEarly && sentHeld > 0, `no Stopped line ${sentEarly}, held reads ${sentHeld}`);
   await page.locator('[data-message-role="assistant"]').nth(1).getByText("Done.", { exact: true }).waitFor({ timeout: 15_000 });
   const sentLanded = await card.locator("span", { hasText: /^Stopped$/ }).first().waitFor({ timeout: 15_000 }).then(() => true, () => false);
   const sentCard = await inspect(card);
