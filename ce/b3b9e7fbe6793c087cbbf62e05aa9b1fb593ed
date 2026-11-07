@@ -1,0 +1,16 @@
+src/components/tools/run-card.test.tsx
+  h_9f68edf4527855 88-98
+src/lib/tools/run-status.test.ts
+  h_9f68edf4527855 74-91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ceb3b9e7fbe6793c087cbbf62e05aa9b1fb593ed",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
