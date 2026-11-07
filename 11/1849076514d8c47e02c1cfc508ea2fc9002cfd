@@ -1,0 +1,14 @@
+docs/slices/README.md
+  h_9f68edf4527855 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "111849076514d8c47e02c1cfc508ea2fc9002cfd",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
