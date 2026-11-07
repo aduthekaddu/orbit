@@ -11,7 +11,7 @@ const BATCH = 32;
 
 export type EmbedKind = "query" | "document";
 
-const TASK_PREFIX: Record<EmbedKind, string> = { query: "", document: "" };
+const TASK_PREFIX: Record<EmbedKind, string> = { query: "search_query: ", document: "search_document: " };
 
 const responseSchema = z.object({
   embeddings: z.array(z.array(z.number())),

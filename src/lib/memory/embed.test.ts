@@ -128,3 +128,18 @@ test("embedPending fills vectors after Ollama comes back", async () => {
   if (filled.ok) assert.ok(filled.embedded >= 1);
   assert.equal(store.getMemory(saved.id)?.embedded, true);
 });
+
+test("questions reach Ollama as search_query and saved memories as search_document", async () => {
+  const { embed, store, mock } = modules();
+  process.env.ORBIT_OLLAMA_URL = mock.url;
+  const question = "Prefixcheck where do these notes live?";
+  const memoryText = "Prefixcheck notes live in a shoebox";
+  store.saveMemory({ text: memoryText, kind: "fact" });
+  assert.equal((await embed.embedQuery(question)).ok, true);
+  assert.equal((await embed.embedPending()).ok, true);
+  const received = (await (await fetch(`${mock.url}/qa/received`)).json()) as string[];
+  assert.ok(received.includes(`search_query: ${question}`), "the question goes out as search_query");
+  assert.ok(received.includes(`search_document: ${memoryText}`), "the saved memory goes out as search_document");
+  assert.equal(received.includes(question), false);
+  assert.equal(received.includes(memoryText), false);
+});

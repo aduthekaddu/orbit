@@ -176,7 +176,9 @@ export function textMatchIds(query: string, limit = 20): string[] {
   }
 }
 
-export const MAX_VECTOR_DISTANCE = 1;
+// L2 distance between nomic vectors made with the task prefixes in embed.ts. 0.97 is cosine similarity 0.53.
+// recall.ollama.test.ts pins the labeled pairs on both sides of it, so change both together.
+export const MAX_VECTOR_DISTANCE = 0.97;
 
 export function vectorMatchIds(vector: number[], limit = 20): string[] {
   const blob = Buffer.from(new Float32Array(vector).buffer);

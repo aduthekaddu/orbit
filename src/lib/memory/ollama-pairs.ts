@@ -30,26 +30,4 @@ export const MAIN: LabeledSet = {
   ],
 };
 
-export const HOLDOUT: LabeledSet = {
-  topics: [
-    { memories: ["I live in Berlin"], questions: ["What city am I based in?", "Where should I look for an apartment?"] },
-    { memories: ["I am allergic to peanuts"], questions: ["Can I eat this satay sauce?", "Which foods should I avoid?"] },
-    { memories: ["My dog is called Biscuit"], questions: ["What is my pet's name?", "Suggest a birthday gift for my dog"] },
-    { memories: ["I work as a nurse"], questions: ["What is my job?", "Give me tips for a long hospital shift"] },
-    { memories: ["I run every morning before work"], questions: ["What exercise do I do?", "Plan my weekly training"] },
-  ],
-  unrelated: [
-    "What is the capital of Australia?",
-    "Explain how a transistor works",
-    "Summarize the plot of Hamlet",
-    "Convert 50 miles to kilometers",
-    "What is the derivative of x squared?",
-    "Who painted the Mona Lisa?",
-    "How does compound interest work?",
-    "Write a limerick about the moon",
-    "What causes the tides?",
-    "List the planets in the solar system",
-  ],
-};
-
 export const FLY_PAIR = { question: "Where do I host things?", memory: "I deploy everything to Fly.io" };

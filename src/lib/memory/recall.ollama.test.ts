@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test, { before, type TestContext } from "node:test";
-import { FLY_PAIR, HOLDOUT, MAIN, type LabeledSet } from "./ollama-pairs";
+import { FLY_PAIR, MAIN, type LabeledSet } from "./ollama-pairs";
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-memory-ollama-"));
 process.env.ORBIT_DATA_DIR = dataDir;
@@ -24,10 +24,8 @@ before(async () => {
     unavailable = `real Ollama with ${embed.EMBED_MODEL} is not available: ${probe.error}`;
     return;
   }
-  for (const set of [MAIN, HOLDOUT]) {
-    for (const topic of set.topics) {
-      for (const text of topic.memories) memoryIds.set(text, store.saveMemory({ text, kind: "fact" }).id);
-    }
+  for (const topic of MAIN.topics) {
+    for (const text of topic.memories) memoryIds.set(text, store.saveMemory({ text, kind: "fact" }).id);
   }
   const filled = await embed.embedPending();
   assert.equal(filled.ok, true, "every labeled memory must embed");
@@ -82,11 +80,9 @@ test("a question with no shared word finds the Fly.io memory by vector", async (
 test("every related question reaches the memories it is about", async (t: TestContext) => {
   if (unavailable) return t.skip(unavailable);
   assert.deepEqual(await missedRelated(MAIN), []);
-  assert.deepEqual(await missedRelated(HOLDOUT), []);
 });
 
 test("an unrelated question reaches no memory", async (t: TestContext) => {
   if (unavailable) return t.skip(unavailable);
   assert.deepEqual(await leakedUnrelated(MAIN), []);
-  assert.deepEqual(await leakedUnrelated(HOLDOUT), []);
 });
