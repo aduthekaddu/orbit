@@ -48,6 +48,10 @@ function writeRequestProof(name) {
   fs.writeFileSync(path.join(dir, name), `${lines.join("\n")}\n`);
 }
 
+async function widths(locator) {
+  return locator.evaluate((element) => ({ scroll: element.scrollWidth, client: element.clientWidth }));
+}
+
 export default async function memory({ page, origin, step, shot }) {
   fs.mkdirSync(path.dirname(requestLog), { recursive: true });
   fs.writeFileSync(requestLog, "");
@@ -145,11 +149,33 @@ export default async function memory({ page, origin, step, shot }) {
   writeRequestProof("after-delete.jsonl");
   step("a deleted memory is not sent again", !leaked);
 
+  const longText = "orbit".repeat(100);
+  const fourth = await page.request.post(`${origin}/api/chats`);
+  const { id: fourthId } = await fourth.json();
+  await page.goto(`${origin}/c/${fourthId}`);
+  await page.getByRole("textbox").fill(`[qa:remember] ${longText}`);
+  await page.getByRole("textbox").press("Enter");
+  const longCard = page.locator('[data-tool-name="remember"] p').filter({ hasText: longText });
+  const longCardShown = await longCard.waitFor({ timeout: 30_000 }).then(() => true, () => false);
+  const cardWidth = longCardShown ? await widths(longCard) : { scroll: 0, client: 0 };
+  await shot("long-card");
+  step("a 500 character remember card with no spaces stays inside the card", longCardShown && cardWidth.scroll <= cardWidth.client, longCardShown ? `${cardWidth.scroll}px of text in ${cardWidth.client}px` : "no card");
+
+  await page.goto(`${origin}/memory`);
+  const longRow = page.locator("li p").filter({ hasText: longText });
+  const longRowShown = await longRow.waitFor({ timeout: 10_000 }).then(() => true, () => false);
+  const rowWidth = longRowShown ? await widths(longRow) : { scroll: 0, client: 0 };
+  await shot("long-row");
+  step("a 500 character memory with no spaces stays inside its row", longRowShown && rowWidth.scroll <= rowWidth.client, longRowShown ? `${rowWidth.scroll}px of text in ${rowWidth.client}px` : "no row");
+
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${origin}/memory`);
   await page.getByRole("heading", { name: "Memory" }).first().waitFor({ timeout: 10_000 });
+  const phoneRowShown = await longRow.waitFor({ timeout: 10_000 }).then(() => true, () => false);
+  const phoneWidth = phoneRowShown ? await widths(longRow) : { scroll: 0, client: 0 };
   await shot("mobile");
   step("memory page renders at 390 by 844", true);
+  step("a 500 character memory with no spaces stays inside its row at 390 by 844", phoneRowShown && phoneWidth.scroll <= phoneWidth.client, phoneRowShown ? `${phoneWidth.scroll}px of text in ${phoneWidth.client}px` : "no row");
 
   await page.goto(`${origin}/c/${id}`);
   await page.getByRole("textbox").click();
