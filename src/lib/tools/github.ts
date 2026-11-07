@@ -16,6 +16,7 @@ export class GithubMcpUrlError extends Error {
   }
 }
 const LIST_CACHE_MS = 5 * 60 * 1000;
+const GITHUB_SETUP_MS = 10_000;
 const PREFIX = "github_";
 
 export type GithubSettings = {
@@ -80,23 +81,26 @@ function emptySet(): McpToolSet {
   return { tools: {}, close: async () => {} };
 }
 
-async function listedTools(client: MCPClient, signal?: AbortSignal): Promise<ListPage> {
-  const options = signal ? { signal } : undefined;
-  let page = await client.listTools(options ? { options } : undefined);
+async function listedTools(client: MCPClient, signal: AbortSignal | undefined, timeoutMs: () => number): Promise<ListPage> {
+  const options = () => ({ signal, timeout: timeoutMs() });
+  let page = await client.listTools({ options: options() });
   const tools = [...page.tools];
   while (page.nextCursor) {
-    page = await client.listTools({ params: { cursor: page.nextCursor }, options });
+    page = await client.listTools({ params: { cursor: page.nextCursor }, options: options() });
     tools.push(...page.tools);
   }
   return { ...page, tools, nextCursor: undefined };
 }
 
-export async function githubTools(settings: GithubSettings, input?: { signal?: AbortSignal; now?: number; tools?: string }): Promise<McpToolSet> {
+export async function githubTools(settings: GithubSettings, input?: { signal?: AbortSignal; now?: number; tools?: string; setupMs?: number }): Promise<McpToolSet> {
   const target = githubMcpTarget(settings.mcpUrl);
   if (!target.ok) throw new GithubMcpUrlError();
   const mcpUrl = target.url;
   const token = settings.token;
   const extraTools = input?.tools ?? "";
+  const setupMs = input?.setupMs ?? GITHUB_SETUP_MS;
+  const started = Date.now();
+  const timeoutMs = () => Math.max(1, setupMs - (Date.now() - started));
   let client: MCPClient | undefined;
   let closed = false;
   const close = async () => {
@@ -117,12 +121,12 @@ export async function githubTools(settings: GithubSettings, input?: { signal?: A
         },
         redirect: "error",
       },
-      initializationOptions: input?.signal ? { signal: input.signal } : undefined,
+      initializationOptions: { signal: input?.signal, timeout: timeoutMs() },
     });
     const now = input?.now ?? Date.now();
     const key = `${mcpUrl}\n${GITHUB_TOOLSETS}\n${extraTools}\n${token}`;
     const cached = listCache.get(key);
-    const definitions = cached && cached.expires > now ? cached.definitions : await listedTools(client, input?.signal);
+    const definitions = cached && cached.expires > now ? cached.definitions : await listedTools(client, input?.signal, timeoutMs);
     if (!cached || cached.expires <= now) listCache.set(key, { expires: now + LIST_CACHE_MS, definitions });
     const raw = client.toolsFromDefinitions(definitions);
     const tools: Record<string, Tool> = {};
@@ -136,10 +140,10 @@ export async function githubTools(settings: GithubSettings, input?: { signal?: A
   }
 }
 
-export async function openGithubTurn(settings: { githubToken: string; githubMcpUrl: string }, signal?: AbortSignal): Promise<McpToolSet> {
+export async function openGithubTurn(settings: { githubToken: string; githubMcpUrl: string }, signal?: AbortSignal, options?: { setupMs?: number }): Promise<McpToolSet> {
   if (!settings.githubToken) return emptySet();
   try {
-    return await githubTools({ token: settings.githubToken, mcpUrl: settings.githubMcpUrl }, { signal });
+    return await githubTools({ token: settings.githubToken, mcpUrl: settings.githubMcpUrl }, { signal, setupMs: options?.setupMs });
   } catch (error) {
     if (signal?.aborted) throw error;
     console.error("github tools unavailable", githubFailureText(error, settings.githubToken));
