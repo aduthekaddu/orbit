@@ -8,6 +8,10 @@ type ToolCardDefinition = {
   stoppedOutput?: (output: unknown) => boolean;
 };
 
+function hasErrorOutput(output: unknown): boolean {
+  return Boolean(output && typeof output === "object" && "error" in output && typeof output.error === "string");
+}
+
 export const toolCards = {
   render_ui: { card: "genui" },
   web_search: { card: "search" },
@@ -16,8 +20,8 @@ export const toolCards = {
     failedOutput: hasFailedCodeOutput,
     stoppedOutput: hasStoppedCodeOutput,
   },
-  remember: { card: "generic" },
-  forget: { card: "generic" },
+  remember: { card: "generic", failedOutput: hasErrorOutput },
+  forget: { card: "generic", failedOutput: hasErrorOutput },
 } satisfies Record<string, ToolCardDefinition>;
 
 export type ToolName = keyof typeof toolCards;

@@ -25,7 +25,7 @@ function rememberedText(args: unknown, result: unknown): string {
 export function RunCard(props: ToolCallMessagePartProps) {
   const status = toolCallRunStatus(props);
   const kind = cardFor(props.toolName);
-  const savedText = props.toolName === "remember" ? rememberedText(props.args, props.result) : "";
+  const savedText = props.toolName === "remember" && status !== "failed" ? rememberedText(props.args, props.result) : "";
   const language = kind === "code" ? runCodeInputSchema.safeParse(props.args).data?.language : undefined;
   return (
     <section data-tool-name={props.toolName} className="my-3 min-w-0 max-w-widget rounded-lg border bg-card shadow-card">
