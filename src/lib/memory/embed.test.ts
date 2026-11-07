@@ -88,6 +88,32 @@ test("embed gives up after 5 seconds when Ollama accepts and never answers", asy
   }
 });
 
+test("a hung Ollama does not stall a second status check", async () => {
+  const { embed, store } = modules();
+  const saved = store.saveMemory({ text: "Hangsearch token stays searchable", kind: "fact" });
+  const server = http.createServer(() => {});
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+  const address = server.address();
+  const port = typeof address === "object" && address ? address.port : 0;
+  process.env.ORBIT_OLLAMA_URL = `http://127.0.0.1:${port}`;
+  const started = Date.now();
+  try {
+    const [first, second] = await Promise.all([embed.memoryEmbeddings(), embed.memoryEmbeddings()]);
+    const elapsed = Date.now() - started;
+    assert.equal(first.ok, false);
+    assert.equal(second.ok, false);
+    assert.ok(elapsed < 2_000, `elapsed ${elapsed}`);
+    const again = Date.now();
+    const third = await embed.memoryEmbeddings();
+    assert.equal(third.ok, false);
+    assert.ok(Date.now() - again < 200, `cached ${Date.now() - again}`);
+    assert.equal(store.listMemories("Hangsearch").some((memory) => memory.id === saved.id), true);
+    assert.equal(store.getMemory(saved.id)?.embedded, false);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test("embedPending fills vectors after Ollama comes back", async () => {
   const { embed, store, mock } = modules();
   process.env.ORBIT_OLLAMA_URL = "http://127.0.0.1:9";

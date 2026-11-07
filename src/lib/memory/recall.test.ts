@@ -103,6 +103,28 @@ test("a full question finds the memory that shares one word when Ollama is down"
   }
 });
 
+test("recall does not wait out a hung Ollama when text search can answer", async () => {
+  const { recall, store } = modules();
+  const http = await import("node:http");
+  const saved = store.saveMemory({ text: "The hangrecall token is stored", kind: "fact" });
+  const server = http.createServer(() => {});
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+  const address = server.address();
+  const port = typeof address === "object" && address ? address.port : 0;
+  process.env.ORBIT_OLLAMA_URL = `http://127.0.0.1:${port}`;
+  const started = Date.now();
+  try {
+    const hits = await recall.recall("Where is the hangrecall token?", 3);
+    const elapsed = Date.now() - started;
+    assert.equal(hits[0]?.memory.id, saved.id);
+    assert.equal(hits[0]?.via, "text");
+    assert.ok(elapsed < 2_000, `elapsed ${elapsed}`);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    if (mock) process.env.ORBIT_OLLAMA_URL = mock.url;
+  }
+});
+
 test("a question far from every memory recalls nothing", async () => {
   const { recall, store, embed } = modules();
   store.saveMemory({ text: "Bananas prefer purple teacups", kind: "fact" });
