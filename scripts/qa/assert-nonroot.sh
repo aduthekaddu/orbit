@@ -113,7 +113,7 @@ fi
 # An earlier image ran as root, so its data directory belongs to root. Any
 # arguments after the directory go to docker run, such as --env ORBIT_DATA_DIR.
 check_root_owned_data() {
-  local label=$1 dir=$2 volume=$prefix-$1 owners code
+  local label=$1 dir=$2 volume=$prefix-$1 owners code logs
   shift 2
   local run_args=("$@")
   docker volume create "$volume" >/dev/null
@@ -124,8 +124,9 @@ check_root_owned_data() {
   start "$prefix-$label-plain" ${run_args[@]+"${run_args[@]}"} --volume "$volume:$dir" "$image"
   code=$(timeout 30 docker wait "$prefix-$label-plain") || fail "docker run kept running with $dir it cannot use"
   [ "$code" != "0" ] || fail "docker run exited 0 with $dir it cannot use"
-  docker logs "$prefix-$label-plain" 2>&1 | grep -q -- '--user 0:0' || fail "the error does not say how to repair $dir"
-  docker logs "$prefix-$label-plain" 2>&1 | grep -q -- "cannot change $dir," || fail "the error does not name $dir"
+  logs=$(docker logs "$prefix-$label-plain" 2>&1) || fail "docker logs failed: $logs"
+  grep -q -- '--user 0:0' <<<"$logs" || fail "the error does not say how to repair $dir: $logs"
+  grep -q -- "cannot change $dir," <<<"$logs" || fail "the error does not name $dir: $logs"
   echo "docker run stopped with exit code $code and printed the repair steps for $dir"
 
   start "$prefix-$label-repair" --user 0:0 ${run_args[@]+"${run_args[@]}"} --volume "$volume:$dir" "$image"
