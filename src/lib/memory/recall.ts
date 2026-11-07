@@ -1,5 +1,5 @@
 import type { ModelMessage } from "ai";
-import { embed } from "./embed";
+import { embedQuery } from "./embed";
 import { getMemory, markUsed, memoryCount, textMatchIds, vectorMatchIds, type Memory } from "./store";
 
 export type Recall = { memory: Memory; score: number; via: "text" | "vector" | "both" };
@@ -68,7 +68,7 @@ export async function recall(query: string, k: number): Promise<Recall[]> {
   if (!trimmed || k < 1 || memoryCount() === 0) return [];
   const textIds = textMatchIds(trimmed, TEXT_LIMIT);
   let vectorIds: string[] = [];
-  const embedded = await embed([trimmed]);
+  const embedded = await embedQuery(trimmed);
   if (embedded.ok && embedded.vectors[0]) vectorIds = vectorMatchIds(embedded.vectors[0], VECTOR_LIMIT);
   const fused = fuseRanks(textIds, vectorIds, k);
   const usedAt = new Date();

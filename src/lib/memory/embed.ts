@@ -5,6 +5,8 @@ import { listUnembedded, writeVectors } from "./store";
 export const EMBED_MODEL = "nomic-embed-text";
 export const EMBED_DIM = 768;
 const TIMEOUT_MS = 5_000;
+export const QUERY_EMBED_TIMEOUT_MS = 1_000;
+const STATUS_TTL_MS = 15_000;
 const BATCH = 32;
 
 const responseSchema = z.object({
@@ -23,7 +25,7 @@ function embedError(error: unknown): string {
   return "Ollama is unreachable";
 }
 
-export async function embed(texts: string[]): Promise<EmbedResult> {
+export async function embed(texts: string[], timeoutMs = TIMEOUT_MS): Promise<EmbedResult> {
   if (texts.length === 0) return { ok: true, vectors: [] };
   let response: Response;
   try {
@@ -31,7 +33,7 @@ export async function embed(texts: string[]): Promise<EmbedResult> {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ model: EMBED_MODEL, input: texts }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
     return { ok: false, error: embedError(error) };
@@ -74,10 +76,57 @@ export function embedPending(): Promise<EmbedPendingResult> {
   return run;
 }
 
-export async function memoryEmbeddings(): Promise<{ ok: true } | { ok: false; error: string }> {
+type OllamaStatus = { ok: true } | { ok: false; error: string };
+
+let statusCache: { url: string; at: number; status: OllamaStatus } | null = null;
+let statusInflight: { url: string; promise: Promise<OllamaStatus> } | null = null;
+
+function rememberStatus(status: OllamaStatus) {
+  if (status.ok) {
+    if (statusCache?.url === ollamaBaseUrl()) statusCache = null;
+    return;
+  }
+  statusCache = { url: ollamaBaseUrl(), at: Date.now(), status };
+}
+
+function freshStatus(): OllamaStatus | null {
+  if (!statusCache || statusCache.url !== ollamaBaseUrl()) return null;
+  if (Date.now() - statusCache.at >= STATUS_TTL_MS) return null;
+  return statusCache.status;
+}
+
+export function ollamaStatus(timeoutMs = QUERY_EMBED_TIMEOUT_MS): Promise<OllamaStatus> {
+  const cached = freshStatus();
+  if (cached) return Promise.resolve(cached);
+  const url = ollamaBaseUrl();
+  if (statusInflight?.url === url) return statusInflight.promise;
+  const promise = embed(["orbit"], timeoutMs).then((result) => {
+    const status: OllamaStatus = result.ok ? { ok: true } : { ok: false, error: result.error };
+    rememberStatus(status);
+    if (statusInflight?.promise === promise) statusInflight = null;
+    return status;
+  });
+  statusInflight = { url, promise };
+  return promise;
+}
+
+export async function embedQuery(text: string): Promise<EmbedResult> {
+  const cached = freshStatus();
+  if (cached && !cached.ok) return cached;
+  const result = await embed([text], QUERY_EMBED_TIMEOUT_MS);
+  if (!result.ok) rememberStatus({ ok: false, error: result.error });
+  else if (result.vectors[0]) rememberStatus({ ok: true });
+  return result;
+}
+
+export async function memoryEmbeddings(): Promise<OllamaStatus> {
+  const status = await ollamaStatus();
+  if (!status.ok) return status;
   const filled = await embedPending();
-  if (!filled.ok) return { ok: false, error: filled.error };
-  if (filled.embedded > 0) return { ok: true };
-  const probe = await embed(["orbit"]);
-  return probe.ok ? { ok: true } : { ok: false, error: probe.error };
+  if (!filled.ok) {
+    const failed = { ok: false as const, error: filled.error };
+    rememberStatus(failed);
+    return failed;
+  }
+  return { ok: true };
 }

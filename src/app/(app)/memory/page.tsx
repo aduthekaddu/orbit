@@ -7,8 +7,8 @@ export const dynamic = "force-dynamic";
 
 export default async function MemoryPage() {
   await requireUser();
-  const embeddings = await memoryEmbeddings();
   const memories = listMemories().map(memoryJson);
+  const embeddings = await memoryEmbeddings();
   return (
     <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
       <MemoryList initial={memories} embeddings={embeddings} />

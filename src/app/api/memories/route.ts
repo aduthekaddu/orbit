@@ -17,9 +17,7 @@ export async function GET(request: Request) {
     q: new URL(request.url).searchParams.get("q") ?? "",
   });
   if (!parsed.success) return Response.json({ error: "Invalid search" }, { status: 400 });
+  const memories = listMemories(parsed.data.q).map(memoryJson);
   const embeddings = await memoryEmbeddings();
-  return Response.json({
-    embeddings,
-    memories: listMemories(parsed.data.q).map(memoryJson),
-  });
+  return Response.json({ embeddings, memories });
 }
