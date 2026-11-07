@@ -78,6 +78,34 @@ test("a list failure closes the client and the turn keeps going without GitHub t
   });
 });
 
+test("a stalled MCP list stops within the deadline and closes the client", { timeout: 5_000 }, async () => {
+  await withMock(async (mock) => {
+    const started = Date.now();
+    const pending = openGithubTurn({ githubToken: mock.token, githubMcpUrl: `${mock.url}?mode=stall-list` }, undefined, { setupMs: 300 });
+    const outcome = await Promise.race([
+      pending.then((opened) => ({ kind: "done" as const, opened })).catch((error: unknown) => ({ kind: "error" as const, error })),
+      new Promise<{ kind: "hung" }>((resolve) => setTimeout(() => resolve({ kind: "hung" }), 800)),
+    ]);
+    assert.equal(outcome.kind, "done");
+    if (outcome.kind !== "done") return;
+    assert.ok(Date.now() - started < 1_500);
+    assert.deepEqual(outcome.opened.tools, {});
+    await outcome.opened.close();
+    assert.equal(mock.openSessions(), 0);
+    assert.ok(mock.closeCount() >= 1);
+  });
+});
+
+test("aborting a stalled MCP list rejects the turn", { timeout: 2_000 }, async () => {
+  await withMock(async (mock) => {
+    const controller = new AbortController();
+    const pending = openGithubTurn({ githubToken: mock.token, githubMcpUrl: `${mock.url}?mode=stall-list` }, controller.signal, { setupMs: 5_000 });
+    setTimeout(() => controller.abort(), 40);
+    await assert.rejects(pending);
+    assert.equal(mock.openSessions(), 0);
+  });
+});
+
 test("abort closes the client", { timeout: 20_000 }, async () => {
   await withMock(async (mock) => {
     const controller = new AbortController();
