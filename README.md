@@ -71,7 +71,7 @@ Earlier images ran the server as root, so an existing `./data` belongs to root. 
 	docker run --detach --user 0:0 --publish 127.0.0.1:3210:3210 --volume "$PWD/data:/app/data" orbit
 	```
 
-The entrypoint gives the directory to uid 1000 and drops root before the server starts. Later starts do not need `--user 0:0`. If you leave it out while the directory belongs to root, the container stops at once and `docker logs` shows these steps. You can also run `sudo chown -R 1000:1000 data` yourself.
+The entrypoint gives `/app/data`, or the directory in `ORBIT_DATA_DIR` when you set it, to uid 1000 and drops root before the server starts. Later starts do not need `--user 0:0`. If you leave it out while the directory belongs to root, the container stops at once and `docker logs` shows these steps. You can also run `sudo chown -R 1000:1000 data` yourself.
 
 ### Run from source
 
