@@ -1,0 +1,21 @@
+src/lib/memory/embed.test.ts
+  s_93b22d92d4f2aa::t_fecd9ac6b5e491 131-145
+scripts/qa/mock-ollama.mjs
+  s_93b22d92d4f2aa::t_83d016a8c5cf1d 4,15-16,56-60,82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0595d1150b7c65ba6186210d212ffe1c244fa9bb",
+  "prompts": {},
+  "sessions": {
+    "s_93b22d92d4f2aa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "45c4590c-eb44-4ccb-95bc-f312197e035b",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
