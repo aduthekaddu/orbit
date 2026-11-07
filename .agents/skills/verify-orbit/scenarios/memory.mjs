@@ -60,6 +60,9 @@ export default async function memory({ page, origin, step, shot }) {
   const savedReply = page.locator('[data-message-role="assistant"]').getByText("Saved.", { exact: true });
   const replied = await savedReply.waitFor({ timeout: 30_000 }).then(() => true, () => false);
   step("remember tool saves from chat", replied);
+  const card = page.locator('[data-tool-name="remember"]').getByText("I deploy to Fly.io", { exact: true });
+  const showed = await card.waitFor({ timeout: 10_000 }).then(() => true, () => false);
+  step("remember card shows the saved text", showed);
 
   await page.goto(`${origin}/memory`);
   const row = page.getByText("I deploy to Fly.io", { exact: true });
@@ -99,6 +102,10 @@ export default async function memory({ page, origin, step, shot }) {
   await page.goto(`${origin}/memory`);
   await page.getByRole("button", { name: "Edit" }).click();
   const editor = page.getByRole("textbox", { name: "Memory" });
+  await editor.fill("a".repeat(501));
+  await page.getByRole("button", { name: "Save" }).click();
+  const refused = await page.getByText("Memory text is longer than 500 characters").waitFor({ timeout: 10_000 }).then(() => true, () => false);
+  step("edit shows the server's reason", refused);
   await editor.fill("I ship to Render");
   await page.getByRole("button", { name: "Save" }).click();
   const editorClosed = await editor.waitFor({ state: "hidden", timeout: 10_000 }).then(() => true, () => false);
