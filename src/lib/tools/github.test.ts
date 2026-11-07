@@ -26,7 +26,6 @@ test("GitHub tool names get the github_ prefix and the server sees read-only too
     try {
       assert.deepEqual(Object.keys(opened.tools).sort(), [
         "github_get_file_contents",
-        "github_get_me",
         "github_get_pull_request",
         "github_list_issues",
       ]);
@@ -35,6 +34,7 @@ test("GitHub tool names get the github_ prefix and the server sees read-only too
       assert.equal(seen.authorized, true);
       assert.equal(seen.readonly, "true");
       assert.equal(seen.toolsets, "repos,issues,pull_requests");
+      assert.equal(seen.tools, "");
       assert.equal(mock.requests.some((entry) => entry.method?.includes("create") || entry.method?.includes("merge")), false);
     } finally {
       await opened.close();
@@ -94,7 +94,7 @@ test("a second call within five minutes skips the tool list and a tool call stil
     const first = await githubTools({ token: mock.token, mcpUrl: mock.url });
     await first.close();
     const second = await githubTools({ token: mock.token, mcpUrl: mock.url });
-    await second.tools.github_get_me?.execute?.({}, toolOptions);
+    await second.tools.github_list_issues?.execute?.({ owner: "aduthekaddu", repo: "orbit" }, toolOptions);
     await second.close();
     assert.equal(mock.listCount(), 1);
     assert.equal(mock.callCount(), 1);
@@ -122,6 +122,22 @@ test("a wrong token leaves the turn with no GitHub tools", { timeout: 20_000 }, 
     } finally {
       console.error = original;
     }
+  });
+});
+
+test("check asks for get_me when the chat toolsets omit it", { timeout: 20_000 }, async () => {
+  await withMock(async (mock) => {
+    const opened = await githubTools({ token: mock.token, mcpUrl: mock.url });
+    try {
+      assert.equal(opened.tools.github_get_me, undefined);
+    } finally {
+      await opened.close();
+    }
+    const ok = await checkGithub({ token: mock.token, mcpUrl: mock.url });
+    assert.deepEqual(ok, { ok: true, login: "octocat" });
+    const lists = mock.requests.filter((entry) => entry.method === "tools/list");
+    assert.equal(lists[0]?.tools, "");
+    assert.match(String(lists.at(-1)?.tools), /(^|,)\s*get_me\s*(,|$)/);
   });
 });
 
