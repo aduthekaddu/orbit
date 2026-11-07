@@ -1,0 +1,25 @@
+docs/slices/11.md
+  s_93b22d92d4f2aa::t_a325d66ab7bff9 74
+  s_93b22d92d4f2aa::t_b41e5fda5c9065 77-78
+CHANGELOG.md
+  s_93b22d92d4f2aa::t_a325d66ab7bff9 11
+docs/slices/10.md
+  s_93b22d92d4f2aa::t_a325d66ab7bff9 62,73
+  s_93b22d92d4f2aa::t_793b52345c72ac 74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cc1c46cf648804f05f890bd7a75287ef648a50e0",
+  "prompts": {},
+  "sessions": {
+    "s_93b22d92d4f2aa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "45c4590c-eb44-4ccb-95bc-f312197e035b",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
