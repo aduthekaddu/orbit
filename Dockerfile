@@ -12,13 +12,15 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
+# The build opens the database as root and leaves root-owned files in /app/data.
 COPY docker/entrypoint.sh /usr/local/bin/orbit-entrypoint
 RUN chmod 755 /usr/local/bin/orbit-entrypoint \
+  && rm -rf /app/data \
   && mkdir -p /app/data \
   && chown node:node /app/data
 
 ENV NODE_ENV=production
 EXPOSE 3210
-USER node
+USER 1000:1000
 ENTRYPOINT ["orbit-entrypoint"]
 CMD ["npm", "start", "--", "-p", "3210", "-H", "0.0.0.0"]

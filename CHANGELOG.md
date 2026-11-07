@@ -9,6 +9,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 ### Changed
 
 - The Docker server runs as the `node` user. On start, Compose gives `./data` to that user and drops root before the server listens.
+- A `docker run` start needs `--user 0:0` once to give an older root-owned data directory to that user. Without it, the container stops and prints the steps instead of answering every request with a 500.
+- The image no longer includes a database or sign-in secret made during the build. Each new data directory makes its own.
 
 ### Added
 

@@ -31,7 +31,7 @@ GitHub Actions runs the checks on every pull request and every push to `main`, a
 
 - **Typecheck, test, build.** `npm run typecheck`, `npm test`, and `npm run build` on Node 22, which the Docker image uses, and on Node 24. The tests run the sandbox against real Docker, so the job pulls the pinned images first. A local run needs a Docker daemon and the same images, because the sandbox never pulls one. The pull commands are in the README.
 - **End to end.** The verify-orbit drives and browser scenarios, in three suites. Each suite starts its own server and keeps its screenshots and logs as a workflow artifact for seven days. Run one locally with `scripts/qa/ci-e2e.sh core`, `browse`, or `sandbox`, after `npm run build` and with nothing on port 3210. The `sandbox` suite also needs Docker and the pinned images. The browse and sandbox suites find scenarios by name, so a new scenario runs without an edit. Scenarios that need a real provider are not run.
-- **Docker image.** Lints the Dockerfile, validates both Compose files, builds the image, starts it, checks the server process is not root, and waits for `/api/setup`.
+- **Docker image.** Lints the Dockerfile, validates both Compose files, builds the image, starts it, and waits for `/api/setup`. `scripts/qa/assert-nonroot.sh` starts the image three ways and requires a non-root server process each time. The ways are the default user, root the way Compose does, and a data volume that an older root image left behind.
 - **Workflow files.** `actionlint` and `zizmor` check the workflows themselves.
 
 Every third-party action is pinned to a commit SHA and every tool image to a digest. The local `setup-orbit` action comes with the checkout. Update a pin on purpose, and keep the version comment next to it.

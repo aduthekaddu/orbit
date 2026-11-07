@@ -64,6 +64,15 @@ Planned features are listed in the [roadmap](docs/roadmap.md).
 
 The server process runs as the `node` user, uid 1000. Compose starts the entrypoint as root so it can give `./data` to that user, then drops root before the server listens. After the first start, `./data` is owned by uid 1000. The container stores its data in `./data`. Compose publishes the app on `127.0.0.1:3210` and SearXNG on `127.0.0.1:8888`. Other machines cannot reach either port. Existing databases keep their saved settings. Add `http://searxng:8080` under **Settings > Search** when upgrading a Compose installation.
 
+Earlier images ran the server as root, so an existing `./data` belongs to root. `docker compose up -d --build` fixes that on the next start. If you build and start the image with `docker run`, start it once as root:
+
+	```sh
+	docker build --tag orbit .
+	docker run --detach --user 0:0 --publish 127.0.0.1:3210:3210 --volume "$PWD/data:/app/data" orbit
+	```
+
+The entrypoint gives the directory to uid 1000 and drops root before the server starts. Later starts do not need `--user 0:0`. If you leave it out while the directory belongs to root, the container stops at once and `docker logs` shows these steps. You can also run `sudo chown -R 1000:1000 data` yourself.
+
 ### Run from source
 
 1. Clone the repository and install the dependencies.
