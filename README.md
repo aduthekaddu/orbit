@@ -103,12 +103,23 @@ Every variable is optional.
 | `ORBIT_BASE_URL`, `ORBIT_API_KEY`, `ORBIT_MODEL` | Empty | Fill the provider settings when the database has none yet. |
 | `ORBIT_SEARXNG_URL` | Empty, or `http://searxng:8080` in Compose | Seed the search backend URL on a new database. For a local Next.js server, use `http://127.0.0.1:8888`. |
 | `ORBIT_TAVILY_API_KEY` | Empty | Seed the server-side Tavily key on a new database. Tavily runs when SearXNG fails or returns no results. |
+| `ORBIT_OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama base URL for memory embeddings. The model is `nomic-embed-text`. Compose defaults to `http://host.docker.internal:11434`. |
 | `ORBIT_SANDBOX` | Off | Source builds use `on` to enable `run_code`. Compose requires the [sandbox override](#enable-the-code-sandbox). Settings shows whether it is on. |
 | `DOCKER_HOST` | Local Docker socket for source builds | Configure the local connection for source builds. Default Compose omits it. The sandbox override sets a private proxy. Remote Docker hosts are unsupported. |
 | `ORBIT_DATA_DIR` | `./data` | Where Orbit keeps `orbit.db` and `auth-secret`. |
 | `BETTER_AUTH_SECRET` | Generated into `data/auth-secret` | The key that signs session cookies. |
 | `BETTER_AUTH_URL` | `http://127.0.0.1:3210` | The URL you open Orbit at. |
 | `ORBIT_TRUSTED_ORIGINS` | Empty | Extra origins, separated by commas, that may sign in. Needed when you serve Orbit on another port or host. |
+
+### Memory embeddings
+
+Orbit stores memories in SQLite. It asks Ollama for a vector so a later question can find a fact that does not share the same words. Pull the embedding model once:
+
+```sh
+ollama pull nomic-embed-text
+```
+
+A local Next.js server uses `http://127.0.0.1:11434` when `ORBIT_OLLAMA_URL` is empty. Compose reaches Ollama on the host at `http://host.docker.internal:11434`. To run Ollama as its own Compose service, set `ORBIT_OLLAMA_URL=http://ollama:11434` and add that service yourself. If Ollama is down, recall uses full text search only, and `/memory` shows the error.
 
 ### Enable the code sandbox
 
