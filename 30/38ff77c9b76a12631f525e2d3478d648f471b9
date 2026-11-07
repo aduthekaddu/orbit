@@ -1,0 +1,25 @@
+src/app/api/memories/route.ts
+  s_aaeb471ca118ad::t_d3ebd601ba7457 1-25
+src/components/memory/memory-list.tsx
+  s_aaeb471ca118ad::t_3b1f3d29cab39f 1-231
+src/app/(app)/memory/page.tsx
+  s_aaeb471ca118ad::t_7f66275a1a4281 1-17
+src/app/api/memories/[id]/route.ts
+  s_aaeb471ca118ad::t_730f1ba56298e1 1-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3038ff77c9b76a12631f525e2d3478d648f471b9",
+  "prompts": {},
+  "sessions": {
+    "s_aaeb471ca118ad": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1b734-90e8-7c70-8980-711968354a5f",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
