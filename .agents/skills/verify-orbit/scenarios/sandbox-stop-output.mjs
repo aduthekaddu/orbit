@@ -121,4 +121,28 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
   await page.waitForTimeout(2_500);
   const left = execFileSync("docker", ["ps", "-a", "--filter", "label=orbit.sandbox=true", "--format", "{{.ID}}"], { encoding: "utf8" }).trim();
   step("regenerate after Stop leaves no sandbox container", left === "", left);
+
+  // Regenerate the moment Stop lands, before the saved result can reach the first version.
+  const quick = (await (await page.request.post(`${origin}/api/chats`)).json()).id;
+  await page.goto(`${origin}/c/${quick}`);
+  await startAndStop(page, card, "run-spin");
+  const early = (await card.locator("span", { hasText: /^Stopped$/ }).count()) === 0;
+  await regenerate.click();
+  console.log(`quick regenerate clicked before the first Stopped line: ${early}`);
+  await card.locator('[data-tool-status="running"]').waitFor({ timeout: 15_000 });
+  const quickStarted = Date.now();
+  while (!containerRunning() && Date.now() - quickStarted < 20_000) await page.waitForTimeout(50);
+  await page.waitForTimeout(1_000);
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await card.locator('[data-tool-status="cancelled"]').waitFor({ timeout: 8_000 });
+  await card.locator("span", { hasText: /^Stopped$/ }).first().waitFor({ timeout: 15_000 }).catch(() => {});
+  await picker.getByRole("button", { name: "Previous", exact: true }).click();
+  const quickFirstShown = await picker.getByText("1 / 2", { exact: true }).waitFor({ timeout: 5_000 }).then(() => true, () => false);
+  const quickFirst = await card.locator("span", { hasText: /^Stopped$/ }).first().waitFor({ timeout: 5_000 }).then(() => true, () => false);
+  step("regenerate right after Stop still gives the first version its Stopped line", quickFirstShown && quickFirst, `picker ${quickFirstShown}, line ${quickFirst}`);
+  await page.waitForTimeout(500);
+  await shot("quick-regenerate-previous");
+  await page.waitForTimeout(2_500);
+  const quickLeft = execFileSync("docker", ["ps", "-a", "--filter", "label=orbit.sandbox=true", "--format", "{{.ID}}"], { encoding: "utf8" }).trim();
+  step("regenerate right after Stop leaves no sandbox container", quickLeft === "", quickLeft);
 }
