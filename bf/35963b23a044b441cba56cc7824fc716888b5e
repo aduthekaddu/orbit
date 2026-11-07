@@ -1,0 +1,18 @@
+.github/workflows/ci.yml
+  h_9f68edf4527855 111-112
+CONTRIBUTING.md
+  h_9f68edf4527855 34
+scripts/qa/assert-nonroot.sh
+  h_9f68edf4527855 1-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bf35963b23a044b441cba56cc7824fc716888b5e",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
