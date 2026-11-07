@@ -78,6 +78,49 @@ test("an existing database gains memory tables and keeps its user", () => {
   db.close();
 });
 
+test("an older memories table keeps its vector when it gains a stable rowid", () => {
+  const folder = path.join(process.cwd(), "drizzle");
+  const names = fs.readdirSync(folder).filter((name) => name.endsWith(".sql")).sort();
+  const stable = names.find((name) => fs.readFileSync(path.join(folder, name), "utf8").includes("memories_stable") || fs.readFileSync(path.join(folder, name), "utf8").includes("__new_memories"));
+  assert.ok(stable, "stable rowid migration is missing");
+  const older = names.filter((name) => name < stable);
+  const file = path.join(os.tmpdir(), `orbit-memory-rowid-${process.pid}.db`);
+  fs.rmSync(file, { force: true });
+  const db = new Database(file);
+  db.function("orbit_clean_output", (text: unknown) => (typeof text === "string" ? text : null));
+  const sqliteVec = require("sqlite-vec") as { load: (database: Database.Database) => void };
+  sqliteVec.load(db);
+  for (const name of older) {
+    for (const statement of fs.readFileSync(path.join(folder, name), "utf8").split("--> statement-breakpoint")) {
+      const sql = statement.trim();
+      if (sql) db.exec(sql);
+    }
+  }
+  db.prepare("INSERT INTO memories (id, kind, text, text_norm, created_at) VALUES (?, 'fact', ?, ?, 1)").run("mem-old", "Keep the oldrow token", "keep the oldrow token");
+  const before = db.prepare("SELECT rowid AS rowid FROM memories WHERE id = ?").get("mem-old") as { rowid: number };
+  const vector = Buffer.from(new Float32Array(Array.from({ length: 768 }, () => 0.25)).buffer);
+  db.prepare("INSERT INTO memories_vec(rowid, embedding) VALUES (cast(? AS integer), ?)").run(before.rowid, vector);
+  for (const statement of fs.readFileSync(path.join(folder, stable), "utf8").split("--> statement-breakpoint")) {
+    const sql = statement.trim();
+    if (sql) db.exec(sql);
+  }
+  const pk = db.prepare("SELECT type AS type FROM pragma_table_info('memories') WHERE pk = 1").get() as { type: string };
+  assert.equal(pk.type, "INTEGER");
+  const after = db.prepare("SELECT rowid AS rowid FROM memories WHERE id = ?").get("mem-old") as { rowid: number };
+  assert.equal(after.rowid, before.rowid);
+  db.exec("VACUUM");
+  const vacuumed = db.prepare("SELECT rowid AS rowid FROM memories WHERE id = ?").get("mem-old") as { rowid: number };
+  assert.equal(vacuumed.rowid, before.rowid);
+  const joined = db.prepare("SELECT memories.text AS text FROM memories_vec JOIN memories ON memories.rowid = memories_vec.rowid WHERE memories.id = ?").get("mem-old") as { text: string };
+  assert.equal(joined.text, "Keep the oldrow token");
+  const found = db.prepare("SELECT count(*) AS n FROM memories_fts WHERE memories_fts MATCH ?").get('"oldrow"') as { n: number };
+  assert.equal(found.n, 1);
+  db.prepare("INSERT INTO memories (id, kind, text, text_norm, created_at) VALUES (?, 'fact', ?, ?, 2)").run("mem-new", "A newrow token after the move", "a newrow token after the move");
+  const added = db.prepare("SELECT count(*) AS n FROM memories_fts WHERE memories_fts MATCH ?").get('"newrow"') as { n: number };
+  assert.equal(added.n, 1);
+  db.close();
+});
+
 test("a memory's vector stays on that memory after vacuum", async () => {
   const { store, embed } = requireStore();
   const saved = store.saveMemory({ text: "Vacuum keeps the vectorkey token", kind: "fact" });
