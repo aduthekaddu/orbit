@@ -53,6 +53,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - A GitHub server that repeats the token does not get that token back out through Check, a tool result, or a chat stream error. The text says `[redacted]` instead.
 - A GitHub connection that does not answer stops after 10 seconds, closes, and the chat continues without those tools. Stopping the chat still cancels the connection immediately.
 - GitHub cards link an issue or a pull request on github.com, and a file result links to that file. A URL inside the issue text, a label, or the file body stays text.
+- A GitHub tool result that reports an error, such as a rate limit or a permission failure, shows Failed on the card. A rejected token check stays Failed.
 
 - After you press Stop on a running code card, the open chat shows the same card a reload shows: Cancelled, the Stopped line with its duration, and the output the program had printed. Before, the card stayed bare until you reloaded the page. Your draft in the composer and the version you are viewing stay as they are. This also holds when you press Regenerate or send a message right after Stop.
 
