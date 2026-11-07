@@ -18,7 +18,7 @@ export function redactValue(value: unknown, secret: string | readonly string[]):
   if (Array.isArray(value)) return value.map((item) => redactValue(item, secret));
   if (!value || typeof value !== "object") return value;
   const copy: Record<string, unknown> = {};
-  for (const [key, child] of Object.entries(value)) copy[key] = redactValue(child, secret);
+  for (const [key, child] of Object.entries(value)) copy[sanitize(key, secret)] = redactValue(child, secret);
   return copy;
 }
 
