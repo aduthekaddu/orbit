@@ -55,9 +55,17 @@ export function githubMcpTarget(value: string | undefined, env: NodeJS.ProcessEn
   return { ok: true, url: url.toString() };
 }
 
+function httpStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== "object" || !("statusCode" in error)) return undefined;
+  const status = error.statusCode;
+  return typeof status === "number" ? status : undefined;
+}
+
 export function githubFailureText(error: unknown, token: string): string {
+  const status = httpStatus(error);
   const message = sanitize(error instanceof Error ? error.message : "GitHub tools unavailable", token);
-  if (/401|403|unauthorized|forbidden/i.test(message)) return "GitHub rejected the token.";
+  if (status === 400 || /\bHTTP 400\b/i.test(message)) return "GitHub rejected the token (bad request).";
+  if (status === 401 || status === 403 || /401|403|unauthorized|forbidden/i.test(message)) return "GitHub rejected the token.";
   return "GitHub is unavailable.";
 }
 
