@@ -260,6 +260,14 @@ test("a structured tool result does not carry the token as a field name into the
   });
 });
 
+test("check reports a malformed token as a bad request", { timeout: 20_000 }, async () => {
+  await withMock(async (mock) => {
+    const bad = await checkGithub({ token: mock.token, mcpUrl: `${mock.url}?mode=bad-request` });
+    assert.deepEqual(bad, { ok: false, error: "GitHub rejected the token (bad request)." });
+    assert.equal(JSON.stringify(bad).includes(mock.token), false);
+  });
+});
+
 test("check reports the GitHub login and a rejected token", { timeout: 20_000 }, async () => {
   await withMock(async (mock) => {
     const ok = await checkGithub({ token: mock.token, mcpUrl: mock.url });

@@ -108,6 +108,11 @@ export async function startMockMcp({ port = 0 } = {}) {
     if (method === "tools/list") listCount += 1;
     if (method === "tools/call") callCount += 1;
     const mode = url.searchParams.get("mode");
+    if (mode === "bad-request") {
+      response.writeHead(400, { "content-type": "application/json" });
+      response.end(JSON.stringify({ message: "Bad credentials" }));
+      return;
+    }
     if (mode === "fail-list" && method === "tools/list") {
       response.writeHead(500, { "content-type": "application/json" });
       response.end(JSON.stringify({ error: "unavailable" }));
