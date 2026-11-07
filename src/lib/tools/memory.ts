@@ -10,7 +10,7 @@ function isForeignKey(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === "SQLITE_CONSTRAINT_FOREIGNKEY");
 }
 
-export function rememberFact(source: MemorySource, input: { text: string; kind: MemoryKind }): { id: string } | { error: string } {
+export function rememberFact(source: MemorySource, input: { text: string; kind: MemoryKind }): { id: string; text: string } | { error: string } {
   const attempts = [
     { chatId: source.chatId, messageId: source.messageId },
     { chatId: source.chatId, messageId: null },
@@ -54,10 +54,12 @@ export function forgetMemory(id: string): { id: string } | { error: string } {
   return deleteMemory(trimmed) ? { id: trimmed } : { error: "No memory with that id" };
 }
 
+export const forgetIdSchema = z.object({ id: z.string().trim().min(1).max(100) });
+
 export function createForgetTool() {
   return tool({
     description: "Delete one saved memory. The id has to be one the user gave you. Do not invent an id.",
-    inputSchema: z.object({ id: z.string().trim().min(1).max(100) }),
+    inputSchema: forgetIdSchema,
     execute: ({ id }) => forgetMemory(id),
   });
 }

@@ -36,11 +36,10 @@ test("forget refuses a call that has no id and leaves the memory in place", () =
   assert.deepEqual(tools.forgetMemory(""), { error: "Memory id is required" });
   assert.deepEqual(tools.forgetMemory("   "), { error: "Memory id is required" });
   assert.equal(store.getMemory(saved.id)?.text, "Keep the forgetgate token");
-  const forget = tools.createForgetTool();
-  assert.equal(forget.inputSchema.safeParse({}).success, false);
-  assert.equal(forget.inputSchema.safeParse({ id: "" }).success, false);
-  assert.equal(forget.inputSchema.safeParse({ id: "   " }).success, false);
-  assert.equal(forget.inputSchema.safeParse({ id: saved.id }).success, true);
+  assert.equal(tools.forgetIdSchema.safeParse({}).success, false);
+  assert.equal(tools.forgetIdSchema.safeParse({ id: "" }).success, false);
+  assert.equal(tools.forgetIdSchema.safeParse({ id: "   " }).success, false);
+  assert.equal(tools.forgetIdSchema.safeParse({ id: saved.id }).success, true);
 });
 
 test("remember returns the saved text", () => {
