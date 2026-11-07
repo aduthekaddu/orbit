@@ -1,0 +1,16 @@
+scripts/qa/mock-mcp.mjs
+  h_9f68edf4527855 111-115
+src/lib/tools/github.test.ts
+  h_9f68edf4527855 263-270
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4d20e22f1364e51115313de6d9d010e26ae121e4",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
