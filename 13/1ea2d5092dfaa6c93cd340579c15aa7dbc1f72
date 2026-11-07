@@ -1,0 +1,24 @@
+CHANGELOG.md
+  h_9f68edf4527855 14
+docs/slices/10.md
+  h_9f68edf4527855 56
+drizzle/0007_memories_stable_rowid.sql
+  h_9f68edf4527855 1-32
+drizzle/meta/0007_snapshot.json
+  h_9f68edf4527855 1-731
+drizzle/meta/_journal.json
+  h_9f68edf4527855 53-59
+src/lib/db/schema.ts
+  h_9f68edf4527855 128-129
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "131ea2d5092dfaa6c93cd340579c15aa7dbc1f72",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
