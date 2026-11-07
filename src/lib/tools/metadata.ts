@@ -16,6 +16,8 @@ export const toolCards = {
     failedOutput: hasFailedCodeOutput,
     stoppedOutput: hasStoppedCodeOutput,
   },
+  remember: { card: "generic" },
+  forget: { card: "generic" },
 } satisfies Record<string, ToolCardDefinition>;
 
 export type ToolName = keyof typeof toolCards;
