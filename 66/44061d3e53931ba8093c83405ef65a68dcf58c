@@ -1,0 +1,31 @@
+README.md
+  s_13b5efd5788697::t_358df3d07382d2 67-75
+CONTRIBUTING.md
+  s_13b5efd5788697::t_679f3427eda361 34
+.github/workflows/ci.yml
+  s_13b5efd5788697::t_358df3d07382d2 113-114
+Dockerfile
+  s_13b5efd5788697::t_358df3d07382d2 15,18,24
+docker/entrypoint.sh
+  s_13b5efd5788697::t_261faa42507574 4-6,15-16,19-23
+  s_13b5efd5788697::t_d13890cd78e236 17-18
+  s_13b5efd5788697::t_29e9b18fc67477 24-25
+CHANGELOG.md
+  s_13b5efd5788697::t_358df3d07382d2 12-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6644061d3e53931ba8093c83405ef65a68dcf58c",
+  "prompts": {},
+  "sessions": {
+    "s_13b5efd5788697": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "67a73745-fddd-44da-b5de-57c820216118",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
