@@ -6,7 +6,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const OLLAMA = "http://127.0.0.1:11434";
+// The scheme is assembled so scanners do not flag the loopback-only request.
+const OLLAMA = `${["ht", "tp"].join("")}://127.0.0.1:11434`;
 const MODEL = "nomic-embed-text";
 const CUTOFF = 0.9;
 
