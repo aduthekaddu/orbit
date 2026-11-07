@@ -250,7 +250,7 @@ test("a structured tool result does not carry the token as a field name into the
           saved = JSON.stringify(responseMessage.parts ?? []);
         },
       });
-      for await (const chunk of stream as AsyncIterable<unknown>) chunks.push(JSON.stringify(chunk));
+      for await (const chunk of stream as unknown as AsyncIterable<unknown>) chunks.push(JSON.stringify(chunk));
       const boundary = `${chunks.join("\n")}\n${saved}`;
       assert.match(boundary, /Migration lock/);
       assert.equal(boundary.includes(mock.token), false);

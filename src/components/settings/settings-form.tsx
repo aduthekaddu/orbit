@@ -142,7 +142,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          token: githubToken.trim() || undefined,
+          token: (githubToken ?? "").trim() || undefined,
           mcpUrl: githubMcpUrl.trim(),
         }),
       });
