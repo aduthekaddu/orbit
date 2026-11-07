@@ -1,0 +1,19 @@
+src/lib/search.ts
+  s_23446b3face73f::t_a71c8940143fe8 37-54,56-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bf62226707f8f8f310c1719d1a02cc1b2951d538",
+  "prompts": {},
+  "sessions": {
+    "s_23446b3face73f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e62df905-b1d7-47b7-9434-485e41c9c4da",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
