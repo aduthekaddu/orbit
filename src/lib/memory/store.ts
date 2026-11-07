@@ -176,19 +176,21 @@ export function textMatchIds(query: string, limit = 20): string[] {
   }
 }
 
+export const MAX_VECTOR_DISTANCE = 1;
+
 export function vectorMatchIds(vector: number[], limit = 20): string[] {
   const blob = Buffer.from(new Float32Array(vector).buffer);
   const rows = db.$client
     .prepare(
-      `SELECT memories.id AS id
+      `SELECT memories.id AS id, distance
        FROM memories_vec
        JOIN memories ON memories.rowid = memories_vec.rowid
        WHERE memories_vec.embedding MATCH ?
          AND k = ?
        ORDER BY distance`,
     )
-    .all(blob, limit) as { id: string }[];
-  return rows.map((row) => row.id);
+    .all(blob, limit) as { id: string; distance: number }[];
+  return rows.filter((row) => row.distance <= MAX_VECTOR_DISTANCE).map((row) => row.id);
 }
 
 export function markUsed(ids: string[], at = new Date()) {

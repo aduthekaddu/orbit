@@ -16,9 +16,16 @@ const statusLabels: Record<ToolRunStatus, string> = {
 
 const languageLabels = { python: "Python", javascript: "JavaScript" };
 
+function rememberedText(args: unknown, result: unknown): string {
+  if (result && typeof result === "object" && "text" in result && typeof result.text === "string" && result.text.trim()) return result.text;
+  if (args && typeof args === "object" && "text" in args && typeof args.text === "string") return args.text;
+  return "";
+}
+
 export function RunCard(props: ToolCallMessagePartProps) {
   const status = toolCallRunStatus(props);
   const kind = cardFor(props.toolName);
+  const savedText = props.toolName === "remember" ? rememberedText(props.args, props.result) : "";
   const language = kind === "code" ? runCodeInputSchema.safeParse(props.args).data?.language : undefined;
   return (
     <section data-tool-name={props.toolName} className="my-3 min-w-0 max-w-widget rounded-lg border bg-card shadow-card">
@@ -30,7 +37,7 @@ export function RunCard(props: ToolCallMessagePartProps) {
       </div>
       {(kind === "code" || status !== "running" && status !== "cancelled") && (
         <div className="min-w-0 p-3">
-          {kind === "code" ? <CodeRun input={props.args} output={status === "cancelled" && !hasStoppedCodeOutput(props.result) ? undefined : props.result} /> : kind === "genui" ? <RenderUiPart {...props} /> : props.isError ? <p className="text-sm text-destructive">Tool failed</p> : kind === "search" ? <SearchResults output={props.result} /> : <GenericOutput output={props.result} />}
+          {kind === "code" ? <CodeRun input={props.args} output={status === "cancelled" && !hasStoppedCodeOutput(props.result) ? undefined : props.result} /> : kind === "genui" ? <RenderUiPart {...props} /> : props.isError ? <p className="text-sm text-destructive">Tool failed</p> : kind === "search" ? <SearchResults output={props.result} /> : savedText ? <p className="text-sm text-foreground">{savedText}</p> : <GenericOutput output={props.result} />}
         </div>
       )}
     </section>

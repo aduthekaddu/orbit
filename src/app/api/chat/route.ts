@@ -5,7 +5,7 @@ import { sanitize, streamErrorMessage } from "@/lib/chat-errors";
 import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
 import { assistantHasVisiblePart, settleInterruptedParts } from "@/lib/genui/spec";
 import { embedPending } from "@/lib/memory/embed";
-import { recall, recalledInstructions, REMEMBER_INSTRUCTIONS } from "@/lib/memory/recall";
+import { attachMemoryNotes, quotedMemoryNotes, recall, REMEMBER_INSTRUCTIONS } from "@/lib/memory/recall";
 import { toolsFor } from "@/lib/tools";
 import { CHAT_STEP_LIMIT, searchAnswerStep } from "@/lib/tools/answer-step";
 import { createStoppedRuns } from "@/lib/tools/stopped-runs";
@@ -97,13 +97,12 @@ export async function POST(request: Request) {
     const stopped = createStoppedRuns();
     const tools = toolsFor(settings, stopped, { chatId: chat.id, messageId: lastUser?.id ?? null });
     const recalled = await recall(textFromParts(lastUser?.parts), 3);
-    const memoryBlock = recalledInstructions(recalled.map((hit) => hit.memory));
+    const notes = quotedMemoryNotes(recalled.map((hit) => hit.memory));
     const instructions = [
       RENDER_UI_SYSTEM,
       ARTIFACT_INSTRUCTIONS,
       REMEMBER_INSTRUCTIONS,
       tools.web_search ? "Use web_search for recent events, prices, or facts you are unsure of. Cite sources as markdown links to result URLs." : "",
-      memoryBlock,
     ]
       .filter((part) => part.length > 0)
       .join("\n\n");
@@ -115,7 +114,7 @@ export async function POST(request: Request) {
         chatId: chat.id,
       }),
       instructions,
-      messages: await convertToModelMessages(uiMessages, { tools }),
+      messages: attachMemoryNotes(await convertToModelMessages(uiMessages, { tools }), notes),
       tools,
       stopWhen: stepCountIs(CHAT_STEP_LIMIT),
       prepareStep: tools.web_search ? searchAnswerStep : undefined,

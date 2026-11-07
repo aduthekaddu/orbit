@@ -28,7 +28,7 @@ export function rememberFact(source: MemorySource, input: { text: string; kind: 
         sourceChatId: attempt.chatId,
         sourceMessageId: attempt.messageId,
       });
-      return { id: memory.id };
+      return { id: memory.id, text: memory.text };
     } catch (error) {
       if (error instanceof MemoryRejected) return { error: error.message };
       if (!isForeignKey(error)) return { error: "Could not save memory" };
@@ -48,10 +48,16 @@ export function createRememberTool(source: MemorySource = { chatId: null, messag
   });
 }
 
+export function forgetMemory(id: string): { id: string } | { error: string } {
+  const trimmed = id.trim();
+  if (!trimmed) return { error: "Memory id is required" };
+  return deleteMemory(trimmed) ? { id: trimmed } : { error: "No memory with that id" };
+}
+
 export function createForgetTool() {
   return tool({
-    description: "Delete one saved memory by id.",
+    description: "Delete one saved memory. The id has to be one the user gave you. Do not invent an id.",
     inputSchema: z.object({ id: z.string().trim().min(1).max(100) }),
-    execute: ({ id }) => (deleteMemory(id) ? { id } : { error: "No memory with that id" }),
+    execute: ({ id }) => forgetMemory(id),
   });
 }

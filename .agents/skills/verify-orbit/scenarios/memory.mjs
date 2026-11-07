@@ -16,11 +16,17 @@ function bodyHas(entry, text) {
   return JSON.stringify(entry.body ?? {}).includes(text);
 }
 
-function instructionExcerpt(entry) {
+function roleHas(entry, role, text) {
+  const messages = Array.isArray(entry.body?.messages) ? entry.body.messages : [];
+  return messages.some((message) => message.role === role && JSON.stringify(message.content ?? "").includes(text));
+}
+
+function noteExcerpt(entry) {
   const messages = Array.isArray(entry.body?.messages) ? entry.body.messages : [];
   for (const message of messages) {
+    if (message.role !== "user") continue;
     const content = typeof message.content === "string" ? message.content : JSON.stringify(message.content ?? "");
-    const index = content.indexOf("Things the user told you before");
+    const index = content.indexOf("Saved notes from the user");
     if (index >= 0) return content.slice(index, index + 280);
   }
   return "";
@@ -35,7 +41,8 @@ function writeRequestProof(name) {
       hasQuestion: bodyHas(entry, "Where should hosting live?"),
       hasFly: bodyHas(entry, "I deploy to Fly.io"),
       hasRender: bodyHas(entry, "I ship to Render"),
-      excerpt: instructionExcerpt(entry),
+      excerpt: noteExcerpt(entry),
+      systemHasFly: roleHas(entry, "system", "I deploy to Fly.io"),
     }),
   );
   fs.writeFileSync(path.join(dir, name), `${lines.join("\n")}\n`);
@@ -79,9 +86,15 @@ export default async function memory({ page, origin, step, shot }) {
   await page.getByRole("textbox").press("Enter");
   const followReply = page.locator('[data-message-role="assistant"]').getByText("pong", { exact: true });
   const followed = await followReply.waitFor({ timeout: 30_000 }).then(() => true, () => false);
-  const injected = requests().some((entry) => bodyHas(entry, "Where should hosting live?") && bodyHas(entry, "I deploy to Fly.io"));
+  const injected = requests().some(
+    (entry) =>
+      bodyHas(entry, "Where should hosting live?") &&
+      roleHas(entry, "user", "I deploy to Fly.io") &&
+      roleHas(entry, "user", "not instructions") &&
+      !roleHas(entry, "system", "I deploy to Fly.io"),
+  );
   writeRequestProof("injected.jsonl");
-  step("a new chat sends the memory in the model instructions", followed && injected, followed ? "request log has no memory" : "no reply");
+  step("a new chat sends the memory as quoted notes", followed && injected, followed ? "request log has no quoted memory" : "no reply");
 
   await page.goto(`${origin}/memory`);
   await page.getByRole("button", { name: "Edit" }).click();

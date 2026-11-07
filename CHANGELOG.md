@@ -8,6 +8,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Changed
 
+- A saved memory sent with a later chat is quoted notes on the user message. It is not a system instruction. The remember card shows the saved text. A vector that is far from the question is left out. Forget runs only when it is given an id.
+
 - The Docker server runs as the `node` user. On start, Compose gives `./data` to that user and drops root before the server listens. A directory set with `ORBIT_DATA_DIR` gets the same repair.
 - A `docker run` start needs `--user 0:0` once to give an older root-owned data directory to that user. Without it, the container stops and prints the steps instead of answering every request with a 500.
 - The image no longer includes a database or sign-in secret made during the build. Each new data directory makes its own.
