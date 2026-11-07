@@ -1,0 +1,21 @@
+CHANGELOG.md
+  s_23446b3face73f::t_10c67e638a2cae 8
+src/lib/tools/github.ts
+  s_23446b3face73f::t_76f8034181431b 58-63,65,67-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b6c5bad3beea101d0263393930e32c34d966a80d",
+  "prompts": {},
+  "sessions": {
+    "s_23446b3face73f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e62df905-b1d7-47b7-9434-485e41c9c4da",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
