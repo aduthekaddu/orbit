@@ -85,6 +85,17 @@ test("a GitHub file card links the blob for the tool input", () => {
   assert.doesNotMatch(html, /evil\.example/);
 });
 
+test("a GitHub rate limit card says it failed", () => {
+  const html = render({
+    toolName: "github_list_issues",
+    args: { owner: "aduthekaddu", repo: "orbit" },
+    result: { content: [{ type: "text", text: "API rate limit exceeded for user ID 1." }], isError: true },
+    isError: false,
+    status: { type: "complete" },
+  });
+  assert.equal(header(html), "GitHub|Failed");
+});
+
 test("a GitHub result without a link uses the generic card", () => {
   const html = render({
     toolName: "github_get_me",

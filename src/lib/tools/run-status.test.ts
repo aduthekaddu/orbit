@@ -71,3 +71,21 @@ test("a stopped code run that saved its output is cancelled, not failed", () => 
   assert.equal(toolRunStatus({ state: "output-available", output: result }, false, "run_code"), "cancelled");
   assert.equal(toolCallRunStatus({ toolName: "run_code", status: { type: "complete" }, result, isError: false }), "cancelled");
 });
+
+test("a GitHub rate limit result is failed", () => {
+  const result = { content: [{ type: "text", text: "API rate limit exceeded for user ID 1." }], isError: true };
+  assert.equal(toolRunStatus({ state: "output-available", output: result }, false, "github_list_issues"), "failed");
+  assert.equal(toolCallRunStatus({ toolName: "github_list_issues", status: { type: "complete" }, result, isError: false }), "failed");
+});
+
+test("a GitHub permission failure is failed", () => {
+  const result = { content: [{ type: "text", text: "Resource not accessible by personal access token" }], isError: true };
+  assert.equal(toolRunStatus({ state: "output-available", output: result }, false, "github_get_pull_request"), "failed");
+  assert.equal(toolCallRunStatus({ toolName: "github_get_pull_request", status: { type: "complete" }, result, isError: false }), "failed");
+});
+
+test("a failed GitHub check stays failed", () => {
+  const result = { ok: false, error: "GitHub rejected the token." };
+  assert.equal(toolRunStatus({ state: "output-available", output: result }, false, "github_get_me"), "failed");
+  assert.equal(toolCallRunStatus({ toolName: "github_get_me", status: { type: "complete" }, result, isError: false }), "failed");
+});
