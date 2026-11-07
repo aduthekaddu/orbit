@@ -1,0 +1,14 @@
+src/lib/tools/github.ts
+  h_9f68edf4527855 8,52,55,72,79,109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "76922da94c593bcbed0455c08ef897f467786ec7",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
