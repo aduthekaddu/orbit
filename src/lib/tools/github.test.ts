@@ -291,6 +291,14 @@ test("issue, pull request, and file results become GitHub links", () => {
     ],
   }, { owner: "aduthekaddu", repo: "orbit", path: "README.md" });
   assert.deepEqual(file, [{ href: "https://github.com/aduthekaddu/orbit/blob/HEAD/README.md", title: "README.md" }]);
+  assert.deepEqual(githubLinks({
+    content: [{ type: "resource", resource: { uri: "repo://aduthekaddu/orbit/sha/abcdef/contents/src/lib/tools/github.ts" } }],
+  }, { owner: "aduthekaddu", repo: "orbit", path: "src/lib/tools/github.ts", ref: "feat/github-tools" }), [
+    { href: "https://github.com/aduthekaddu/orbit/blob/feat/github-tools/src/lib/tools/github.ts", title: "github.ts" },
+  ]);
+  assert.deepEqual(githubLinks({
+    content: [{ type: "resource", resource: { uri: "repo://other/repo/contents/README.md" } }],
+  }, { owner: "aduthekaddu", repo: "orbit", path: "README.md" }), []);
   assert.deepEqual(githubLinks({ content: [{ type: "text", text: "not json" }] }), []);
   assert.deepEqual(githubLinks({ html_url: "javascript:alert(1)", title: "Nope" }), []);
   assert.deepEqual(githubLinks({ html_url: "https://evil.example/phish", title: "Click me" }), []);

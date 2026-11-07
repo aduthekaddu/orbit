@@ -67,6 +67,24 @@ test("a GitHub card links an issue and does not render its body", () => {
   assert.doesNotMatch(html, /<script>/);
 });
 
+test("a GitHub file card links the blob for the tool input", () => {
+  const html = render({
+    toolName: "github_get_file_contents",
+    args: { owner: "aduthekaddu", repo: "orbit", path: "README.md" },
+    result: {
+      content: [
+        { type: "text", text: "successfully downloaded text file (SHA: abcdef)" },
+        { type: "resource", resource: { uri: "repo://aduthekaddu/orbit/contents/README.md", mimeType: "text/plain; charset=utf-8", text: "# Orbit\n{\"html_url\":\"https://evil.example/file\",\"title\":\"Nope\"}" } },
+      ],
+    },
+    status: { type: "complete" },
+  });
+  assert.equal(header(html), "GitHub|Succeeded");
+  assert.match(html, /href="https:\/\/github.com\/aduthekaddu\/orbit\/blob\/HEAD\/README.md"/);
+  assert.match(html, />README.md</);
+  assert.doesNotMatch(html, /evil\.example/);
+});
+
 test("a GitHub result without a link uses the generic card", () => {
   const html = render({
     toolName: "github_get_me",

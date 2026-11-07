@@ -40,7 +40,7 @@ export function RunCard(props: ToolCallMessagePartProps) {
       </div>
       {(kind === "code" || status !== "running" && status !== "cancelled") && (
         <div className="min-w-0 p-3">
-          {kind === "code" ? <CodeRun input={props.args} output={status === "cancelled" && !hasStoppedCodeOutput(props.result) ? undefined : props.result} /> : kind === "genui" ? <RenderUiPart {...props} /> : props.isError ? <p className="text-sm text-destructive">Tool failed</p> : kind === "search" ? <SearchResults output={props.result} /> : kind === "github" ? <GithubOutput output={props.result} /> : <GenericOutput output={props.result} />}
+          {kind === "code" ? <CodeRun input={props.args} output={status === "cancelled" && !hasStoppedCodeOutput(props.result) ? undefined : props.result} /> : kind === "genui" ? <RenderUiPart {...props} /> : props.isError ? <p className="text-sm text-destructive">Tool failed</p> : kind === "search" ? <SearchResults output={props.result} /> : kind === "github" ? <GithubOutput output={props.result} input={props.args} /> : <GenericOutput output={props.result} />}
         </div>
       )}
     </section>

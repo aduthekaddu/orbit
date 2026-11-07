@@ -1,8 +1,8 @@
 import { githubLinks } from "@/lib/tools/github-links";
 import { GenericOutput } from "./generic-output";
 
-export function GithubOutput({ output }: { output: unknown }) {
-  const links = githubLinks(output);
+export function GithubOutput({ output, input }: { output: unknown; input?: unknown }) {
+  const links = githubLinks(output, input);
   if (links.length === 0) return <GenericOutput output={output} />;
   return (
     <ul className="space-y-2">
