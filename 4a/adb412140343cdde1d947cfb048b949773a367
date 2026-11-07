@@ -1,0 +1,24 @@
+docker/entrypoint.sh
+  s_29d262531d34d6::t_206b60e2159449 2-3
+  s_29d262531d34d6::t_9a4ae607cbada8 10-11,13-14,18-19,21
+CHANGELOG.md
+  s_29d262531d34d6::t_206b60e2159449 11
+README.md
+  s_29d262531d34d6::t_206b60e2159449 74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4aadb412140343cdde1d947cfb048b949773a367",
+  "prompts": {},
+  "sessions": {
+    "s_29d262531d34d6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "642c1460-f3c8-45bd-9183-e9b51de7a87c",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
