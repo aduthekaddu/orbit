@@ -8,7 +8,9 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Added
 
-- Conversation search finds the standard output and standard error of code runs, so a result that only the program printed can be found by its text. A result opens the right chat and message. A migration adds the output of earlier runs to search. Source code is not searched.
+- Conversation search finds the source of code runs, so code the model ran can be found by a name or a word in it. This includes a run you stopped. A migration adds the source of earlier runs to search.
+
+- Conversation search finds the standard output and standard error of code runs, so a result that only the program printed can be found by its text. A result opens the right chat and message. A migration adds the output of earlier runs to search.
 
 - Code run cards name their language, Python or JavaScript, in the header. The tag stays while the run goes, after a failure or Stop, and after you reopen the chat. The output boxes sit on a darker surface than the source.
 
