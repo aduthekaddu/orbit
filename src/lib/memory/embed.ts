@@ -57,7 +57,7 @@ async function fillPending(): Promise<EmbedPendingResult> {
     const batch = rows.slice(index, index + BATCH);
     const result = await embed(batch.map((row) => row.text));
     if (!result.ok) return { ok: false, error: result.error, embedded };
-    writeVectors(batch.map((row, offset) => ({ rowid: row.rowid, vector: result.vectors[offset] ?? [] })));
+    writeVectors(batch.map((row, offset) => ({ rowid: row.rowid, text: row.text, vector: result.vectors[offset] ?? [] })));
     embedded += batch.length;
   }
   return { ok: true, embedded };

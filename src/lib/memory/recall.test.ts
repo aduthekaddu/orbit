@@ -91,14 +91,14 @@ test("recall with Ollama down still returns a full text match", async () => {
 test("the instruction block keeps three memories and says to use them only when relevant", () => {
   const { recall } = modules();
   const block = recall.recalledInstructions([
-    { text: "one fact" },
-    { text: "two fact" },
-    { text: "three fact" },
-    { text: "four fact" },
+    { id: "mem-one", text: "one fact" },
+    { id: "mem-two", text: "two fact" },
+    { id: "mem-three", text: "three fact" },
+    { id: "mem-four", text: "four fact" },
   ]);
   assert.match(block, /Use them only when relevant/);
-  assert.match(block, /one fact/);
-  assert.match(block, /three fact/);
+  assert.match(block, /mem-one one fact/);
+  assert.match(block, /mem-three three fact/);
   assert.doesNotMatch(block, /four fact/);
   assert.equal(recall.recalledInstructions([]), "");
 });

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { visibleMemories } from "./visible-memories";
 
 type MemoryKind = "fact" | "preference" | "summary";
 
@@ -46,7 +47,7 @@ export function MemoryList({
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const [rows, setRows] = useState(initial);
+  const [fetched, setFetched] = useState<{ query: string; rows: MemoryItem[] } | null>(null);
   const [status, setStatus] = useState(embeddings);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -56,9 +57,8 @@ export function MemoryList({
   const [pendingDelete, setPendingDelete] = useState<MemoryItem | null>(null);
 
   useEffect(() => {
-    setRows(initial);
     setStatus(embeddings);
-  }, [initial, embeddings]);
+  }, [embeddings]);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -68,21 +68,27 @@ export function MemoryList({
       fetch(`/api/memories?q=${encodeURIComponent(trimmed)}`, { signal: controller.signal })
         .then((response) => (response.ok ? response.json() : null))
         .then((payload: { memories?: MemoryItem[]; embeddings?: { ok: true } | { ok: false; error: string } } | null) => {
-          if (!payload || controller.signal.aborted) return;
-          if (Array.isArray(payload.memories)) setRows(payload.memories);
+          if (controller.signal.aborted) return;
+          if (!payload || !Array.isArray(payload.memories)) {
+            setFetched({ query: trimmed, rows: [] });
+            setError("Could not search");
+            return;
+          }
+          setFetched({ query: trimmed, rows: payload.memories });
+          setError((current) => (current === "Could not search" ? "" : current));
           if (payload.embeddings) setStatus(payload.embeddings);
         })
-        .catch(() => {});
+        .catch(() => {
+          if (controller.signal.aborted) return;
+          setFetched({ query: trimmed, rows: [] });
+          setError("Could not search");
+        });
     }, 150);
     return () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [query]);
-
-  function shown() {
-    return query.trim() ? rows : initial;
-  }
+  }, [query, initial]);
 
   async function save(id: string) {
     setPending(true);
@@ -121,7 +127,7 @@ export function MemoryList({
     }
   }
 
-  const visible = shown();
+  const visible = visibleMemories(query, initial, fetched);
 
   return (
     <div className="mx-auto w-full max-w-widget px-6 py-10">

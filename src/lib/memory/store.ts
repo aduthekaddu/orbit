@@ -140,11 +140,14 @@ export function listUnembedded(): { rowid: number; text: string }[] {
     .all() as { rowid: number; text: string }[];
 }
 
-export function writeVectors(rows: { rowid: number; vector: number[] }[]) {
+export function writeVectors(rows: { rowid: number; text: string; vector: number[] }[]) {
+  const current = db.$client.prepare("SELECT text AS text FROM memories WHERE rowid = cast(? AS integer)");
   const remove = db.$client.prepare("DELETE FROM memories_vec WHERE rowid = cast(? AS integer)");
   const insert = db.$client.prepare("INSERT INTO memories_vec(rowid, embedding) VALUES (cast(? AS integer), ?)");
-  const run = db.$client.transaction((items: { rowid: number; vector: number[] }[]) => {
+  const run = db.$client.transaction((items: { rowid: number; text: string; vector: number[] }[]) => {
     for (const item of items) {
+      const row = current.get(item.rowid) as { text: string } | undefined;
+      if (!row || row.text !== item.text) continue;
       const blob = Buffer.from(new Float32Array(item.vector).buffer);
       remove.run(item.rowid);
       insert.run(item.rowid, blob);

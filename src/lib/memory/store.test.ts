@@ -132,3 +132,32 @@ test("editing the text clears the vector until embeddings run again", async () =
   assert.equal((await embed.embedPending()).ok, true);
   assert.equal(store.getMemory(saved.id)?.embedded, true);
 });
+
+test("a vector for the old text does not mark the rewritten text as embedded", async () => {
+  const { store } = requireStore();
+  const saved = store.saveMemory({ text: "Stale vector token original", kind: "fact" });
+  const { db } = await import("../db");
+  const located = db.$client.prepare("SELECT rowid AS rowid FROM memories WHERE id = ?").get(saved.id) as { rowid: number };
+  const vector = Array.from({ length: 768 }, () => 0);
+  vector[0] = 1;
+  store.updateMemory(saved.id, { text: "Stale vector token rewritten", kind: "fact" });
+  store.writeVectors([{ rowid: located.rowid, text: "Stale vector token original", vector }]);
+  assert.equal(store.getMemory(saved.id)?.embedded, false);
+  store.writeVectors([{ rowid: located.rowid, text: "Stale vector token rewritten", vector }]);
+  assert.equal(store.getMemory(saved.id)?.embedded, true);
+});
+
+test("remember keeps the chat when the message id is missing", async () => {
+  const { store } = requireStore();
+  const { db } = await import("../db");
+  const schema = await import("../db/schema");
+  const { rememberFact } = await import("../tools/memory");
+  const now = new Date();
+  db.insert(schema.user).values({ id: "mem-user", name: "Mem", email: "mem-user@orbit.local", emailVerified: true }).run();
+  db.insert(schema.chats).values({ id: "mem-chat", userId: "mem-user", title: "Host", createdAt: now, updatedAt: now }).run();
+  const saved = rememberFact({ chatId: "mem-chat", messageId: "missing-message" }, { text: "Remember the chat link token", kind: "fact" });
+  assert.equal("id" in saved, true);
+  const memory = store.getMemory("id" in saved ? saved.id : "");
+  assert.equal(memory?.sourceChatId, "mem-chat");
+  assert.equal(memory?.sourceMessageId, null);
+});

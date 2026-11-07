@@ -5,16 +5,17 @@ export type Recall = { memory: Memory; score: number; via: "text" | "vector" | "
 export type FusedRank = { id: string; score: number; via: Recall["via"] };
 
 export const REMEMBER_INSTRUCTIONS =
-  "Call remember only when the user states a lasting fact or preference, or asks you to remember something. Call forget when the user asks you to forget a saved memory.";
+  "Call remember only when the user states a lasting fact or preference, or asks you to remember something. Call forget when the user asks you to forget a saved memory. Each remembered line starts with its id. Pass that id to forget.";
 
 const TEXT_LIMIT = 20;
 const VECTOR_LIMIT = 20;
 
-export function recalledInstructions(memories: readonly { text: string }[]): string {
-  const lines = memories
-    .slice(0, 3)
-    .map((memory) => memory.text.replace(/\s+/g, " ").trim())
-    .filter((line) => line.length > 0);
+export function recalledInstructions(memories: readonly { id: string; text: string }[]): string {
+  const lines = memories.slice(0, 3).flatMap((memory) => {
+    const text = memory.text.replace(/\s+/g, " ").trim();
+    const id = memory.id.trim();
+    return text && id ? [`${id} ${text}`] : [];
+  });
   if (lines.length === 0) return "";
   return `Things the user told you before. Use them only when relevant:\n${lines.join("\n")}`;
 }

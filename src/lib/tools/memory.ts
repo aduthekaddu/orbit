@@ -6,9 +6,34 @@ export type MemorySource = { chatId: string | null; messageId: string | null };
 
 const kindSchema = z.enum(["fact", "preference", "summary"]);
 
-function rejected(error: unknown): { error: string } | null {
-  if (error instanceof MemoryRejected) return { error: error.message };
-  if (error && typeof error === "object" && "code" in error && error.code === "SQLITE_CONSTRAINT_FOREIGNKEY") return null;
+function isForeignKey(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "code" in error && error.code === "SQLITE_CONSTRAINT_FOREIGNKEY");
+}
+
+export function rememberFact(source: MemorySource, input: { text: string; kind: MemoryKind }): { id: string } | { error: string } {
+  const attempts = [
+    { chatId: source.chatId, messageId: source.messageId },
+    { chatId: source.chatId, messageId: null },
+    { chatId: null, messageId: null },
+  ];
+  const seen = new Set<string>();
+  for (const attempt of attempts) {
+    const key = `${attempt.chatId ?? ""}\0${attempt.messageId ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    try {
+      const memory = saveMemory({
+        text: input.text,
+        kind: input.kind,
+        sourceChatId: attempt.chatId,
+        sourceMessageId: attempt.messageId,
+      });
+      return { id: memory.id };
+    } catch (error) {
+      if (error instanceof MemoryRejected) return { error: error.message };
+      if (!isForeignKey(error)) return { error: "Could not save memory" };
+    }
+  }
   return { error: "Could not save memory" };
 }
 
@@ -19,26 +44,7 @@ export function createRememberTool(source: MemorySource = { chatId: null, messag
       text: z.string().trim().min(1).max(500),
       kind: kindSchema.default("fact"),
     }),
-    execute: ({ text, kind }) => {
-      const save = (withSource: boolean) =>
-        saveMemory({
-          text,
-          kind: kind as MemoryKind,
-          sourceChatId: withSource ? source.chatId : null,
-          sourceMessageId: withSource ? source.messageId : null,
-        });
-      try {
-        return { id: save(true).id };
-      } catch (error) {
-        const failure = rejected(error);
-        if (failure) return failure;
-        try {
-          return { id: save(false).id };
-        } catch (again) {
-          return rejected(again) ?? { error: "Could not save memory" };
-        }
-      }
-    },
+    execute: ({ text, kind }) => rememberFact(source, { text, kind }),
   });
 }
 
