@@ -41,7 +41,7 @@ function modules() {
 test("embed reads 768 numbers from Ollama", async () => {
   const { embed, mock } = modules();
   process.env.ORBIT_OLLAMA_URL = mock.url;
-  const result = await embed.embed(["Deploy targets Fly.io", "Where should hosting live?"]);
+  const result = await embed.embed(["Deploy targets Fly.io", "Where should hosting live?"], "document");
   assert.equal(result.ok, true);
   if (!result.ok) return;
   assert.equal(result.vectors.length, 2);
@@ -54,7 +54,7 @@ test("embed rejects a vector of the wrong length", async () => {
   await fetch(`${mock.url}/qa/short`, { method: "POST" });
   process.env.ORBIT_OLLAMA_URL = mock.url;
   try {
-    const result = await embed.embed(["too short"]);
+    const result = await embed.embed(["too short"], "document");
     assert.equal(result.ok, false);
   } finally {
     await fetch(`${mock.url}/qa/ok`, { method: "POST" });
@@ -64,7 +64,7 @@ test("embed rejects a vector of the wrong length", async () => {
 test("embed reports that Ollama is unreachable", async () => {
   const { embed } = modules();
   process.env.ORBIT_OLLAMA_URL = "http://127.0.0.1:9";
-  const result = await embed.embed(["hello"]);
+  const result = await embed.embed(["hello"], "document");
   assert.equal(result.ok, false);
   if (result.ok) return;
   assert.match(result.error, /Ollama/);
@@ -79,7 +79,7 @@ test("embed gives up after 5 seconds when Ollama accepts and never answers", asy
   process.env.ORBIT_OLLAMA_URL = `http://127.0.0.1:${port}`;
   const started = Date.now();
   try {
-    const result = await embed.embed(["hang"]);
+    const result = await embed.embed(["hang"], "document");
     const elapsed = Date.now() - started;
     assert.equal(result.ok, false);
     assert.ok(elapsed >= 4_500 && elapsed < 8_000, `elapsed ${elapsed}`);

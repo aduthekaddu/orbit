@@ -9,6 +9,10 @@ export const QUERY_EMBED_TIMEOUT_MS = 1_000;
 const STATUS_TTL_MS = 15_000;
 const BATCH = 32;
 
+export type EmbedKind = "query" | "document";
+
+const TASK_PREFIX: Record<EmbedKind, string> = { query: "", document: "" };
+
 const responseSchema = z.object({
   embeddings: z.array(z.array(z.number())),
 });
@@ -25,14 +29,14 @@ function embedError(error: unknown): string {
   return "Ollama is unreachable";
 }
 
-export async function embed(texts: string[], timeoutMs = TIMEOUT_MS): Promise<EmbedResult> {
+export async function embed(texts: string[], kind: EmbedKind, timeoutMs = TIMEOUT_MS): Promise<EmbedResult> {
   if (texts.length === 0) return { ok: true, vectors: [] };
   let response: Response;
   try {
     response = await fetch(`${ollamaBaseUrl()}/api/embed`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: EMBED_MODEL, input: texts }),
+      body: JSON.stringify({ model: EMBED_MODEL, input: texts.map((text) => TASK_PREFIX[kind] + text) }),
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
@@ -57,7 +61,7 @@ async function fillPending(): Promise<EmbedPendingResult> {
   let embedded = 0;
   for (let index = 0; index < rows.length; index += BATCH) {
     const batch = rows.slice(index, index + BATCH);
-    const result = await embed(batch.map((row) => row.text));
+    const result = await embed(batch.map((row) => row.text), "document");
     if (!result.ok) return { ok: false, error: result.error, embedded };
     writeVectors(batch.map((row, offset) => ({ rowid: row.rowid, text: row.text, vector: result.vectors[offset] ?? [] })));
     embedded += batch.length;
@@ -100,7 +104,7 @@ export function ollamaStatus(timeoutMs = QUERY_EMBED_TIMEOUT_MS): Promise<Ollama
   if (cached) return Promise.resolve(cached);
   const url = ollamaBaseUrl();
   if (statusInflight?.url === url) return statusInflight.promise;
-  const promise = embed(["orbit"], timeoutMs).then((result) => {
+  const promise = embed(["orbit"], "query", timeoutMs).then((result) => {
     const status: OllamaStatus = result.ok ? { ok: true } : { ok: false, error: result.error };
     rememberStatus(status);
     if (statusInflight?.promise === promise) statusInflight = null;
@@ -113,7 +117,7 @@ export function ollamaStatus(timeoutMs = QUERY_EMBED_TIMEOUT_MS): Promise<Ollama
 export async function embedQuery(text: string): Promise<EmbedResult> {
   const cached = freshStatus();
   if (cached && !cached.ok) return cached;
-  const result = await embed([text], QUERY_EMBED_TIMEOUT_MS);
+  const result = await embed([text], "query", QUERY_EMBED_TIMEOUT_MS);
   if (!result.ok) rememberStatus({ ok: false, error: result.error });
   else if (result.vectors[0]) rememberStatus({ ok: true });
   return result;
