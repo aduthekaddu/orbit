@@ -1,0 +1,14 @@
+src/lib/settings.test.ts
+  h_9f68edf4527855 78-90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d5476f2000ef85684073859fd8ffcf7d28073e63",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
