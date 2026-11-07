@@ -1,0 +1,20 @@
+.agents/skills/verify-orbit/features/memory.md
+  h_9f68edf4527855 5
+.agents/skills/verify-orbit/scenarios/memory.mjs
+  h_9f68edf4527855 19-43,78,83,91,93,121,125,130
+.agents/skills/verify-orbit/verify.mjs
+  h_9f68edf4527855 196-199,232,239
+scripts/qa/ci-e2e.sh
+  h_9f68edf4527855 41-68,72,137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "24f5d8719864e68e11ce74b87071d10e1aee6eb3",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
