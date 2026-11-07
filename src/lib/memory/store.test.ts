@@ -121,6 +121,36 @@ test("an older memories table keeps its vector when it gains a stable rowid", ()
   db.close();
 });
 
+test("vectors made without task prefixes are cleared and the memory stays", () => {
+  const folder = path.join(process.cwd(), "drizzle");
+  const names = fs.readdirSync(folder).filter((name) => name.endsWith(".sql")).sort();
+  const reembed = names.find((name) => name.includes("memories_reembed"));
+  assert.ok(reembed, "re-embed migration is missing");
+  const file = path.join(os.tmpdir(), `orbit-memory-reembed-${process.pid}.db`);
+  fs.rmSync(file, { force: true });
+  const db = new Database(file);
+  db.function("orbit_clean_output", (text: unknown) => (typeof text === "string" ? text : null));
+  const sqliteVec = require("sqlite-vec") as { load: (database: Database.Database) => void };
+  sqliteVec.load(db);
+  for (const name of names.filter((name) => name < reembed)) {
+    for (const statement of fs.readFileSync(path.join(folder, name), "utf8").split("--> statement-breakpoint")) {
+      const sql = statement.trim();
+      if (sql) db.exec(sql);
+    }
+  }
+  db.prepare("INSERT INTO memories (id, kind, text, text_norm, created_at) VALUES (?, 'fact', ?, ?, 1)").run("mem-plain", "Saved before the prefixes", "saved before the prefixes");
+  const row = db.prepare("SELECT rowid AS rowid FROM memories WHERE id = ?").get("mem-plain") as { rowid: number };
+  const vector = Buffer.from(new Float32Array(Array.from({ length: 768 }, () => 0.25)).buffer);
+  db.prepare("INSERT INTO memories_vec(rowid, embedding) VALUES (cast(? AS integer), ?)").run(row.rowid, vector);
+  for (const statement of fs.readFileSync(path.join(folder, reembed), "utf8").split("--> statement-breakpoint")) {
+    const sql = statement.trim();
+    if (sql) db.exec(sql);
+  }
+  assert.equal((db.prepare("SELECT count(*) AS n FROM memories WHERE id = ?").get("mem-plain") as { n: number }).n, 1);
+  assert.equal((db.prepare("SELECT count(*) AS n FROM memories_vec").get() as { n: number }).n, 0);
+  db.close();
+});
+
 test("a memory's vector stays on that memory after vacuum", async () => {
   const { store, embed } = requireStore();
   const saved = store.saveMemory({ text: "Vacuum keeps the vectorkey token", kind: "fact" });

@@ -57,6 +57,13 @@
       "when": 1794082471580,
       "tag": "0007_memories_stable_rowid",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794091433813,
+      "tag": "0008_memories_reembed",
+      "breakpoints": true
     }
   ]
 }
