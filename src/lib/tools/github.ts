@@ -1,6 +1,6 @@
 import { createMCPClient, type MCPClient } from "@ai-sdk/mcp";
 import type { Tool } from "ai";
-import { sanitize } from "../chat-errors";
+import { redactValue, sanitize } from "../chat-errors";
 import { githubLogin } from "./github-links";
 
 export const DEFAULT_GITHUB_MCP_URL = "https://api.githubcopilot.com/mcp/";
@@ -60,6 +60,22 @@ export function githubFailureText(error: unknown, token: string): string {
   return "GitHub is unavailable.";
 }
 
+function redactTool(tool: Tool, token: string): Tool {
+  const execute = tool.execute?.bind(tool);
+  if (!execute) return tool;
+  return {
+    ...tool,
+    execute: async (input, options) => {
+      try {
+        return redactValue(await execute(input, options), token);
+      } catch (error) {
+        if (error instanceof Error) throw new Error(sanitize(error.message, token));
+        throw error;
+      }
+    },
+  };
+}
+
 function emptySet(): McpToolSet {
   return { tools: {}, close: async () => {} };
 }
@@ -111,7 +127,7 @@ export async function githubTools(settings: GithubSettings, input?: { signal?: A
     const raw = client.toolsFromDefinitions(definitions);
     const tools: Record<string, Tool> = {};
     for (const [name, tool] of Object.entries(raw)) {
-      tools[name.startsWith(PREFIX) ? name : `${PREFIX}${name}`] = tool as Tool;
+      tools[name.startsWith(PREFIX) ? name : `${PREFIX}${name}`] = redactTool(tool as Tool, token);
     }
     return { tools, close };
   } catch (error) {
@@ -138,9 +154,9 @@ export async function checkGithub(settings: GithubSettings, signal?: AbortSignal
     try {
       const tool = opened.tools.github_get_me;
       if (!tool?.execute) return { ok: false, error: "GitHub is unavailable." };
-      const result = await tool.execute({}, { toolCallId: "github-check", messages: [], abortSignal: signal, context: undefined });
+      const result = redactValue(await tool.execute({}, { toolCallId: "github-check", messages: [], abortSignal: signal, context: undefined }), settings.token);
       const login = githubLogin(result);
-      if (!login) return { ok: false, error: "GitHub did not return a login." };
+      if (!login || login.includes(settings.token) || login.includes("[redacted]")) return { ok: false, error: "GitHub did not return a login." };
       return { ok: true, login };
     } finally {
       await opened.close();

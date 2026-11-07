@@ -78,7 +78,7 @@ export async function POST(request: Request) {
         model: settings.model,
         chatId: chat.id,
       }),
-      onError: (message) => console.error("chat title", sanitize(message, settings.apiKey)),
+      onError: (message) => console.error("chat title", sanitize(message, [settings.apiKey, settings.githubToken])),
     });
   }
 
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
         await loaded.close();
       } catch (error) {
         const message = error instanceof Error ? error.message : "GitHub tools close failed";
-        console.error("github tools close", sanitize(sanitize(message, settings.apiKey), settings.githubToken));
+        console.error("github tools close", sanitize(message, [settings.apiKey, settings.githubToken]));
       }
     };
     const tools = loaded.tools;
@@ -134,7 +134,7 @@ export async function POST(request: Request) {
       tools,
       originalMessages: uiMessages,
       generateMessageId: () => write.responseId,
-      onError: (error) => streamErrorMessage(error, settings.apiKey),
+      onError: (error) => streamErrorMessage(error, [settings.apiKey, settings.githubToken]),
       onEnd: async ({ responseMessage, isAborted, outcome }) => {
         try {
           const interrupted = isAborted || outcome.status !== "completed";
@@ -171,7 +171,7 @@ export async function POST(request: Request) {
   } catch (error) {
     await closeTools();
     const message = error instanceof Error ? error.message : "The model request failed";
-    console.error("chat request error", sanitize(sanitize(message, settings.apiKey), settings.githubToken));
+    console.error("chat request error", sanitize(message, [settings.apiKey, settings.githubToken]));
     return Response.json({ error: "The model request failed" }, { status: 502 });
   }
 }
