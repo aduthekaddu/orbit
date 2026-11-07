@@ -16,6 +16,31 @@ function bodyHas(entry, text) {
   return JSON.stringify(entry.body ?? {}).includes(text);
 }
 
+function instructionExcerpt(entry) {
+  const messages = Array.isArray(entry.body?.messages) ? entry.body.messages : [];
+  for (const message of messages) {
+    const content = typeof message.content === "string" ? message.content : JSON.stringify(message.content ?? "");
+    const index = content.indexOf("Things the user told you before");
+    if (index >= 0) return content.slice(index, index + 280);
+  }
+  return "";
+}
+
+function writeRequestProof(name) {
+  const dir = path.join(process.cwd(), ".verify", "evidence", "memory");
+  fs.mkdirSync(dir, { recursive: true });
+  const lines = requests().map((entry) =>
+    JSON.stringify({
+      scenario: entry.scenario,
+      hasQuestion: bodyHas(entry, "Where should hosting live?"),
+      hasFly: bodyHas(entry, "I deploy to Fly.io"),
+      hasRender: bodyHas(entry, "I ship to Render"),
+      excerpt: instructionExcerpt(entry),
+    }),
+  );
+  fs.writeFileSync(path.join(dir, name), `${lines.join("\n")}\n`);
+}
+
 export default async function memory({ page, origin, step, shot }) {
   fs.mkdirSync(path.dirname(requestLog), { recursive: true });
   fs.writeFileSync(requestLog, "");
@@ -50,11 +75,12 @@ export default async function memory({ page, origin, step, shot }) {
   const followUp = await page.request.post(`${origin}/api/chats`);
   const { id: secondId } = await followUp.json();
   await page.goto(`${origin}/c/${secondId}`);
-  await page.getByRole("textbox").fill("Where should hosting live?");
+  await page.getByRole("textbox").fill("[qa:plain] Where should hosting live?");
   await page.getByRole("textbox").press("Enter");
   const followReply = page.locator('[data-message-role="assistant"]').getByText("pong", { exact: true });
   const followed = await followReply.waitFor({ timeout: 30_000 }).then(() => true, () => false);
   const injected = requests().some((entry) => bodyHas(entry, "Where should hosting live?") && bodyHas(entry, "I deploy to Fly.io"));
+  writeRequestProof("injected.jsonl");
   step("a new chat sends the memory in the model instructions", followed && injected, followed ? "request log has no memory" : "no reply");
 
   await page.goto(`${origin}/memory`);
@@ -62,8 +88,9 @@ export default async function memory({ page, origin, step, shot }) {
   const editor = page.getByRole("textbox", { name: "Memory" });
   await editor.fill("I ship to Render");
   await page.getByRole("button", { name: "Save" }).click();
+  const editorClosed = await editor.waitFor({ state: "hidden", timeout: 10_000 }).then(() => true, () => false);
   const edited = page.getByText("I ship to Render", { exact: true });
-  const editedVisible = await edited.waitFor({ timeout: 10_000 }).then(() => true, () => false);
+  const editedVisible = editorClosed && (await edited.waitFor({ timeout: 10_000 }).then(() => true, () => false));
   await shot("edited");
   step("edit saves the new text", editedVisible);
 
@@ -91,15 +118,16 @@ export default async function memory({ page, origin, step, shot }) {
   const third = await page.request.post(`${origin}/api/chats`);
   const { id: thirdId } = await third.json();
   await page.goto(`${origin}/c/${thirdId}`);
-  await page.getByRole("textbox").fill("Where should hosting live?");
+  await page.getByRole("textbox").fill("[qa:plain] Where should hosting live?");
   await page.getByRole("textbox").press("Enter");
   await page.locator('[data-message-role="assistant"]').getByText("pong", { exact: true }).waitFor({ timeout: 30_000 }).catch(() => {});
   const leaked = requests().some((entry) => bodyHas(entry, "I ship to Render") || bodyHas(entry, "I deploy to Fly.io"));
+  writeRequestProof("after-delete.jsonl");
   step("a deleted memory is not sent again", !leaked);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${origin}/memory`);
-  await page.getByRole("heading", { name: "Memory" }).waitFor({ timeout: 10_000 });
+  await page.getByRole("heading", { name: "Memory" }).first().waitFor({ timeout: 10_000 });
   await shot("mobile");
   step("memory page renders at 390 by 844", true);
 
