@@ -29,6 +29,7 @@ Require each printed check to pass.
 - The card and its link survive reload.
 - The card fits at 390 by 844 without page overflow.
 - The chat closes the MCP client.
+- Remove on the GitHub token clears it. Settings then reports `githubTokenSet` false and still hides the token.
 
 Screenshots land in `.verify/evidence/github/`. They are `connected.png`, `issues.png`, and `mobile.png`.
 

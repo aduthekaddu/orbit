@@ -70,7 +70,7 @@ export function saveSettings(input: {
   apiKey?: string;
   searxngUrl?: string;
   tavilyApiKey?: string | null;
-  githubToken?: string;
+  githubToken?: string | null;
   githubMcpUrl?: string;
   model: string;
   reasoningEffort: ReasoningEffort;
@@ -86,7 +86,7 @@ export function saveSettings(input: {
     apiKey,
     searxngUrl: input.searxngUrl?.trim().replace(/\/+$/, "") ?? current?.searxngUrl ?? "",
     tavilyApiKey: input.tavilyApiKey === null ? "" : input.tavilyApiKey?.trim() || current?.tavilyApiKey || "",
-    githubToken: input.githubToken?.trim() || current?.githubToken || "",
+    githubToken: input.githubToken === null ? "" : input.githubToken?.trim() || current?.githubToken || "",
     githubMcpUrl: input.githubMcpUrl === undefined ? current?.githubMcpUrl ?? "" : input.githubMcpUrl.trim(),
     model: input.model.trim(),
     reasoningEffort: input.reasoningEffort,

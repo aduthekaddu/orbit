@@ -24,7 +24,7 @@ export type SettingsSnapshot = {
   apiKey: string;
   searxngUrl: string;
   tavilyApiKey: string | null;
-  githubToken: string;
+  githubToken: string | null;
   githubMcpUrl: string;
   model: string;
   effort: ReasoningEffort;

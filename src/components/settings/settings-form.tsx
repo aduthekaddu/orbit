@@ -33,7 +33,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
   const [searxngUrl, setSearxngUrl] = useState(initial.searxngUrl);
   const [tavilyApiKey, setTavilyApiKey] = useState<string | null>("");
   const [tavilyKeySet, setTavilyKeySet] = useState(initial.tavilyKeySet);
-  const [githubToken, setGithubToken] = useState("");
+  const [githubToken, setGithubToken] = useState<string | null>("");
   const [githubTokenSet, setGithubTokenSet] = useState(initial.githubTokenSet);
   const [githubMcpUrl, setGithubMcpUrl] = useState(initial.githubMcpUrl);
   const [githubCheck, setGithubCheck] = useState<GithubCheck>({ status: "idle" });
@@ -108,7 +108,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
           reasoningEffort: formValues.effort,
           searxngUrl: formValues.searxngUrl.trim(),
           tavilyApiKey: formValues.tavilyApiKey === null ? null : formValues.tavilyApiKey || undefined,
-          githubToken: formValues.githubToken || undefined,
+          githubToken: formValues.githubToken === null ? null : formValues.githubToken || undefined,
           githubMcpUrl: formValues.githubMcpUrl.trim(),
         }),
       });
@@ -294,7 +294,12 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
         <div className="divide-y">
           <Row id="githubToken" label="Token">
             <div className="flex min-w-0 items-center gap-2">
-              <Input id="githubToken" type="password" value={githubToken} placeholder={githubTokenSet && githubToken === "" ? "Key set" : ""} autoComplete="off" onChange={(event) => { setError(""); setGithubToken(event.target.value); }} />
+              <Input id="githubToken" type="password" value={githubToken ?? ""} placeholder={githubTokenSet && githubToken !== null ? "Key set" : ""} autoComplete="off" onChange={(event) => { setError(""); setGithubToken(event.target.value); }} />
+              {githubTokenSet && githubToken !== null ? (
+                <Button type="button" variant="ghost" size="sm" aria-label="Remove GitHub token" disabled={pending} onClick={() => { setError(""); setSaved(false); setGithubToken(null); }}>
+                  Remove
+                </Button>
+              ) : null}
               <Button type="button" variant="ghost" size="sm" disabled={githubCheck.status === "checking"} onClick={() => void onCheckGithub()}>
                 Check
               </Button>

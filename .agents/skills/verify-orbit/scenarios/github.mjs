@@ -79,6 +79,15 @@ export default async function github({ page, origin, step, shot }) {
 
     const listed = await (await page.request.get(`${origin}/api/settings`)).text();
     step("settings still hide the token", !listed.includes(mock.token) && !listed.includes("wrong-token"));
+
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto(`${origin}/settings`);
+    await page.getByRole("button", { name: "Remove GitHub token", exact: true }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    const savedLabel = await page.getByText("Saved", { exact: true }).waitFor({ timeout: 10_000 }).then(() => true, () => false);
+    const removedText = await (await page.request.get(`${origin}/api/settings`)).text();
+    const removed = JSON.parse(removedText) as { githubTokenSet?: boolean };
+    step("Remove clears the saved GitHub token", savedLabel && removed.githubTokenSet === false && !removedText.includes(mock.token));
   } finally {
     await mock.close();
   }
