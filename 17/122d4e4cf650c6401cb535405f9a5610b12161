@@ -1,0 +1,18 @@
+CHANGELOG.md
+  h_9f68edf4527855 54
+src/lib/tools/github.test.ts
+  h_9f68edf4527855 99-112
+src/lib/tools/github.ts
+  h_9f68edf4527855 19,84-86,89,95,101-103,124,129,143,146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "17122d4e4cf650c6401cb535405f9a5610b12161",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
