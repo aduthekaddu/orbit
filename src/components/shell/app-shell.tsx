@@ -104,7 +104,7 @@ export function AppShell({
   });
 
   const current = chats.find((chat) => pathname === `/c/${chat.id}`);
-  const title = pathname === "/settings" ? "Settings" : current && chatLabel(current.title);
+  const title = pathname === "/settings" ? "Settings" : pathname === "/memory" ? "Memory" : current && chatLabel(current.title);
 
   const sidebarProps = {
     chats,
