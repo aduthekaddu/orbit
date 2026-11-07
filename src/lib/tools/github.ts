@@ -5,6 +5,7 @@ import { githubLogin } from "./github-links";
 
 export const DEFAULT_GITHUB_MCP_URL = "https://api.githubcopilot.com/mcp/";
 export const GITHUB_TOOLSETS = "repos,issues,pull_requests";
+export const GITHUB_CHECK_TOOLS = "get_me";
 const LIST_CACHE_MS = 5 * 60 * 1000;
 const PREFIX = "github_";
 
@@ -48,9 +49,10 @@ async function listedTools(client: MCPClient, signal?: AbortSignal): Promise<Lis
   return { ...page, tools, nextCursor: undefined };
 }
 
-export async function githubTools(settings: GithubSettings, input?: { signal?: AbortSignal; now?: number }): Promise<McpToolSet> {
+export async function githubTools(settings: GithubSettings, input?: { signal?: AbortSignal; now?: number; tools?: string }): Promise<McpToolSet> {
   const mcpUrl = resolveGithubMcpUrl(settings.mcpUrl);
   const token = settings.token;
+  const extraTools = input?.tools ?? "";
   let client: MCPClient | undefined;
   let closed = false;
   const close = async () => {
@@ -67,13 +69,14 @@ export async function githubTools(settings: GithubSettings, input?: { signal?: A
           Authorization: `Bearer ${token}`,
           "X-MCP-Readonly": "true",
           "X-MCP-Toolsets": GITHUB_TOOLSETS,
+          ...(extraTools ? { "X-MCP-Tools": extraTools } : {}),
         },
         redirect: "error",
       },
       initializationOptions: input?.signal ? { signal: input.signal } : undefined,
     });
     const now = input?.now ?? Date.now();
-    const key = `${mcpUrl}\n${token}`;
+    const key = `${mcpUrl}\n${GITHUB_TOOLSETS}\n${extraTools}\n${token}`;
     const cached = listCache.get(key);
     const definitions = cached && cached.expires > now ? cached.definitions : await listedTools(client, input?.signal);
     if (!cached || cached.expires <= now) listCache.set(key, { expires: now + LIST_CACHE_MS, definitions });
@@ -103,7 +106,7 @@ export async function openGithubTurn(settings: { githubToken: string; githubMcpU
 export async function checkGithub(settings: GithubSettings, signal?: AbortSignal): Promise<{ ok: true; login: string } | { ok: false; error: string }> {
   if (!settings.token.trim()) return { ok: false, error: "Add a GitHub token." };
   try {
-    const opened = await githubTools({ token: settings.token, mcpUrl: settings.mcpUrl }, { signal });
+    const opened = await githubTools({ token: settings.token, mcpUrl: settings.mcpUrl }, { signal, tools: GITHUB_CHECK_TOOLS });
     try {
       const tool = opened.tools.github_get_me;
       if (!tool?.execute) return { ok: false, error: "GitHub is unavailable." };
