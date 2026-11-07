@@ -1,0 +1,22 @@
+src/lib/memory/ollama-pairs.ts
+  s_93b22d92d4f2aa::t_9ee8081b6be70b 1-55
+src/lib/memory/recall.ollama.test.ts
+  s_93b22d92d4f2aa::t_f5445e9f97d00a 77-79
+  s_93b22d92d4f2aa::t_af7b13dcdd87e0 1-76,80-92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "28c34591128e4e115fb9182d788429f1c62d1249",
+  "prompts": {},
+  "sessions": {
+    "s_93b22d92d4f2aa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "45c4590c-eb44-4ccb-95bc-f312197e035b",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
