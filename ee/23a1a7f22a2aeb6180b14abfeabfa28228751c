@@ -1,0 +1,21 @@
+src/components/memory/memory-list.tsx
+  s_23446b3face73f::t_1d9a13716acc07 187
+src/components/tools/run-card.tsx
+  s_23446b3face73f::t_933384186b0515 40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ee23a1a7f22a2aeb6180b14abfeabfa28228751c",
+  "prompts": {},
+  "sessions": {
+    "s_23446b3face73f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e62df905-b1d7-47b7-9434-485e41c9c4da",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
