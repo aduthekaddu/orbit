@@ -1,0 +1,33 @@
+.agents/skills/verify-orbit/features/memory.md
+  s_aaeb471ca118ad::t_d73ed2b542cfff 1-9
+src/lib/memory/recall.test.ts
+  s_aaeb471ca118ad::t_69ed616a88c18b 1-110
+.agents/skills/verify-orbit/scenarios/memory.mjs
+  s_aaeb471ca118ad::t_6c6715d3b8f2f3 1-115
+src/lib/memory/ollama-harness.ts
+  s_aaeb471ca118ad::t_3cf1f4a3dde91f 1-35
+src/lib/memory/embed.test.ts
+  s_aaeb471ca118ad::t_a96b5adfa7e16f 1-104
+scripts/qa/mock-ollama.mjs
+  s_aaeb471ca118ad::t_627399a012dc25 1-87
+src/lib/memory/store.test.ts
+  s_aaeb471ca118ad::t_2dafe5889a035c 1-130,133
+  s_aaeb471ca118ad::t_b96554ba77bc3e 131-132
+  s_aaeb471ca118ad::t_1d2f265c233512 134
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "55d72d7759de414513ba3cdb27c5eb91472ed43f",
+  "prompts": {},
+  "sessions": {
+    "s_aaeb471ca118ad": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1b734-90e8-7c70-8980-711968354a5f",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
