@@ -1,6 +1,7 @@
 import http from "node:http";
 
 let mode = "ok";
+const received = [];
 
 function hash(text) {
   let value = 2166136261;
@@ -11,7 +12,8 @@ function hash(text) {
   return value >>> 0;
 }
 
-function vector(text) {
+function vector(raw) {
+  const text = raw.replace(/^search_(query|document): /, "");
   const size = mode === "short" ? 3 : 768;
   const values = new Array(size).fill(0);
   const cluster = /fly|deploy|host/i.test(text) ? 0 : (hash(text.toLowerCase()) % 32) + 1;
@@ -51,6 +53,11 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(204).end();
     return;
   }
+  if (req.method === "GET" && req.url === "/qa/received") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify(received));
+    return;
+  }
   if (req.method === "POST" && req.url === "/qa/ok") {
     mode = "ok";
     res.writeHead(204).end();
@@ -72,6 +79,7 @@ const server = http.createServer(async (req, res) => {
     }
     const input = body.input;
     const texts = Array.isArray(input) ? input : [input];
+    received.push(...texts.map((text) => String(text ?? "")));
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ embeddings: texts.map((text) => vector(String(text ?? ""))) }));
     return;
