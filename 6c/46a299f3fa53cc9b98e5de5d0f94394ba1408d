@@ -1,0 +1,16 @@
+src/components/settings/settings-form.tsx
+  h_9f68edf4527855 145
+src/lib/tools/github.test.ts
+  h_9f68edf4527855 253
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6c46a299f3fa53cc9b98e5de5d0f94394ba1408d",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
