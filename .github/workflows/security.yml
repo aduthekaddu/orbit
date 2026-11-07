@@ -66,14 +66,12 @@ jobs:
         with:
           persist-credentials: false
       - name: Scan the source
-        # The Dockerfile runs as root (issue #40). Remove the exclusion when the image runs as a non-root user.
         run: |
           docker run --rm --volume "$PWD:/src" --workdir /src \
             --env SEMGREP_SEND_METRICS=off \
             --env GIT_CONFIG_COUNT=1 --env GIT_CONFIG_KEY_0=safe.directory --env GIT_CONFIG_VALUE_0=/src \
             semgrep/semgrep@sha256:cc1b68266f267878b39739373ea9985b9a78e5d64497dd875c8de100b22695ed \
             semgrep scan --metrics=off --error --quiet \
-            --exclude-rule dockerfile.security.missing-user.missing-user \
             --config p/typescript --config p/javascript --config p/react --config p/nextjs \
             --config p/security-audit --config p/owasp-top-ten --config p/secrets \
             --config p/dockerfile --config p/docker-compose \
