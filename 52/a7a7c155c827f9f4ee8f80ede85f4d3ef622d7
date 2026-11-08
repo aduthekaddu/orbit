@@ -1,0 +1,100 @@
+.agents/skills/verify-orbit/features/README.md
+  h_9f68edf4527855 44
+.agents/skills/verify-orbit/features/github.md
+  h_9f68edf4527855 1-36
+.agents/skills/verify-orbit/scenarios/github.mjs
+  h_9f68edf4527855 1-94
+.agents/skills/verify-orbit/scenarios/settings-sandbox.mjs
+  h_9f68edf4527855 4
+.agents/skills/verify-orbit/verify.mjs
+  h_9f68edf4527855 238
+.env.example
+  h_9f68edf4527855 10-14
+CHANGELOG.md
+  h_9f68edf4527855 7-8,28-29,31,35,70-76
+README.md
+  h_9f68edf4527855 106
+SECURITY.md
+  h_9f68edf4527855 18,28
+docker-compose.yml
+  h_9f68edf4527855 19
+docs/roadmap.md
+  h_9f68edf4527855 31-33
+docs/slices/README.md
+  h_9f68edf4527855 15
+drizzle/0010_github_settings.sql
+  h_9f68edf4527855 1-2
+drizzle/meta/0010_snapshot.json
+  h_9f68edf4527855 1-841
+drizzle/meta/_journal.json
+  h_9f68edf4527855 74-80
+package-lock.json
+  h_9f68edf4527855 12,52,1425-1437,2081-2121,4415-4455,4482-4516,4864-4902,4943-4952,4966-4982,5171-5232,5312-5321,5551-5557,5564-5577,5697-5703,5726-5748,5758-5862,5869-5892,5910-5933,5968-5987,6192-6201,6212-6232,6246-6262,6295-6314,6380-6386,6427-6440,7052-7078,7747-7777,7895-7924,7959-7968,7978-7988,8148-8165,8185-8201,8279-8308,8532-8541,8558-8574,8642-8715,8722-8728,8800-8875,9017-9026,9251-9260,9786-9845,9962-9971,10075-10084,10196-10205
+package.json
+  h_9f68edf4527855 17,57
+scripts/qa/mock-mcp.d.mts
+  h_9f68edf4527855 1-24
+scripts/qa/mock-mcp.mjs
+  h_9f68edf4527855 1-216
+scripts/qa/mock-provider.mjs
+  h_9f68edf4527855 280-308,551-565
+src/app/api/chat/route.ts
+  h_9f68edf4527855 9,83,95,99-111,119,146,149-175,182,184
+src/app/api/settings/github/check/route.ts
+  h_9f68edf4527855 1-33
+src/app/api/settings/route.ts
+  h_9f68edf4527855 4,15-16
+src/components/settings/settings-form.tsx
+  h_9f68edf4527855 36-40,49,111-112,127-128,137-159,290-311,381-399
+src/components/tools/github-output.tsx
+  h_9f68edf4527855 1-16
+src/components/tools/run-card.test.tsx
+  h_9f68edf4527855 52-126
+src/components/tools/run-card.tsx
+  h_9f68edf4527855 11,13,21-28,44,50
+src/lib/chat-errors.test.ts
+  h_9f68edf4527855 96
+src/lib/chat-errors.ts
+  h_9f68edf4527855 9-22,65
+src/lib/db/index.ts
+  h_9f68edf4527855 67-68,76-77
+src/lib/db/schema.ts
+  h_9f68edf4527855 88-89
+src/lib/settings-form.test.ts
+  h_9f68edf4527855 12-13,20,30,40,50,83-92
+src/lib/settings-form.ts
+  h_9f68edf4527855 27-28,36,45,49,51
+src/lib/settings.test.ts
+  h_9f68edf4527855 8,40-57,66-67,72,78-101
+src/lib/settings.ts
+  h_9f68edf4527855 6,16-17,29-30,47-48,62-63,73-74,89-90
+src/lib/tools/github-links.ts
+  h_9f68edf4527855 1-160
+src/lib/tools/github-mcp-url.test.ts
+  h_9f68edf4527855 1-48
+src/lib/tools/github.test.ts
+  h_9f68edf4527855 1-442
+src/lib/tools/github.ts
+  h_9f68edf4527855 1-219
+src/lib/tools/index.ts
+  h_9f68edf4527855 6,42-51
+src/lib/tools/metadata.ts
+  h_9f68edf4527855 3,36
+src/lib/tools/run-code.test.ts
+  h_9f68edf4527855 11
+src/lib/tools/run-status.test.ts
+  h_9f68edf4527855 75-92
+src/lib/tools/run-status.ts
+  h_9f68edf4527855 18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "52a7a7c155c827f9f4ee8f80ede85f4d3ef622d7",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
