@@ -45,6 +45,37 @@ test("an API call with only the plain cookie from an http base URL is told apart
   assert.match(line, / site=- /);
 });
 
+function fields(line: string) {
+  const out: [string, string][] = [];
+  for (const [, key, quoted, bare] of line.replace(/^auth miss /, "").matchAll(/(\w+)=(?:("(?:[^"\\]|\\.)*")|(\S+))/g)) {
+    out.push([key, quoted ? JSON.parse(quoted) : bare]);
+  }
+  return out;
+}
+
+test("request headers cannot add or overwrite fields in the line", () => {
+  const line = describeAuthMiss(
+    "/c/abc",
+    new Headers({
+      "sec-fetch-site": "same-origin session=secure access=yes",
+      "sec-fetch-dest": 'document" session="both',
+      "cf-ray": "abc ua=00000000",
+    }),
+  );
+  const parsed = fields(line);
+  assert.deepEqual(
+    parsed.map(([key]) => key),
+    ["path", "kind", "site", "session", "access", "cookieBytes", "ray", "ua"],
+    line,
+  );
+  const value = Object.fromEntries(parsed);
+  assert.equal(value.site, "same-origin session=secure access=yes");
+  assert.equal(value.kind, 'document" session="both');
+  assert.equal(value.ray, "abc ua=00000000");
+  assert.equal(value.session, "none");
+  assert.equal(value.access, "no");
+});
+
 test("the line holds no cookie value and no raw user agent", () => {
   const line = describeAuthMiss(
     "/c/abc",
