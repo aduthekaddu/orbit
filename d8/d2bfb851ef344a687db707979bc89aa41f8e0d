@@ -1,0 +1,63 @@
+CHANGELOG.md
+  s_31779442dcb4d1::t_bfaf0754ae192d 29-33
+.agents/skills/verify-orbit/SKILL.md
+  s_31779442dcb4d1::t_13a617c711aaaf 41,66
+.agents/skills/verify-orbit/features/README.md
+  s_31779442dcb4d1::t_5c25e0dc8df53b 46
+.agents/skills/verify-orbit/features/dreaming.md
+  s_31779442dcb4d1::t_475277987c80af 1-7
+.agents/skills/verify-orbit/verify.mjs
+  s_31779442dcb4d1::t_230c43447a439d 699-884,902-903,907
+.env.example
+  s_31779442dcb4d1::t_e8ed07780cba0a 19-22
+docker-compose.yml
+  s_31779442dcb4d1::t_f212c260affe0e 20-21
+drizzle/0009_memory_runs.sql
+  s_31779442dcb4d1::t_82eb1c5f8df586 1-14
+drizzle/meta/0009_snapshot.json
+  s_31779442dcb4d1::t_ea7ecbc34029a9 4,322-415
+drizzle/meta/0010_snapshot.json
+  s_31779442dcb4d1::t_851e52e8997be1 1-841
+drizzle/meta/_journal.json
+  s_31779442dcb4d1::t_b335f2ce01e47f 71-79
+package.json
+  s_31779442dcb4d1::t_27ac515947b846 13-14
+scripts/dream.ts
+  s_31779442dcb4d1::t_8af51ee85bd6d0 1-47
+scripts/qa/mock-provider.mjs
+  s_31779442dcb4d1::t_3372b1af7967b6 347-384,534-542,670-672
+scripts/qa/real-ollama-merge.mjs
+  s_31779442dcb4d1::t_68124fe5f18543 1-241
+src/app/(app)/memory/page.tsx
+  s_31779442dcb4d1::t_b9b78c4a4f71b6 3,13,16
+src/components/memory/memory-list.tsx
+  s_31779442dcb4d1::t_7c36c24dae6c34 45,49,138
+src/instrumentation.ts
+  s_31779442dcb4d1::t_779a7e23264bea 4-5
+src/lib/db/schema.ts
+  s_31779442dcb4d1::t_b1b0baf513d4c2 142-156
+src/lib/memory/dream.test.ts
+  s_31779442dcb4d1::t_8d7d7dddb2e3eb 1-348
+src/lib/memory/dream.ts
+  s_31779442dcb4d1::t_369951cafa3171 1-451
+src/lib/memory/schedule.test.ts
+  s_31779442dcb4d1::t_30e0833e0d2c26 1-173
+src/lib/memory/schedule.ts
+  s_31779442dcb4d1::t_d5a5df693a3821 1-116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d8d2bfb851ef344a687db707979bc89aa41f8e0d",
+  "prompts": {},
+  "sessions": {
+    "s_31779442dcb4d1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c4d6e1b6-7d2c-4ffe-8e8d-820ee12ca6f9",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
