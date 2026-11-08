@@ -344,6 +344,44 @@ function jsonTitle(res) {
   );
 }
 
+function dreamCandidates(prompt) {
+  const candidates = [];
+  for (const line of prompt.split("\n")) {
+    const match = /^msg (\S+) (user|assistant): (.*)$/.exec(line);
+    if (!match) continue;
+    if (match[2] !== "user" && !match[3].includes("[qa:dream-cite]")) continue;
+    const text = match[3].replace(/\[qa:dream(?:-fail|-cite)?\]\s*/g, "").trim();
+    if (!text) continue;
+    candidates.push({
+      kind: /prefer|dark mode/i.test(text) ? "preference" : "fact",
+      text,
+      sourceMessageId: match[1],
+    });
+    if (candidates.length >= 10) break;
+  }
+  return candidates;
+}
+
+function jsonDream(res, prompt) {
+  res.writeHead(200, { "content-type": "application/json" });
+  res.end(
+    JSON.stringify({
+      id: "chatcmpl-dream",
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1000),
+      model: MODEL,
+      choices: [
+        {
+          index: 0,
+          message: { role: "assistant", content: JSON.stringify({ candidates: dreamCandidates(prompt) }) },
+          finish_reason: "stop",
+        },
+      ],
+      usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+    }),
+  );
+}
+
 function textResponse(res, text) {
   start(res);
   for (const part of text.match(/.{1,24}/gs) ?? []) {
@@ -493,6 +531,15 @@ const server = http.createServer((req, res) => {
       jsonTitle(res);
       return;
     }
+    if (scenario === "dream-fail") {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "mock failure", type: "server_error" } }));
+      return;
+    }
+    if (scenario === "dream") {
+      jsonDream(res, prompt);
+      return;
+    }
     if (invalidSandboxCalls.has(scenario)) {
       toolResponse(res, scenario, invalidSandboxCalls.get(scenario), "run_code");
       return;
@@ -620,7 +667,9 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  console.log(`mock provider on http://127.0.0.1:${PORT}/v1 model=${MODEL}`);
+  const address = server.address();
+  const bound = address && typeof address === "object" ? address.port : PORT;
+  console.log(`mock provider on http://127.0.0.1:${bound}/v1 model=${MODEL}`);
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {

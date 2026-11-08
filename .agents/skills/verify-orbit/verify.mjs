@@ -696,6 +696,192 @@ async function browse(scenario) {
   console.log(`browse ${scenario} passed`);
 }
 
+const DREAM_FACTS = ["I live in Lisbon", "I prefer dark mode", "My bike is blue"];
+
+function localDreamDate(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const pick = (type) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${pick("year")}-${pick("month")}-${pick("day")}`;
+}
+
+function openSandboxDb() {
+  const dbPath = path.join(sandbox, "data", "orbit.db");
+  if (!fs.existsSync(dbPath)) fail(`sandbox database is missing at ${dbPath}`);
+  const database = new Database(dbPath);
+  database.pragma("busy_timeout = 5000");
+  database.pragma("foreign_keys = ON");
+  return database;
+}
+
+function seedDreamChats(database, userId) {
+  let createdAt = Date.now() - 5_000;
+  if (localDreamDate(new Date(createdAt)) !== localDreamDate()) createdAt = Date.now();
+  const insertChat = database.prepare(
+    "INSERT INTO chats (id, user_id, head_id, title, created_at, updated_at) VALUES (?, ?, ?, 'New chat', ?, ?)",
+  );
+  const insertMessage = database.prepare(
+    "INSERT INTO messages (id, chat_id, parent_id, role, content, parts, position, created_at) VALUES (?, ?, NULL, 'user', ?, ?, 0, ?)",
+  );
+  const run = database.transaction(() => {
+    for (const text of DREAM_FACTS) {
+      const chatId = crypto.randomUUID();
+      const messageId = crypto.randomUUID();
+      insertChat.run(chatId, userId, messageId, createdAt, createdAt);
+      insertMessage.run(messageId, chatId, text, JSON.stringify([{ type: "text", text }]), createdAt);
+    }
+  });
+  run();
+}
+
+function dreamSnapshot(database, date) {
+  const memories = database.prepare("SELECT count(*) AS n FROM memories").get().n;
+  const table = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memory_runs'").get();
+  if (!table) return { memories, run: null };
+  const run = database
+    .prepare(
+      `SELECT date, state, added, merged, error, chat_ids AS chatIds, done_chat_ids AS doneChatIds, retry_chat_ids AS retryChatIds
+       FROM memory_runs WHERE date = ?`,
+    )
+    .get(date);
+  return { memories, run: run ?? null };
+}
+
+function formatDreamSnapshot(snapshot) {
+  if (!snapshot.run) return `memories ${snapshot.memories}\nrun none`;
+  const run = snapshot.run;
+  const chats = JSON.parse(run.chatIds).length;
+  const done = JSON.parse(run.doneChatIds).length;
+  const retry = JSON.parse(run.retryChatIds).length;
+  return `date=${run.date} state=${run.state} chats=${chats} done=${done} retry=${retry} added=${run.added} merged=${run.merged} memories=${snapshot.memories} error=${run.error ?? ""}`;
+}
+
+function runDreamCli(ollamaUrl) {
+  return new Promise((resolve) => {
+    const child = spawn("npm", ["run", "dream"], {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        ORBIT_DATA_DIR: path.join(sandbox, "data"),
+        ...(ollamaUrl ? { ORBIT_OLLAMA_URL: ollamaUrl } : {}),
+        ...(readState(mockStatePath) ? { ORBIT_QA_TAGS: "1" } : {}),
+      },
+    });
+    let output = "";
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+      process.stdout.write(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+      process.stderr.write(chunk);
+    });
+    child.on("close", (code) => resolve({ code: code ?? 1, output }));
+  });
+}
+
+async function startDriveOllama() {
+  if (process.env.ORBIT_OLLAMA_URL) return { url: process.env.ORBIT_OLLAMA_URL, stop: async () => {} };
+  const child = spawn(process.execPath, [path.join(repoRoot, "scripts/qa/mock-ollama.mjs")], {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const port = await new Promise((resolve, reject) => {
+    let buffer = "";
+    const timer = setTimeout(() => reject(new Error("mock ollama did not listen")), 5_000);
+    child.stdout.on("data", (chunk) => {
+      buffer += chunk.toString();
+      const match = /mock-ollama port=(\d+)/.exec(buffer);
+      if (!match) return;
+      clearTimeout(timer);
+      resolve(match[1]);
+    });
+    child.once("exit", (code) => {
+      clearTimeout(timer);
+      reject(new Error(`mock ollama exited ${code ?? "null"}`));
+    });
+  });
+  return {
+    url: `http://127.0.0.1:${port}`,
+    stop: () =>
+      new Promise((resolve) => {
+        if (child.exitCode !== null) {
+          resolve();
+          return;
+        }
+        child.once("exit", () => resolve());
+        child.kill("SIGTERM");
+      }),
+  };
+}
+
+async function shotMemory(cookies, name, viewport) {
+  const { chromium } = await import("playwright");
+  const executablePath = chromePath();
+  const browser = await chromium.launch(executablePath ? { executablePath } : {});
+  try {
+    const context = await browser.newContext({ viewport });
+    await context.addCookies(
+      [...cookies.entries()].map(([cookieName, value]) => ({
+        name: cookieName,
+        value,
+        url: ORIGIN,
+        httpOnly: true,
+        sameSite: "Lax",
+      })),
+    );
+    const page = await context.newPage();
+    await page.goto(`${ORIGIN}/memory`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: "Memory" }).first().waitFor();
+    const dir = path.join(evidenceRoot, "dreaming");
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `${name}.png`);
+    await page.screenshot({ path: file });
+    console.log(`shot ${path.relative(repoRoot, file)}`);
+  } finally {
+    await browser.close();
+  }
+}
+
+async function driveDream() {
+  assertOurServer();
+  const date = localDreamDate();
+  const database = openSandboxDb();
+  const user = database.prepare("SELECT id FROM user LIMIT 1").get();
+  if (!user) {
+    database.close();
+    fail("no user in the sandbox. Run launch --mock first.");
+  }
+  const before = dreamSnapshot(database, date);
+  const lines = [`before ${formatDreamSnapshot(before).replaceAll("\n", " | ")}`];
+  if (!before.run) seedDreamChats(database, user.id);
+  database.close();
+  const ollama = await startDriveOllama();
+  try {
+    const cookies = await signInVerify();
+    if (!before.run) await shotMemory(cookies, "before", { width: 1280, height: 800 });
+    const result = await runDreamCli(ollama.url);
+    lines.push(`dream exit ${result.code}`);
+    const afterDb = openSandboxDb();
+    const after = dreamSnapshot(afterDb, date);
+    afterDb.close();
+    const summary = formatDreamSnapshot(after);
+    lines.push(summary);
+    console.log(summary);
+    writeEvidence("dreaming", lines);
+    if (result.code !== 0 || !after.run || after.run.state !== "done") fail(`drive dream failed. ${summary}`);
+    if (!before.run && after.run.added === 0) fail(`drive dream added nothing. ${summary}`);
+    await shotMemory(cookies, "after", { width: 1280, height: 800 });
+    await shotMemory(cookies, "mobile", { width: 390, height: 844 });
+    console.log("drive dream passed");
+  } finally {
+    await ollama.stop();
+  }
+}
+
 const command = process.argv[2];
 const feature = process.argv[3];
 
@@ -713,8 +899,10 @@ if (command === "launch") {
   await driveSettings();
 } else if (command === "drive" && feature === "chat") {
   await driveChat();
+} else if (command === "drive" && feature === "dream") {
+  await driveDream();
 } else if (command === "browse") {
   await browse(feature);
 } else {
-  fail("usage: verify.mjs launch [--mock] | doctor | cleanup | drive signup | drive signin | drive settings | drive chat | browse <scenario>");
+  fail("usage: verify.mjs launch [--mock] | doctor | cleanup | drive signup | drive signin | drive settings | drive chat | drive dream | browse <scenario>");
 }
