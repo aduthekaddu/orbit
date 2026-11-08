@@ -200,6 +200,20 @@ finish() {
 # the whole file before the first prompt, so an edit mid-run can't break it.
 # ──────────────────────────────────────────────────────────────────────────
 
+# is_access_login URL succeeds when URL is https and its host is
+# cloudflareaccess.com or one of its subdomains. It reads the host, so a lookalike
+# such as cloudflareaccess.com.attacker.invalid or a domain in the path or in the
+# user info does not pass. A backslash ends the host, as browsers read it.
+is_access_login() {
+  local rest="$1" host
+  [[ "$rest" == https://* ]] || return 1
+  rest="${rest#https://}"
+  host="${rest%%[/\\?#]*}"
+  host="${host##*@}"
+  host="${host%%:*}"
+  [[ "$host" == cloudflareaccess.com || "$host" == *.cloudflareaccess.com ]]
+}
+
 run_wizard() {
 
 TOTAL_STAGES=5
@@ -285,11 +299,12 @@ fi
 step "In the dashboard, the tunnel '$TUNNEL_NAME' should show Healthy."
 code=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' "$ORBIT_PUBLIC_URL/" 2>/dev/null || echo "no answer")
 say "Without an Access login, $ORBIT_PUBLIC_URL/ answers: $code"
-case "$code" in
-  302\ *cloudflareaccess.com*) printf '  %s✓ Access is in front of Orbit%s\n' "$GREEN" "$RESET" ;;
-  *) warn "Expected 302 to a cloudflareaccess.com address. DNS can take a few minutes."
-     SKIPPED+=("Access check: curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\\n' $ORBIT_PUBLIC_URL/") ;;
-esac
+if [[ "$code" == "302 "* ]] && is_access_login "${code#302 }"; then
+  printf '  %s✓ Access is in front of Orbit%s\n' "$GREEN" "$RESET"
+else
+  warn "Expected 302 to a cloudflareaccess.com address. DNS can take a few minutes."
+  SKIPPED+=("Access check: curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\\n' $ORBIT_PUBLIC_URL/")
+fi
 pause "Press Enter to finish."
 
 finish
