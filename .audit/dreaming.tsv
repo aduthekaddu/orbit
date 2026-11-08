@@ -1,8 +1,0 @@
-ts	phase	decision	why	evidence	result
-2026-11-07T00:00:00Z	start	started dreaming slice on feat/dreaming from origin/feat/memory at 7cd0cdc	memory tables and embedPending must exist and this branch had been pointed at main	git rev-parse HEAD	open
-2026-11-07T12:00:00Z	checkpoint	one worker owns the lease, the claim, and the chat write	those three steps are one invariant on one sqlite file	docs/slices/11.md state machine	kept
-2026-11-07T12:10:00Z	implement	claim updates owner and lease only	a reclaim must keep started_at, chat ids, and counts	CLAIM_SQL WHERE state = running AND lease_until < now	kept
-2026-11-07T12:20:00Z	fix	renew floors the lease at the run start	a test clock in 2099 was pulled back to the wall clock, so a second claim stole a live lease	parallel test 2 requests then 1	kept
-2026-11-07T12:40:00Z	fix	prompt names the json fields and contains the word json	the saved provider rejects json_object without that word and otherwise returns the wrong keys	probe parsed one synthetic candidate	kept
-2026-11-07T13:00:00Z	verify	drive dream twice, SIGKILL after the first chat, real copy of orbit.db	slice turn 3	PR comment on 57	kept
-2026-11-07T13:05:00Z	skip	cross-model review of the decision log	spawn_subagent has no model field	harness grok.md	skipped
