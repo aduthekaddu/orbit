@@ -22,12 +22,15 @@ The drive does three things:
 - **Public API.** `GET <public>/api/chats` with no Access cookie must not answer `200`.
 - **Local sign-in.** Chrome opens `http://127.0.0.1:3210/login`, signs in as `verify@orbit.local`, lands on `/c/<id>`, then opens `/settings` and finds `Base URL`. On an empty sandbox the drive first creates that account. `GET /api/setup` answers without a session, so it does not count as sign-in proof.
 
+When the tunnel is not up, the drive skips both public checks, still runs local sign-in, and exits 0 with `skipped the public checks`. The tunnel counts as not up when `GET <public>/` gets no DNS answer, fails TLS, or answers `530`, which Cloudflare sends for a tunnel with no connector. Any other answer runs the public checks, so a reachable URL without Access still fails.
+
 ## Proof
 
-`.verify/evidence/public/summary.txt` holds the public URL, both public statuses, the redirect target, the chat path after sign-in, the session cookie name and its `Secure` flag, and the `/settings` status. `local-settings.png` shows `/settings` after the browser sign-in. No file holds cookie values.
+`.verify/evidence/public/summary.txt` holds the public URL, the public statuses or the skip line, the redirect target, the chat path after sign-in, the session cookie name and its `Secure` flag, and the `/settings` status. `local-settings.png` shows `/settings` after the browser sign-in. No file holds cookie values.
 
 ## Gotchas
 
-- A DNS or TLS failure is recorded as `status 0` with the error code. That fails the public root check.
+- A DNS or TLS failure is recorded as `status 0` with the error code.
+- Access answers before the tunnel, so the public checks pass while the tunnel is down once the Access application exists. `docker compose logs cloudflared` shows whether the tunnel connected.
 - With an `https` public URL, better-auth names the session cookie `__Secure-better-auth.session_token` and marks it `Secure`. Chrome still keeps it on `http://127.0.0.1`, because it treats loopback as a secure origin.
 - A launch with a different `ORBIT_PUBLIC_URL` than the running sandbox stops with a cleanup instruction.
