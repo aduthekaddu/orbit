@@ -1,0 +1,19 @@
+src/lib/auth-origins.test.ts
+  s_9c70596f2df9c7::t_9badfe54bfcfb9 3,26-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6dde35d045bed335f0272bc8458b0964a5571a4c",
+  "prompts": {},
+  "sessions": {
+    "s_9c70596f2df9c7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bb10e086-75f2-4357-940d-87cbf41b188c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
