@@ -1,0 +1,19 @@
+docs/design/gap-analysis.md
+  s_433682a0e588e7::t_1eb75581265ded 1-332
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "36caf575f5277cf3a76e2075624ddafd909728eb",
+  "prompts": {},
+  "sessions": {
+    "s_433682a0e588e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8f594c9d-b7be-4c1e-ac5f-c4ddcdcb0355",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
