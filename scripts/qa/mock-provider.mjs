@@ -318,9 +318,10 @@ function jsonTitle(res) {
 function dreamCandidates(prompt) {
   const candidates = [];
   for (const line of prompt.split("\n")) {
-    const match = /^msg (\S+) user: (.*)$/.exec(line);
+    const match = /^msg (\S+) (user|assistant): (.*)$/.exec(line);
     if (!match) continue;
-    const text = match[2].replace(/\[qa:dream(?:-fail)?\]\s*/g, "").trim();
+    if (match[2] !== "user" && !match[3].includes("[qa:dream-cite]")) continue;
+    const text = match[3].replace(/\[qa:dream(?:-fail|-cite)?\]\s*/g, "").trim();
     if (!text) continue;
     candidates.push({
       kind: /prefer|dark mode/i.test(text) ? "preference" : "fact",

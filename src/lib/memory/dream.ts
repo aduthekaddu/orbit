@@ -191,11 +191,16 @@ function safeError(error: unknown): string {
 }
 
 function failOwned(date: string, owner: string, message: string) {
+  const run = readRun(date);
+  if (!run || run.owner !== owner) return;
+  const unfinished = run.chatIds.filter((id) => !run.doneChatIds.includes(id));
+  const retryChatIds = [...new Set([...run.retryChatIds, ...unfinished])];
   db.$client
     .prepare(
-      `UPDATE memory_runs SET state = 'failed', finished_at = ?, error = ? WHERE date = ? AND owner = ? AND state = 'running'`,
+      `UPDATE memory_runs SET state = 'failed', finished_at = ?, error = ?, retry_chat_ids = ?
+       WHERE date = ? AND owner = ? AND state = 'running'`,
     )
-    .run(Date.now(), message, date, owner);
+    .run(Date.now(), message, JSON.stringify(retryChatIds), date, owner);
 }
 
 type ChatMessage = { id: string; role: string; parts: string; createdAt: number };
@@ -237,7 +242,7 @@ function promptFor(messages: ChatMessage[]): string {
   const lines = [...messages]
     .sort((left, right) => left.createdAt - right.createdAt)
     .flatMap((message) => {
-      const text = messageText(message.parts);
+      const text = messageText(message.parts).replace(/\s+/g, " ").trim();
       return text ? [`msg ${message.id} ${message.role}: ${text}`] : [];
     });
   const qa = process.env.ORBIT_QA_TAGS === "1";
@@ -360,7 +365,7 @@ export async function dreamChat(chatId: string, input: { date: string; owner: st
   const messages = loadMessages(chatId, windowStart(input.date), run.startedAt.getTime(), inherited.has(chatId)).sort(
     (left, right) => left.createdAt - right.createdAt,
   );
-  const known = new Set(messages.map((message) => message.id));
+  const known = new Set(messages.filter((message) => message.role === "user").map((message) => message.id));
   const createdAt = new Map(messages.map((message) => [message.id, message.createdAt]));
   let candidates: Candidate[] = [];
   try {
