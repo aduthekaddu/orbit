@@ -47,8 +47,29 @@
     {
       "idx": 6,
       "version": "6",
-      "when": 1794076165644,
-      "tag": "0006_petite_shinko_yamashiro",
+      "when": 1794076289666,
+      "tag": "0006_memories",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1794082471580,
+      "tag": "0007_memories_stable_rowid",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794091433813,
+      "tag": "0008_memories_reembed",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1794112469774,
+      "tag": "0009_github_settings",
       "breakpoints": true
     }
   ]

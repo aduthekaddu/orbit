@@ -193,6 +193,10 @@ async function launch({ mock }) {
       const runningMode = typeof state.sandboxEnabled === "boolean" ? state.sandboxEnabled ? "on" : "off" : "unknown";
       fail(`sandbox mode mismatch. Running=${runningMode} requested=${sandboxEnabled ? "on" : "off"}. Run node .agents/skills/verify-orbit/verify.mjs cleanup, then launch again with ORBIT_SANDBOX=${sandboxEnabled ? "on" : "off"}.`);
     }
+    const ollamaUrl = process.env.ORBIT_OLLAMA_URL ?? "";
+    if ((state.ollamaUrl ?? "") !== ollamaUrl) {
+      fail(`ollama url mismatch. Run node .agents/skills/verify-orbit/verify.mjs cleanup, then launch again.`);
+    }
     console.log(`already starting or running pid=${state.pid} origin=${ORIGIN}`);
   } else {
     await startServer();
@@ -226,13 +230,14 @@ async function startServer() {
       ORBIT_SANDBOX: sandboxEnabled ? "on" : "off",
       ORBIT_GITHUB_MCP_FIXTURE: "1",
       DOCKER_HOST: process.env.DOCKER_HOST ?? "unix:///var/run/docker.sock",
+      ...(process.env.ORBIT_OLLAMA_URL ? { ORBIT_OLLAMA_URL: process.env.ORBIT_OLLAMA_URL } : {}),
     },
     detached: true,
     stdio: ["ignore", logFd, logFd],
   });
   child.unref();
   fs.closeSync(logFd);
-  fs.writeFileSync(statePath, JSON.stringify({ pid: child.pid, port: PORT, sandbox, origin: ORIGIN, sandboxEnabled }, null, 2));
+  fs.writeFileSync(statePath, JSON.stringify({ pid: child.pid, port: PORT, sandbox, origin: ORIGIN, sandboxEnabled, ollamaUrl: process.env.ORBIT_OLLAMA_URL ?? "" }, null, 2));
   try {
     const ready = await waitReady();
     console.log(`ready origin=${ORIGIN} pid=${child.pid} signupOpen=${ready.signupOpen ? "yes" : "no"}`);

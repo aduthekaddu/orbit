@@ -89,3 +89,11 @@ test("a failed GitHub check stays failed", () => {
   assert.equal(toolRunStatus({ state: "output-available", output: result }, false, "github_get_me"), "failed");
   assert.equal(toolCallRunStatus({ toolName: "github_get_me", status: { type: "complete" }, result, isError: false }), "failed");
 });
+
+test("a remember or forget result with an error is failed, and one without is succeeded", () => {
+  const done = { type: "complete" } as const;
+  assert.equal(toolCallRunStatus({ toolName: "remember", status: done, result: { error: "Could not save memory" }, isError: false }), "failed");
+  assert.equal(toolCallRunStatus({ toolName: "forget", status: done, result: { error: "No memory with that id" }, isError: false }), "failed");
+  assert.equal(toolCallRunStatus({ toolName: "remember", status: done, result: { id: "mem-1", text: "I deploy to Fly.io" }, isError: false }), "succeeded");
+  assert.equal(toolCallRunStatus({ toolName: "forget", status: done, result: { id: "mem-1" }, isError: false }), "succeeded");
+});

@@ -16,6 +16,9 @@ services:
       ORBIT_SEARXNG_URL: ${ORBIT_SEARXNG_URL:-http://searxng:8080}
       ORBIT_TAVILY_API_KEY: ${ORBIT_TAVILY_API_KEY:-}
       ORBIT_GITHUB_TOKEN: ${ORBIT_GITHUB_TOKEN:-}
+      ORBIT_OLLAMA_URL: ${ORBIT_OLLAMA_URL:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: ["npm", "start", "--", "-p", "3210", "-H", "0.0.0.0"]
     restart: "no"
 

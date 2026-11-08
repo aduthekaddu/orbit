@@ -10,6 +10,15 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Changed
 
+- A question like "Where do I host things?" now finds the memory "I deploy everything to Fly.io". Orbit puts the labels `nomic-embed-text` expects in front of each question and each saved memory, and a vector must be within L2 distance 0.97 of the question. Memory vectors made before this are cleared once and made again the next time the Memory page opens or a chat ends.
+- A saved memory sent with a later chat is quoted notes on the user message. It is not a system instruction. The remember card shows the saved text. A vector that is far from the question is left out. Forget runs only when it is given an id.
+- A full question can find a memory from one shared word when Ollama is down. Common words such as "is", "the", and "and" do not count, so an unrelated question no longer brings back unrelated memories.
+- A hung Ollama no longer holds a chat turn or a memory search for 5 seconds. The last Ollama result is reused for 15 seconds, and a chat asks for a vector for at most 1 second. Search still reads SQLite.
+- Each memory has a stable row number, so its vector stays attached after vacuum.
+- Editing a memory shows the server's reason when the save is refused.
+- A remember or forget call that fails shows Failed on its card. The card no longer shows the text as saved.
+- A long text with no spaces wraps inside the remember card and the Memory page row.
+
 - The Docker server runs as the `node` user. On start, Compose gives `./data` to that user and drops root before the server listens. A directory set with `ORBIT_DATA_DIR` gets the same repair.
 - A `docker run` start needs `--user 0:0` once to give an older root-owned data directory to that user. Without it, the container stops and prints the steps instead of answering every request with a 500.
 - The image no longer includes a database or sign-in secret made during the build. Each new data directory makes its own.
@@ -17,6 +26,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 ### Added
 
 - Read GitHub repositories, issues, and pull requests when a token is set. Settings stores the token on the server, and Check shows the GitHub login or the error. Issue, pull request, and file cards link to GitHub. The tools are read-only.
+- Orbit remembers a fact or a preference from one chat and can use it in a later chat. The Memory page lists, searches, edits, and deletes those memories. Vectors come from Ollama. When Ollama is down, text search still works and the page shows the error.
 
 - Conversation search finds the source of code runs, so code the model ran can be found by a name or a word in it. This includes a run you stopped. A migration adds the source of earlier runs to search.
 
