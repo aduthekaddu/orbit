@@ -1,0 +1,25 @@
+.agents/skills/verify-orbit/features/public.md
+  s_9c70596f2df9c7::t_6ecc92e3c46874 1-33
+.agents/skills/verify-orbit/verify.mjs
+  s_9c70596f2df9c7::t_639d8982bc3a3a 200-202,210-213,240,247,892-977,997-998,1002
+.agents/skills/verify-orbit/features/README.md
+  s_9c70596f2df9c7::t_6ecc92e3c46874 46
+.agents/skills/verify-orbit/SKILL.md
+  s_9c70596f2df9c7::t_6ecc92e3c46874 42,67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bb66cce53808a3b48b55cabef7ee186018be58ab",
+  "prompts": {},
+  "sessions": {
+    "s_9c70596f2df9c7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bb10e086-75f2-4357-940d-87cbf41b188c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
