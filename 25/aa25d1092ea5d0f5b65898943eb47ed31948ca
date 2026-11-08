@@ -1,0 +1,24 @@
+README.md
+  s_9c70596f2df9c7::t_6a95e14c8e145a 113-114,144-177
+.env.example
+  s_9c70596f2df9c7::t_6a95e14c8e145a 24-29
+SECURITY.md
+  s_9c70596f2df9c7::t_6a95e14c8e145a 27,30-41
+  s_9c70596f2df9c7::t_4e5045884c9e57 42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "25aa25d1092ea5d0f5b65898943eb47ed31948ca",
+  "prompts": {},
+  "sessions": {
+    "s_9c70596f2df9c7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bb10e086-75f2-4357-940d-87cbf41b188c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
