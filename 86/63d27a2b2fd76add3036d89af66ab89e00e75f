@@ -1,0 +1,19 @@
+docker-compose.yml
+  s_552c90b913b4b0::t_34c46491201936 19-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8663d27a2b2fd76add3036d89af66ab89e00e75f",
+  "prompts": {},
+  "sessions": {
+    "s_552c90b913b4b0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fdee576a-6834-45f7-8196-2942f53d8b80",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
