@@ -1,0 +1,19 @@
+src/lib/deploy-wizard.test.ts
+  s_433682a0e588e7::t_6bb96b294e7a67 29-38,102-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "73e8e4fa60b9d72d3dadcdddaf33ee84f13e50c6",
+  "prompts": {},
+  "sessions": {
+    "s_433682a0e588e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8f594c9d-b7be-4c1e-ac5f-c4ddcdcb0355",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
