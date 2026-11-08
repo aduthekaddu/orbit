@@ -30,7 +30,7 @@ When the tunnel is not up, the drive skips both public checks, still runs local 
 
 ## Gotchas
 
-- A DNS or TLS failure is recorded as `status 0` with the error code.
+- A DNS or TLS failure is recorded as `status 0` with the error code. When the root has answered, a `status 0` from `/api/chats` fails the drive, because a failed request does not show that the API is protected.
 - Access answers before the tunnel, so the public checks pass while the tunnel is down once the Access application exists. `docker compose logs cloudflared` shows whether the tunnel connected.
 - With an `https` public URL, better-auth names the session cookie `__Secure-better-auth.session_token` and marks it `Secure`. Chrome still keeps it on `http://127.0.0.1`, because it treats loopback as a secure origin.
 - A launch with a different `ORBIT_PUBLIC_URL` than the running sandbox stops with a cleanup instruction.

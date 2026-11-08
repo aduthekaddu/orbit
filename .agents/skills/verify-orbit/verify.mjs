@@ -901,6 +901,11 @@ async function probePublic(url) {
   }
 }
 
+// Status 0 is a network error, so only a real HTTP status counts as an answer.
+function answered(probe) {
+  return probe.status >= 200;
+}
+
 function isAccessLogin(location) {
   try {
     const host = new URL(location).hostname;
@@ -961,13 +966,14 @@ async function drivePublic() {
   lines.push(`public root status ${root.status}${root.error ? ` error ${root.error}` : ""}`);
   lines.push(`public root location ${root.location || "none"}`);
   // No DNS answer, a TLS failure, or Cloudflare's 530 for a tunnel with no connector.
-  const tunnelUp = root.status !== 0 && root.status !== 530;
+  const tunnelUp = answered(root) && root.status !== 530;
   const rootOk = root.status === 302 && isAccessLogin(root.location);
-  let apiOk = true;
+  let apiFailure = "";
   if (tunnelUp) {
     const api = await probePublic(`${base}/api/chats`);
     lines.push(`public api/chats status ${api.status}${api.error ? ` error ${api.error}` : ""}`);
-    apiOk = api.status !== 200;
+    if (!answered(api)) apiFailure = `public api/chats got no HTTP response${api.error ? `, error ${api.error}` : ""}`;
+    else if (api.status === 200) apiFailure = "public api/chats answered 200 without Access";
   } else {
     lines.push("public checks skipped, the tunnel is not up");
   }
@@ -977,7 +983,7 @@ async function drivePublic() {
   writeEvidence("public", lines);
   for (const line of lines) console.log(line);
   if (tunnelUp && !rootOk) fail(`public root did not answer 302 to cloudflareaccess.com. status ${root.status}`);
-  if (!apiOk) fail("public api/chats answered 200 without Access");
+  if (apiFailure) fail(apiFailure);
   if (!localOk) fail(`local sign-in at ${ORIGIN} did not open a protected page`);
   console.log(tunnelUp ? "drive public passed" : "drive public passed local sign-in and skipped the public checks");
 }
