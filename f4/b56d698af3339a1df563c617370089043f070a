@@ -1,0 +1,20 @@
+scripts/deploy-wizard.sh
+  s_8bf263e0092ee3::t_419275c3a76374 203-216
+  s_8bf263e0092ee3::t_7812082b35ae0c 302-307
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f4b56d698af3339a1df563c617370089043f070a",
+  "prompts": {},
+  "sessions": {
+    "s_8bf263e0092ee3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "32fdc3b3-ca50-4fb7-a220-6d099b84e5b4",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
