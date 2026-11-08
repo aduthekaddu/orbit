@@ -138,6 +138,20 @@ test("a run adds facts the user stated", async () => {
   assert.match(api.formatDreamStatus(row), /3 chats, 3 added, 0 merged/);
 });
 
+test("a run embeds each candidate with the document label", async () => {
+  const api = requireDream();
+  await resetChats();
+  assert.ok(ollama);
+  const date = "2099-05-03";
+  await seedChat("I own a red scooter", at(date, 12));
+  const row = await api.runDream({ manual: true, date, now: new Date(at(date, 16)) });
+  assert.ok(row);
+  assert.equal(row.added, 1);
+  const received = (await (await fetch(`${ollama.url}/qa/received`)).json()) as string[];
+  assert.equal(received.includes("search_document: I own a red scooter"), true);
+  assert.equal(received.includes("I own a red scooter"), false);
+});
+
 test("a second run on the same date adds nothing", async () => {
   const api = requireDream();
   await resetChats();

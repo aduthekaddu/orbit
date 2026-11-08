@@ -10,6 +10,7 @@ import path from "node:path";
 const OLLAMA = `${["ht", "tp"].join("")}://127.0.0.1:11434`;
 const MODEL = "nomic-embed-text";
 const CUTOFF = 0.9;
+const DOCUMENT_LABEL = "search_document: ";
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-real-ollama-"));
 process.env.ORBIT_DATA_DIR = dataDir;
@@ -38,7 +39,7 @@ async function embedDirect(texts) {
   const response = await fetch(`${OLLAMA}/api/embed`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ model: MODEL, input: texts }),
+    body: JSON.stringify({ model: MODEL, input: texts.map((text) => DOCUMENT_LABEL + text) }),
     signal: AbortSignal.timeout(30_000),
   });
   if (!response.ok) throw new Error(`Ollama returned HTTP ${response.status}`);
@@ -190,9 +191,9 @@ async function main() {
     line("memories kept", String(memories.length));
     for (const memory of memories) line("  memory", JSON.stringify(memory.text));
 
-    const leftVector = seen.get(best.left);
-    const rightVector = seen.get(best.right);
-    if (!leftVector || !rightVector) throw new Error("the run did not embed both near-duplicate texts");
+    const leftVector = seen.get(DOCUMENT_LABEL + best.left);
+    const rightVector = seen.get(DOCUMENT_LABEL + best.right);
+    if (!leftVector || !rightVector) throw new Error(`the run did not embed both near-duplicate texts with the ${DOCUMENT_LABEL.trim()} label`);
     line("cosine the run embedded (JS)", cosine(leftVector, rightVector).toFixed(4));
 
     // Database check with the same sqlite-vec function the merge uses. A merge that rewrites the kept

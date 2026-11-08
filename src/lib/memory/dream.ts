@@ -384,7 +384,7 @@ export async function dreamChat(chatId: string, input: { date: string; owner: st
     return finishChat(input.date, input.owner, chatId, "retry", () => ({ added: 0, merged: 0 }));
   }
   const accepted = candidates.filter((candidate) => known.has(candidate.sourceMessageId));
-  const embedded = await embed(accepted.map((candidate) => candidate.text));
+  const embedded = await embed(accepted.map((candidate) => candidate.text), "document");
   if (!embedded.ok) return finishChat(input.date, input.owner, chatId, "retry", () => ({ added: 0, merged: 0 }));
   const prepared: Prepared[] = accepted.flatMap((candidate, index) => {
     const vector = embedded.vectors[index];
