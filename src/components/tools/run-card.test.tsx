@@ -85,6 +85,23 @@ test("a GitHub file card links the blob for the tool input", () => {
   assert.doesNotMatch(html, /evil\.example/);
 });
 
+test("a GitHub list card links rows that have no html_url through the tool input", () => {
+  const html = render({
+    toolName: "github_list_issues",
+    args: { owner: "aduthekaddu", repo: "orbit", fields: ["number", "title"] },
+    result: {
+      content: [{ type: "text", text: JSON.stringify({ issues: [{ number: 12, title: "Queue lock" }, { number: 13, title: "Retry budget" }], pageInfo: { hasNextPage: false } }) }],
+      _meta: { icon: "data:image/png;base64,iVBORw0KGgo=" },
+    },
+    status: { type: "complete" },
+  });
+  assert.equal(header(html), "GitHub|Succeeded");
+  assert.match(html, /href="https:\/\/github.com\/aduthekaddu\/orbit\/issues\/12"[^>]*>Queue lock</);
+  assert.match(html, /href="https:\/\/github.com\/aduthekaddu\/orbit\/issues\/13"[^>]*>Retry budget</);
+  assert.doesNotMatch(html, /base64/);
+  assert.doesNotMatch(html, /<summary[^>]*>Output<\/summary>/);
+});
+
 test("a GitHub rate limit card says it failed", () => {
   const html = render({
     toolName: "github_list_issues",

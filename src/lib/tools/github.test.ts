@@ -367,3 +367,23 @@ test("issue, pull request, and file results become GitHub links", () => {
   assert.deepEqual(githubLinks({ html_url: "javascript:alert(1)", title: "Nope" }), []);
   assert.deepEqual(githubLinks({ html_url: "https://evil.example/phish", title: "Click me" }), []);
 });
+
+test("a numbered row without html_url links through the tool input", () => {
+  const listed = (rows: unknown) => ({ content: [{ type: "text", text: JSON.stringify(rows) }] });
+  const input = { owner: "aduthekaddu", repo: "orbit" };
+  assert.deepEqual(githubLinks(listed({ issues: [{ number: 12, title: "Queue lock" }, { number: 13 }] }), input), [
+    { href: "https://github.com/aduthekaddu/orbit/issues/12", title: "Queue lock" },
+    { href: "https://github.com/aduthekaddu/orbit/issues/13", title: "#13" },
+  ]);
+  assert.deepEqual(githubLinks(listed([{ number: 42, title: "Add tools" }]), input), [
+    { href: "https://github.com/aduthekaddu/orbit/issues/42", title: "Add tools" },
+  ]);
+  assert.deepEqual(githubLinks(listed({ number: 7, title: "Migration lock", milestone: { number: 3, title: "v1" } }), input), [
+    { href: "https://github.com/aduthekaddu/orbit/issues/7", title: "Migration lock" },
+  ]);
+  assert.deepEqual(githubLinks(listed([{ number: 12, title: "Queue lock" }])), []);
+  assert.deepEqual(githubLinks(listed([{ number: 12, title: "Queue lock" }]), { owner: "..", repo: "orbit" }), []);
+  assert.deepEqual(githubLinks(listed([{ number: 12, title: "Queue lock" }]), { owner: "aduthekaddu", repo: "orbit/../x" }), []);
+  assert.deepEqual(githubLinks(listed([{ number: "12", title: "Queue lock" }, { number: 1.5 }, { number: 0 }]), input), []);
+  assert.deepEqual(githubLinks(listed([{ number: 12, title: "Click me", html_url: "https://evil.example/phish" }]), input), []);
+});

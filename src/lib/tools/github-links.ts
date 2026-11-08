@@ -46,6 +46,16 @@ function issueOrPull(row: Record<string, unknown>): GithubLink | null {
   return { href: `https://github.com/${owner}/${repo}/${kind}/${number}`, title };
 }
 
+function numberedIssue(row: Record<string, unknown>, input: unknown): GithubLink | null {
+  if (row.html_url != null || typeof row.number !== "number" || !Number.isSafeInteger(row.number) || row.number < 1) return null;
+  const args = record(input);
+  const owner = text(args?.owner);
+  const repo = text(args?.repo);
+  if (!owner || !repo || !safeSegment(owner) || !safeSegment(repo)) return null;
+  const title = text(row.title) ?? `#${row.number}`;
+  return { href: `https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${row.number}`, title };
+}
+
 function fileLink(uri: string, input: unknown): GithubLink | null {
   const row = record(input);
   if (!row) return null;
@@ -67,16 +77,18 @@ function fileLink(uri: string, input: unknown): GithubLink | null {
   return { href, title };
 }
 
-function walkLinks(value: unknown, add: (link: GithubLink | null) => void) {
+// A row without html_url links through the tool input only at the top or as a list item,
+// so a nested object such as a milestone never becomes an issue link.
+function walkLinks(value: unknown, add: (link: GithubLink | null) => void, input: unknown, listed = true) {
   if (Array.isArray(value)) {
-    for (const item of value) walkLinks(item, add);
+    for (const item of value) walkLinks(item, add, input);
     return;
   }
   const row = record(value);
   if (!row) return;
-  add(issueOrPull(row));
+  add(issueOrPull(row) ?? (listed ? numberedIssue(row, input) : null));
   for (const child of Object.values(row)) {
-    if (child && typeof child === "object") walkLinks(child, add);
+    if (child && typeof child === "object") walkLinks(child, add, input, Array.isArray(child));
   }
 }
 
@@ -105,7 +117,7 @@ export function githubLinks(output: unknown, input?: unknown): GithubLink[] {
       if (!part) continue;
       if (part.type === "text" && typeof part.text === "string") {
         const parsed = parsedJson(part.text);
-        if (parsed) walkLinks(parsed, add);
+        if (parsed) walkLinks(parsed, add, input);
       }
       if (part.type === "resource") {
         const uri = text(record(part.resource)?.uri);
@@ -113,7 +125,7 @@ export function githubLinks(output: unknown, input?: unknown): GithubLink[] {
       }
     }
   }
-  if (row.structuredContent && typeof row.structuredContent === "object") walkLinks(row.structuredContent, add);
+  if (row.structuredContent && typeof row.structuredContent === "object") walkLinks(row.structuredContent, add, input);
   return found;
 }
 
