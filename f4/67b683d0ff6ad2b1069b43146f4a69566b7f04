@@ -1,0 +1,143 @@
+.agents/skills/verify-orbit/verify.mjs
+  s_552c90b913b4b0::t_c2fdde5a0a152f 196-199,233,240
+src/app/(app)/memory/page.tsx
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-17
+.env.example
+  s_552c90b913b4b0::t_c2fdde5a0a152f 15-17
+  s_552c90b913b4b0::t_0cd99e1ba88b69 18
+src/app/api/chat/route.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 7-8,112-117,120-122,130-131
+  s_552c90b913b4b0::t_05905807529b05 99,148
+src/components/memory/memory-list.tsx
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-238
+src/lib/tools/memory.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-65
+docs/slices/11.md
+  s_552c90b913b4b0::t_c2fdde5a0a152f 74,77
+  s_552c90b913b4b0::t_9c2e03c0bbe2b2 78
+drizzle/0006_memories.sql
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-33
+docs/design.md
+  s_552c90b913b4b0::t_c2fdde5a0a152f 99
+scripts/qa/ci-e2e.sh
+  s_552c90b913b4b0::t_c2fdde5a0a152f 41-68,72,137
+src/components/memory/visible-memories.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-6
+src/lib/memory/ollama-harness.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-35
+src/lib/memory/recall.test.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-186
+drizzle/0007_memories_stable_rowid.sql
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-32
+src/components/memory/save-error.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-4
+src/lib/memory/store.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-277
+src/lib/tools/index.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 8,12-13,17,25-26,35-40
+  s_552c90b913b4b0::t_7e2672efbd9c97 43-48,50
+.agents/skills/verify-orbit/features/README.md
+  s_552c90b913b4b0::t_c2fdde5a0a152f 45
+src/lib/memory/ollama-pairs.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-33
+drizzle/0009_github_settings.sql
+  s_552c90b913b4b0::t_1ab2f5a5539c9f 1-2
+README.md
+  s_552c90b913b4b0::t_c2fdde5a0a152f 107,115-123
+  s_552c90b913b4b0::t_9184b01062a9fc 124
+src/components/memory/save-error.test.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-10
+scripts/qa/mock-ollama.mjs
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-95
+src/app/api/memories/route.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-23
+.agents/skills/verify-orbit/scenarios/memory.mjs
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-189
+src/lib/db/index.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 4,26
+src/components/shell/app-shell.tsx
+  s_552c90b913b4b0::t_c2fdde5a0a152f 107
+next.config.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 4
+src/components/tools/run-card.tsx
+  s_552c90b913b4b0::t_c2fdde5a0a152f 29-34,38
+  s_552c90b913b4b0::t_42335d6f8c4b95 50
+src/lib/memory/embed.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-136
+src/components/tools/run-card.test.tsx
+  s_552c90b913b4b0::t_c2fdde5a0a152f 110-131
+  s_552c90b913b4b0::t_78312145e0ac9c 109
+src/lib/db/schema.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 2,126-140
+  s_552c90b913b4b0::t_fa07f2b303024a 141
+src/lib/memory/recall.ollama.test.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-88
+src/lib/search.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 22-25,31,37-59
+  s_552c90b913b4b0::t_d9a93883aed6aa 60
+src/lib/tools/metadata.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 11-14,23-24
+src/lib/memory/store.test.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-251
+src/lib/tools/run-status.test.ts
+  s_552c90b913b4b0::t_42335d6f8c4b95 92
+  s_552c90b913b4b0::t_c2fdde5a0a152f 93-98
+  s_552c90b913b4b0::t_71bea7e00f14a8 99
+.agents/skills/verify-orbit/features/memory.md
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-9
+drizzle/0008_memories_reembed.sql
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1
+docs/slices/10.md
+  s_552c90b913b4b0::t_c2fdde5a0a152f 19,56,62,73-74,81-82,126,134
+src/lib/tools/memory.test.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-49
+src/lib/memory/embed.test.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-145
+src/components/memory/visible-memories.test.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-12
+docker-compose.yml
+  s_552c90b913b4b0::t_c2fdde5a0a152f 19-21
+src/components/shell/command-palette.tsx
+  s_552c90b913b4b0::t_c2fdde5a0a152f 6,116-118
+  s_552c90b913b4b0::t_45fd4c14bb7053 119
+src/lib/search.test.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 36-49
+CHANGELOG.md
+  s_552c90b913b4b0::t_c2fdde5a0a152f 13-21,29
+scripts/qa/mock-provider.mjs
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1,3,480-491
+src/app/api/memories/[id]/route.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-42
+package.json
+  s_552c90b913b4b0::t_c2fdde5a0a152f 50
+src/lib/memory/recall.ts
+  s_552c90b913b4b0::t_c2fdde5a0a152f 1-83
+drizzle/meta/0006_snapshot.json
+  s_552c90b913b4b0::t_6e9f0b3f1934c5 4,207-307
+drizzle/meta/0007_snapshot.json
+  s_552c90b913b4b0::t_8c12ce84c65178 1-731
+drizzle/meta/0008_snapshot.json
+  s_552c90b913b4b0::t_a5d3ca17f248bc 1-731
+drizzle/meta/0009_snapshot.json
+  s_552c90b913b4b0::t_dda27b8af8b848 1-747
+drizzle/meta/_journal.json
+  s_552c90b913b4b0::t_329c7f82446353 50-72
+package-lock.json
+  s_552c90b913b4b0::t_fa438650b1526b 46,8922-8999
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f467b683d0ff6ad2b1069b43146f4a69566b7f04",
+  "prompts": {},
+  "sessions": {
+    "s_552c90b913b4b0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fdee576a-6834-45f7-8196-2942f53d8b80",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
