@@ -137,3 +137,18 @@ export const memories = sqliteTable(
   },
   (table) => [uniqueIndex("memories_text_norm_idx").on(table.textNorm)],
 );
+
+export const memoryRuns = sqliteTable("memory_runs", {
+  date: text("date").primaryKey(),
+  state: text("state").notNull(),
+  startedAt: integer("started_at", { mode: "timestamp_ms" }).notNull(),
+  finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
+  owner: text("owner"),
+  leaseUntil: integer("lease_until", { mode: "timestamp_ms" }),
+  chatIds: text("chat_ids").notNull(),
+  doneChatIds: text("done_chat_ids").notNull(),
+  retryChatIds: text("retry_chat_ids").notNull(),
+  added: integer("added").notNull(),
+  merged: integer("merged").notNull(),
+  error: text("error"),
+});
