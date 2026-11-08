@@ -17,6 +17,7 @@ export type MockMcp = {
   listCount: () => number;
   callCount: () => number;
   closeCount: () => number;
+  holdStart: () => () => void;
   close: () => Promise<void>;
 };
 

@@ -31,7 +31,9 @@ export type McpToolSet = {
 
 type ListPage = Awaited<ReturnType<MCPClient["listTools"]>>;
 
-const listCache = new Map<string, { expires: number; definitions: ListPage }>();
+type CachedList = { expires: number; definitions: ListPage; shapes: Record<string, Tool> };
+
+const listCache = new Map<string, CachedList>();
 
 export function resolveGithubMcpUrl(value: string | undefined): string {
   const trimmed = value?.trim() ?? "";
@@ -89,6 +91,42 @@ function emptySet(): McpToolSet {
   return { tools: {}, close: async () => {} };
 }
 
+function prefixedTools(raw: Record<string, Tool>, token: string): Record<string, Tool> {
+  const tools: Record<string, Tool> = {};
+  for (const [name, tool] of Object.entries(raw)) {
+    tools[name.startsWith(PREFIX) ? name : `${PREFIX}${name}`] = redactTool(tool, token);
+  }
+  return tools;
+}
+
+// A warm turn returns the cached tools at once and starts the client alongside the model call.
+// Each call waits for the client, so a turn that calls no GitHub tool waits for nothing.
+function warmTools(cached: CachedList, connect: () => Promise<MCPClient>, token: string, signal: AbortSignal | undefined): McpToolSet {
+  const ready = connect().then((client) => ({ client, tools: client.toolsFromDefinitions(cached.definitions) as Record<string, Tool> }));
+  ready.catch((error: unknown) => {
+    if (!signal?.aborted) console.error("github tools unavailable", githubFailureText(error, token));
+  });
+  const raw: Record<string, Tool> = {};
+  for (const [name, shape] of Object.entries(cached.shapes)) {
+    raw[name] = {
+      ...shape,
+      execute: async (args: unknown, options: Parameters<NonNullable<Tool["execute"]>>[1]) => {
+        const execute = (await ready).tools[name]?.execute;
+        if (!execute) throw new Error("GitHub tool unavailable");
+        return execute(args, options);
+      },
+    } as Tool;
+  }
+  let closed = false;
+  const close = async () => {
+    if (closed) return;
+    closed = true;
+    const started = await ready.catch(() => null);
+    if (started) await started.client.close();
+  };
+  return { tools: prefixedTools(raw, token), close };
+}
+
 async function listedTools(client: MCPClient, signal: AbortSignal | undefined, timeoutMs: () => number): Promise<ListPage> {
   const options = () => ({ signal, timeout: timeoutMs() });
   let page = await client.listTools({ options: options() });
@@ -116,8 +154,8 @@ export async function githubTools(settings: GithubSettings, input?: { signal?: A
     closed = true;
     if (client) await client.close();
   };
-  try {
-    client = await createMCPClient({
+  const connect = () =>
+    createMCPClient({
       transport: {
         type: "http",
         url: mcpUrl,
@@ -131,17 +169,17 @@ export async function githubTools(settings: GithubSettings, input?: { signal?: A
       },
       initializationOptions: { signal: input?.signal, timeout: timeoutMs() },
     });
-    const now = input?.now ?? Date.now();
-    const key = `${mcpUrl}\n${GITHUB_TOOLSETS}\n${extraTools}\n${token}`;
-    const cached = listCache.get(key);
-    const definitions = cached && cached.expires > now ? cached.definitions : await listedTools(client, input?.signal, timeoutMs);
-    if (!cached || cached.expires <= now) listCache.set(key, { expires: now + LIST_CACHE_MS, definitions });
-    const raw = client.toolsFromDefinitions(definitions);
-    const tools: Record<string, Tool> = {};
-    for (const [name, tool] of Object.entries(raw)) {
-      tools[name.startsWith(PREFIX) ? name : `${PREFIX}${name}`] = redactTool(tool as Tool, token);
-    }
-    return { tools, close };
+  const now = input?.now ?? Date.now();
+  const key = `${mcpUrl}\n${GITHUB_TOOLSETS}\n${extraTools}\n${token}`;
+  const cached = listCache.get(key);
+  if (cached && cached.expires > now) return warmTools(cached, connect, token, input?.signal);
+  try {
+    client = await connect();
+    const definitions = await listedTools(client, input?.signal, timeoutMs);
+    const raw = client.toolsFromDefinitions(definitions) as Record<string, Tool>;
+    const shapes = Object.fromEntries(Object.entries(raw).map(([name, tool]) => [name, { ...tool, execute: undefined } as Tool]));
+    listCache.set(key, { expires: now + LIST_CACHE_MS, definitions, shapes });
+    return { tools: prefixedTools(raw, token), close };
   } catch (error) {
     await close();
     throw error;

@@ -78,6 +78,7 @@ export async function startMockMcp({ port = 0 } = {}) {
   let listCount = 0;
   let callCount = 0;
   let closeCount = 0;
+  let startHold;
 
   const server = http.createServer(async (request, response) => {
     const chunks = [];
@@ -107,6 +108,7 @@ export async function startMockMcp({ port = 0 } = {}) {
     if (request.method === "DELETE") closeCount += 1;
     if (method === "tools/list") listCount += 1;
     if (method === "tools/call") callCount += 1;
+    if (startHold && (method === "server/discover" || method === "initialize")) await startHold;
     const mode = url.searchParams.get("mode");
     if (mode === "bad-request") {
       response.writeHead(400, { "content-type": "application/json" });
@@ -183,6 +185,16 @@ export async function startMockMcp({ port = 0 } = {}) {
     listCount: () => listCount,
     callCount: () => callCount,
     closeCount: () => closeCount,
+    holdStart: () => {
+      let release = () => {};
+      startHold = new Promise((resolve) => {
+        release = resolve;
+      });
+      return () => {
+        startHold = undefined;
+        release();
+      };
+    },
     close: () => new Promise((resolve) => {
       for (const timer of timers) clearTimeout(timer);
       timers.clear();

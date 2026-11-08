@@ -150,6 +150,59 @@ test("a second call within five minutes skips the tool list and a tool call stil
   });
 });
 
+test("a warm turn gets its tools before the MCP server answers the start", { timeout: 20_000 }, async () => {
+  await withMock(async (mock) => {
+    const first = await githubTools({ token: mock.token, mcpUrl: mock.url });
+    await first.close();
+    const release = mock.holdStart();
+    try {
+      const warm = await Promise.race([
+        githubTools({ token: mock.token, mcpUrl: mock.url }),
+        new Promise<"hung">((resolve) => setTimeout(() => resolve("hung"), 1_000)),
+      ]);
+      assert.notEqual(warm, "hung");
+      if (warm === "hung") return;
+      assert.deepEqual(Object.keys(warm.tools).sort(), ["github_get_file_contents", "github_get_pull_request", "github_list_issues"]);
+      const call = warm.tools.github_list_issues?.execute?.({ owner: "aduthekaddu", repo: "orbit" }, toolOptions);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.equal(mock.callCount(), 0);
+      release();
+      assert.equal(githubLinks(await call)[0]?.href, "https://github.com/aduthekaddu/orbit/issues/7");
+      assert.equal(mock.callCount(), 1);
+      assert.equal(mock.listCount(), 1);
+      await warm.close();
+      await warm.close();
+      assert.equal(mock.openSessions(), 0);
+    } finally {
+      release();
+    }
+  });
+});
+
+test("a warm turn whose client fails to start fails the tool call and logs one line", { timeout: 20_000 }, async () => {
+  const logs: string[] = [];
+  const original = console.error;
+  await withMock(async (mock) => {
+    const first = await githubTools({ token: mock.token, mcpUrl: mock.url });
+    await first.close();
+    await mock.close();
+    console.error = (...args: unknown[]) => {
+      logs.push(args.map(String).join(" "));
+    };
+    try {
+      const warm = await githubTools({ token: mock.token, mcpUrl: mock.url });
+      assert.equal("github_list_issues" in warm.tools, true);
+      await assert.rejects(warm.tools.github_list_issues?.execute?.({ owner: "aduthekaddu", repo: "orbit" }, toolOptions) ?? Promise.resolve());
+      await warm.close();
+      assert.equal(logs.length, 1);
+      assert.doesNotMatch(logs[0], new RegExp(mock.token));
+      assert.doesNotMatch(logs[0], /Authorization/i);
+    } finally {
+      console.error = original;
+    }
+  });
+});
+
 test("a wrong token leaves the turn with no GitHub tools", { timeout: 20_000 }, async () => {
   await withMock(async (mock) => {
     const logs: string[] = [];
