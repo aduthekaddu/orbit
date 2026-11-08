@@ -1,0 +1,20 @@
+.audit/dreaming.tsv
+  s_377aeebc351da9::t_2ede0fb1ec01f9 1-2
+  s_377aeebc351da9::t_046a83e33055e1 3-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "135df103d8d19227201db302fcc2a96913906315",
+  "prompts": {},
+  "sessions": {
+    "s_377aeebc351da9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1b78d-4ea4-7df2-9006-24342acdb42e",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}

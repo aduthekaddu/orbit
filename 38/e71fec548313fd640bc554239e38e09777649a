@@ -1,0 +1,30 @@
+scripts/qa/real-ollama-merge.mjs
+  s_ce57a52e4f0244::t_b07ef38e77c4a2 1-196,200-207,209-239
+  s_ce57a52e4f0244::t_0aa5c747ed4210 197-199
+  s_ce57a52e4f0244::t_d7034f00c04956 208
+.env.example
+  s_ce57a52e4f0244::t_a313300a6bd7f1 15
+src/lib/memory/dream.ts
+  s_ce57a52e4f0244::t_488ab6f8d0ab39 217
+  s_ce57a52e4f0244::t_4e7917fb2f1cbf 243-245
+  s_ce57a52e4f0244::t_6110d7e636627f 436
+src/lib/memory/dream.test.ts
+  s_ce57a52e4f0244::t_2b7545e85b3796 238-256
+  s_ce57a52e4f0244::t_023b150e566a1a 56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "38e71fec548313fd640bc554239e38e09777649a",
+  "prompts": {},
+  "sessions": {
+    "s_ce57a52e4f0244": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "60924bc9-e67e-4b57-8b76-5ee145664025",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
