@@ -110,6 +110,8 @@ Every variable is optional.
 | `BETTER_AUTH_SECRET` | Generated into `data/auth-secret` | The key that signs session cookies. |
 | `BETTER_AUTH_URL` | `http://127.0.0.1:3210` | The URL you open Orbit at. |
 | `ORBIT_TRUSTED_ORIGINS` | Empty | Extra origins, separated by commas, that may sign in. Needed when you serve Orbit on another port or host. |
+| `ORBIT_PUBLIC_URL` | Empty | The public address behind a Cloudflare tunnel, such as `https://orbit.example.com`. It becomes the auth URL and a trusted origin. `127.0.0.1:3210` still signs in. See [Deploy behind Cloudflare](#deploy-behind-cloudflare). |
+| `CLOUDFLARE_TUNNEL_TOKEN` | Empty | The tunnel token. Only the `cloudflared` container reads it, as a file secret. |
 
 ### Memory embeddings
 
@@ -139,3 +141,37 @@ docker compose -f docker-compose.yml -f docker-compose.sandbox.yml up -d --build
 The default Compose deployment has no Docker proxy or Docker API connection. For a source build, start with `ORBIT_SANDBOX=on npm start -- -p 3210 -H 127.0.0.1`.
 
 Each run has only the image's standard library. It has no network or persistent files. See [Security](SECURITY.md#code-sandbox) for limits and the Docker proxy trade-off.
+
+### Deploy behind Cloudflare
+
+You can reach Orbit from a phone or another computer through a Cloudflare tunnel. The tunnel makes an outbound connection to Cloudflare, so no port opens on your machine. Cloudflare Access asks who you are before any request reaches Orbit, and Orbit's own sign-in still runs after that.
+
+```text
+phone → Cloudflare → Access login → tunnel → cloudflared container → http://orbit:3210 → Orbit sign-in
+```
+
+You need a Cloudflare account with a domain on it. The free plan covers tunnels and Access.
+
+1. Run the wizard. It walks you through the dashboard steps, saves the tunnel token and `ORBIT_PUBLIC_URL` to `.env`, and never prints the token.
+
+	```sh
+	scripts/deploy-wizard.sh
+	```
+
+	The wizard covers five steps: create a tunnel, route your hostname to `http://orbit:3210`, add a self-hosted Access application, allow only your email with a 24 hour session, and start the tunnel.
+
+2. Start Orbit with the `public` profile, if the wizard did not already.
+
+	```sh
+	docker compose --profile public up -d --build
+	```
+
+	With the sandbox override, add `-f docker-compose.yml -f docker-compose.sandbox.yml` before `--profile public`.
+
+3. Check that Access is in front. Without an Access login, the public URL answers `302` to a `cloudflareaccess.com` address.
+
+	```sh
+	curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' https://orbit.example.com/
+	```
+
+A plain `docker compose up` starts no tunnel. Orbit stays on `127.0.0.1:3210` on your machine either way. With an `https` public URL, the session cookie is marked `Secure`, and browsers still accept it on `http://127.0.0.1:3210`. See [Security](SECURITY.md#cloudflare-access) for what Access protects.
