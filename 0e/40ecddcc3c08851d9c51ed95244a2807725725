@@ -1,0 +1,23 @@
+src/lib/auth.ts
+  s_9c70596f2df9c7::t_0bf6290e447d25 28,31,33
+  s_9c70596f2df9c7::t_7a489b14c38898 7,27,34
+src/lib/auth-origins.ts
+  s_9c70596f2df9c7::t_7a489b14c38898 1
+  s_9c70596f2df9c7::t_0bf6290e447d25 2-13,15-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0e40ecddcc3c08851d9c51ed95244a2807725725",
+  "prompts": {},
+  "sessions": {
+    "s_9c70596f2df9c7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bb10e086-75f2-4357-940d-87cbf41b188c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
