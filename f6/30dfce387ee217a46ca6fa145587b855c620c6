@@ -1,0 +1,23 @@
+scripts/qa/mock-provider.mjs
+  s_552c90b913b4b0::t_f345f372f9a17b 321,323-324
+src/lib/memory/dream.test.ts
+  s_552c90b913b4b0::t_f146d3ea95c846 106-113,241-293
+src/lib/memory/dream.ts
+  s_552c90b913b4b0::t_7164f30bf6ad4a 194-197,200-201,203,245,368
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f630dfce387ee217a46ca6fa145587b855c620c6",
+  "prompts": {},
+  "sessions": {
+    "s_552c90b913b4b0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fdee576a-6834-45f7-8196-2942f53d8b80",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
