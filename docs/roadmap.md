@@ -28,9 +28,9 @@ Orbit is a self-hosted chat app for one person, shaped like ChatGPT or Claude, t
 | 6 | [Titles and history search](slices/06.md) | Short model-written titles. ⌘K finds any message. | Shipped in #19 |
 | 7 | [Web search](slices/07.md) | The model searches through SearXNG or Tavily and cites sources. | Shipped in #20 |
 | 8 | [Code sandbox](slices/08.md) | The model runs Python or JavaScript in a locked-down container. | Shipped in #21 |
-| 9 | [GitHub](slices/09.md) | The model reads your repositories, issues, and pull requests. | Planned |
-| 10 | [Memory](slices/10.md) | Orbit remembers facts across chats. A page lists and edits them. | Planned |
-| 11 | [Dreaming](slices/11.md) | A nightly job turns the day's chats into memories. | Planned |
+| 9 | [GitHub](slices/09.md) | The model reads your repositories, issues, and pull requests. | Shipped in #56 |
+| 10 | [Memory](slices/10.md) | Orbit remembers facts across chats. A page lists and edits them. | Shipped in #55 |
+| 11 | [Dreaming](slices/11.md) | A nightly job turns the day's chats into memories. | Shipped in #57 |
 | 12 | [Deploy](slices/12.md) | Reach Orbit from anywhere behind Cloudflare Access. | Planned |
 
 Between slices 2 and 3, two pull requests shipped without a slice number: the design system (#3) and inline editing (#5).
