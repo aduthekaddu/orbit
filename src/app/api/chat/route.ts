@@ -4,6 +4,8 @@ import { ARTIFACT_INSTRUCTIONS } from "@/lib/artifacts/detect";
 import { sanitize, streamErrorMessage } from "@/lib/chat-errors";
 import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
 import { assistantHasVisiblePart, settleInterruptedParts } from "@/lib/genui/spec";
+import { embedPending } from "@/lib/memory/embed";
+import { attachMemoryNotes, quotedMemoryNotes, recall, REMEMBER_INSTRUCTIONS } from "@/lib/memory/recall";
 import { toolsFor } from "@/lib/tools";
 import { CHAT_STEP_LIMIT, searchAnswerStep } from "@/lib/tools/answer-step";
 import { createStoppedRuns } from "@/lib/tools/stopped-runs";
@@ -93,7 +95,17 @@ export async function POST(request: Request) {
   try {
     const allowReasoning = modelAllowsReasoning(settings.baseUrl, settings.model);
     const stopped = createStoppedRuns();
-    const tools = toolsFor(settings, stopped);
+    const tools = toolsFor(settings, stopped, { chatId: chat.id, messageId: lastUser?.id ?? null });
+    const recalled = await recall(textFromParts(lastUser?.parts), 3);
+    const notes = quotedMemoryNotes(recalled.map((hit) => hit.memory));
+    const instructions = [
+      RENDER_UI_SYSTEM,
+      ARTIFACT_INSTRUCTIONS,
+      REMEMBER_INSTRUCTIONS,
+      tools.web_search ? "Use web_search for recent events, prices, or facts you are unsure of. Cite sources as markdown links to result URLs." : "",
+    ]
+      .filter((part) => part.length > 0)
+      .join("\n\n");
     const result = streamText({
       model: orbitModel({
         baseUrl: settings.baseUrl,
@@ -101,8 +113,8 @@ export async function POST(request: Request) {
         model: settings.model,
         chatId: chat.id,
       }),
-      instructions: `${RENDER_UI_SYSTEM}\n\n${ARTIFACT_INSTRUCTIONS}${tools.web_search ? "\n\nUse web_search for recent events, prices, or facts you are unsure of. Cite sources as markdown links to result URLs." : ""}`,
-      messages: await convertToModelMessages(uiMessages, { tools }),
+      instructions,
+      messages: attachMemoryNotes(await convertToModelMessages(uiMessages, { tools }), notes),
       tools,
       stopWhen: stepCountIs(CHAT_STEP_LIMIT),
       prepareStep: tools.web_search ? searchAnswerStep : undefined,
@@ -119,6 +131,7 @@ export async function POST(request: Request) {
       generateMessageId: () => write.responseId,
       onError: (error) => streamErrorMessage(error, settings.apiKey),
       onEnd: async ({ responseMessage, isAborted, outcome }) => {
+        void embedPending();
         const interrupted = isAborted || outcome.status !== "completed";
         const parts = settleInterruptedParts(interrupted ? await stopped.apply(responseMessage.parts) : responseMessage.parts, interrupted);
         const visible = assistantHasVisiblePart(parts);

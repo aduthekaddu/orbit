@@ -48,3 +48,26 @@ test("a card whose tool input was rejected names no language", () => {
 test("other tools show no language", () => {
   assert.equal(header(render({ toolName: "web_search", args: { query: "orbit" } })), "Web search|Running");
 });
+
+test("a remember card shows the saved text", () => {
+  const html = render({
+    toolName: "remember",
+    args: { text: "I deploy to Fly.io", kind: "fact" },
+    result: { id: "mem-1", text: "I deploy to Fly.io" },
+    status: { type: "complete" },
+  });
+  assert.match(html, /I deploy to Fly\.io/);
+  assert.doesNotMatch(html, /<summary[^>]*>Output<\/summary>/);
+});
+
+test("a remember card whose save failed says Failed and does not show the text as saved", () => {
+  const html = render({
+    toolName: "remember",
+    args: { text: "I deploy to Fly.io", kind: "fact" },
+    result: { error: "Could not save memory" },
+    status: { type: "complete" },
+  });
+  assert.equal(header(html), "remember|Failed");
+  assert.doesNotMatch(html, /I deploy to Fly\.io/);
+  assert.match(html, /Could not save memory/);
+});

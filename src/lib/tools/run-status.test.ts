@@ -71,3 +71,11 @@ test("a stopped code run that saved its output is cancelled, not failed", () => 
   assert.equal(toolRunStatus({ state: "output-available", output: result }, false, "run_code"), "cancelled");
   assert.equal(toolCallRunStatus({ toolName: "run_code", status: { type: "complete" }, result, isError: false }), "cancelled");
 });
+
+test("a remember or forget result with an error is failed, and one without is succeeded", () => {
+  const done = { type: "complete" } as const;
+  assert.equal(toolCallRunStatus({ toolName: "remember", status: done, result: { error: "Could not save memory" }, isError: false }), "failed");
+  assert.equal(toolCallRunStatus({ toolName: "forget", status: done, result: { error: "No memory with that id" }, isError: false }), "failed");
+  assert.equal(toolCallRunStatus({ toolName: "remember", status: done, result: { id: "mem-1", text: "I deploy to Fly.io" }, isError: false }), "succeeded");
+  assert.equal(toolCallRunStatus({ toolName: "forget", status: done, result: { id: "mem-1" }, isError: false }), "succeeded");
+});

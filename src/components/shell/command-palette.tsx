@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Command, defaultFilter } from "cmdk";
-import { ChatCircleIcon, GearSixIcon, MagnifyingGlassIcon, NotePencilIcon } from "@phosphor-icons/react";
+import { BrainIcon, ChatCircleIcon, GearSixIcon, MagnifyingGlassIcon, NotePencilIcon } from "@phosphor-icons/react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ScrollFade } from "@/components/ui/scroll-fade";
 import { chatLabel, type ChatSummary } from "@/components/chat/sidebar";
@@ -112,6 +112,10 @@ export function CommandPalette({
                 <Command.Item value="Settings" onSelect={() => run(() => router.push("/settings"))} className={itemClass}>
                   <GearSixIcon weight="light" className="size-4" />
                   Settings
+                </Command.Item>
+                <Command.Item value="Memory" onSelect={() => run(() => router.push("/memory"))} className={itemClass}>
+                  <BrainIcon weight="light" className="size-4" />
+                  Memory
                 </Command.Item>
               </Command.Group>
               {chats.length > 0 && (

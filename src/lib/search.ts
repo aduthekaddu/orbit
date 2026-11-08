@@ -19,15 +19,43 @@ type SearchRow = {
   snippet: string;
 };
 
+function quotedToken(token: string): string {
+  return `"${token.replaceAll('"', '""')}"`;
+}
+
 export function toMatchQuery(input: string): string | null {
   const tokens = input.split(" ").filter((token) => token.length > 0);
   if (tokens.length === 0) return null;
   return tokens
     .map((token, index) => {
-      const quoted = `"${token.replaceAll('"', '""')}"`;
+      const quoted = quotedToken(token);
       return index === tokens.length - 1 ? `${quoted}*` : quoted;
     })
     .join(" ");
+}
+
+const STOP_WORDS = new Set(
+  (
+    "about above after again all also am an and any are as at be because been before being below between both but by can could did do does doing down during " +
+    "each few for from further had has have having he her here hers herself him himself his how if in into is it its itself just me more most my myself no nor not " +
+    "of off on once only or other our ours ourselves out over own re same shall she should so some such than that the their theirs them themselves then there " +
+    "these they this those through to too under until up ve very was we were what when where which while who whom why will with would you your yours yourself " +
+    "yourselves ll"
+  ).split(" "),
+);
+
+function contentWords(input: string): string[] {
+  const words = input
+    .toLowerCase()
+    .replace(/\p{L}+n['’]t(?!\p{L})/gu, " ")
+    .match(/[\p{L}\p{N}]+/gu);
+  return [...new Set((words ?? []).filter((word) => word.length > 1 && !STOP_WORDS.has(word)))];
+}
+
+export function toOrMatchQuery(input: string): string | null {
+  const words = contentWords(input);
+  if (words.length === 0) return null;
+  return words.map((word) => quotedToken(word)).join(" OR ");
 }
 
 export function searchMessages(userId: string, q: string): SearchHit[] {

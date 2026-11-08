@@ -33,6 +33,20 @@ function part(id: string, role: "user" | "assistant", text: string) {
   return { id, role, parts: [{ type: "text", text }] };
 }
 
+test("toOrMatchQuery keeps only content words", () => {
+  assert.equal(search.toOrMatchQuery("Where do I deploy things?"), '"deploy" OR "things"');
+  assert.equal(search.toOrMatchQuery("deploy Deploy DEPLOY"), '"deploy"');
+  assert.equal(search.toOrMatchQuery("Fly.io"), '"fly" OR "io"');
+  assert.equal(search.toOrMatchQuery("John's rust notes"), '"john" OR "rust" OR "notes"');
+  assert.equal(search.toOrMatchQuery('say "hi"'), '"say" OR "hi"');
+});
+
+test("toOrMatchQuery is null when the question has no content word", () => {
+  assert.equal(search.toOrMatchQuery("What is 2+2?"), null);
+  assert.equal(search.toOrMatchQuery("It isn't what I'm after"), null);
+  assert.equal(search.toOrMatchQuery("  "), null);
+});
+
 test("toMatchQuery quotes every token and prefixes the last one", () => {
   assert.equal(search.toMatchQuery("zebra"), '"zebra"*');
   assert.equal(search.toMatchQuery("zebra corn"), '"zebra" "corn"*');

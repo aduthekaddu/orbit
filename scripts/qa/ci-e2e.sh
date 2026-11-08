@@ -38,9 +38,38 @@ save_logs() {
     cp "$file" ".verify/evidence/logs/$log_count-$(basename "$file")"
   done
 }
+mock_ollama_pid=""
+start_mock_ollama() {
+  mkdir -p .verify
+  if ss -ltn 2>/dev/null | grep -q '127.0.0.1:11435'; then
+    echo "port 11435 is already in use" >&2
+    return 1
+  fi
+  MOCK_OLLAMA_PORT=11435 node scripts/qa/mock-ollama.mjs > .verify/mock-ollama.log 2>&1 &
+  mock_ollama_pid=$!
+  export ORBIT_OLLAMA_URL=http://127.0.0.1:11435
+  local tries=0
+  while ! ss -ltn 2>/dev/null | grep -q '127.0.0.1:11435'; do
+    tries=$((tries + 1))
+    if [ "$tries" -gt 50 ]; then
+      echo "mock ollama did not listen on 11435" >&2
+      return 1
+    fi
+    sleep 0.1
+  done
+}
+stop_mock_ollama() {
+  if [ -n "$mock_ollama_pid" ]; then
+    kill "$mock_ollama_pid" 2>/dev/null || true
+    wait "$mock_ollama_pid" 2>/dev/null || true
+    mock_ollama_pid=""
+  fi
+}
+
 cleanup_server() {
   save_logs
   verify cleanup
+  stop_mock_ollama
 }
 
 die() {
@@ -105,6 +134,7 @@ case $suite in
     check verify drive settings
     ;;
   browse)
+    start_mock_ollama || die "mock ollama"
     verify launch --mock || die "verify launch --mock"
     verify doctor || die "verify doctor"
     for name in $(scenario_names); do

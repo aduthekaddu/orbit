@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const user = sqliteTable("user", {
   id: text("id").primaryKey(),
@@ -120,4 +120,20 @@ export const messages = sqliteTable(
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
   (table) => [index("messages_chat_position_idx").on(table.chatId, table.position), index("messages_chat_parent_idx").on(table.chatId, table.parentId)],
+);
+
+export const memories = sqliteTable(
+  "memories",
+  {
+    seq: integer("seq").primaryKey({ autoIncrement: true }),
+    id: text("id").notNull().unique(),
+    kind: text("kind").notNull(),
+    text: text("text").notNull(),
+    textNorm: text("text_norm").notNull(),
+    sourceChatId: text("source_chat_id").references(() => chats.id, { onDelete: "set null" }),
+    sourceMessageId: text("source_message_id").references(() => messages.id, { onDelete: "set null" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [uniqueIndex("memories_text_norm_idx").on(table.textNorm)],
 );

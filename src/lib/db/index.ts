@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
+import * as sqliteVec from "sqlite-vec";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { eq } from "drizzle-orm";
@@ -22,6 +23,7 @@ const sqlite = new Database(dbPath);
 sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("foreign_keys = ON");
 sqlite.pragma("busy_timeout = 5000");
+sqliteVec.load(sqlite);
 // Migration 0004 calls this to clean saved code output the way new saves do.
 sqlite.function("orbit_clean_output", { deterministic: true }, (text) => (typeof text === "string" ? stripTerminalControls(text) : null));
 

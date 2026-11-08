@@ -1,4 +1,6 @@
+import fs from "node:fs";
 import http from "node:http";
+import path from "node:path";
 
 const PORT = Number(process.env.MOCK_PORT ?? 3299);
 const MODEL = process.env.MOCK_MODEL ?? "mock-genui";
@@ -446,6 +448,18 @@ const server = http.createServer((req, res) => {
     const prompt = lastUserText(body);
     const scenario = scenarioOf(prompt);
     console.log(`mock request scenario=${scenario}`);
+    const requestLog = process.env.MOCK_REQUEST_LOG ?? path.join(process.cwd(), ".verify", "mock-requests.jsonl");
+    fs.mkdirSync(path.dirname(requestLog), { recursive: true });
+    fs.appendFileSync(requestLog, `${JSON.stringify({ at: new Date().toISOString(), scenario, body })}\n`);
+    if (scenario === "remember") {
+      if (body.messages?.at(-1)?.role === "tool") {
+        textResponse(res, "Saved.");
+        return;
+      }
+      const text = prompt.replace(/\[qa:remember\]\s*/, "").trim();
+      toolResponse(res, scenario, { text, kind: "fact" }, "remember");
+      return;
+    }
     if (raw.includes("Write a title of at most six words.") && body.stream !== true) {
       jsonTitle(res);
       return;
