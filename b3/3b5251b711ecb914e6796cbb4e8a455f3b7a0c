@@ -1,0 +1,25 @@
+SECURITY.md
+  s_1556314371aa76::t_0b23ba8d1aa4db 31
+next.config.ts
+  s_1556314371aa76::t_85d628587c0b91 5-7
+src/components/chat/markdown-image.tsx
+  s_1556314371aa76::t_85d628587c0b91 1-24
+src/components/chat/markdown-text.tsx
+  s_1556314371aa76::t_85d628587c0b91 12,74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b33b5251b711ecb914e6796cbb4e8a455f3b7a0c",
+  "prompts": {},
+  "sessions": {
+    "s_1556314371aa76": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8578f210-760a-4e22-af0e-04c4b4b7a8b8",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
