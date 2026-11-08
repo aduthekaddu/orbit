@@ -9,6 +9,7 @@ services:
       - ./data:/app/data
     environment:
       BETTER_AUTH_URL: http://127.0.0.1:3210
+      ORBIT_PUBLIC_URL: ${ORBIT_PUBLIC_URL:-}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
       ORBIT_BASE_URL: ${ORBIT_BASE_URL:-}
       ORBIT_API_KEY: ${ORBIT_API_KEY:-}
@@ -34,3 +35,19 @@ services:
     command:
       - 'export SEARXNG_SECRET="$$(python -c "import secrets; print(secrets.token_hex(32))")"; exec /usr/local/searxng/entrypoint.sh'
     restart: "no"
+
+  # Runs only with --profile public. It reaches Orbit as http://orbit:3210 on the Compose network.
+  cloudflared:
+    image: cloudflare/cloudflared@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
+    profiles: [public]
+    # A file secret keeps the token out of the container's environment and out of docker compose config.
+    command: ["tunnel", "--no-autoupdate", "run", "--token-file", "/run/secrets/cloudflare_tunnel_token"]
+    secrets:
+      - cloudflare_tunnel_token
+    depends_on:
+      - orbit
+    restart: "no"
+
+secrets:
+  cloudflare_tunnel_token:
+    environment: CLOUDFLARE_TUNNEL_TOKEN

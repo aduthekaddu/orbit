@@ -26,8 +26,21 @@ Orbit is built for one person on their own machine. These are the protections it
 
 - The database stores the provider key in plain text. Anyone who can read `data/orbit.db` can read the key.
 - The database stores the GitHub token in plain text, the same way. Use a fine-grained personal access token that can only read the repositories you want Orbit to see. Orbit does not use GitHub sign-in.
-- Sign-in relies on better-auth's default rate limits. Orbit adds no lockout of its own. Keep it on `127.0.0.1`, or behind an access layer such as Cloudflare Access, which is planned in [slice 12](docs/slices/12.md).
+- Sign-in relies on better-auth's default rate limits. Orbit adds no lockout of its own. Keep it on `127.0.0.1`, or behind [Cloudflare Access](#cloudflare-access).
 - Model output is untrusted. Markdown renders without raw HTML. Generated UI specs are checked against a fixed component catalog before they render.
+
+## Cloudflare Access
+
+The `public` Compose profile runs a `cloudflared` container that carries a Cloudflare tunnel to Orbit. The tunnel connects out to Cloudflare, so no port listens on a public interface. Compose still publishes port 3210 on `127.0.0.1` only.
+
+Access checks each request at Cloudflare before it enters the tunnel. Only the emails in the Allow policy get through. Every page, every API route, and `/api/auth/*` sit behind it, so sign-in rate limits and the code sandbox are not reachable from the open internet. Orbit's own sign-in still runs after Access.
+
+The tunnel token lives in `.env` as `CLOUDFLARE_TUNNEL_TOKEN`. Compose hands it to `cloudflared` as a file secret, so it does not appear in `docker compose config` or in the container's environment.
+
+Known limits:
+
+- **Orbit does not check the Access JWT yet.** Access adds a signed `Cf-Access-Jwt-Assertion` header to each request. Orbit trusts that the tunnel is the only public path and does not verify that header. Anything that reaches port 3210 without the tunnel skips Access, such as another process or user on the same machine, or a misconfigured port mapping. This is a follow-up: verify the JWT against the team's public keys and the application's audience tag, and reject requests without it when `ORBIT_PUBLIC_URL` is set.
+- Anyone who can read `.env` can run the tunnel. Keep that file at mode `0600`.
 
 ## Artifact previews
 

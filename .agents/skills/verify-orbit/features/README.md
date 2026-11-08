@@ -44,3 +44,4 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 - [GitHub](./github.md) checks a read-only token and links an issue card through a local MCP fixture.
 - [Memory](./memory.md) saves a fact from chat, lists it on `/memory`, and sends it with a later question.
 - [Dreaming](./dreaming.md) reads the day's chats into memory, then a second run leaves the counts unchanged.
+- [Public URL](./public.md) checks that Cloudflare Access guards the public URL and that local sign-in still works.
