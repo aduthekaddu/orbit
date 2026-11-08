@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveTrustedOrigins } from "./auth-origins";
+import { resolveAuthBaseUrl, resolveTrustedOrigins } from "./auth-origins";
 
 test("a public base URL trusts only the deployment origin", () => {
   assert.deepEqual(resolveTrustedOrigins("https://orbit.example.com", undefined), ["https://orbit.example.com"]);
@@ -22,4 +22,38 @@ test("explicit extra origins are trimmed, deduplicated, and kept", () => {
 
 test("a malformed base URL still keeps the explicit origins", () => {
   assert.deepEqual(resolveTrustedOrigins("not a url", "http://127.0.0.1:3211"), ["http://127.0.0.1:3211"]);
+});
+
+test("ORBIT_PUBLIC_URL becomes the auth base URL", () => {
+  assert.equal(
+    resolveAuthBaseUrl({ BETTER_AUTH_URL: "http://127.0.0.1:3210", ORBIT_PUBLIC_URL: "https://orbit.example.com" }),
+    "https://orbit.example.com",
+  );
+});
+
+test("without ORBIT_PUBLIC_URL the auth base URL stays BETTER_AUTH_URL", () => {
+  assert.equal(resolveAuthBaseUrl({ BETTER_AUTH_URL: "http://127.0.0.1:3210" }), "http://127.0.0.1:3210");
+  assert.equal(
+    resolveAuthBaseUrl({ BETTER_AUTH_URL: "http://127.0.0.1:3210", ORBIT_PUBLIC_URL: "  " }),
+    "http://127.0.0.1:3210",
+  );
+  assert.equal(resolveAuthBaseUrl({}), "http://127.0.0.1:3210");
+});
+
+test("ORBIT_PUBLIC_URL adds the public origin and keeps the local one", () => {
+  assert.deepEqual(resolveTrustedOrigins("http://127.0.0.1:3210", undefined, "https://orbit.example.com/"), [
+    "http://127.0.0.1:3210",
+    "https://orbit.example.com",
+  ]);
+});
+
+test("ORBIT_PUBLIC_URL keeps the explicit origins", () => {
+  assert.deepEqual(
+    resolveTrustedOrigins("http://127.0.0.1:3210", "http://127.0.0.1:3211", "https://orbit.example.com"),
+    ["http://127.0.0.1:3210", "https://orbit.example.com", "http://127.0.0.1:3211"],
+  );
+});
+
+test("an empty ORBIT_PUBLIC_URL changes no origins", () => {
+  assert.deepEqual(resolveTrustedOrigins("http://127.0.0.1:3210", undefined, ""), ["http://127.0.0.1:3210"]);
 });
