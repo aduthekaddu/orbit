@@ -1,0 +1,19 @@
+src/lib/tools/github-links.ts
+  s_1556314371aa76::t_edc6dbd99f930c 4,70-71,73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "454575bfb8a66914fb54a3e53c235ffcb948b5a5",
+  "prompts": {},
+  "sessions": {
+    "s_1556314371aa76": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8578f210-760a-4e22-af0e-04c4b4b7a8b8",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
