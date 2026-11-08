@@ -1,0 +1,14 @@
+CHANGELOG.md
+  h_9f68edf4527855 28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8d66d83234aca4e2809401ed7eb990e7537cee4e",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
