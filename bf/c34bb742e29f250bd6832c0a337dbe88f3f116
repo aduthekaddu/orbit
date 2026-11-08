@@ -1,0 +1,21 @@
+src/components/settings/settings-form.tsx
+  s_1556314371aa76::t_6022f605cf65d4 100,138-142,303,305,315
+CHANGELOG.md
+  s_1556314371aa76::t_0f9f10ebe2f3cf 10-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bfc34bb742e29f250bd6832c0a337dbe88f3f116",
+  "prompts": {},
+  "sessions": {
+    "s_1556314371aa76": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8578f210-760a-4e22-af0e-04c4b4b7a8b8",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
