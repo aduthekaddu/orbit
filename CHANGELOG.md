@@ -23,6 +23,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Added
 
+- Reach Orbit from a phone or another computer through a Cloudflare tunnel, with Cloudflare Access asking who you are before Orbit's own sign-in. `scripts/deploy-wizard.sh` walks through the Cloudflare dashboard steps, and `docker compose --profile public up -d` starts the tunnel. A plain `docker compose up` starts no tunnel, and `127.0.0.1:3210` still signs in.
 - Once a night, Orbit reads the day's chats and saves lasting facts and preferences on the Memory page. A second run the same night does not add them again. Near-duplicates update the older memory. The page shows when the last run finished, or the error.
 
 - Once a day, Orbit reviews the day's chats and drafts new memories from them. ORBIT_DREAM_HOUR sets the hour, and the run is logged so it can be checked.
