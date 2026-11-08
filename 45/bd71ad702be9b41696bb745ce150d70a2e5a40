@@ -1,0 +1,21 @@
+.agents/skills/verify-orbit/features/dreaming.md
+  s_552c90b913b4b0::t_a9af2d86a35380 5
+.agents/skills/verify-orbit/verify.mjs
+  s_552c90b913b4b0::t_e682480427b753 770,875
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "45bd71ad702be9b41696bb745ce150d70a2e5a40",
+  "prompts": {},
+  "sessions": {
+    "s_552c90b913b4b0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fdee576a-6834-45f7-8196-2942f53d8b80",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
