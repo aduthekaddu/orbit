@@ -3,6 +3,7 @@ import type { SettingsRecord } from "../settings";
 import { renderUiTool } from "../genui/tool";
 import { cardFor, type ToolCardKind, type ToolName } from "./metadata";
 import { createSearchTool } from "./search";
+import { openGithubTurn } from "./github";
 import { sandboxEnabled } from "../sandbox/enabled";
 import { createForgetTool, createRememberTool, type MemorySource } from "./memory";
 import { createRunCodeTool } from "./run-code";
@@ -37,4 +38,14 @@ export function toolsFor(
   source: MemorySource = { chatId: null, messageId: null },
 ): ToolSet {
   return Object.fromEntries(entries.filter((entry) => entry.enabled(settings)).map((entry) => [entry.name, entry.create(settings, stopped, source)]));
+}
+
+export async function toolsForTurn(
+  settings: SettingsRecord,
+  stopped: StoppedRuns = createStoppedRuns(),
+  source: MemorySource = { chatId: null, messageId: null },
+  signal?: AbortSignal,
+): Promise<{ tools: ToolSet; close: () => Promise<void> }> {
+  const github = await openGithubTurn(settings, signal);
+  return { tools: { ...toolsFor(settings, stopped, source), ...github.tools }, close: github.close };
 }

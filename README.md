@@ -103,6 +103,7 @@ Every variable is optional.
 | `ORBIT_BASE_URL`, `ORBIT_API_KEY`, `ORBIT_MODEL` | Empty | Fill the provider settings when the database has none yet. |
 | `ORBIT_SEARXNG_URL` | Empty, or `http://searxng:8080` in Compose | Seed the search backend URL on a new database. For a local Next.js server, use `http://127.0.0.1:8888`. |
 | `ORBIT_TAVILY_API_KEY` | Empty | Seed the server-side Tavily key on a new database. Tavily runs when SearXNG fails or returns no results. |
+| `ORBIT_GITHUB_TOKEN` | Empty | Seed the server-side GitHub token on a new database. Tools stay read-only and cover repositories, issues, and pull requests. The token is sent only to `api.githubcopilot.com`, `github.com`, and `api.github.com` over HTTPS. |
 | `ORBIT_OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama base URL for memory embeddings. The model is `nomic-embed-text`. Compose defaults to `http://host.docker.internal:11434`. |
 | `ORBIT_SANDBOX` | Off | Source builds use `on` to enable `run_code`. Compose requires the [sandbox override](#enable-the-code-sandbox). Settings shows whether it is on. |
 | `DOCKER_HOST` | Local Docker socket for source builds | Configure the local connection for source builds. Default Compose omits it. The sandbox override sets a private proxy. Remote Docker hosts are unsupported. |

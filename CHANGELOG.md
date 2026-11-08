@@ -4,6 +4,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- Settings can remove a saved GitHub token. The stored token is cleared and GitHub tools stop.
+- Check says "GitHub rejected the token (bad request)." when GitHub answers HTTP 400.
 - Keep earlier prompts and replies when editing or regenerating. Switch versions with the message arrows. Reload opens the last written branch.
 
 ### Changed
@@ -23,10 +25,14 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Added
 
+- Read GitHub repositories, issues, and pull requests when a token is set. Settings stores the token on the server, and Check shows the GitHub login or the error. Issue, pull request, and file cards link to GitHub. The tools are read-only.
+
 - Reach Orbit from a phone or another computer through a Cloudflare tunnel, with Cloudflare Access asking who you are before Orbit's own sign-in. `scripts/deploy-wizard.sh` walks through the Cloudflare dashboard steps, and `docker compose --profile public up -d` starts the tunnel. A plain `docker compose up` starts no tunnel, and `127.0.0.1:3210` still signs in.
+
 - Once a night, Orbit reads the day's chats and saves lasting facts and preferences on the Memory page. A second run the same night does not add them again. Near-duplicates update the older memory. The page shows when the last run finished, or the error.
 
 - Once a day, Orbit reviews the day's chats and drafts new memories from them. ORBIT_DREAM_HOUR sets the hour, and the run is logged so it can be checked.
+
 - Orbit remembers a fact or a preference from one chat and can use it in a later chat. The Memory page lists, searches, edits, and deletes those memories. Vectors come from Ollama. When Ollama is down, text search still works and the page shows the error.
 
 - Conversation search finds the source of code runs, so code the model ran can be found by a name or a word in it. This includes a run you stopped. A migration adds the source of earlier runs to search.
@@ -60,6 +66,13 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - `scripts/qa/genui-qa.cjs` saves screenshots under `.verify/evidence/genui-qa/` instead of `docs/qa/screenshots/`.
 
 ### Fixed
+
+- GitHub Check asks for `get_me` on its own, so a valid token still shows the login when the chat tools are limited to repositories, issues, and pull requests.
+- The saved GitHub token is sent only to `api.githubcopilot.com`, `github.com`, and `api.github.com` over HTTPS. Any other MCP URL, including plain HTTP, is refused before the request. Tests can set `ORBIT_GITHUB_MCP_FIXTURE=1` to allow the local fixture.
+- A GitHub server that repeats the token does not get that token back out through Check, a tool result, or a chat stream error. The text says `[redacted]` instead.
+- A GitHub connection that does not answer stops after 10 seconds, closes, and the chat continues without those tools. Stopping the chat still cancels the connection immediately.
+- GitHub cards link an issue or a pull request on github.com, and a file result links to that file. A URL inside the issue text, a label, or the file body stays text.
+- A GitHub tool result that reports an error, such as a rate limit or a permission failure, shows Failed on the card. A rejected token check stays Failed.
 
 - After you press Stop on a running code card, the open chat shows the same card a reload shows: Cancelled, the Stopped line with its duration, and the output the program had printed. Before, the card stayed bare until you reloaded the page. Your draft in the composer and the version you are viewing stay as they are. This also holds when you press Regenerate or send a message right after Stop.
 
