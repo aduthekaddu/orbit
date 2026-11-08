@@ -8,7 +8,7 @@ import { runCodeInputSchema } from "../sandbox/spec";
 
 test("run_code exists only when the server explicitly enables it", () => {
   const original = process.env.ORBIT_SANDBOX;
-  const settings = { baseUrl: "http://localhost/v1", apiKey: "fake", model: "fake", reasoningEffort: "low", searxngUrl: "", tavilyApiKey: "" } as const;
+  const settings = { baseUrl: "http://localhost/v1", apiKey: "fake", model: "fake", reasoningEffort: "low" as const, searxngUrl: "", tavilyApiKey: "", githubToken: "", githubMcpUrl: "" };
   try {
     for (const value of [undefined, "off", "true", "ON", "on"]) {
       if (value === undefined) delete process.env.ORBIT_SANDBOX;

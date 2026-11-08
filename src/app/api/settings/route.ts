@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { normalizeBaseUrl } from "@/lib/base-url";
 import { REASONING_EFFORTS, getSettings, saveSettings, toPublicSettings } from "@/lib/settings";
+import { githubMcpTarget } from "@/lib/tools/github";
 import { getSession, unauthorized } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -11,6 +12,8 @@ const putSchema = z.object({
   apiKey: z.string().optional(),
   searxngUrl: z.union([z.literal(""), z.url({ protocol: /^https?$/ })]).optional(),
   tavilyApiKey: z.string().nullable().optional(),
+  githubToken: z.string().nullable().optional(),
+  githubMcpUrl: z.string().optional().refine((value) => value === undefined || githubMcpTarget(value).ok),
   model: z.string().trim().min(1).max(200),
   reasoningEffort: z.enum(REASONING_EFFORTS),
 });

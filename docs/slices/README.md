@@ -12,7 +12,7 @@ Orbit grows in slices. A slice is one pull request that ships one user-visible c
 | 6 | [Titles and history search](06.md) | `feat/history-search` | Shipped in #19 |
 | 7 | [Web search](07.md) | `feat/search` | Shipped in #20 |
 | 8 | [Code sandbox](08.md) | `feat/sandbox` | Shipped in #21 |
-| 9 | [GitHub](09.md) | `feat/github-mcp` | Planned |
+| 9 | [GitHub](09.md) | `feat/github-tools` | In review in #56 |
 | 10 | [Memory](10.md) | `feat/memory` | Planned |
 | 11 | [Dreaming](11.md) | `feat/dreaming` | Planned |
 | 12 | [Deploy](12.md) | `feat/deploy` | Planned |

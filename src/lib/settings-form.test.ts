@@ -9,12 +9,15 @@ const submitted: SettingsSnapshot = {
   effort: "medium",
   searxngUrl: "http://127.0.0.1:8888",
   tavilyApiKey: "test-tavily-key-not-real",
+  githubToken: "",
+  githubMcpUrl: "https://api.githubcopilot.com/mcp/",
 };
 
 test("unchanged values clear the key and report saved", () => {
   assert.deepEqual(appliedSave(submitted, { ...submitted }), {
     clearKey: true,
     clearTavilyKey: true,
+    clearGithubToken: true,
     applyKeySet: true,
     saved: true,
   });
@@ -24,6 +27,7 @@ test("a key typed during the save stays in the field", () => {
   assert.deepEqual(appliedSave(submitted, { ...submitted, apiKey: "sk-new" }), {
     clearKey: false,
     clearTavilyKey: true,
+    clearGithubToken: true,
     applyKeySet: true,
     saved: false,
   });
@@ -33,6 +37,7 @@ test("a base URL changed during the save keeps the previous keySet", () => {
   assert.deepEqual(appliedSave(submitted, { ...submitted, baseUrl: "https://other.example.com/v1" }), {
     clearKey: true,
     clearTavilyKey: true,
+    clearGithubToken: true,
     applyKeySet: false,
     saved: false,
   });
@@ -42,6 +47,7 @@ test("a model changed during the save is not reported as saved", () => {
   assert.deepEqual(appliedSave(submitted, { ...submitted, model: "gpt-5" }), {
     clearKey: true,
     clearTavilyKey: true,
+    clearGithubToken: true,
     applyKeySet: true,
     saved: false,
   });
@@ -72,6 +78,16 @@ test("a Tavily key typed during save remains in the field", () => {
 
 test("a search URL edited during save is not reported as saved", () => {
   assert.equal(appliedSave(submitted, { ...submitted, searxngUrl: "http://127.0.0.1:9999" }).saved, false);
+});
+
+test("a GitHub token typed during save stays in the field", () => {
+  const applied = appliedSave(submitted, { ...submitted, githubToken: "typed-during-save" });
+  assert.equal(applied.clearGithubToken, false);
+  assert.equal(applied.saved, false);
+});
+
+test("a GitHub MCP URL edited during save is not reported as saved", () => {
+  assert.equal(appliedSave(submitted, { ...submitted, githubMcpUrl: "http://127.0.0.1:9/mcp" }).saved, false);
 });
 
 test("a key typed during a removal save stays in the field", () => {

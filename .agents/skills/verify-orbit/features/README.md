@@ -41,5 +41,6 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 
 - [Web search](./web-search.md) calls a search tool, reads its results, keeps source links after reload, and shows failed and cancelled runs.
 - [Code sandbox](./sandbox.md) runs Python in real containers, shows code and output, rejects a network escape, and checks the real-provider hash.
+- [GitHub](./github.md) checks a read-only token and links an issue card through a local MCP fixture.
 - [Memory](./memory.md) saves a fact from chat, lists it on `/memory`, and sends it with a later question.
 - [Dreaming](./dreaming.md) reads the day's chats into memory, then a second run leaves the counts unchanged.

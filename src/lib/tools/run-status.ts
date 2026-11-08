@@ -15,6 +15,7 @@ export function toolRunStatus(part: ToolRunPart, stopped = false, toolName?: str
       }
       if (hasStoppedOutput(toolName, part.output)) return "cancelled";
       if (hasFailedOutput(toolName, part.output)) return "failed";
+      if (part.output && typeof part.output === "object" && "isError" in part.output && part.output.isError === true) return "failed";
       return "succeeded";
     case "output-error":
       return part.errorText === "Stopped" || part.errorText === "Code run was stopped" ? "cancelled" : "failed";

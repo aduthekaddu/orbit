@@ -93,6 +93,7 @@ test("other failures keep their messages", () => {
     assert.equal(streamErrorMessage("AI_APICallError: Rate limit reached", "sk-test-secret"), "Rate limit reached");
     assert.equal(streamErrorMessage(new Error("socket hang up"), "sk-test-secret"), "The model request failed");
     assert.equal(streamErrorMessage("token sk-test-secret was rejected", "sk-test-secret"), "token [redacted] was rejected");
+    assert.equal(streamErrorMessage("GitHub said secret-token-value", ["sk-test-secret", "secret-token-value"]), "GitHub said [redacted]");
   } finally {
     console.error = error;
   }

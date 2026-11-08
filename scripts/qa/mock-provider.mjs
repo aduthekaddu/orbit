@@ -277,6 +277,35 @@ function scenarioOf(text) {
   return match?.[1] ?? "text";
 }
 
+function firstGithubLink(value) {
+  let found = null;
+  const visit = (node) => {
+    if (found) return;
+    if (typeof node === "string") {
+      try {
+        visit(JSON.parse(node));
+      } catch {
+        return;
+      }
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+      return;
+    }
+    if (!node || typeof node !== "object") return;
+    const href = typeof node.html_url === "string" ? node.html_url : "";
+    const title = typeof node.title === "string" ? node.title : typeof node.path === "string" ? node.path : "";
+    if (/^https?:\/\//.test(href) && title) {
+      found = { title, href };
+      return;
+    }
+    for (const child of Object.values(node)) visit(child);
+  };
+  visit(value);
+  return found;
+}
+
 function chunk(choices, extra = {}) {
   return {
     id: "chatcmpl-mock",
@@ -517,6 +546,21 @@ const server = http.createServer((req, res) => {
     }
     if (scenario === "run-token-echo" && body.messages?.at(-1)?.role === "tool") {
       textResponse(res, "The program printed echoedtoken42.");
+      return;
+    }
+    if (scenario === "github") {
+      const messages = Array.isArray(body.messages) ? body.messages : [];
+      const reply = messages.findLast((message) => message.role === "tool");
+      if (reply) {
+        const link = firstGithubLink(reply.content);
+        textResponse(res, link ? `Found [${link.title}](${link.href}).` : "GitHub is unavailable.");
+        return;
+      }
+      if (body.tools?.some((entry) => entry.function?.name === "github_list_issues")) {
+        toolResponse(res, scenario, { owner: "aduthekaddu", repo: "orbit" }, "github_list_issues");
+        return;
+      }
+      textResponse(res, "GitHub is unavailable.");
       return;
     }
     if (scenario !== "search" && scenario !== "search-loop" && body.messages?.at(-1)?.role === "tool") {

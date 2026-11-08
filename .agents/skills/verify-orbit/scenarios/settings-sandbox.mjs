@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const publicFields = ["baseUrl", "keySet", "model", "reasoningEffort", "sandbox", "searxngUrl", "tavilyKeySet"];
+const publicFields = ["baseUrl", "githubMcpUrl", "githubTokenSet", "keySet", "model", "reasoningEffort", "sandbox", "searxngUrl", "tavilyKeySet"];
 const provider = { baseUrl: "http://127.0.0.1:3299/v1", model: "mock-genui", reasoningEffort: "low" };
 
 export default async function settingsSandbox({ page, origin, step, shot }) {

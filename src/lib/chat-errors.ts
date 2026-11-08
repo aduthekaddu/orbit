@@ -6,9 +6,20 @@ const FIELD_LIMIT = 80;
 const MESSAGE_LIMIT = 120;
 const REASON_LIMIT = 240;
 
-export function sanitize(message: string, secret: string) {
-  if (!secret) return message;
-  return message.split(secret).join("[redacted]");
+export function sanitize(message: string, secret: string | readonly string[]) {
+  const secrets = (typeof secret === "string" ? [secret] : secret).filter((value) => value.length > 0).sort((left, right) => right.length - left.length);
+  let text = message;
+  for (const value of secrets) text = text.split(value).join("[redacted]");
+  return text;
+}
+
+export function redactValue(value: unknown, secret: string | readonly string[]): unknown {
+  if (typeof value === "string") return sanitize(value, secret);
+  if (Array.isArray(value)) return value.map((item) => redactValue(item, secret));
+  if (!value || typeof value !== "object") return value;
+  const copy: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) copy[sanitize(key, secret)] = redactValue(child, secret);
+  return copy;
 }
 
 function cleanErrorText(text: string) {
@@ -51,7 +62,7 @@ function shortToolInputError(text: string) {
   return match ? `Invalid input for tool ${match[1]}: ${inputProblem(match[2])}` : undefined;
 }
 
-export function streamErrorMessage(error: unknown, secret: string) {
+export function streamErrorMessage(error: unknown, secret: string | readonly string[]) {
   if (typeof error === "string") return sanitize(shortToolInputError(error) ?? cleanErrorText(error), secret);
   const message = error instanceof Error ? error.message : "The model request failed";
   if (error instanceof Error && error.name === "AI_InvalidToolInputError") {

@@ -64,7 +64,8 @@ function seedSettings() {
   const model = readEnv("ORBIT_MODEL") ?? "";
   const searxngUrl = readEnv("ORBIT_SEARXNG_URL") ?? "";
   const tavilyApiKey = readEnv("ORBIT_TAVILY_API_KEY") ?? "";
-  if (!baseUrl && !apiKey && !model && !searxngUrl && !tavilyApiKey) return;
+  const githubToken = readEnv("ORBIT_GITHUB_TOKEN") ?? "";
+  if (!baseUrl && !apiKey && !model && !searxngUrl && !tavilyApiKey && !githubToken) return;
   db.insert(schema.settings)
     .values({
       id: 1,
@@ -72,6 +73,8 @@ function seedSettings() {
       apiKey,
       searxngUrl,
       tavilyApiKey,
+      githubToken,
+      githubMcpUrl: "",
       model,
       reasoningEffort: "medium",
       updatedAt: new Date(),
