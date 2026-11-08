@@ -197,11 +197,18 @@ async function launch({ mock }) {
     if ((state.ollamaUrl ?? "") !== ollamaUrl) {
       fail(`ollama url mismatch. Run node .agents/skills/verify-orbit/verify.mjs cleanup, then launch again.`);
     }
+    if ((state.publicUrl ?? "") !== publicUrlEnv()) {
+      fail(`public url mismatch. Run node .agents/skills/verify-orbit/verify.mjs cleanup, then launch again.`);
+    }
     console.log(`already starting or running pid=${state.pid} origin=${ORIGIN}`);
   } else {
     await startServer();
   }
   if (mock) await startMock();
+}
+
+function publicUrlEnv() {
+  return process.env.ORBIT_PUBLIC_URL?.trim() ?? "";
 }
 
 async function startServer() {
@@ -230,13 +237,14 @@ async function startServer() {
       ORBIT_SANDBOX: sandboxEnabled ? "on" : "off",
       DOCKER_HOST: process.env.DOCKER_HOST ?? "unix:///var/run/docker.sock",
       ...(process.env.ORBIT_OLLAMA_URL ? { ORBIT_OLLAMA_URL: process.env.ORBIT_OLLAMA_URL } : {}),
+      ...(publicUrlEnv() ? { ORBIT_PUBLIC_URL: publicUrlEnv() } : {}),
     },
     detached: true,
     stdio: ["ignore", logFd, logFd],
   });
   child.unref();
   fs.closeSync(logFd);
-  fs.writeFileSync(statePath, JSON.stringify({ pid: child.pid, port: PORT, sandbox, origin: ORIGIN, sandboxEnabled, ollamaUrl: process.env.ORBIT_OLLAMA_URL ?? "" }, null, 2));
+  fs.writeFileSync(statePath, JSON.stringify({ pid: child.pid, port: PORT, sandbox, origin: ORIGIN, sandboxEnabled, ollamaUrl: process.env.ORBIT_OLLAMA_URL ?? "", publicUrl: publicUrlEnv() }, null, 2));
   try {
     const ready = await waitReady();
     console.log(`ready origin=${ORIGIN} pid=${child.pid} signupOpen=${ready.signupOpen ? "yes" : "no"}`);
@@ -881,6 +889,92 @@ async function driveDream() {
   }
 }
 
+// Plain fetch, so no Access cookie rides along. A DNS or TLS failure is recorded as an error, not a status.
+async function probePublic(url) {
+  try {
+    const response = await fetch(url, { redirect: "manual" });
+    await response.body?.cancel();
+    return { status: response.status, location: response.headers.get("location") ?? "" };
+  } catch (error) {
+    const cause = error instanceof Error && error.cause instanceof Error ? error.cause : error;
+    return { status: 0, location: "", error: cause?.code ?? (cause instanceof Error ? cause.message : String(cause)) };
+  }
+}
+
+function isAccessLogin(location) {
+  try {
+    const host = new URL(location).hostname;
+    return host === "cloudflareaccess.com" || host.endsWith(".cloudflareaccess.com");
+  } catch {
+    return false;
+  }
+}
+
+async function localBrowserSignin(lines) {
+  const { chromium } = await import("playwright");
+  const executablePath = chromePath();
+  const browser = await chromium.launch(executablePath ? { executablePath } : {});
+  try {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const page = await context.newPage();
+    await page.goto(`${ORIGIN}/login`, { waitUntil: "domcontentloaded" });
+    await page.getByLabel("Email").fill(VERIFY_EMAIL);
+    await page.getByLabel("Password").fill(VERIFY_PASSWORD);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    let chatPath = "";
+    try {
+      await page.waitForURL((url) => url.pathname.startsWith("/c/"), { timeout: 15_000 });
+      chatPath = new URL(page.url()).pathname;
+    } catch {
+      chatPath = "";
+    }
+    lines.push(`local signin landed ${chatPath || new URL(page.url()).pathname}`);
+    const cookies = await context.cookies(ORIGIN);
+    for (const cookie of cookies.filter((entry) => entry.name.includes("session_token"))) {
+      lines.push(`local session cookie ${cookie.name} secure=${cookie.secure ? "yes" : "no"}`);
+    }
+    const settings = await page.goto(`${ORIGIN}/settings`, { waitUntil: "domcontentloaded" });
+    const settingsPath = new URL(page.url()).pathname;
+    const hasLabels = settingsPath === "/settings" && (await page.getByText("Base URL").count()) > 0;
+    lines.push(`local settings status ${settings?.status() ?? 0} path ${settingsPath}`);
+    lines.push(`local settings has Base URL ${hasLabels ? "yes" : "no"}`);
+    const dir = path.join(evidenceRoot, "public");
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, "local-settings.png");
+    await page.screenshot({ path: file });
+    console.log(`shot ${path.relative(repoRoot, file)}`);
+    return chatPath !== "" && settings?.status() === 200 && hasLabels;
+  } finally {
+    await browser.close();
+  }
+}
+
+async function drivePublic() {
+  assertOurServer();
+  const publicUrl = readState()?.publicUrl ?? "";
+  if (!publicUrl) {
+    fail("the sandbox server has no ORBIT_PUBLIC_URL. Run cleanup, then launch with ORBIT_PUBLIC_URL set.");
+  }
+  const base = publicUrl.replace(/\/+$/, "");
+  const lines = [`public url ${base}`];
+  const root = await probePublic(`${base}/`);
+  lines.push(`public root status ${root.status}${root.error ? ` error ${root.error}` : ""}`);
+  lines.push(`public root location ${root.location || "none"}`);
+  const rootOk = root.status === 302 && isAccessLogin(root.location);
+  const api = await probePublic(`${base}/api/chats`);
+  lines.push(`public api/chats status ${api.status}${api.error ? ` error ${api.error}` : ""}`);
+  const apiOk = api.status !== 200;
+  // Create the verify account when the sandbox is empty, then sign in from a fresh browser.
+  if (JSON.parse((await request("/api/setup")).text).signupOpen === true) await signInVerify();
+  const localOk = await localBrowserSignin(lines);
+  writeEvidence("public", lines);
+  for (const line of lines) console.log(line);
+  if (!rootOk) fail(`public root did not answer 302 to cloudflareaccess.com. status ${root.status}`);
+  if (!apiOk) fail("public api/chats answered 200 without Access");
+  if (!localOk) fail(`local sign-in at ${ORIGIN} did not open a protected page`);
+  console.log("drive public passed");
+}
+
 const command = process.argv[2];
 const feature = process.argv[3];
 
@@ -900,8 +994,10 @@ if (command === "launch") {
   await driveChat();
 } else if (command === "drive" && feature === "dream") {
   await driveDream();
+} else if (command === "drive" && feature === "public") {
+  await drivePublic();
 } else if (command === "browse") {
   await browse(feature);
 } else {
-  fail("usage: verify.mjs launch [--mock] | doctor | cleanup | drive signup | drive signin | drive settings | drive chat | drive dream | browse <scenario>");
+  fail("usage: verify.mjs launch [--mock] | doctor | cleanup | drive signup | drive signin | drive settings | drive chat | drive dream | drive public | browse <scenario>");
 }
