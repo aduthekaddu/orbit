@@ -1,0 +1,173 @@
+.agents/skills/verify-orbit/features/memory.md
+  s_aaeb471ca118ad::t_d73ed2b542cfff 1-4,6,8-9
+  s_23446b3face73f::t_3c07b29b06b50e 5,7
+src/lib/memory/recall.test.ts
+  s_aaeb471ca118ad::t_69ed616a88c18b 1-90,155,157,159-161,179-180,182-184,186
+  h_9f68edf4527855 91-98,124-145,138,140,142-145,146-154,156-160,162-178,181,185
+  s_23446b3face73f::t_ec76d58c1204ec 107-118
+  s_23446b3face73f::t_17599758fef571 99-101
+  s_23446b3face73f::t_c12d42ce9fa652 102-106
+.agents/skills/verify-orbit/scenarios/memory.mjs
+  s_aaeb471ca118ad::t_6c6715d3b8f2f3 1-18,55-66,70-91,93-95,105-108,113-114,116,118-144,146-148,150-151,171-172,176-177,179-189
+  h_9f68edf4527855 19-24,25-26,27,28,29,30-43,44-45,46-50,67-69,92,96-102,103,104,109-112,115,117,145,149,173
+  s_23446b3face73f::t_9f9f05b71c6851 51-54,152-170,174-175,178
+src/lib/memory/ollama-harness.ts
+  s_aaeb471ca118ad::t_3cf1f4a3dde91f 1-35
+src/lib/memory/embed.test.ts
+  s_aaeb471ca118ad::t_a96b5adfa7e16f 1-43,45-56,58-66,68-81,83-90,117-130
+  h_9f68edf4527855 91-116
+  s_93b22d92d4f2aa::t_082a264fa6845e 44,57,67,82
+  s_93b22d92d4f2aa::t_fecd9ac6b5e491 131-145
+scripts/qa/mock-ollama.mjs
+  s_aaeb471ca118ad::t_627399a012dc25 1-3,5-14,17-55,61-81,83-95
+  s_93b22d92d4f2aa::t_83d016a8c5cf1d 4,15-16,56-60,82
+src/lib/memory/store.test.ts
+  s_aaeb471ca118ad::t_2dafe5889a035c 1-80,169-218,221
+  s_aaeb471ca118ad::t_b96554ba77bc3e 219-220
+  s_aaeb471ca118ad::t_1d2f265c233512 222
+  h_9f68edf4527855 81-123,154-168
+  s_93b22d92d4f2aa::t_e9e9d3652fa857 124-153
+src/lib/memory/recall.ts
+  s_aaeb471ca118ad::t_3e09e933cb4c22 3-8,10-12,14,24,37-70,72-83
+  h_9f68edf4527855 1,2,9,13,15-20,22,25-36,71
+src/lib/memory/embed.ts
+  s_aaeb471ca118ad::t_1f7dc71adc7205 1-7,10-11,16-31,33-38,41-63,65,67-82,129,136
+  h_9f68edf4527855 8-9,40,83-106,108-119,121-128,130-135
+  s_93b22d92d4f2aa::t_082a264fa6845e 12-13,15,32,39,64,107,120
+  s_93b22d92d4f2aa::t_039114d0cd696e 14
+src/lib/memory/store.ts
+  s_aaeb471ca118ad::t_c4fe112d91d38d 1-3,5-142,145-146,148,151-159,161-178,183-186,188-193,196-259
+  s_aaeb471ca118ad::t_9ce094da91af08 260-262
+  h_9f68edf4527855 4,160,182,187,194-195
+  s_93b22d92d4f2aa::t_c5f1859a0a5686 179-181
+src/lib/tools/memory.ts
+  s_aaeb471ca118ad::t_094ee9ebc32c5c 1-8,37-46,48
+  s_aaeb471ca118ad::t_3c7453ee8ab4e2 49-50,59
+  h_9f68edf4527855 13,31,51-56,57-58,61,62,63
+src/app/api/memories/route.ts
+  s_aaeb471ca118ad::t_d3ebd601ba7457 1-19,21,23
+  h_9f68edf4527855 20,22
+src/components/memory/memory-list.tsx
+  s_aaeb471ca118ad::t_3b1f3d29cab39f 1-8,11-50,52-60,61,63-71,80-81,87-91,93-103,105-130,132-186,188-238
+  h_9f68edf4527855 9,104
+  s_23446b3face73f::t_1d9a13716acc07 187
+src/app/(app)/memory/page.tsx
+  s_aaeb471ca118ad::t_7f66275a1a4281 1-9,10,12-17
+  h_9f68edf4527855 11
+src/app/api/memories/[id]/route.ts
+  s_aaeb471ca118ad::t_730f1ba56298e1 1-42
+.agents/skills/verify-orbit/verify.mjs
+  h_9f68edf4527855 196-199,232,239
+scripts/qa/ci-e2e.sh
+  h_9f68edf4527855 41-68,72,137
+.env.example
+  h_9f68edf4527855 10-13
+CHANGELOG.md
+  h_9f68edf4527855 12,14,15,16,19,26-27
+  s_23446b3face73f::t_6c59eb7bec6347 13,17-18
+  s_93b22d92d4f2aa::t_a325d66ab7bff9 11
+README.md
+  h_9f68edf4527855 106,114-123
+docker-compose.yml
+  h_9f68edf4527855 18-20
+src/components/memory/visible-memories.ts
+  s_aaeb471ca118ad::t_cbf3f6695cc6c0 1-6
+src/components/memory/visible-memories.test.ts
+  s_aaeb471ca118ad::t_1085eee1ef7eee 1-12
+src/lib/search.ts
+  h_9f68edf4527855 22-25,31,55,59-60
+  s_23446b3face73f::t_a71c8940143fe8 37-54,56-58
+src/components/tools/run-card.test.tsx
+  h_9f68edf4527855 51-61
+  s_23446b3face73f::t_41e824e2793a6d 62-73
+src/lib/tools/memory.test.ts
+  h_9f68edf4527855 1-38,39-42,43-49
+docs/design.md
+  h_9f68edf4527855 99
+docs/slices/10.md
+  h_9f68edf4527855 19,56,81-82,126,134
+  s_93b22d92d4f2aa::t_a325d66ab7bff9 62,73
+  s_93b22d92d4f2aa::t_793b52345c72ac 74
+src/app/api/chat/route.ts
+  h_9f68edf4527855 8,100,117
+src/components/tools/run-card.tsx
+  h_9f68edf4527855 19-24
+  s_23446b3face73f::t_b22324bddf4234 28
+  s_23446b3face73f::t_933384186b0515 40
+drizzle/0007_memories_stable_rowid.sql
+  h_9f68edf4527855 1-32
+drizzle/meta/0007_snapshot.json
+  h_9f68edf4527855 1-731
+drizzle/meta/_journal.json
+  h_9f68edf4527855 53-59
+  s_93b22d92d4f2aa::t_7bf4a558a4ea16 60-66
+src/lib/db/schema.ts
+  h_9f68edf4527855 128-129
+docs/slices/README.md
+  h_9f68edf4527855 16
+src/components/memory/save-error.test.ts
+  h_9f68edf4527855 1-10
+src/components/memory/save-error.ts
+  h_9f68edf4527855 1-4
+src/lib/search.test.ts
+  s_23446b3face73f::t_af62a17e9c1ca8 36-45,47-49
+  s_23446b3face73f::t_aa0d27e30f5a8b 46
+src/lib/tools/run-status.test.ts
+  s_23446b3face73f::t_cede5990f08895 74-81
+src/lib/tools/metadata.ts
+  s_23446b3face73f::t_00e5dbbe0df613 11-14,23-24
+src/lib/memory/ollama-pairs.ts
+  s_93b22d92d4f2aa::t_9ee8081b6be70b 1-32,33
+src/lib/memory/recall.ollama.test.ts
+  s_93b22d92d4f2aa::t_f5445e9f97d00a 75-77
+  s_93b22d92d4f2aa::t_af7b13dcdd87e0 1-5,7-26,29-74,78-82,83-87,88
+  s_93b22d92d4f2aa::t_c5f1859a0a5686 6,27-28
+drizzle/0008_memories_reembed.sql
+  s_93b22d92d4f2aa::t_485fe0c38ba9f0 1
+drizzle/meta/0008_snapshot.json
+  s_93b22d92d4f2aa::t_92d8535edf0e44 1-731
+docs/slices/11.md
+  s_93b22d92d4f2aa::t_a325d66ab7bff9 74
+  s_93b22d92d4f2aa::t_b41e5fda5c9065 77-78
+src/lib/memory/dream.test.ts
+  h_9f68edf4527855 1-253
+src/lib/memory/schedule.test.ts
+  h_9f68edf4527855 1-173
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6ac6561f21a8cd4add93e3f6bcbdc31ce5b91c33",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  },
+  "sessions": {
+    "s_23446b3face73f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e62df905-b1d7-47b7-9434-485e41c9c4da",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    },
+    "s_93b22d92d4f2aa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "45c4590c-eb44-4ccb-95bc-f312197e035b",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    },
+    "s_aaeb471ca118ad": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1b734-90e8-7c70-8980-711968354a5f",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}

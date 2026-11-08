@@ -1,0 +1,25 @@
+src/lib/memory/dream.ts
+  s_25746189a522f0::t_09471078cf9cd2 387
+scripts/qa/real-ollama-merge.mjs
+  s_25746189a522f0::t_f366d419256ee6 13
+  s_25746189a522f0::t_fd927c719189d2 42
+  s_25746189a522f0::t_270f02c6d0ea0e 194-196
+src/lib/memory/dream.test.ts
+  s_25746189a522f0::t_3a28137e3eb21f 141-154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cace3f10e1f464c3d21347f1d2dbe13db68db7ff",
+  "prompts": {},
+  "sessions": {
+    "s_25746189a522f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "830a8409-4c50-4c62-9dc4-5e3c325e2bce",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
