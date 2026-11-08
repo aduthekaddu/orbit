@@ -767,6 +767,7 @@ function runDreamCli(ollamaUrl) {
         ...process.env,
         ORBIT_DATA_DIR: path.join(sandbox, "data"),
         ...(ollamaUrl ? { ORBIT_OLLAMA_URL: ollamaUrl } : {}),
+        ...(readState(mockStatePath) ? { ORBIT_QA_TAGS: "1" } : {}),
       },
     });
     let output = "";
@@ -871,6 +872,7 @@ async function driveDream() {
     console.log(summary);
     writeEvidence("dreaming", lines);
     if (result.code !== 0 || !after.run || after.run.state !== "done") fail(`drive dream failed. ${summary}`);
+    if (!before.run && after.run.added === 0) fail(`drive dream added nothing. ${summary}`);
     await shotMemory(cookies, "after", { width: 1280, height: 800 });
     await shotMemory(cookies, "mobile", { width: 390, height: 844 });
     console.log("drive dream passed");
