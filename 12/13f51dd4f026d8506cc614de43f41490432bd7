@@ -1,0 +1,23 @@
+src/lib/auth-miss.ts
+  s_d007925bdca828::t_9964f067be4883 1-39
+CHANGELOG.md
+  s_d007925bdca828::t_ff23796c838a62 7
+src/proxy.ts
+  s_d007925bdca828::t_d5cfb3ed6506b8 3,19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1213f51dd4f026d8506cc614de43f41490432bd7",
+  "prompts": {},
+  "sessions": {
+    "s_d007925bdca828": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "20bf43ee-1ea9-4cb7-805c-ffa937a9cf11",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
