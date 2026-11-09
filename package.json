@@ -20,7 +20,7 @@
     "@assistant-ui/react": "0.15.32",
     "@assistant-ui/react-ai-sdk": "1.4.21",
     "@assistant-ui/react-markdown": "0.14.24",
-    "@json-render/core": "0.21.3",
+    "@json-render/core": "0.21.4",
     "@json-render/react": "0.21.3",
     "@lucasmarkes/hairline": "0.5.1",
     "@phosphor-icons/react": "2.1.10",
