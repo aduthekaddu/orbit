@@ -1,0 +1,14 @@
+[Unit]
+Description=runner-up coordinator: one-job CI runners in KVM virtual machines
+After=network-online.target
+
+[Service]
+Environment=GH_CONFIG_DIR=%h/.config/runner-up/gh
+ExecStart=%h/.local/state/runner-up/program/current serve --config %h/.config/runner-up/config.json
+Restart=on-failure
+RestartSec=10
+# Stop only the coordinator: running jobs' place runners carry on (runner-up README).
+KillMode=process
+
+[Install]
+WantedBy=default.target
