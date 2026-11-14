@@ -273,14 +273,7 @@ On a phone, each section opens as its own screen.
 
 ## Suggested order
 
-1. **Slice 13. Replies that survive a dropped connection (B1, G5).** It stops the money loss, and every later slice streams through it.
-2. **`fix/auth-logout-signal` (B2).** It ships the log line, then one reproduction on the phone decides the real fix.
-3. **Slice 14. Model and effort per chat (G1).** This is the first thing you named, and slices 16 and 17 build on its per-chat columns.
-4. **Slice 15. Memory in the chat (G2, G3).**
-5. **Slice 16. Usage per reply and per chat (G4).** It needs the model id per message from slice 14.
-6. **Slice 17. Tools sheet and split settings (G6, G7).** G8's small PR can land any time.
-
-Adding these to the roadmap and writing their `docs/slices/NN.md` plans is the maintainer's call. This page does not change the roadmap.
+The order now lives in [What Orbit v1 should fix and build next](v1-plan.md#the-plan-in-order). That page puts these gaps into one list with the component, multi-user, file, artifact, sharing, and plugin work requested on 14 November 2026. The slice numbers 13 to 17 on this page are placeholders until the roadmap assigns real ones.
 
 ## Sources
 
