@@ -1,0 +1,42 @@
+docs/design/gap-analysis.md
+  s_b90b9c3669d001::t_ce0bc32fb203ee 276
+docs/design/v1-plan.md
+  s_b90b9c3669d001::t_1ee2f5b7295254 1-32,35-37,39,41-46,48-50,52,54-55,57-63,65-66,68,70-72,74-89,91-96,98-106,108-117,119-159,161-162,165-169,171,173,175-227
+  s_b90b9c3669d001::t_d33a0d33edae6b 118
+  s_b90b9c3669d001::t_3ffb41d88bd883 164
+  s_b90b9c3669d001::t_83a48cedab1d03 174
+  s_b90b9c3669d001::t_1e1306ff7e98dd 53
+  s_b90b9c3669d001::t_c46de9a355655c 172
+  s_b90b9c3669d001::t_c6779518436024 38
+  s_b90b9c3669d001::t_78b0ccc8531d98 56
+  s_b90b9c3669d001::t_a77de6224b2215 33
+  s_b90b9c3669d001::t_8a7d731c7ce2c7 107
+  s_b90b9c3669d001::t_53889415e968c9 160
+  s_b90b9c3669d001::t_f9ea898a1bcd99 163
+  s_b90b9c3669d001::t_399b308748ba66 51
+  s_b90b9c3669d001::t_36874ab8425042 40
+  s_b90b9c3669d001::t_0949c691b710f5 47
+  s_b90b9c3669d001::t_cc4f4e26a3871f 73
+  s_b90b9c3669d001::t_d37a9ec001d1da 170
+  s_b90b9c3669d001::t_cdc7e058415f77 97
+  s_b90b9c3669d001::t_d981be704b35b3 64
+  s_b90b9c3669d001::t_ff4c5941c40bda 34
+  s_b90b9c3669d001::t_053074f92b895e 90
+  s_b90b9c3669d001::t_bb6c394ae89f8b 67,69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1e7a5797232d810f03fc8a04f956e0c7b91a0f76",
+  "prompts": {},
+  "sessions": {
+    "s_b90b9c3669d001": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f4a7754f-aa3c-46c1-923b-61ca8f2839a1",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
