@@ -2,14 +2,13 @@
 Description=Firewall that keeps CI virtual machines away from this host's services
 Documentation=file:/etc/ci-guard.nft
 # Load before any login or lingering user manager, so the runner-up coordinator never starts
-# a VM without it. The coordinator also refuses to start until /run/ci-guard.ok exists.
+# a VM without it. ci-ssh-entry also refuses every ci session while the firewall is missing.
 Before=systemd-user-sessions.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/sbin/nft -f /etc/ci-guard.nft
-ExecStart=/usr/bin/touch /run/ci-guard.ok
 
 [Install]
 WantedBy=multi-user.target

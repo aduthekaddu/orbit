@@ -33,12 +33,36 @@ users: []
 ssh_pwauth: false
 disable_root: true
 write_files:
+  # Jobs resolve names through public DNS servers, never through QEMU's forwarder to the
+  # host's resolver, which knows the host's private names (the ci-guard firewall refuses it).
+  - path: /etc/cloud/cloud.cfg.d/99-ci-network.cfg
+    content: |
+      network:
+        version: 2
+        ethernets:
+          ci-nic:
+            match:
+              name: "en*"
+            dhcp4: true
+            dhcp4-overrides:
+              use-dns: false
+            dhcp6: false
+            accept-ra: false
+  - path: /etc/systemd/resolved.conf.d/ci-dns.conf
+    content: |
+      [Resolve]
+      DNS=1.1.1.1 9.9.9.9 8.8.8.8
+      Domains=~.
   - path: /root/build.sh
     permissions: "0700"
     content: |
       #!/bin/bash
       set -euxo pipefail
       export DEBIAN_FRONTEND=noninteractive
+      # This boot already took DNS from DHCP. Use the public servers written above instead.
+      systemctl restart systemd-resolved
+      for link in /sys/class/net/en*; do resolvectl dns "${link##*/}" ""; done
+      resolvectl status | grep -E "DNS Servers|Current DNS" || true
       apt-get update
       apt-get install -y ca-certificates curl gnupg
       install -m 0755 -d /etc/apt/keyrings

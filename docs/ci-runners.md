@@ -27,16 +27,18 @@ GitHub reads the variable when it queues a run. Changing it affects new runs, no
 
 romper is also the owner's workstation and runs production Orbit. A job runs code from this repository, from third-party actions and from Dependabot updates, so it is kept away from the host:
 
-- **Firewall.** The nftables table `inet ci_guard` (`/etc/ci-guard.nft`, loaded at boot by `ci-guard.service`) lets the `ci` user reach the public internet and its own listeners only. QEMU's user networking makes each guest connection a socket of the QEMU process, which runs as `ci`, so the rules see guest traffic as `ci` traffic. Refused: every service on romper's loopback, private and public addresses, Docker networks, the tailnet, and Oracle's metadata service. Allowed on the host: DNS through `127.0.0.53`, the SSH port QEMU forwards for runner-up, and runner-up's cloud-init seed server.
+- **Firewall.** The nftables table `inet ci_guard` (`/etc/ci-guard.nft`, loaded at boot by `ci-guard.service`) lets the `ci` user reach the public internet and its own listeners only. QEMU's user networking makes each guest connection a socket of the QEMU process, which runs as `ci`, so the rules see guest traffic as `ci` traffic. Refused: every service on romper's loopback, private and public addresses, including its DNS resolver, plus Docker networks, the tailnet and Oracle's metadata service. Allowed on the host: the SSH port QEMU forwards for runner-up and runner-up's cloud-init seed server. TCP to romper's ports below 32768 gets a reset before the service sees a packet. Other local TCP is rate-limited and completes only when a `ci` socket answers. Jobs resolve names through public DNS servers (1.1.1.1, 9.9.9.9, 8.8.8.8), set in the image.
 - **Memory.** `user-1500.slice` has `MemoryMax=9G`, so CI never takes the last of romper's memory (romper has no swap). Every `ci` session starts through `/usr/local/libexec/ci-ssh-entry`, which sets `oom_score_adj` to 1000: if romper still runs out, the kernel stops a CI machine first.
-- **Start order.** `runner-up.service` starts only when `/run/ci-guard.ok` exists, which `ci-guard.service` writes after it loads the firewall.
+- **Firewall check.** Every `ci` session starts through `/usr/local/libexec/ci-ssh-entry`, which first connects to romper's SSH port as `ci`. With the firewall loaded that gets a reset; without it, sshd answers, and the entry refuses the session. So no job starts while the firewall is missing. `ci-guard.service` loads it at boot, before user sessions.
+- **Time.** `maxJobSeconds` is 3600. A job's serial console goes to a log on romper with no size limit. A job with sudo wrote to it at about 39 KB a second (measured), so an hour stays under about 140 MB.
 - **Image.** The base image is owned by root, so a job cannot change what later jobs boot.
 
 What stays open:
 
 - A job has the internet, like a hosted job. A bad dependency could send the job's checkout or its short-lived `GITHUB_TOKEN` out.
 - A guest can open TCP connections to other `ci` listeners: another running job's SSH forward (it needs that job's own key) and seed server (it serves public data only).
-- A guest resolves names through romper's resolver, so it can resolve tailnet names. It cannot connect to them.
+- A guest can still tell an open local port from a closed one in the ephemeral range (32768 and up) by timing, and can hold a few half-open connections there (at most 20 new ones a second). It cannot complete a connection to any of them.
+- A job that loses its firewall mid-run keeps running until it ends. Only new sessions are refused.
 - A job that escapes its virtual machine runs as `ci` and could change the runner-up agent in `/home/ci` for later jobs.
 
 ## Files on romper
@@ -50,7 +52,7 @@ What stays open:
 | `~/.ssh/runner-up_ci_ed25519` | The coordinator's key for `ci@127.0.0.1` |
 | `/home/ci/.ssh/authorized_keys` | That key, only from `127.0.0.1` and `::1`, forced through `ci-ssh-entry` |
 | `/etc/ci-guard.nft`, `/etc/systemd/system/ci-guard.service` | The firewall ([copy](../scripts/ci-runner/ci-guard.nft), [unit](../scripts/ci-runner/ci-guard.service)) |
-| `/etc/systemd/system/user-1500.slice.d/50-ci.conf` | The memory cap |
+| `/etc/systemd/system/user-1500.slice.d/50-ci.conf` | The memory cap ([copy](../scripts/ci-runner/50-ci.conf)) |
 | `/usr/local/libexec/ci-ssh-entry` | The SSH entry ([copy](../scripts/ci-runner/ci-ssh-entry)) |
 | `/var/lib/ci-images/` | The Ubuntu cloud image and the CI base image |
 
@@ -59,23 +61,23 @@ What stays open:
 This is how romper was set up on 2026-11-14. Check every download against its published checksum.
 
 1. `sudo apt-get install --no-install-recommends qemu-system-x86 qemu-utils`
-2. The `ci` user: `sudo useradd --uid 1500 --create-home --shell /bin/bash ci`, then `sudo usermod -aG kvm ci`. Install `scripts/ci-runner/ci-ssh-entry` as `/usr/local/libexec/ci-ssh-entry` (root, 0755) and the memory cap drop-in.
+2. The `ci` user: `sudo useradd --uid 1500 --create-home --shell /bin/bash ci`, then `sudo usermod -aG kvm ci`. Install `scripts/ci-runner/ci-ssh-entry` as `/usr/local/libexec/ci-ssh-entry` (root, 0755) and `scripts/ci-runner/50-ci.conf` as `/etc/systemd/system/user-1500.slice.d/50-ci.conf`, then `sudo systemctl daemon-reload`.
 3. As `ubuntu`, make the key `~/.ssh/runner-up_ci_ed25519`. Put its public half in `/home/ci/.ssh/authorized_keys` as `restrict,from="127.0.0.1,::1",command="/usr/local/libexec/ci-ssh-entry" ssh-ed25519 ...`.
-4. The firewall: replace `PUBLIC_IPV4` in `scripts/ci-runner/ci-guard.nft` with romper's public address, install it as `/etc/ci-guard.nft` and the unit as `/etc/systemd/system/ci-guard.service`, then `sudo systemctl enable --now ci-guard`. `/run/ci-guard.ok` must exist before any virtual machine boots.
+4. The firewall: replace `PUBLIC_IPV4` in `scripts/ci-runner/ci-guard.nft` with romper's public address, install it as `/etc/ci-guard.nft` and the unit as `/etc/systemd/system/ci-guard.service`, then `sudo systemctl enable --now ci-guard`. Load it before any virtual machine boots: `ssh -i ~/.ssh/runner-up_ci_ed25519 ci@127.0.0.1 true` succeeds only once it is.
 5. Build the base image (see below).
-6. Install runner-up and `gh` from their releases. Put `gh` in `~/.local/share/runner-up/gh/bin/`, off the `PATH`, so other programs on romper do not pick up the token. Run `scripts/ci-runner/runner-up-token-wizard.sh`.
+6. Install runner-up from its release as `~/.local/bin/runner-up`. Install `gh` from its release in `~/.local/share/runner-up/gh/bin/`, off the `PATH`, so other programs on romper do not pick up the token. Run `scripts/ci-runner/runner-up-token-wizard.sh`.
 7. Set up runner-up:
 
    ```bash
    export GH_CONFIG_DIR=~/.config/runner-up/gh
    runner-up init --repo aduthekaddu/orbit --pool romper-linux --gh ~/.local/share/runner-up/gh/bin/gh
    runner-up machine add romper --ssh "-i $HOME/.ssh/runner-up_ci_ed25519 -o IdentitiesOnly=yes ci@127.0.0.1" \
-     --provider kvm --image /var/lib/ci-images/ci-noble-20261114b.qcow2 \
+     --provider kvm --image /var/lib/ci-images/ci-noble-20261114c.qcow2 \
      --places 1 --place-cores 4 --place-memory 4096 --disk-gb 40 --room-cores 12 --room-memory 11800
    ```
 
-   Add `release` with the version and the `linux-amd64` SHA-256 to `config.json`, then run `runner-up update` and `runner-up check-config`.
-8. Install `scripts/ci-runner/runner-up.service` as `~/.config/systemd/user/runner-up.service`, then `systemctl --user enable --now runner-up`.
+   `machine add` copies runner-up to `/home/ci/.local/bin/`. Add `release` with the version and the `linux-amd64` SHA-256, and `"maxJobSeconds": 3600`, to `config.json`, then run `runner-up update` and `runner-up check-config`.
+8. Install `scripts/ci-runner/runner-up.service` as `~/.config/systemd/user/runner-up.service`, then `systemctl --user enable --now runner-up`. `sudo loginctl enable-linger ubuntu` keeps it running with nobody logged in (already on for romper).
 
 ## Tasks
 
@@ -97,7 +99,7 @@ Run this where `gh` is signed in as the repository owner, such as the owner's la
 gh variable delete CI_RUNNER --repo aduthekaddu/orbit
 ```
 
-New runs then ask for `ubuntu-24.04`. They wait while the account has no minutes left. To switch back, run `gh variable set CI_RUNNER --body romper-linux --repo aduthekaddu/orbit`.
+New runs then ask for `ubuntu-24.04`. While the account has no minutes left they fail at once with a spending-limit error, without using minutes. To switch back, run `gh variable set CI_RUNNER --body romper-linux --repo aduthekaddu/orbit`.
 
 ### Stop everything now
 
@@ -110,7 +112,13 @@ New runs then ask for `ubuntu-24.04`. They wait while the account has no minutes
 Do it every month or so, for security updates and new Chrome and Docker versions.
 
 1. Download Ubuntu's noble cloud image and check it against the signed `SHA256SUMS` (`gpgv --keyring /usr/share/keyrings/ubuntu-cloudimage-keyring.gpg SHA256SUMS.gpg SHA256SUMS`, then `sha256sum -c`). Install it read-only into `/var/lib/ci-images/`.
-2. As `ci`, run [`scripts/ci-runner/build-base-image.sh`](../scripts/ci-runner/build-base-image.sh) `CLOUD_IMAGE OUTPUT.qcow2`. It needs the firewall loaded, takes about 10 minutes, and keeps the VM's console log next to `OUTPUT` when it fails.
+2. Run [`scripts/ci-runner/build-base-image.sh`](../scripts/ci-runner/build-base-image.sh) as `ci` through the coordinator's key, so it runs under the memory cap and the firewall check:
+
+   ```bash
+   ssh -i ~/.ssh/runner-up_ci_ed25519 ci@127.0.0.1 'mkdir -p ~/image-build && cat > ~/image-build/build.sh && cd ~/image-build && bash build.sh /var/lib/ci-images/CLOUD_IMAGE ~/image-build/ci-noble-DATE.qcow2' < scripts/ci-runner/build-base-image.sh
+   ```
+
+   It takes about 5 minutes. Its build VM uses 2 cores and 2 GB, so it fits beside one running job. When it fails it keeps the VM's console log next to the output.
 3. `sudo install -m 0444 -o root -g root OUTPUT.qcow2 /var/lib/ci-images/`
 4. Point the place's `image` in `config.json` at the new file. runner-up applies the change to the next job. Delete the old image once no job uses it.
 
@@ -121,6 +129,13 @@ runner-up pins GitHub's runner version. GitHub may stop sending jobs to runner 2
 1. Read the new release's notes and its `checksums.txt`.
 2. In `config.json`, set `release.version` and `release.sha256.linux-amd64` to the new version and its archive's SHA-256.
 3. The running coordinator downloads it, checks the SHA-256, and replaces itself. `runner-up status` and `journalctl --user -u runner-up` show the result.
+4. If the new release pins a new GitHub runner version, give the agent its archive. The firewall keeps `ci` off romper's DNS resolver, so the agent cannot download it. As `ubuntu`, download `actions-runner-linux-x64-VERSION.tar.gz` from GitHub's runner release, check its SHA-256 against the one runner-up pins, then copy it in:
+
+   ```bash
+   ssh -i ~/.ssh/runner-up_ci_ed25519 ci@127.0.0.1 'cat > ~/.local/state/runner-up/agent/cache/actions-runner-linux-x64-VERSION.tar.gz' < actions-runner-linux-x64-VERSION.tar.gz
+   ```
+
+   The agent checks the archive's SHA-256 on every use, so a wrong file fails the job instead of running.
 
 ### Renew the token
 

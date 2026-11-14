@@ -5,8 +5,9 @@
 # turns every connection the guest makes into an ordinary socket of the QEMU process, so the
 # output hook sees it as local traffic from ci. These rules let ci reach the public internet
 # and its own listeners only: the SSH port QEMU forwards for the runner-up agent and the
-# agent's cloud-init seed server. Every other service on this host, the private networks
-# around it, the tailnet and the cloud metadata service are refused.
+# agent's cloud-init seed server. Every other service on this host, including its DNS
+# resolver, the private networks around it, the tailnet and the cloud metadata service are
+# refused. The CI image uses public DNS servers instead of QEMU's DNS forwarder.
 #
 # Loading this file replaces only the ci_guard table. Docker's and Tailscale's rules stay.
 
@@ -44,9 +45,14 @@ table inet ci_guard {
 
 		ct state established,related accept
 
-		meta skuid "ci" ip daddr { 127.0.0.53, 127.0.0.54 } th dport 53 accept
 		meta skuid "ci" ip daddr @public4 counter reject
-		meta skuid "ci" fib daddr type local meta l4proto tcp ct mark set ct mark | 0x00100000 accept
+		# ci's own listeners (QEMU's SSH forward, the cloud-init seed server) bind port 0, so
+		# they sit in the ephemeral range. Every lower port on this host gets a reset at once,
+		# before its service sees a packet. ci-ssh-entry relies on this reset for port 22.
+		meta skuid "ci" fib daddr type local tcp dport < 32768 counter reject with tcp reset
+		# A few connections a minute are normal (agent to guest, guest to seed). The limit keeps
+		# a job from filling the backlog of a host listener in the ephemeral range.
+		meta skuid "ci" ct state new fib daddr type local meta l4proto tcp limit rate 20/second burst 40 packets ct mark set ct mark | 0x00100000 accept
 		meta skuid "ci" fib daddr type local counter reject
 		meta skuid "ci" ip daddr @private4 counter reject
 		meta skuid "ci" ip6 daddr @private6 counter reject

@@ -4,8 +4,6 @@ After=network-online.target
 
 [Service]
 Environment=GH_CONFIG_DIR=%h/.config/runner-up/gh
-# Never start virtual machines without the ci-guard firewall.
-ExecStartPre=/usr/bin/test -f /run/ci-guard.ok
 ExecStart=%h/.local/state/runner-up/program/current serve --config %h/.config/runner-up/config.json
 Restart=on-failure
 RestartSec=10
