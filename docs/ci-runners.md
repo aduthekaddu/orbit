@@ -21,7 +21,8 @@ GitHub reads the variable when it queues a run. Changing it affects new runs, no
 
 - The virtual machines run as a separate user, `ci` (uid 1500). It is in the `kvm` group only: no sudo, no Docker, no lxd.
 - Each machine boots from a copy-on-write layer over the base image in `/var/lib/ci-images/`. The base image is Ubuntu 24.04 with Docker, Compose, Buildx, Google Chrome, Node.js 22, git, jq, build tools and a 4 GB swap file. CodeQL needs the system Node.js, as on GitHub's image. The job runs as user `runner` (uid 1001) with passwordless sudo and Docker access, like GitHub's `ubuntu-24.04` image.
-- Jobs from forks' pull requests are refused (runner-up's fork guard, `allowForkPullRequests: false`).
+- Jobs from forks' pull requests are refused (runner-up's fork guard, `allowForkPullRequests: false`): they fail as soon as they start. To run CI on a fork's change, push its branch to this repository and open the pull request from there.
+- Each machine pulls its Docker images afresh, anonymously, from romper's one public IP. Docker Hub allows that IP 100 pulls an hour (measured 2026-11-14). A CI and Security run pulls about 10, and two places finish at most a few runs an hour, so this stays under the limit. If jobs start failing with HTTP 429 from Docker Hub, add `{"registry-mirrors": ["https://mirror.gcr.io"]}` to `/etc/docker/daemon.json` in the image build. Google's mirror served this repository's pinned images.
 
 ## What keeps romper safe
 
@@ -73,7 +74,7 @@ This is how romper was set up on 2026-11-14. Check every download against its pu
    runner-up init --repo aduthekaddu/orbit --pool romper-linux --gh ~/.local/share/runner-up/gh/bin/gh
    runner-up machine add romper --ssh "-i $HOME/.ssh/runner-up_ci_ed25519 -o IdentitiesOnly=yes ci@127.0.0.1" \
      --provider kvm --image /var/lib/ci-images/ci-noble-20261114c.qcow2 \
-     --places 1 --place-cores 4 --place-memory 4096 --disk-gb 40 --room-cores 12 --room-memory 11800
+     --places 2 --place-cores 4 --place-memory 4096 --disk-gb 40 --room-cores 8 --room-memory 7786
    ```
 
    `machine add` copies runner-up to `/home/ci/.local/bin/`. Add `release` with the version and the `linux-amd64` SHA-256, and `"maxJobSeconds": 3600`, to `config.json`, then run `runner-up update` and `runner-up check-config`.
@@ -118,7 +119,7 @@ Do it every month or so, for security updates and new Chrome and Docker versions
    ssh -i ~/.ssh/runner-up_ci_ed25519 ci@127.0.0.1 'mkdir -p ~/image-build && cat > ~/image-build/build.sh && cd ~/image-build && bash build.sh /var/lib/ci-images/CLOUD_IMAGE ~/image-build/ci-noble-DATE.qcow2' < scripts/ci-runner/build-base-image.sh
    ```
 
-   It takes about 5 minutes. Its build VM uses 2 cores and 2 GB, so it fits beside one running job. When it fails it keeps the VM's console log next to the output.
+   It takes about 5 minutes. Its build VM uses 2 cores and 2 GB, which does not fit under the memory cap beside two running jobs, so build while no job runs. When it fails it keeps the VM's console log next to the output.
 3. `sudo install -m 0444 -o root -g root OUTPUT.qcow2 /var/lib/ci-images/`
 4. Point the place's `image` in `config.json` at the new file. runner-up applies the change to the next job. Delete the old image once no job uses it.
 
@@ -145,7 +146,7 @@ The token's expiry date is in `~/.config/runner-up/token.env`. The first token e
 
 Measure first: run `scripts/ci-runner/ci-sample.sh > samples.log` on romper while CI runs. It prints the host's available memory, the `ci` slice's memory, and each virtual machine's memory and CPU every 5 seconds. runner-up's own `usage` readings do not cover KVM places.
 
-Then edit the machine's `roomCores`, `roomMemoryMB` and its places in `config.json`, and run `runner-up check-config`. A virtual machine takes its place's memory plus about 50 MB from romper once the guest has used all of it. Keep the places' total under the 9 GB cap.
+Then edit the machine's `roomCores`, `roomMemoryMB` and its places in `config.json`, and run `runner-up check-config`. A virtual machine takes its place's memory plus about 50 MB from romper once the guest has used all of it. Keep runner-up's budget, `memoryMB - roomMemoryMB`, at 8192 MB or less, so the places always fit under the 9 GB cap. romper runs two places of 4 cores and 4096 MB, with `roomCores` 8 and `roomMemoryMB` 7786.
 
 ### When romper's public IP changes
 
