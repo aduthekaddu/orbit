@@ -7,10 +7,13 @@
 #
 # It also makes the session, and the agent and QEMU processes it starts, the first ones the
 # kernel kills if the host runs out of memory, so the owner's tools and production keep running.
-timeout 3 bash -c 'exec 3<>/dev/tcp/127.0.0.1/22' 2> /dev/null
-if [ $? -ne 1 ]; then
-  echo "ci-ssh-entry: the ci-guard firewall is not loaded, so CI work is refused" >&2
-  exit 1
-fi
+probe=$(LC_ALL=C timeout 3 bash -c 'exec 3<>/dev/tcp/127.0.0.1/22' 2>&1)
+case "$?:$probe" in
+  1:*"Connection refused"*) ;;
+  *)
+    echo "ci-ssh-entry: the ci-guard firewall is not loaded, so CI work is refused" >&2
+    exit 1
+    ;;
+esac
 echo 1000 > /proc/self/oom_score_adj
 exec /bin/bash -c "$SSH_ORIGINAL_COMMAND"

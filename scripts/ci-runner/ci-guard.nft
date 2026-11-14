@@ -51,8 +51,9 @@ table inet ci_guard {
 		# before its service sees a packet. ci-ssh-entry relies on this reset for port 22.
 		meta skuid "ci" fib daddr type local tcp dport < 32768 counter reject with tcp reset
 		# A few connections a minute are normal (agent to guest, guest to seed). The limit keeps
-		# a job from filling the backlog of a host listener in the ephemeral range.
-		meta skuid "ci" ct state new fib daddr type local meta l4proto tcp limit rate 20/second burst 40 packets ct mark set ct mark | 0x00100000 accept
+		# a job from filling the backlog of a host listener in the ephemeral range, and SYN
+		# cookies (net.ipv4.tcp_syncookies=1) keep a full backlog from locking out real clients.
+		meta skuid "ci" ct state new fib daddr type local meta l4proto tcp limit rate 5/second burst 10 packets ct mark set ct mark | 0x00100000 accept
 		meta skuid "ci" fib daddr type local counter reject
 		meta skuid "ci" ip daddr @private4 counter reject
 		meta skuid "ci" ip6 daddr @private6 counter reject

@@ -27,17 +27,17 @@ GitHub reads the variable when it queues a run. Changing it affects new runs, no
 
 romper is also the owner's workstation and runs production Orbit. A job runs code from this repository, from third-party actions and from Dependabot updates, so it is kept away from the host:
 
-- **Firewall.** The nftables table `inet ci_guard` (`/etc/ci-guard.nft`, loaded at boot by `ci-guard.service`) lets the `ci` user reach the public internet and its own listeners only. QEMU's user networking makes each guest connection a socket of the QEMU process, which runs as `ci`, so the rules see guest traffic as `ci` traffic. Refused: every service on romper's loopback, private and public addresses, including its DNS resolver, plus Docker networks, the tailnet and Oracle's metadata service. Allowed on the host: the SSH port QEMU forwards for runner-up and runner-up's cloud-init seed server. TCP to romper's ports below 32768 gets a reset before the service sees a packet. Other local TCP is rate-limited and completes only when a `ci` socket answers. Jobs resolve names through public DNS servers (1.1.1.1, 9.9.9.9, 8.8.8.8), set in the image.
+- **Firewall.** The nftables table `inet ci_guard` (`/etc/ci-guard.nft`, loaded at boot by `ci-guard.service`) lets the `ci` user reach the public internet and its own listeners only. QEMU's user networking makes each guest connection a socket of the QEMU process, which runs as `ci`, so the rules see guest traffic as `ci` traffic. Refused: every service on romper's loopback, private and public addresses, including its DNS resolver, plus Docker networks, the tailnet and Oracle's metadata service. Allowed on the host: the SSH port QEMU forwards for runner-up and runner-up's cloud-init seed server. TCP to romper's ports below 32768 gets a reset before the service sees a packet. Other local TCP is limited to 5 new connections a second and completes only when a `ci` socket answers. Jobs resolve names through public DNS servers (1.1.1.1, 9.9.9.9, 8.8.8.8), set in the image.
 - **Memory.** `user-1500.slice` has `MemoryMax=9G`, so CI never takes the last of romper's memory (romper has no swap). Every `ci` session starts through `/usr/local/libexec/ci-ssh-entry`, which sets `oom_score_adj` to 1000: if romper still runs out, the kernel stops a CI machine first.
 - **Firewall check.** Every `ci` session starts through `/usr/local/libexec/ci-ssh-entry`, which first connects to romper's SSH port as `ci`. With the firewall loaded that gets a reset; without it, sshd answers, and the entry refuses the session. So no job starts while the firewall is missing. `ci-guard.service` loads it at boot, before user sessions.
-- **Time.** `maxJobSeconds` is 3600. A job's serial console goes to a log on romper with no size limit. A job with sudo wrote to it at about 39 KB a second (measured), so an hour stays under about 140 MB.
+- **Time.** `maxJobSeconds` is 3600. A job's serial console goes to a log on romper with no size limit. A job with sudo wrote to it at about 39 KB a second (measured), so an hour stays under about 140 MB, and runner-up deletes the virtual machine's folder, log included, when the job ends.
 - **Image.** The base image is owned by root, so a job cannot change what later jobs boot.
 
 What stays open:
 
 - A job has the internet, like a hosted job. A bad dependency could send the job's checkout or its short-lived `GITHUB_TOKEN` out.
 - A guest can open TCP connections to other `ci` listeners: another running job's SSH forward (it needs that job's own key) and seed server (it serves public data only).
-- A guest can still tell an open local port from a closed one in the ephemeral range (32768 and up) by timing, and can hold a few half-open connections there (at most 20 new ones a second). It cannot complete a connection to any of them.
+- A guest can still tell an open local port from a closed one in the ephemeral range (32768 and up) by timing, and can hold a few half-open connections there (at most 5 new ones a second, with SYN cookies on). It cannot complete a connection to any of them.
 - A job that loses its firewall mid-run keeps running until it ends. Only new sessions are refused.
 - A job that escapes its virtual machine runs as `ci` and could change the runner-up agent in `/home/ci` for later jobs.
 
@@ -126,16 +126,16 @@ Do it every month or so, for security updates and new Chrome and Docker versions
 
 runner-up pins GitHub's runner version. GitHub may stop sending jobs to runner 2.338.1 around **2026-12-28** ([runner-up#67](https://github.com/kunchenguid/runner-up/issues/67)), so update runner-up before then.
 
-1. Read the new release's notes and its `checksums.txt`.
-2. In `config.json`, set `release.version` and `release.sha256.linux-amd64` to the new version and its archive's SHA-256.
-3. The running coordinator downloads it, checks the SHA-256, and replaces itself. `runner-up status` and `journalctl --user -u runner-up` show the result.
-4. If the new release pins a new GitHub runner version, give the agent its archive. The firewall keeps `ci` off romper's DNS resolver, so the agent cannot download it. As `ubuntu`, download `actions-runner-linux-x64-VERSION.tar.gz` from GitHub's runner release, check its SHA-256 against the one runner-up pins, then copy it in:
+1. Read the new release's notes and its `checksums.txt`, and find the runner version and SHA-256 it pins.
+2. If that runner version is new, give the agent its archive first. The firewall keeps `ci` off romper's DNS resolver, so the agent cannot download it itself. As `ubuntu`, download `actions-runner-linux-x64-VERSION.tar.gz` from GitHub's runner release, check its SHA-256, then copy it in under a temporary name and move it into place, so a job never reads half a file:
 
    ```bash
-   ssh -i ~/.ssh/runner-up_ci_ed25519 ci@127.0.0.1 'cat > ~/.local/state/runner-up/agent/cache/actions-runner-linux-x64-VERSION.tar.gz' < actions-runner-linux-x64-VERSION.tar.gz
+   ssh -i ~/.ssh/runner-up_ci_ed25519 ci@127.0.0.1 'f=~/.local/state/runner-up/agent/cache/actions-runner-linux-x64-VERSION.tar.gz; cat > "$f.part" && mv "$f.part" "$f"' < actions-runner-linux-x64-VERSION.tar.gz
    ```
 
    The agent checks the archive's SHA-256 on every use, so a wrong file fails the job instead of running.
+3. In `config.json`, set `release.version` and `release.sha256.linux-amd64` to the new version and its archive's SHA-256.
+4. The running coordinator downloads it, checks the SHA-256, and replaces itself. `runner-up status` and `journalctl --user -u runner-up` show the result.
 
 ### Renew the token
 
