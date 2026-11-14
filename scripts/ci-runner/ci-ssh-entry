@@ -1,0 +1,6 @@
+#!/bin/sh
+# Every SSH session of the runner-up coordinator as ci starts here (authorized_keys command=).
+# It makes the session, and the agent and QEMU processes it starts, the first ones the kernel
+# kills if the host runs out of memory, so the owner's tools and production keep running.
+echo 1000 > /proc/self/oom_score_adj
+exec /bin/bash -c "$SSH_ORIGINAL_COMMAND"

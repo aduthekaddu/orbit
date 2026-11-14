@@ -1,0 +1,54 @@
+#!/usr/sbin/nft -f
+# Keeps CI virtual machines away from this host's own services and private networks.
+#
+# runner-up runs each CI job in a QEMU virtual machine as the user ci. QEMU's user networking
+# turns every connection the guest makes into an ordinary socket of the QEMU process, so the
+# output hook sees it as local traffic from ci. These rules let ci reach the public internet
+# and its own listeners only: the SSH port QEMU forwards for the runner-up agent and the
+# agent's cloud-init seed server. Every other service on this host, the private networks
+# around it, the tailnet and the cloud metadata service are refused.
+#
+# Loading this file replaces only the ci_guard table. Docker's and Tailscale's rules stay.
+
+table inet ci_guard
+delete table inet ci_guard
+
+table inet ci_guard {
+	# This host's public address. Oracle maps it outside the VM, so "fib daddr type local"
+	# does not see it. Update it if the instance's public IP changes.
+	set public4 {
+		type ipv4_addr
+		elements = { PUBLIC_IPV4 }
+	}
+
+	set private4 {
+		type ipv4_addr
+		flags interval
+		elements = { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16,
+			     172.16.0.0/12, 192.0.0.0/24, 192.168.0.0/16, 198.18.0.0/15, 224.0.0.0/3 }
+	}
+
+	set private6 {
+		type ipv6_addr
+		flags interval
+		elements = { ::/127, ::ffff:0:0/96, 64:ff9b:1::/48, fc00::/7, fe80::/10, ff00::/8 }
+	}
+
+	chain output {
+		type filter hook output priority filter; policy accept;
+
+		# A TCP connection ci opened to this host completes only when a socket owned by ci
+		# answers. A SYN-ACK carries its listening socket, so this checks the listener's owner.
+		ct mark & 0x00100000 == 0x00100000 ct direction reply tcp flags & (syn | ack) == syn | ack meta skuid "ci" accept
+		ct mark & 0x00100000 == 0x00100000 ct direction reply tcp flags & (syn | ack) == syn | ack counter drop
+
+		ct state established,related accept
+
+		meta skuid "ci" ip daddr { 127.0.0.53, 127.0.0.54 } th dport 53 accept
+		meta skuid "ci" ip daddr @public4 counter reject
+		meta skuid "ci" fib daddr type local meta l4proto tcp ct mark set ct mark | 0x00100000 accept
+		meta skuid "ci" fib daddr type local counter reject
+		meta skuid "ci" ip daddr @private4 counter reject
+		meta skuid "ci" ip6 daddr @private6 counter reject
+	}
+}
