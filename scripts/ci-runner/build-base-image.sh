@@ -53,6 +53,15 @@ write_files:
         google-chrome-stable git curl jq unzip zip zstd xz-utils build-essential python3 \
         iproute2 libicu74 libkrb5-3 zlib1g libssl3t64 liblttng-ust1t64
       systemctl enable docker.service containerd.service
+      # GitHub's image has a system Node.js, and CodeQL's JavaScript extractor runs node from
+      # PATH without setup-node. Jobs that run setup-node put their own version first.
+      curl -fsSLo /tmp/node-SHASUMS256.txt https://nodejs.org/dist/latest-v22.x/SHASUMS256.txt
+      node_tar=$(grep -oE 'node-v22\.[0-9.]+-linux-x64\.tar\.xz' /tmp/node-SHASUMS256.txt | head -1)
+      curl -fsSLo "/tmp/$node_tar" "https://nodejs.org/dist/latest-v22.x/$node_tar"
+      (cd /tmp && grep " $node_tar\$" node-SHASUMS256.txt | sha256sum -c -)
+      tar -xJf "/tmp/$node_tar" -C /usr/local --strip-components=1 --no-same-owner
+      rm -f "/tmp/$node_tar" /tmp/node-SHASUMS256.txt
+      node --version
       # GitHub's runner image has user runner (uid 1001) in the docker group. The per-job
       # cloud-init seed only adds its key and sudo rule to an existing user.
       useradd --create-home --uid 1001 --shell /bin/bash --groups docker runner
@@ -92,7 +101,7 @@ seed_pid=$!
 
 qemu-img create -q -f qcow2 -F qcow2 -b "$cloud_image" "$work/disk.qcow2" 16G
 qemu-system-x86_64 -name ci-image-build -nodefaults -display none \
-  -machine q35,accel=kvm -cpu host -smp 4 -m 4096 \
+  -machine q35,accel=kvm -cpu host -smp 2 -m 2048 \
   -drive "if=virtio,format=qcow2,file=$work/disk.qcow2" \
   -netdev user,id=net0 -device virtio-net-pci,netdev=net0 \
   -serial "file:$work/console.log" \

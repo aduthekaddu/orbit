@@ -20,7 +20,7 @@ GitHub reads the variable when it queues a run. Changing it affects new runs, no
 [runner-up](https://github.com/kunchenguid/runner-up) v0.1.12 runs there as the `ubuntu` user's systemd user service `runner-up`. It holds a runner scale set for `aduthekaddu/orbit` with the label `romper-linux`. For each job it boots a fresh KVM virtual machine (a "place"), starts GitHub's runner in it for that one job, and deletes the machine afterwards.
 
 - The virtual machines run as a separate user, `ci` (uid 1500). It is in the `kvm` group only: no sudo, no Docker, no lxd.
-- Each machine boots from a copy-on-write layer over the base image in `/var/lib/ci-images/`. The base image is Ubuntu 24.04 with Docker, Compose, Buildx, Google Chrome, git, jq, build tools and a 4 GB swap file. The job runs as user `runner` (uid 1001) with passwordless sudo and Docker access, like GitHub's `ubuntu-24.04` image.
+- Each machine boots from a copy-on-write layer over the base image in `/var/lib/ci-images/`. The base image is Ubuntu 24.04 with Docker, Compose, Buildx, Google Chrome, Node.js 22, git, jq, build tools and a 4 GB swap file. CodeQL needs the system Node.js, as on GitHub's image. The job runs as user `runner` (uid 1001) with passwordless sudo and Docker access, like GitHub's `ubuntu-24.04` image.
 - Jobs from forks' pull requests are refused (runner-up's fork guard, `allowForkPullRequests: false`).
 
 ## What keeps romper safe
@@ -70,7 +70,7 @@ This is how romper was set up on 2026-11-14. Check every download against its pu
    export GH_CONFIG_DIR=~/.config/runner-up/gh
    runner-up init --repo aduthekaddu/orbit --pool romper-linux --gh ~/.local/share/runner-up/gh/bin/gh
    runner-up machine add romper --ssh "-i $HOME/.ssh/runner-up_ci_ed25519 -o IdentitiesOnly=yes ci@127.0.0.1" \
-     --provider kvm --image /var/lib/ci-images/ci-noble-20261114.qcow2 \
+     --provider kvm --image /var/lib/ci-images/ci-noble-20261114b.qcow2 \
      --places 1 --place-cores 4 --place-memory 4096 --disk-gb 40 --room-cores 12 --room-memory 11800
    ```
 
