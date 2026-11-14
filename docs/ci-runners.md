@@ -1,5 +1,7 @@
 # CI runners on romper
 
+The decision behind this setup is [ADR 0001](adr/0001-ci-on-romper.md).
+
 Orbit's CI can run on the owner's machine `romper` instead of GitHub's hosted runners. GitHub's included minutes ran out in November 2026, and hosted jobs cost money past them. Jobs on romper cost nothing per minute.
 
 ## How a job picks its runner
@@ -79,6 +81,17 @@ This is how romper was set up on 2026-11-14. Check every download against its pu
 
    `machine add` copies runner-up to `/home/ci/.local/bin/`. Add `release` with the version and the `linux-amd64` SHA-256, and `"maxJobSeconds": 3600`, to `config.json`, then run `runner-up update` and `runner-up check-config`.
 8. Install `scripts/ci-runner/runner-up.service` as `~/.config/systemd/user/runner-up.service`, then `systemctl --user enable --now runner-up`. `sudo loginctl enable-linger ubuntu` keeps it running with nobody logged in (already on for romper).
+
+## Add a repository
+
+Any private repository of the account can use the same pool. For each one:
+
+1. **Token.** The owner adds the repository to the fine-grained token "runner-up on romper" (Settings, Developer settings, Fine-grained tokens, Edit, Repository access). The token value does not change.
+2. **runner-up.** Add `owner/name` to `github.repos` in `~/.config/runner-up/config.json` and run `runner-up check-config`. The running coordinator opens a scale set for it (`journalctl --user -u runner-up` logs `scale set session open`). Do not rerun `runner-up init`: it rewrites the setup.
+3. **Tools.** Read every workflow. List what a job uses that GitHub's image has and this image lacks (see the base image above). Install it in the job, or add it to `build-base-image.sh` and rebuild. Setup actions such as `setup-node`, `setup-python`, `setup-uv` and `pnpm/action-setup` work as they are. Service containers work, because the image has Docker.
+4. **Workflows.** Change each `runs-on: LABEL` to `runs-on: ${{ vars.CI_RUNNER || 'LABEL' }}`, keeping each job's own label as the fallback.
+5. **Variable first.** `gh variable set CI_RUNNER --body romper-linux --repo owner/name`, before the pull request opens, since GitHub reads it when it queues a run.
+6. **Proof.** Open the pull request. Every job must show a `runner-up-romper-*` runner and pass, with the same result per job as the repository's last green hosted run of the same event type. Rollback is `gh variable delete CI_RUNNER --repo owner/name`.
 
 ## Tasks
 
