@@ -80,8 +80,8 @@ The order follows your instruction to fix the built-in components first. After t
 | 19 | [Tools page and tools sheet](../slices/19.md) | Verifying plugins, G6 | M | 18 |
 | 20 | [Files](../slices/20.md) | File management | L | 17, 18 |
 | 21 | [Artifacts page](../slices/21.md) | Artifact management | M | 16, 18 |
-| 22 | [Share links](../slices/22.md) | Sharing | M | 18, 21 |
-| 23 | [Remote MCP servers](../slices/23.md) | More plugins | L | 19 |
+| 22 | [Share links](../slices/22.md) | Sharing | M | 18, 20, 21 |
+| 23 | [Remote MCP servers](../slices/23.md) | More plugins | L | 18b, 19 |
 
 Slice 13 can ship at any time, in parallel with the component work, because B1 loses tokens you pay for. G2 (memory in the chat) fits after slice 18, because memories become per user there. G4 (usage) fits after slice 17, because it needs the model recorded on each reply. B2 and G8 stay small `fix/` PRs.
 
@@ -106,6 +106,7 @@ Each plan picks a default for these so an implementer is never blocked. Answer a
 | Slice | Question | Default in the plan |
 | --- | --- | --- |
 | 13 | Closing the tab no longer stops a reply. Only **Stop** does. Is that right? | Yes |
+| 13 | Are 4 running replies per person and a 64 MB replay buffer right? | Yes, as starting values |
 | 14 | Should a new install start on the dark theme or follow the system? | Dark |
 | 14 | Which self-hosted serif for replies, Source Serif 4 or Literata? | Source Serif 4 |
 | 14 | Are the accent presets sun, sky, rose, and sand right? | Yes |
@@ -116,15 +117,17 @@ Each plan picks a default for these so an implementer is never blocked. Answer a
 | 16 | Is a five-second undo for delete right? | Yes |
 | 17 | Should a chat lock its model on the first message, so later default changes do not move it? | Yes |
 | 17 | Should Anthropic's refusal fallback be on? | Off |
+| 18 | In `community`, each person enters their own provider key. Is that the exception you meant when you said members should not enter keys? | Yes |
 | 18 | Keep Cloudflare Access in front of the public deployment? | Works both ways |
 | 18 | Should `team` members have a spending budget on the admin's key? | No budget yet |
 | 18 | Is one admin with no transfer of the role acceptable? | Yes |
 | 18 | Is `community` signup without email verification acceptable? | Yes, with better-auth's rate limit |
 | 18 | Is removing a person without a data export first acceptable? | Yes |
-| 19 | In `community`, should the admin's search key and sandbox serve every member? | Yes |
+| 19 | In `community`, should the admin's search key and sandbox serve every member? Nothing caps their total use across the install, and anyone who can sign up can spend the admin's Tavily credits and run code in the sandbox. | Yes, with no install-wide cap |
 | 19 | Should generated UI have a per-chat switch? | No, always on |
 | 20 | Are 5 MB per image, 10 MB per PDF, and 1 MB per text file right? | Yes, with `ORBIT_FILES_MAX_MB` |
 | 20 | When a model's image or PDF support is unknown, should Orbit refuse the file? | Yes |
+| 20 | Pasted files saved before slice 20 stay inside their messages and do not appear in the Files list. Is that acceptable? | Yes |
 | 22 | Should an admin be able to turn sharing off for the install? | No switch |
 | 23 | Should an admin share an MCP server with every member in `team`? | Not planned |
 
