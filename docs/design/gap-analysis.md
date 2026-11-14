@@ -25,13 +25,13 @@ This page compares Orbit with ChatGPT and Claude.ai as of 8 November 2026. It co
 | --- | --- | --- | --- |
 | B1 | A dropped connection kills the reply and wastes its tokens | P0 | Slice 13, replies that survive a dropped connection |
 | B2 | Orbit's sign-in page comes back while the session is still valid | P0 | A diagnostic `fix/` PR first. The cause is not confirmed. |
-| G1 | Model and effort are global settings, not chosen per chat | P1 | Slice 14, model and effort per chat |
-| G2 | Memory works in the background but the chat never shows it | P1 | Slice 15, memory in the chat |
-| G3 | On a phone, Settings, Memory, and tools are hard to find | P1 | Part of slice 15, plus a mobile pass |
-| G4 | No token usage or context readout | P1 | Slice 16, usage per reply and per chat |
+| G1 | Model and effort are global settings, not chosen per chat | P1 | Slice 17, model and effort in the chat |
+| G2 | Memory works in the background but the chat never shows it | P1 | A later slice, after slice 18 |
+| G3 | On a phone, Settings, Memory, and tools are hard to find | P1 | Slice 16 for the drawer, and the later memory slice |
+| G4 | No token usage or context readout | P1 | A later slice, after slice 17 |
 | G5 | Thinking shows no timer, so a long think looks like a stall | P2 | Part of slice 13 |
-| G6 | Tools are switched on server-side, and the chat cannot see or change them | P2 | Slice 17, a tools sheet in the composer |
-| G7 | One long settings page mixes credentials with preferences | P2 | Slice 17, split settings |
+| G6 | Tools are switched on server-side, and the chat cannot see or change them | P2 | Slice 19, a tools sheet in the composer |
+| G7 | One long settings page mixes credentials with preferences | P2 | Slice 18, split settings |
 | G8 | Sessions do not roll forward, and Access adds a second daily sign-in | P2 | Settings change plus a small `fix/` PR |
 
 ## B1. A dropped connection kills the reply and wastes its tokens
@@ -92,7 +92,7 @@ The goal is that a reply finishes and is saved even if the phone drops, and the 
 4. **Never drop what you paid for.** Save a reply that holds only reasoning, and mark it as interrupted. Show "Interrupted" with a Continue action in place of the raw `network error`.
 5. **Guard silent thinking.** Set `keepAliveMs` on `createUIMessageStreamResponse` (`node_modules/ai/dist/index.d.ts:2630`). This covers a model that thinks without streaming for more than Cloudflare's 125 seconds.
 
-`maxDuration = 120` in `route.ts:20` does nothing under `next start` ([Next.js docs](https://nextjs.org/docs/app/api-reference/file-conventions/route-segment-config/maxDuration)). Delete it in the same slice, so nobody reads it as a limit.
+`maxDuration = 120` in `src/app/api/chat/route.ts:20` does nothing under `next start` ([Next.js docs](https://nextjs.org/docs/app/api-reference/file-conventions/route-segment-config/maxDuration)). Delete it in the same slice, so nobody reads it as a limit.
 
 The proof for this slice reruns the drop test above. The server copy must hold all 50 words, and the phone must show them without a reload.
 
@@ -164,7 +164,7 @@ This is a `fix/auth-logout-signal` PR, not a slice. It ships the log line and th
 - Effort has three levels, `low`, `medium`, and `high` (`src/lib/settings.ts:8`).
 - No reply records which model wrote it.
 
-**Suggested fix: slice 14, model and effort per chat.** Add nullable `model` and `reasoning_effort` columns to `chats`. A null value falls back to the settings default, so old chats keep working. The composer chip opens a picker. It is a popover on desktop and a bottom sheet on a phone. It lists `/api/models`, with an effort row that shows only for models that support reasoning. Save the model id on each assistant message, and show it in the action bar when it differs from the chat's current model. Settings then holds only the default for new chats.
+**Suggested fix: slice 17, model and effort in the chat.** Add nullable `model` and `reasoning_effort` columns to `chats`. A null value falls back to the settings default, so old chats keep working. The composer chip opens a picker. It is a popover on desktop and a bottom sheet on a phone. It lists `/api/models`, with an effort row that shows only for models that support reasoning. Save the model id on each assistant message, and show it in the action bar when it differs from the chat's current model. Settings then holds only the default for new chats.
 
 ## G2. Memory works in the background but the chat never shows it
 
@@ -181,7 +181,7 @@ This is a `fix/auth-logout-signal` PR, not a slice. It ships the log line and th
 - The Memory page is reachable only from the command palette (`src/components/shell/command-palette.tsx:116`). On a phone that means opening the drawer, tapping Search, and typing "Memory".
 - No chat can opt out of memory.
 
-**Suggested fix: slice 15, memory in the chat.** Stream the recalled memories as a data part on the reply. Render it as a small "2 memories" chip under the answer. Tapping it opens a sheet that lists them, with Edit and Forget. Add a per-chat "no memory" switch before the first message, as Claude does. Put Memory in the drawer (see G3).
+**Suggested fix: a later slice, memory in the chat.** Stream the recalled memories as a data part on the reply. Render it as a small "2 memories" chip under the answer. Tapping it opens a sheet that lists them, with Edit and Forget. Add a per-chat "no memory" switch before the first message, as Claude does. Put Memory in the drawer (see G3).
 
 ## G3. On a phone, Settings, Memory, and tools are hard to find
 
@@ -197,7 +197,7 @@ This is a `fix/auth-logout-signal` PR, not a slice. It ships the log line and th
 - **The header.** The phone header has only Open sidebar and New chat (`src/components/shell/app-shell.tsx:149`).
 - **The composer.** The composer has a text box, the model chip, and Send or Stop. It has no attachments, tools, or dictation (`src/components/chat/composer.tsx`).
 
-**Suggested fix.** Give the drawer footer two labeled rows, **Settings** and **Memory**. A visible label on a navigation row is a primary label, not helper text. Move Sign out into Settings. With slice 14, put the model picker in the phone header, as ChatGPT does. Attachments and dictation are larger features, so add them to the roadmap's Later list instead of this pass.
+**Suggested fix.** Give the drawer footer two labeled rows, **Settings** and **Memory**. A visible label on a navigation row is a primary label, not helper text. Move Sign out into Settings. With slice 17, put the model picker in the phone header, as ChatGPT does. Attachments and dictation are larger features, so add them to the roadmap's Later list instead of this pass.
 
 ## G4. No token usage or context readout
 
@@ -211,7 +211,7 @@ This is a `fix/auth-logout-signal` PR, not a slice. It ships the log line and th
 
 **Why it matters more for Orbit.** The benchmarks sell a subscription. Orbit uses your own API key, so every token is your money. The deepseek reply in B1 spent 110 seconds of high-effort thinking, and Orbit cannot tell you what that cost.
 
-**Suggested fix: slice 16, usage per reply and per chat.** On finish, save input, output, and reasoning token counts on the assistant message. Show the count in the reply's action bar. Show a small ring in the composer for the last turn's input tokens against the model's context window, when `/api/models` reports one. Near the limit, offer a new chat that starts with a summary. Keep the ring free of text, per the copy rule in `docs/design.md`.
+**Suggested fix: a later slice, usage per reply and per chat.** On finish, save input, output, and reasoning token counts on the assistant message. Show the count in the reply's action bar. Show a small ring in the composer for the last turn's input tokens against the model's context window, when `/api/models` reports one. Near the limit, offer a new chat that starts with a summary. Keep the ring free of text, per the copy rule in `docs/design.md`.
 
 ## G5. Thinking shows no timer, so a long think looks like a stall
 
@@ -233,7 +233,7 @@ This is a `fix/auth-logout-signal` PR, not a slice. It ships the log line and th
 
 **Orbit today.** `toolsFor(settings)` turns on search, the code sandbox, GitHub, and memory from settings and environment variables (`src/lib/tools/index.ts:35`). The chat does not show which tools are on, and you cannot turn one off for a single chat.
 
-**Suggested fix: part of slice 17.** Add a **+** sheet in the composer. It lists the enabled tools with a per-chat switch, stored next to the chat's model from slice 14.
+**Suggested fix: part of slice 19.** Add a **+** sheet in the composer. It lists the enabled tools with a per-chat switch, stored next to the chat's model from slice 17.
 
 ## G7. One long settings page mixes credentials with preferences
 
@@ -245,7 +245,7 @@ This is a `fix/auth-logout-signal` PR, not a slice. It ships the log line and th
 
 **Orbit today.** One page holds four sections: Provider, Search, GitHub, and Code sandbox (`src/components/settings/settings-form.tsx:170`, `273`, `291`, `313`). The model and effort sit inside Provider, next to the API key (`settings-form.tsx:248`). Memory and the account have no section.
 
-**Suggested fix: part of slice 17.** Split the page into these sections:
+**Suggested fix: part of slice 18.** Split the page into these sections:
 
 - **Connection.** The base URL and the key.
 - **Defaults.** The model and effort for new chats.
@@ -273,7 +273,7 @@ On a phone, each section opens as its own screen.
 
 ## Suggested order
 
-The order now lives in [What Orbit v1 should fix and build next](v1-plan.md#the-plan-in-order). That page puts these gaps into one list with the component, multi-user, file, artifact, sharing, and plugin work requested on 14 November 2026. The slice numbers 13 to 17 on this page are placeholders until the roadmap assigns real ones.
+The order now lives in [What Orbit v1 should fix and build next](v1-plan.md#the-plan-in-order). That page puts these gaps into one list with the component, multi-user, file, artifact, sharing, and plugin work requested on 14 November 2026. Slice numbers on this page match the plans in `docs/slices/13.md` to `docs/slices/23.md`.
 
 ## Sources
 
