@@ -1,0 +1,55 @@
+docs/adr/0002-several-users.md
+  s_b90b9c3669d001::t_069a2aff39258e 11
+  s_b90b9c3669d001::t_7682502503895b 49
+  s_b90b9c3669d001::t_9c416a8db435c6 8-10
+  s_b90b9c3669d001::t_de0fbbeb9df634 12-14,46-48
+  s_b90b9c3669d001::t_5a22a920641c96 50-51
+  s_b90b9c3669d001::t_f3feccdf7a77f2 1-7,15-45
+docs/design/v1-plan.md
+  s_b90b9c3669d001::t_b1254bf4adb14f 19
+  s_b90b9c3669d001::t_72c2fe71c2c587 45,47,60,62-64,66,70,72,74-129,146-148
+docs/design/gap-analysis.md
+  s_b90b9c3669d001::t_38247b662d003a 28-31,33-34,95,167,184,200,214,236,248,276
+docs/roadmap.md
+  s_b90b9c3669d001::t_28da7b4988feac 3,7,10,33-44
+docs/slices/13.md
+  s_b90b9c3669d001::t_ad88ea95dd4fb2 1-239
+docs/slices/14.md
+  s_b90b9c3669d001::t_3d6e296d13ce55 1-318
+docs/slices/15.md
+  s_b90b9c3669d001::t_dcd1616ce31499 1-301
+docs/slices/16.md
+  s_b90b9c3669d001::t_bda101afb7544e 1-380
+docs/slices/17.md
+  s_b90b9c3669d001::t_a8e868885b0d13 1-293
+docs/slices/18.md
+  s_b90b9c3669d001::t_f9ac3fc2f408af 1-460
+docs/slices/19.md
+  s_b90b9c3669d001::t_e34bd8b8c3e3db 1-277
+docs/slices/20.md
+  s_b90b9c3669d001::t_7f27a921f24ee4 1-292
+docs/slices/21.md
+  s_b90b9c3669d001::t_cf37139ed8af58 1-229
+docs/slices/22.md
+  s_b90b9c3669d001::t_e9b6c3bc6dd7b7 1-258
+docs/slices/23.md
+  s_b90b9c3669d001::t_41368fbfa2c2ad 1-379
+docs/slices/README.md
+  s_b90b9c3669d001::t_e62819130405cf 15-29,37-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2f1f14346ba08aa21251304bba3e5a89cbc4a149",
+  "prompts": {},
+  "sessions": {
+    "s_b90b9c3669d001": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f4a7754f-aa3c-46c1-923b-61ca8f2839a1",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
