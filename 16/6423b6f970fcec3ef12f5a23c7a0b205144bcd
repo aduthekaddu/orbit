@@ -1,0 +1,35 @@
+docs/design/v1-plan.md
+  s_b90b9c3669d001::t_8732995e8358f8 83-84,109,120,126,130
+docs/slices/13.md
+  s_b90b9c3669d001::t_159630cf691093 29-30,55,71-76,94,97,133,143,192,221,235-236
+docs/slices/14.md
+  s_b90b9c3669d001::t_c3c79c51452199 143,149,266
+docs/slices/18.md
+  s_b90b9c3669d001::t_66d8a92592973c 5,82-86,103,129,131,163-168,172-177,344,422-424,458-459
+docs/slices/20.md
+  s_b90b9c3669d001::t_94b9cc9f71cec4 116,122-123,168,251,253-255,276-277,282,293
+docs/slices/21.md
+  s_b90b9c3669d001::t_b08eb540c7a4c8 77,103,122,137,145,149,166,180,182-184,194-195,218,227
+docs/slices/22.md
+  s_b90b9c3669d001::t_59ea065264f633 5,96,98,103,113,179,220-222,224,250-251
+docs/slices/23.md
+  s_b90b9c3669d001::t_7d74152441aea6 5,152,154-155,161,173,215-217,224,277,321,323,326-327,336,355-356,371-372,374,381
+docs/slices/README.md
+  s_b90b9c3669d001::t_49b4130003e4ef 37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "166423b6f970fcec3ef12f5a23c7a0b205144bcd",
+  "prompts": {},
+  "sessions": {
+    "s_b90b9c3669d001": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f4a7754f-aa3c-46c1-923b-61ca8f2839a1",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
