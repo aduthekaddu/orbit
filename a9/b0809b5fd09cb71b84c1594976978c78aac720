@@ -1,0 +1,25 @@
+docs/slices/16.md
+  s_4a25a1b2eca7c1::t_1c4fcfd55d5879 115
+  s_4a25a1b2eca7c1::t_b2534d3fd8ae63 244,338
+docs/design/gap-analysis.md
+  s_4a25a1b2eca7c1::t_be6e06c6023b75 92
+  s_4a25a1b2eca7c1::t_4d6696ba44b555 3
+docs/slices/17.md
+  s_4a25a1b2eca7c1::t_2c2bfd15cd8468 76,102-107,112,116,249,288
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a9b0809b5fd09cb71b84c1594976978c78aac720",
+  "prompts": {},
+  "sessions": {
+    "s_4a25a1b2eca7c1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7c94d3fa-ab2a-490f-aebc-271e73c9fb84",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
