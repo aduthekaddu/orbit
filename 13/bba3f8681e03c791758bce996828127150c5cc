@@ -1,0 +1,38 @@
+.github/workflows/ci.yml
+  s_72572c693f71a5::t_7ef64f93709cba 30
+AGENTS.md
+  s_72572c693f71a5::t_7ef64f93709cba 24
+CONTRIBUTING.md
+  s_72572c693f71a5::t_7ef64f93709cba 32
+Dockerfile
+  s_72572c693f71a5::t_7ef64f93709cba 1
+CHANGELOG.md
+  s_72572c693f71a5::t_4f57d3d681f940 11
+.github/actions/setup-orbit/action.yml
+  s_72572c693f71a5::t_7ef64f93709cba 6
+docs/slices/01.md
+  s_72572c693f71a5::t_7ef64f93709cba 13
+package.json
+  s_72572c693f71a5::t_ec01229536cec2 58
+README.md
+  s_72572c693f71a5::t_7ef64f93709cba 42
+  s_72572c693f71a5::t_09a59372ef7754 48-49
+package-lock.json
+  s_72572c693f71a5::t_6e35b9724027ba 54,4272-4274,4277,8851-8853
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "13bba3f8681e03c791758bce996828127150c5cc",
+  "prompts": {},
+  "sessions": {
+    "s_72572c693f71a5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e90c-cadb-7142-aa0c-47026924832c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
