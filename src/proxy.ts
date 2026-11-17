@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
+import { describeAuthMiss } from "@/lib/auth-miss";
 
 const PUBLIC_PAGES = new Set(["/login", "/signup"]);
 
@@ -15,6 +16,7 @@ export async function proxy(request: NextRequest) {
   }
 
   const session = await auth.api.getSession({ headers: request.headers });
+  if (!session && !PUBLIC_PAGES.has(pathname)) console.warn(describeAuthMiss(pathname, request.headers));
 
   if (pathname.startsWith("/api")) {
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
