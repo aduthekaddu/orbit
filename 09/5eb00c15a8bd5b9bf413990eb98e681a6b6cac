@@ -1,0 +1,21 @@
+scripts/qa/genui-qa.cjs
+  s_60dd7872be33fb::t_989bc7b30cc9b4 2,466-467
+scripts/qa/mock-provider.mjs
+  s_60dd7872be33fb::t_989bc7b30cc9b4 672
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "095eb00c15a8bd5b9bf413990eb98e681a6b6cac",
+  "prompts": {},
+  "sessions": {
+    "s_60dd7872be33fb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e974-e6ca-7171-bb95-b47c29cce8cd",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
