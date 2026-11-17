@@ -1,0 +1,23 @@
+CHANGELOG.md
+  s_50c8c9708b1706::t_7c3ba13facce3b 7
+package-lock.json
+  s_50c8c9708b1706::t_c1e1fd7d9ec904 12,52
+package.json
+  s_50c8c9708b1706::t_470fc9a5f435a1 72-76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "24e0b9ef8ba0d0ea9855902495918145d3966197",
+  "prompts": {},
+  "sessions": {
+    "s_50c8c9708b1706": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ea71-fbd1-72e1-b051-a1f63c758a8c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
