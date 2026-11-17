@@ -12,16 +12,29 @@ Orbit grows in slices. A slice is one pull request that ships one user-visible c
 | 6 | [Titles and history search](06.md) | `feat/history-search` | Shipped in #19 |
 | 7 | [Web search](07.md) | `feat/search` | Shipped in #20 |
 | 8 | [Code sandbox](08.md) | `feat/sandbox` | Shipped in #21 |
-| 9 | [GitHub](09.md) | `feat/github-tools` | In review in #56 |
-| 10 | [Memory](10.md) | `feat/memory` | Planned |
-| 11 | [Dreaming](11.md) | `feat/dreaming` | Planned |
-| 12 | [Deploy](12.md) | `feat/deploy` | Planned |
+| 9 | [GitHub](09.md) | `feat/github-tools` | Shipped in #56 |
+| 10 | [Memory](10.md) | `feat/memory` | Shipped in #55 |
+| 11 | [Dreaming](11.md) | `feat/dreaming` | Shipped in #57 |
+| 12 | [Deploy](12.md) | `feat/deploy` | Shipped in #58 |
+| 13 | [Replies that survive a dropped connection](13.md) | `feat/durable-replies` | Planned |
+| 14 | [Reading foundation and appearance](14.md) | `feat/reading-appearance` | Planned |
+| 15 | [Widgets and tool cards](15.md) | `feat/widgets-tool-cards` | Planned |
+| 16 | [Messages, artifact cards, phone fixes, rename and delete](16.md) | `feat/thread-polish` | Planned |
+| 17 | [Model and effort in the chat, plus Anthropic](17.md) | `feat/model-picker` | Planned |
+| 18 | [Accounts and hosting modes](18.md) | `feat/accounts`, then `feat/accounts-modes` | Planned |
+| 19 | [Tools page and tools sheet](19.md) | `feat/tools-page` | Planned |
+| 20 | [Files](20.md) | `feat/files` | Planned |
+| 21 | [Artifacts page](21.md) | `feat/artifacts-page` | Planned |
+| 22 | [Share links](22.md) | `feat/share-links` | Planned |
+| 23 | [Remote MCP servers](23.md) | `feat/mcp-servers` | Planned |
 
 The design system and inline editing shipped between slices, in #3 and #5.
 
 ## Order
 
 Slice 3 comes first because it adds the browser drive to verify-orbit, and every later UI slice proves itself with that drive. Slices 4, 5, and 6 depend only on slice 3. Slice 7 adds the tool registry and the run card, so slices 8, 9, and 10 depend on it. Slice 11 depends on slice 10. Slice 12 can ship any time after slice 3, but it is last on purpose. The sandbox and GitHub tools should exist behind Cloudflare Access from the first day they are public.
+
+Slices 13 to 23 come from the [v1 plan](../design/v1-plan.md). Slice 13 can ship any time. Slice 14 comes first among the UI slices because 15 and 16 build on its type scale and themes, and 17 adds columns to its `user_preferences` table. Slice 17 creates `provider_connections`, which slice 18 shares or keeps private by hosting mode. Slice 18 comes before files, artifacts, sharing, and tool servers, so each new table has an owner from its first row. Slice 22 needs the `artifacts` table from slice 21 and the chat toolbar from slice 20. Slice 23 builds on the Tools page from slice 19, and it needs the hosting modes and the network guard from 18b, the second part of slice 18.
 
 ## Build a slice in three turns
 
