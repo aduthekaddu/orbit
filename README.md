@@ -39,11 +39,13 @@ Planned features are listed in the [roadmap](docs/roadmap.md).
 | --- | --- | --- |
 | An OpenAI-compatible endpoint and API key | Any | Chat |
 | Docker with the Compose plugin | Compose v2 (`docker compose`) | Running with Docker |
-| Node.js | 22 or later | Running from source |
+| Node.js | 24 or later | Running from source |
 | npm | 10 or later | Running from source |
 | Python 3, `make`, and a C++ compiler | Any | Building `better-sqlite3` from source when no prebuilt binary fits your platform |
 
 ### Run with Docker
+
+The app image uses `node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54`.
 
 1. Clone the repository and enter it.
 

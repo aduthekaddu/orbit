@@ -3,7 +3,7 @@ description: Install Node.js and the locked dependencies, and optionally build t
 inputs:
   node-version:
     description: Node.js major version.
-    default: "22"
+    default: "24"
   build:
     description: Run `npm run build` after the install.
     default: "false"
