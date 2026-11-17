@@ -1,0 +1,19 @@
+src/lib/sandbox/run.test.ts
+  s_286c663adcefd3::t_3303a2c0aab8d0 14-25,351,423,475
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "82325d4cab93b5a1fdd1a8a0d4d488c29de83283",
+  "prompts": {},
+  "sessions": {
+    "s_286c663adcefd3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9dd-0a94-7e72-b8ab-6793a197c3b7",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
