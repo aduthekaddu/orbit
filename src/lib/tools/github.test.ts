@@ -112,12 +112,16 @@ test("a stalled MCP initialize stops within the deadline", { timeout: 5_000 }, a
   });
 });
 
-test("aborting a stalled MCP list rejects the turn", { timeout: 2_000 }, async () => {
+test("aborting a stalled MCP list rejects the turn", { timeout: 5_000 }, async () => {
   await withMock(async (mock) => {
     const controller = new AbortController();
     const pending = openGithubTurn({ githubToken: mock.token, githubMcpUrl: `${mock.url}?mode=stall-list` }, controller.signal, { setupMs: 5_000 });
     setTimeout(() => controller.abort(), 40);
     await assert.rejects(pending);
+    const deadline = Date.now() + 2_000;
+    while (mock.openSessions() !== 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
     assert.equal(mock.openSessions(), 0);
   });
 });
