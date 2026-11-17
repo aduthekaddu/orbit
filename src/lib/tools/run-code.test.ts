@@ -1,12 +1,27 @@
 import assert from "node:assert/strict";
-import test, { type TestContext } from "node:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import test, { after, type TestContext } from "node:test";
 import http from "node:http";
 import { once } from "node:events";
 import { createRunCodeTool } from "./run-code";
-import { toolsFor } from "./index";
 import { runCodeInputSchema } from "../sandbox/spec";
 
-test("run_code exists only when the server explicitly enables it", () => {
+const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-run-code-tools-"));
+process.env.ORBIT_DATA_DIR = dataDir;
+
+after(async () => {
+  try {
+    const { db } = await import("../db");
+    db.$client.close();
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("run_code exists only when the server explicitly enables it", async () => {
+  const { toolsFor } = await import("./index");
   const original = process.env.ORBIT_SANDBOX;
   const settings = { baseUrl: "http://localhost/v1", apiKey: "fake", model: "fake", reasoningEffort: "low" as const, searxngUrl: "", tavilyApiKey: "", githubToken: "", githubMcpUrl: "" };
   try {
