@@ -1,0 +1,23 @@
+CHANGELOG.md
+  s_77db1e38263b5a::t_11a7a8d7a8685e 7
+package-lock.json
+  s_77db1e38263b5a::t_6bab8403455ee6 12,41,52,2123-2125,2129-2131,2145-2147,2161-2163,2180-2182,2199-2201,2218-2220,2237-2239,2253-2255,7779-7781,7784,7798-7805
+package.json
+  s_77db1e38263b5a::t_1908c240d6fb46 46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ea593bd8c5b7d03de83640c34a7781da9315a515",
+  "prompts": {},
+  "sessions": {
+    "s_77db1e38263b5a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ea6c-6a14-7303-a9bb-dc55c4448e2d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
