@@ -17,6 +17,9 @@ function pretty(value: unknown) {
 }
 
 function Fallback({ error, raw }: { error: string; raw: unknown }) {
+  if (error === "Stopped") {
+    return <p data-genui-fallback className="text-sm text-muted-foreground">Stopped</p>;
+  }
   const text = pretty(raw);
   return (
     <div data-genui-fallback className="rounded-xl border border-destructive/40 bg-card p-3 text-sm text-card-foreground">
@@ -68,6 +71,10 @@ function errorText(result: unknown) {
 export function RenderUiPart({ result, args, argsText, status, isError, toolCallId }: ToolCallMessagePartProps) {
   if (status.type === "running" && result == null && !isError) {
     return <p className="text-sm text-muted-foreground">Building</p>;
+  }
+
+  if (status.type !== "running" && result == null && !isError) {
+    return <Fallback error="Stopped" raw={null} />;
   }
 
   if (isError) {

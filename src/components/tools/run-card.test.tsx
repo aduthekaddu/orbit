@@ -49,6 +49,28 @@ test("other tools show no language", () => {
   assert.equal(header(render({ toolName: "web_search", args: { query: "orbit" } })), "Web search|Running");
 });
 
+for (const status of [
+  { type: "incomplete", reason: "error" },
+  { type: "incomplete", reason: "cancelled" },
+  { type: "complete" },
+] as const) {
+  test(`an interrupted generated view shows Stopped for ${JSON.stringify(status)}`, () => {
+    const html = render({ toolName: "render_ui", args: { root: "partial" }, argsText: '{"root":"partial', status });
+    assert.match(html, /data-genui-fallback/);
+    assert.match(html, />Stopped</);
+    assert.doesNotMatch(html, /<pre|<details|partial/);
+  });
+}
+
+test("a generated view saved as Stopped keeps its fallback after reload", () => {
+  const html = render({
+    toolName: "render_ui", args: { root: "partial" }, result: { error: "Stopped" }, isError: true, status: { type: "complete" },
+  });
+  assert.match(html, /data-genui-fallback/);
+  assert.match(html, />Stopped</);
+  assert.doesNotMatch(html, /<pre|<details|partial/);
+});
+
 test("a GitHub card links an issue and does not render its body", () => {
   const html = render({
     toolName: "github_list_issues",
