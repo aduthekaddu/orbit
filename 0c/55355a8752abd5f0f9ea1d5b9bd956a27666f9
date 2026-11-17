@@ -1,0 +1,22 @@
+src/lib/pr-checks.test.ts
+  s_027d4494d05336::t_5e335836367dd3 11-22,37,86-87
+  s_027d4494d05336::t_b4fe6e1da813ea 129
+src/lib/tools/github.test.ts
+  s_027d4494d05336::t_a64d2f11ef555c 115,121-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0c55355a8752abd5f0f9ea1d5b9bd956a27666f9",
+  "prompts": {},
+  "sessions": {
+    "s_027d4494d05336": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ea92-9ca2-7381-a3be-6dd7eb83bbfe",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
