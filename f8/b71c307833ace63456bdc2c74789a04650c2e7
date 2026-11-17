@@ -1,0 +1,28 @@
+src/lib/chat-write.test.ts
+  s_27554aaa7b1587::t_8ba4078faa212b 5,19-26,30-32
+src/lib/messages.test.ts
+  s_27554aaa7b1587::t_8ba4078faa212b 5,19-26,30-32
+src/lib/slice-plan-rules.test.ts
+  s_27554aaa7b1587::t_8ba4078faa212b 285,288-290,295,311-313
+src/lib/tools/run-code.test.ts
+  s_27554aaa7b1587::t_8ba4078faa212b 2-5,11-24
+src/lib/tools/github.test.ts
+  s_27554aaa7b1587::t_8ba4078faa212b 2-5,14-24
+  s_27554aaa7b1587::t_ce9adc96446da6 25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f8b71c307833ace63456bdc2c74789a04650c2e7",
+  "prompts": {},
+  "sessions": {
+    "s_27554aaa7b1587": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ea80-f7ea-7871-89d5-94a2217f8e2e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
