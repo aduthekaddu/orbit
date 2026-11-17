@@ -1,0 +1,32 @@
+CONTRIBUTING.md
+  s_2d2b7b451bf363::t_f686c0f08c1a5c 33
+scripts/qa/ci-e2e.sh
+  s_2d2b7b451bf363::t_f686c0f08c1a5c 8-10,16
+  s_2d2b7b451bf363::t_c7f4a0efe9aadd 17
+.agents/skills/verify-orbit/SKILL.md
+  s_2d2b7b451bf363::t_f686c0f08c1a5c 3,10,12-20,28,39
+CHANGELOG.md
+  s_2d2b7b451bf363::t_f686c0f08c1a5c 7-8
+AGENTS.md
+  s_2d2b7b451bf363::t_f686c0f08c1a5c 18
+.agents/skills/verify-orbit/verify.mjs
+  s_2d2b7b451bf363::t_f686c0f08c1a5c 8,237
+.agents/skills/verify-orbit/features/README.md
+  s_2d2b7b451bf363::t_f686c0f08c1a5c 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "386712e956f9e916d01dc7237c4e4cfdced2a493",
+  "prompts": {},
+  "sessions": {
+    "s_2d2b7b451bf363": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9b4-0a71-7d03-8fb6-964a89b5f1e3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
