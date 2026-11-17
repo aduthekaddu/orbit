@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- Override Drizzle tooling's `@esbuild-kit/core-utils` dependency to use patched `esbuild` 0.25.12, removing GHSA-67mh-4wv8-2f99. (#71)
 - The server log has an `auth miss` line for each request that reaches Orbit without a valid session. It says whether the browser sent a session cookie and the Access cookie, by name only.
 - Settings can remove a saved GitHub token. The stored token is cleared and GitHub tools stop.
 - Check says "GitHub rejected the token (bad request)." when GitHub answers HTTP 400.
