@@ -1,0 +1,21 @@
+STATUS.md
+  s_d30a7bb55065e2::t_1714a434f36be6 1-8
+docker-compose.yml
+  s_d30a7bb55065e2::t_ef10daef7cfbe5 12,19,21-23,39-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "53d937cff2f35fc2e746caa7edfb7c2e6eb0c98e",
+  "prompts": {},
+  "sessions": {
+    "s_d30a7bb55065e2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9d359a70-0183-42b7-b19e-5a7a3633fc39",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
