@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const { chromium } = require("playwright");
 
@@ -462,7 +463,8 @@ async function main() {
   browser = null;
 
   const report = { findings, consoleErrors, focusOrder };
-  fs.writeFileSync("/tmp/orbit-genui-qa-report.json", JSON.stringify(report, null, 2));
+  const reportDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-genui-qa-"));
+  fs.writeFileSync(path.join(reportDir, "report.json"), JSON.stringify(report, null, 2));
   console.log(`scenarios done. findings=${findings.length} consoleErrors=${consoleErrors.length}`);
   console.log(JSON.stringify(findings, null, 2));
   if (findings.some((item) => item.severity === "high")) process.exitCode = 2;
