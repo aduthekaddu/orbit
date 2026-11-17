@@ -1,15 +1,23 @@
 ---
 name: verify-orbit
-description: Drive Orbit, the local Next.js chat app, on 127.0.0.1:3210 and record proof. Use for /verify-orbit, to prove signup, sign-in, settings, or chat, to prove a click or layout in Chrome, or when a change needs a scripted user-path check.
+description: Drive Orbit, the local Next.js chat app, on a configurable loopback port and record proof. Use for /verify-orbit, to prove signup, sign-in, settings, or chat, to prove a click or layout in Chrome, or when a change needs a scripted user-path check.
 ---
 
 # Verify Orbit
 
 Orbit is a web app. The `drive` commands send the same HTTP requests the pages send. The `browse` command drives Chrome through Playwright. A passing HTTP check is not a click in Chrome, so prove a click or a layout with `browse`.
 
-The database path is `process.cwd()/data/orbit.db`. Launch uses a sandbox cwd so a run does not open the repo `data/` directory. Auth trusts only `http://127.0.0.1:3210` and `http://localhost:3210`, so the port stays 3210. One server at a time. If something else owns 3210, launch stops and names that process. It does not kill it.
+The database path is `process.cwd()/data/orbit.db`. Launch uses a sandbox cwd so a run does not open the repo `data/` directory.
 
-Run the commands from the repo root.
+Launch reads `ORBIT_VERIFY_PORT`, default `3210`, and sets auth to trust `127.0.0.1` and `localhost` on that port. One server at a time. If something else owns the selected port, launch stops and names that process. It does not kill it.
+
+Run the commands from the repo root. To use another port, export it for the whole session.
+
+```sh
+export ORBIT_VERIFY_PORT=3230
+```
+
+Keep the same value for `launch`, `doctor`, `drive`, `browse`, and `cleanup`. Run `cleanup` before changing the port.
 
 ## Launch
 
@@ -17,7 +25,7 @@ Done when the command prints `ready` and `signupOpen=yes` on an empty sandbox.
 
 1. Run `npm run build` if `.next` is missing. `npm start` serves that build.
 2. Run `node .agents/skills/verify-orbit/verify.mjs launch`.
-3. The command symlinks the build into `.verify/sandbox`, creates an empty `.verify/sandbox/data`, and starts `npm start -- -p 3210 -H 127.0.0.1` with that cwd.
+3. The command symlinks the build into `.verify/sandbox`, creates an empty `.verify/sandbox/data`, and starts `npm start -- -p <port> -H 127.0.0.1` with that cwd and the selected port.
 4. Ready means `GET /api/setup` returns JSON with a boolean `signupOpen`. A live port alone is not ready.
 
 A second launch reuses a healthy sandbox server when the requested sandbox mode matches its recorded mode. A mismatch or unknown recorded mode exits with a cleanup instruction and leaves the server and data in place. Run `cleanup`, then launch with the intended `ORBIT_SANDBOX` value.
@@ -28,7 +36,7 @@ A second launch reuses a healthy sandbox server when the requested sandbox mode 
 
 Run `node .agents/skills/verify-orbit/verify.mjs doctor` before a drive when anything looks wrong.
 
-Done when it prints `doctor ok`. That means the recorded pid is alive, its cwd is `.verify/sandbox`, a process with that cwd is listening on `127.0.0.1:3210`, and `GET /api/setup` returns `signupOpen`.
+Done when it prints `doctor ok`. That means the recorded pid is alive, its cwd is `.verify/sandbox`, a process with that cwd is listening on `127.0.0.1` at the selected port, and `GET /api/setup` returns `signupOpen`.
 
 ## Drive
 

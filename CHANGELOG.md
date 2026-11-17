@@ -4,6 +4,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- Set `ORBIT_VERIFY_PORT` to run verify-orbit on another port when the deployment owns `3210`. The default stays `3210`.
+
 - The server log has an `auth miss` line for each request that reaches Orbit without a valid session. It says whether the browser sent a session cookie and the Access cookie, by name only.
 - Settings can remove a saved GitHub token. The stored token is cleared and GitHub tools stop.
 - Check says "GitHub rejected the token (bad request)." when GitHub answers HTTP 400.

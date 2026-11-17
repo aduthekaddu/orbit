@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 
-const PORT = 3210;
+const PORT = Number(process.env.ORBIT_VERIFY_PORT || 3210);
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const MOCK_PORT = 3299;
 const MOCK_MODEL = "mock-genui";
@@ -234,6 +234,7 @@ async function startServer() {
       TMPDIR: process.env.TMPDIR || "/tmp",
       NODE_ENV: "production",
       BETTER_AUTH_URL: ORIGIN,
+      ORBIT_TRUSTED_ORIGINS: `${ORIGIN},http://localhost:${PORT}`,
       ORBIT_SANDBOX: sandboxEnabled ? "on" : "off",
       ORBIT_GITHUB_MCP_FIXTURE: "1",
       DOCKER_HOST: process.env.DOCKER_HOST ?? "unix:///var/run/docker.sock",
