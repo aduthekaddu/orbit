@@ -6,6 +6,7 @@ import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { Component, useMemo, type ReactNode } from "react";
 import { registry } from "@/components/genui/registry";
 import { parseRenderSpec, type RenderOutcome } from "@/lib/genui/spec";
+import { STOPPED_ERROR } from "@/lib/tools/run-status";
 
 function pretty(value: unknown) {
   if (typeof value === "string") return value;
@@ -16,10 +17,11 @@ function pretty(value: unknown) {
   }
 }
 
+function StoppedFallback() {
+  return <p data-genui-fallback className="text-sm text-muted-foreground">Stopped</p>;
+}
+
 function Fallback({ error, raw }: { error: string; raw: unknown }) {
-  if (error === "Stopped") {
-    return <p data-genui-fallback className="text-sm text-muted-foreground">Stopped</p>;
-  }
   const text = pretty(raw);
   return (
     <div data-genui-fallback className="rounded-xl border border-destructive/40 bg-card p-3 text-sm text-card-foreground">
@@ -74,11 +76,12 @@ export function RenderUiPart({ result, args, argsText, status, isError, toolCall
   }
 
   if (status.type !== "running" && result == null && !isError) {
-    return <Fallback error="Stopped" raw={null} />;
+    return <StoppedFallback />;
   }
 
   if (isError) {
-    return <Fallback error={errorText(result)} raw={argsText || args} />;
+    const error = errorText(result);
+    return error === STOPPED_ERROR ? <StoppedFallback /> : <Fallback error={error} raw={argsText || args} />;
   }
 
   const outcome = readOutcome(result);
@@ -100,7 +103,7 @@ export function RenderUiPart({ result, args, argsText, status, isError, toolCall
   }
 
   if (status.type === "incomplete") {
-    return <Fallback error="Stopped" raw={argsText || args} />;
+    return <StoppedFallback />;
   }
 
   return <Fallback error="No tool result" raw={argsText || args} />;

@@ -1,6 +1,9 @@
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { hasFailedOutput, hasStoppedOutput } from "./metadata";
 
+/** The errorText of a tool call whose stream stopped first. Saved chats store it, so the value must not change. */
+export const STOPPED_ERROR = "Stopped";
+
 export type ToolRunStatus = "running" | "succeeded" | "failed" | "cancelled";
 export type ToolRunPart =
   | { state: "input-streaming" | "input-available" }
@@ -18,7 +21,7 @@ export function toolRunStatus(part: ToolRunPart, stopped = false, toolName?: str
       if (part.output && typeof part.output === "object" && "isError" in part.output && part.output.isError === true) return "failed";
       return "succeeded";
     case "output-error":
-      return part.errorText === "Stopped" || part.errorText === "Code run was stopped" ? "cancelled" : "failed";
+      return part.errorText === STOPPED_ERROR || part.errorText === "Code run was stopped" ? "cancelled" : "failed";
     case "input-streaming":
     case "input-available":
       return stopped ? "cancelled" : "running";
