@@ -21,7 +21,11 @@ function requestKind(pathname: string, headers: Headers) {
 // Printable ASCII without a space, quote, or backslash stays bare. Anything else is JSON-quoted, so a header cannot add a field.
 function logValue(value: string | number) {
   const text = String(value);
-  return /^[!#-[\]-~]+$/.test(text) ? text : JSON.stringify(text);
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if (code <= 0x20 || code >= 0x7f || code === 0x22 || code === 0x5c) return JSON.stringify(text);
+  }
+  return text || JSON.stringify(text);
 }
 
 /**
