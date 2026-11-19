@@ -464,9 +464,11 @@ async function main() {
 
   const report = { findings, consoleErrors, focusOrder };
   const reportDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-genui-qa-"));
-  fs.writeFileSync(path.join(reportDir, "report.json"), JSON.stringify(report, null, 2));
+  const reportFile = path.join(reportDir, "report.json");
+  fs.writeFileSync(reportFile, JSON.stringify(report, null, 2));
   console.log(`scenarios done. findings=${findings.length} consoleErrors=${consoleErrors.length}`);
   console.log(JSON.stringify(findings, null, 2));
+  console.log(`report ${reportFile}`);
   if (findings.some((item) => item.severity === "high")) process.exitCode = 2;
 }
 
