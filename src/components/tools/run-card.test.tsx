@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { settleInterruptedParts } from "@/lib/genui/spec";
 import { RunCard } from "./run-card";
 
 const finished = { stdout: "", stderr: "", exitCode: 0, durationMs: 20, timedOut: false, truncated: false };
@@ -69,6 +70,16 @@ test("a generated view saved as Stopped keeps its fallback after reload", () => 
   assert.match(html, /data-genui-fallback/);
   assert.match(html, />Stopped</);
   assert.doesNotMatch(html, /<pre|<details|partial/);
+});
+
+test("a generated view the server saved as stopped shows the same muted Stopped card after reload", () => {
+  const [saved] = settleInterruptedParts([{ type: "tool-render_ui", toolCallId: "t1", state: "input-streaming", input: { root: "partial" } }], true) as Array<{ state: string; errorText?: string; input: unknown }>;
+  assert.equal(saved.state, "output-error");
+  // assistant-ui hands an output-error part to the card as { error: errorText } with isError set.
+  const html = render({ toolName: "render_ui", args: saved.input, result: { error: saved.errorText }, isError: true, status: { type: "complete" } });
+  assert.equal(header(html), "Generated UI|Cancelled");
+  assert.match(html, /<p data-genui-fallback="[^"]*" class="text-sm text-muted-foreground">Stopped<\/p>/);
+  assert.doesNotMatch(html, /text-destructive|<pre|<details|partial/);
 });
 
 test("a GitHub card links an issue and does not render its body", () => {
