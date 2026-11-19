@@ -1,0 +1,31 @@
+scripts/smoke.ts
+  s_21fa8e53576bfc::t_d7f466b3229329 6
+.agents/skills/verify-orbit/verify.mjs
+  s_21fa8e53576bfc::t_6c5aba0c500335 363-364,367,370,384,391,398,401
+  s_21fa8e53576bfc::t_36aaf2bce6c454 112-113
+  s_21fa8e53576bfc::t_75df764e0e8f38 33-39
+  s_21fa8e53576bfc::t_63ddde118ee97d 198-200
+  s_21fa8e53576bfc::t_d52dfe01df62ef 8
+  s_21fa8e53576bfc::t_8c770b60080d24 373
+  s_21fa8e53576bfc::t_3dd2de8725c00d 648
+.agents/skills/verify-orbit/SKILL.md
+  s_21fa8e53576bfc::t_2bc36473b530b1 12,20,31,55
+.agents/skills/verify-orbit/features/chat.md
+  s_21fa8e53576bfc::t_c1ca39594ed3e4 25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "194b257a712a111d2d6d55d10bdfbaf8375db1b1",
+  "prompts": {},
+  "sessions": {
+    "s_21fa8e53576bfc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a64b935-fd96-4abb-9df4-8bfe89e01ec7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
