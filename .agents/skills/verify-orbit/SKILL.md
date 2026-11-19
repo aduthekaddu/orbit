@@ -9,7 +9,7 @@ Orbit is a web app. The `drive` commands send the same HTTP requests the pages s
 
 The database path is `process.cwd()/data/orbit.db`. Launch uses a sandbox cwd so a run does not open the repo `data/` directory.
 
-Launch reads `ORBIT_VERIFY_PORT`, default `3210`, and sets auth to trust `127.0.0.1` and `localhost` on that port. One server at a time. If something else owns the selected port, launch stops and names that process. It does not kill it.
+Launch reads `ORBIT_VERIFY_PORT`, a whole number from 1 to 65535, default `3210`, and sets auth to trust `127.0.0.1` and `localhost` on that port. One server at a time. If something else owns the selected port, launch stops and names that process. It does not kill it.
 
 Run the commands from the repo root. To use another port, export it for the whole session.
 
@@ -17,7 +17,7 @@ Run the commands from the repo root. To use another port, export it for the whol
 export ORBIT_VERIFY_PORT=3230
 ```
 
-Keep the same value for `launch`, `doctor`, `drive`, `browse`, and `cleanup`. Run `cleanup` before changing the port.
+Keep the same value for `launch`, `doctor`, `drive`, and `browse`. `cleanup` stops the recorded server on the port it was launched with. Run `cleanup` before changing the port.
 
 ## Launch
 
@@ -28,7 +28,7 @@ Done when the command prints `ready` and `signupOpen=yes` on an empty sandbox.
 3. The command symlinks the build into `.verify/sandbox`, creates an empty `.verify/sandbox/data`, and starts `npm start -- -p <port> -H 127.0.0.1` with that cwd and the selected port.
 4. Ready means `GET /api/setup` returns JSON with a boolean `signupOpen`. A live port alone is not ready.
 
-A second launch reuses a healthy sandbox server when the requested sandbox mode matches its recorded mode. A mismatch or unknown recorded mode exits with a cleanup instruction and leaves the server and data in place. Run `cleanup`, then launch with the intended `ORBIT_SANDBOX` value.
+A second launch reuses a healthy sandbox server when the requested port and sandbox mode match its recorded ones. A mismatch or unknown recorded mode exits with a cleanup instruction and leaves the server and data in place. Run `cleanup`, then launch with the intended `ORBIT_VERIFY_PORT` and `ORBIT_SANDBOX` values.
 
 `launch --mock` also starts `scripts/qa/mock-provider.mjs` on `127.0.0.1:3299` and saves settings for it as `verify@orbit.local`. Done when it also prints `mock ready` and `settings baseUrl=http://127.0.0.1:3299/v1 model=mock-genui keySet=yes`. That account blocks `drive signup` and `drive chat` on the same sandbox.
 
@@ -52,7 +52,7 @@ The helper is the harness. Prefer the commands below over ad hoc curls. Page che
 
 Feature recipes live in `features/`. Read `features/README.md` first. Drive one feature from that map. A proof that uses a different entry point does not cover the ones you skipped.
 
-`drive chat` runs `scripts/smoke.ts` with cwd `.verify/sandbox`. It needs `ORBIT_BASE_URL` and `ORBIT_API_KEY` in the environment. The helper redacts those values in its output. If they are missing, the command fails before any provider call.
+`drive chat` runs `scripts/smoke.ts` with cwd `.verify/sandbox` and `ORBIT_QA_ORIGIN` set to the sandbox origin. Run on its own, smoke calls `http://127.0.0.1:3210`. It needs `ORBIT_BASE_URL` and `ORBIT_API_KEY` in the environment. The helper redacts those values in its output. If they are missing, the command fails before any provider call.
 
 ## Evidence
 

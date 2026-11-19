@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 
-const PORT = Number(process.env.ORBIT_VERIFY_PORT || 3210);
+const PORT = parsePort(process.env.ORBIT_VERIFY_PORT);
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const MOCK_PORT = 3299;
 const MOCK_MODEL = "mock-genui";
@@ -28,6 +28,13 @@ const FAKE_KEY = "test-key-not-real";
 function fail(message) {
   console.error(message);
   process.exit(1);
+}
+
+function parsePort(value) {
+  if (value === undefined || value === "") return 3210;
+  const port = /^\d+$/.test(value) ? Number(value) : 0;
+  if (port < 1 || port > 65535) fail(`ORBIT_VERIFY_PORT must be a whole number from 1 to 65535. Got "${value}".`);
+  return port;
 }
 
 function sleep(ms) {
@@ -102,8 +109,8 @@ function listenerPids(port = PORT) {
   return pids;
 }
 
-function sandboxListening() {
-  return listenerPids().some((pid) => procCwd(pid) === sandbox);
+function sandboxListening(port = PORT) {
+  return listenerPids(port).some((pid) => procCwd(pid) === sandbox);
 }
 
 function linkIntoSandbox(name) {
@@ -188,6 +195,9 @@ function assertOurServer() {
 async function launch({ mock }) {
   const state = readState();
   if (state && alive(state.pid) && procCwd(state.pid) === sandbox) {
+    if (state.port !== PORT) {
+      fail(`port mismatch. Running=${state.port} requested=${PORT}. Run node .agents/skills/verify-orbit/verify.mjs cleanup, then launch again with ORBIT_VERIFY_PORT=${PORT}, or set ORBIT_VERIFY_PORT=${state.port} to keep using the running server.`);
+    }
     const sandboxEnabled = process.env.ORBIT_SANDBOX === "on";
     if (state.sandboxEnabled !== sandboxEnabled) {
       const runningMode = typeof state.sandboxEnabled === "boolean" ? state.sandboxEnabled ? "on" : "off" : "unknown";
@@ -350,19 +360,17 @@ function doctor() {
   });
 }
 
-function portFree() {
-  return listenerPids().length === 0;
-}
-
-async function waitForStopped(pid, timeoutMs) {
+async function waitForStopped(pid, port, timeoutMs) {
+  const stopped = () => !alive(pid) && listenerPids(port).length === 0;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (!alive(pid) && portFree()) return true;
+    if (stopped()) return true;
     await sleep(100);
   }
-  return !alive(pid) && portFree();
+  return stopped();
 }
 
+// Cleanup stops the recorded server, so it waits on the recorded port even when ORBIT_VERIFY_PORT now names another.
 async function stopServer() {
   const state = readState();
   if (!state) {
@@ -373,24 +381,24 @@ async function stopServer() {
   if (alive(state.pid) && procCwd(state.pid) !== sandbox) {
     fail(`pid ${state.pid} is not the sandbox server. Not killing it.`);
   }
-  if (alive(state.pid) || sandboxListening()) {
+  if (alive(state.pid) || sandboxListening(state.port)) {
     try {
       process.kill(-state.pid, "SIGTERM");
     } catch (error) {
       if (error?.code !== "ESRCH") throw error;
     }
   }
-  let stopped = await waitForStopped(state.pid, 5_000);
+  let stopped = await waitForStopped(state.pid, state.port, 5_000);
   if (!stopped) {
     try {
       process.kill(-state.pid, "SIGKILL");
     } catch {
       // Already gone.
     }
-    stopped = await waitForStopped(state.pid, 5_000);
+    stopped = await waitForStopped(state.pid, state.port, 5_000);
   }
   if (!stopped) {
-    const listeners = listenerPids().map((pid) => `${pid} cwd ${procCwd(pid) || "unknown"}`);
+    const listeners = listenerPids(state.port).map((pid) => `${pid} cwd ${procCwd(pid) || "unknown"}`);
     fail(
       `server did not stop. pid ${state.pid} alive=${alive(state.pid) ? "yes" : "no"} listeners ${listeners.join(", ") || "none"}. Sandbox left in place.`,
     );
@@ -637,7 +645,7 @@ async function driveChat() {
   }
   const child = spawn("npx", ["tsx", path.join(repoRoot, "scripts/smoke.ts")], {
     cwd: sandbox,
-    env: { ...process.env, ORBIT_BASE_URL: baseUrl, ORBIT_API_KEY: apiKey },
+    env: { ...process.env, ORBIT_BASE_URL: baseUrl, ORBIT_API_KEY: apiKey, ORBIT_QA_ORIGIN: ORIGIN },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";
