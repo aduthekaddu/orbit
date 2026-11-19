@@ -13,6 +13,7 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 ## Driving conventions
 
 - Start from the baseline unless the feature names a different precondition.
+- `<port>` in a recipe is the port in `ORBIT_VERIFY_PORT`, default `3210`. The sandbox origin is `http://127.0.0.1:<port>`. Where the deployment owns `3210`, `http://127.0.0.1:3210` opens the deployment, not the sandbox.
 - Page checks use the visible strings `Create account`, `Sign in`, `Ask anything`, and the settings labels `Base URL` and `API key`.
 - Run every command through `node .agents/skills/verify-orbit/verify.mjs`.
 - Keep `.verify/evidence/` after cleanup.
