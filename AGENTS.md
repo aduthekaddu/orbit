@@ -18,6 +18,12 @@ Orbit is a self-hosted chat app for one user: Next.js App Router, the AI SDK, as
 - verify-orbit owns `127.0.0.1:3210` during a drive. Stop only processes you started.
 - Leave `~/kodus` and the host's `cloudflared` untouched.
 
+## Test cleanup
+
+- Give each file its own temporary data directory before importing anything that opens SQLite. Never share the checkout's database or rely on another file's fixtures.
+- In file teardown, close database handles and servers, stop and await child processes, restore environment variables, cwd, mocks and timers, and remove only the temporary files this test owns. Await cleanup before the file exits.
+- CI shuffles the test files. To reproduce the order, run `ORBIT_TEST_SEED=<seed> node scripts/test-random.mjs` with the seed from the CI log.
+
 ## Gotchas
 
 - Auth trusts `BETTER_AUTH_URL` plus `ORBIT_TRUSTED_ORIGINS`. A server on any other port needs that port in `ORBIT_TRUSTED_ORIGINS`, or sign-in fails.
