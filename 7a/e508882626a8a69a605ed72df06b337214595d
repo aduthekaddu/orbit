@@ -1,0 +1,25 @@
+src/lib/tools/github.test.ts
+  s_21fa8e53576bfc::t_238a3b5648fd0a 1,4
+  s_21fa8e53576bfc::t_7adcd68048c477 381-385
+src/lib/tools/run-code.test.ts
+  s_21fa8e53576bfc::t_f57f879a8a8896 1,4
+  s_21fa8e53576bfc::t_fc584cbf74fc4e 26-30
+src/lib/test-data-dir.ts
+  s_21fa8e53576bfc::t_f191a00452b241 1-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7ae508882626a8a69a605ed72df06b337214595d",
+  "prompts": {},
+  "sessions": {
+    "s_21fa8e53576bfc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a64b935-fd96-4abb-9df4-8bfe89e01ec7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
