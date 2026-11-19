@@ -1,6 +1,6 @@
 # CI runners on romper
 
-The decision behind this setup is [ADR 0001](adr/0001-ci-on-romper.md).
+The decision behind this setup is [ADR 0001](adr/0001-ci-on-romper.md). [ADR 0003](adr/0003-freestyle-overflow.md) adds Freestyle VMs for when GitHub's allowance is used up.
 
 Orbit's CI can run on the owner's machine `romper` instead of GitHub's hosted runners. GitHub's included minutes ran out in November 2026, and hosted jobs cost money past them. Jobs on romper cost nothing per minute.
 
@@ -13,9 +13,56 @@ runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
 ```
 
 - The repository variable `CI_RUNNER` set to `romper-linux` sends every job to romper.
+- `CI_RUNNER` set to `freestyle-linux` sends every job to a fresh Freestyle VM. See [Freestyle overflow](#freestyle-overflow).
 - With the variable unset, jobs ask for GitHub's `ubuntu-24.04` runner again.
 
 GitHub reads the variable when it queues a run. Changing it affects new runs, not running ones.
+
+## Freestyle overflow
+
+When GitHub's allowance is used up and romper is busy, Orbit's CI can run on short-lived Freestyle VMs instead. The order of use is GitHub's runners, then Freestyle, then romper. The decision is [ADR 0003](adr/0003-freestyle-overflow.md).
+
+[freestyle-runners](https://github.com/aduthekaddu/freestyle-runners) runs on romper as the `ubuntu` user's systemd user service `freestyle-runners`. It watches Orbit for queued jobs with the label `freestyle-linux`. For each job it starts a fresh Freestyle VM with 4 vCPU and 8 GiB, starts GitHub's runner in it for that one job, and deletes the VM afterwards. The VMs run on Freestyle's machines, so the romper safeguards below do not apply to them. Each VM can reach public addresses and accepts no inbound connections. Jobs from forks' pull requests are refused, as on romper. To check or stop the service, see [Running the service](https://github.com/aduthekaddu/freestyle-runners/blob/main/docs/service.md).
+
+### Switch to Freestyle and back
+
+Run these where `gh` is signed in as the repository owner. To send new runs to Freestyle:
+
+```bash
+gh variable set CI_RUNNER --body freestyle-linux --repo aduthekaddu/orbit
+```
+
+To send new runs back to romper:
+
+```bash
+gh variable set CI_RUNNER --body romper-linux --repo aduthekaddu/orbit
+```
+
+GitHub reads the variable when it queues a run, so a switch changes only the runs queued after it. When GitHub's allowance is back, delete the variable as in [Roll back to GitHub's runners](#roll-back-to-githubs-runners).
+
+### What the service does at 85% of the free plan
+
+Freestyle's API reports no usage, so the service keeps its own estimate. When the estimate reaches 85% of the free plan, 170 of its 200 vCPU-hours a month, the service stops creating VMs. If Orbit's `CI_RUNNER` is `freestyle-linux`, the service sets it to `romper-linux`, so new runs go to romper. It also opens an issue with the label `budget-limit` in [aduthekaddu/freestyle-runners](https://github.com/aduthekaddu/freestyle-runners/issues).
+
+The free allowance resets on the 13th of each month at 00:16 IST, which is 18:46 UTC on the 12th. After the reset, the service sets `CI_RUNNER` back to `freestyle-linux` and closes the issue.
+
+### Cost and capacity
+
+One round is the 14 jobs that one push to a pull request starts. A full Orbit round ran on Freestyle on 2026-11-19 ([proof](https://github.com/aduthekaddu/orbit/pull/94#issuecomment-7021145263)). The table gives its cost from the service's budget ledger, and the rounds a month that cost allows before the 85% switch.
+
+| Cost per round | vCPU-hours | Rounds before the 85% switch |
+| --- | --- | --- |
+| Measured, with one re-run of the flaky `End to end (sandbox)` job | 5.9 | 28 |
+| Measured, without the re-run | 5.2 | 32 |
+| Estimated, with Freestyle creating VMs in about 13 s | 3.5 | 48 |
+
+At the measured cost, the free plan covers about 28 to 32 rounds a month. The estimate is the round's job time plus about 77 s of overhead for each of the 14 VMs, at the create time Freestyle reached late in the proof. A VM has 2 GiB per vCPU, so the plan's 400 GiB-hours allow the same number of rounds.
+
+The `End to end (sandbox)` job failed once in the proof, in its `sandbox-stop-output` scenario. That scenario fails the same way on romper, and the job passed when re-run.
+
+### Speed
+
+The proof round took 40 minutes (2,415 s) on Freestyle, against 28 minutes (1,657 s) for the last green round on romper. VM creation set that time, not the jobs. The Docker image job took 374 s on Freestyle against 616 s on romper. That day the service created VMs one after another, and each create took 35 s to 5 minutes. Four creates failed, and three failures in a row paused creation for 10 minutes. [freestyle-runners#12](https://github.com/aduthekaddu/freestyle-runners/issues/12) and [freestyle-runners#13](https://github.com/aduthekaddu/freestyle-runners/issues/13) track the two problems.
 
 ## What runs on romper
 
