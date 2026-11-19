@@ -1,0 +1,19 @@
+scripts/ci/test-with-ollama.sh
+  s_f5be07b37a022d::t_09b6e5e70dd093 6,8-9,13,22,24-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bcaf25f9fb40a0ba9faede136cd08ad961dae853",
+  "prompts": {},
+  "sessions": {
+    "s_f5be07b37a022d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bb637910-2b0a-4e7d-9ed2-ab380a354de9",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
