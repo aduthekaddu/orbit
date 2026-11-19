@@ -1,0 +1,21 @@
+src/lib/test-runner.test.ts
+  s_21fa8e53576bfc::t_306bfce57cf5ab 1-45
+scripts/test.mjs
+  s_21fa8e53576bfc::t_8a974cf8135732 12-19,25-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "73145147fa2558a2a1d327d6bf4596d5706230d0",
+  "prompts": {},
+  "sessions": {
+    "s_21fa8e53576bfc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a64b935-fd96-4abb-9df4-8bfe89e01ec7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
