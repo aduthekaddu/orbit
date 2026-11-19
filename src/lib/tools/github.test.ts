@@ -1,8 +1,7 @@
+import { testDataDir } from "../test-data-dir";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import test, { after } from "node:test";
+import test from "node:test";
 import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { startMockMcp } from "../../../scripts/qa/mock-mcp.mjs";
@@ -10,18 +9,6 @@ import { startMockMcp } from "../../../scripts/qa/mock-mcp.mjs";
 process.env.ORBIT_GITHUB_MCP_FIXTURE = "1";
 import { githubLinks } from "./github-links";
 import { checkGithub, githubTools, openGithubTurn } from "./github";
-
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-github-tools-"));
-process.env.ORBIT_DATA_DIR = dataDir;
-
-after(async () => {
-  try {
-    const { db } = await import("../db");
-    db.$client.close();
-  } finally {
-    fs.rmSync(dataDir, { recursive: true, force: true });
-  }
-});
 
 const toolOptions = {
   toolCallId: "github-test",
@@ -389,6 +376,11 @@ test("a turn without a GitHub token does not open GitHub", async () => {
   assert.equal(Object.keys(opened.tools).some((name) => name.startsWith("github_")), false);
   assert.equal("render_ui" in opened.tools, true);
   await opened.close();
+});
+
+test("the tool registry opens its database in the test data directory", async () => {
+  const { db } = await import("../db");
+  assert.equal(db.$client.name, path.join(testDataDir, "orbit.db"));
 });
 
 test("issue, pull request, and file results become GitHub links", () => {
