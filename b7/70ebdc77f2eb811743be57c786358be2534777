@@ -1,0 +1,23 @@
+package-lock.json
+  s_21fa8e53576bfc::t_85a28ce83ebfa5 12,18-19,52,2044-2046,2056-2058,2061
+package.json
+  s_21fa8e53576bfc::t_ba923a1a260aa3 23-24
+src/lib/genui/json-render-copy.test.ts
+  s_21fa8e53576bfc::t_2c4023a6c90b59 1-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b770ebdc77f2eb811743be57c786358be2534777",
+  "prompts": {},
+  "sessions": {
+    "s_21fa8e53576bfc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a64b935-fd96-4abb-9df4-8bfe89e01ec7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
