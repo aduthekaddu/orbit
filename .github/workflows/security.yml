@@ -17,7 +17,7 @@ concurrency:
 jobs:
   secrets:
     name: Secrets
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    runs-on: freestyle-linux
     timeout-minutes: 10
     permissions:
       contents: read
@@ -34,7 +34,7 @@ jobs:
 
   dependencies:
     name: Dependencies
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    runs-on: freestyle-linux
     timeout-minutes: 10
     permissions:
       contents: read
@@ -57,7 +57,7 @@ jobs:
 
   semgrep:
     name: Semgrep
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    runs-on: freestyle-linux
     timeout-minutes: 15
     permissions:
       contents: read
@@ -81,7 +81,7 @@ jobs:
     name: Security passed
     if: always()
     needs: [secrets, dependencies, semgrep]
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    runs-on: freestyle-linux
     timeout-minutes: 5
     permissions: {}
     steps:
