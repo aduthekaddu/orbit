@@ -35,6 +35,7 @@ jobs:
       - uses: ./.github/actions/setup-orbit
         with:
           node-version: ${{ matrix.node }}
+          seed-dependency-cache: "true"
       - name: Typecheck
         run: npm run typecheck
       - name: Pull the pinned sandbox images

@@ -36,6 +36,8 @@ GitHub Actions runs the checks on every pull request and every push to `main`, a
 
 Every third-party action is pinned to a commit SHA and every tool image to a digest. The local `setup-orbit` action comes with the checkout. Update a pin on purpose, and keep the version comment next to it.
 
+The Node matrix seeds the installed dependency cache on `main` and on same-repository PRs. PR saves are scoped to that PR's merge ref; they cannot replace the cache from `main`. The cache requires an exact match on the Node version, runner platform, and install inputs. A miss runs `npm ci`.
+
 ## Security checks
 
 The `Security` and `CodeQL` workflows run on every pull request, every push to `main`, and once a week. GitHub code scanning, dependency review, and secret scanning are not available on a private personal repository, so each job does its own failing. `Security passed` succeeds only when all the `Security` jobs do.
