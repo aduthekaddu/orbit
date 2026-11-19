@@ -1,0 +1,25 @@
+docs/slices/14.md
+  s_21fa8e53576bfc::t_39244b31f51e10 235
+docs/slices/16.md
+  s_21fa8e53576bfc::t_4aee5ba68d1a13 331
+docs/slices/17.md
+  s_21fa8e53576bfc::t_14f28df67e9cf2 267
+docs/slices/21.md
+  s_21fa8e53576bfc::t_a3b4351ec03ed4 209
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f9e02c795f90b47bafd24dc617629ffa8e161d20",
+  "prompts": {},
+  "sessions": {
+    "s_21fa8e53576bfc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a64b935-fd96-4abb-9df4-8bfe89e01ec7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
