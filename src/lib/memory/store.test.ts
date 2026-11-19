@@ -154,7 +154,8 @@ test("vectors made without task prefixes are cleared and the memory stays", () =
 test("a memory's vector stays on that memory after vacuum", async () => {
   const { store, embed } = requireStore();
   const saved = store.saveMemory({ text: "Vacuum keeps the vectorkey token", kind: "fact" });
-  assert.equal((await embed.embedPending()).ok, true);
+  const embedded = await embed.embedPending();
+  assert.equal(embedded.ok, true, embedded.ok ? undefined : embedded.error);
   const { db } = await import("../db");
   const pk = db.$client.prepare("SELECT type AS type FROM pragma_table_info('memories') WHERE pk = 1").get() as { type: string };
   assert.equal(pk.type, "INTEGER");

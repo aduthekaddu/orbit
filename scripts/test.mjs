@@ -1,6 +1,5 @@
 import { createHash, randomInt } from "node:crypto";
 import { globSync } from "node:fs";
-import { availableParallelism } from "node:os";
 import { run } from "node:test";
 import { tap } from "node:test/reporters";
 
@@ -23,7 +22,7 @@ const tests = run({
   ...(files ? { files } : { globPatterns: globs }),
   execArgv: ["--import", "tsx"],
   isolation: "process",
-  concurrency: files ? availableParallelism() : true,
+  concurrency: true,
 });
 
 // The summary counts leave out a skipped suite, so count every skip or todo mark, on tests and suites.

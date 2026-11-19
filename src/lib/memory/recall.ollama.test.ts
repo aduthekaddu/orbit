@@ -28,13 +28,13 @@ before(async () => {
     for (const text of topic.memories) memoryIds.set(text, store.saveMemory({ text, kind: "fact" }).id);
   }
   const filled = await embed.embedPending();
-  assert.equal(filled.ok, true, "every labeled memory must embed");
+  assert.equal(filled.ok, true, filled.ok ? undefined : `every labeled memory must embed: ${filled.error}`);
 });
 
 async function nearIds(question: string): Promise<string[]> {
   assert.ok(embed && store);
   const embedded = await embed.embedQuery(question);
-  assert.equal(embedded.ok, true, `embed "${question}"`);
+  assert.equal(embedded.ok, true, embedded.ok ? undefined : `embed "${question}": ${embedded.error}`);
   if (!embedded.ok || !embedded.vectors[0]) return [];
   return store.vectorMatchIds(embedded.vectors[0], 50);
 }
