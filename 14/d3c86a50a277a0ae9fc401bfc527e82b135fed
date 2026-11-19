@@ -1,0 +1,22 @@
+.github/workflows/ci.yml
+  h_9f68edf4527855 44,151
+CONTRIBUTING.md
+  h_9f68edf4527855 30,32
+package.json
+  h_9f68edf4527855 11
+scripts/ci/test-with-ollama.sh
+  h_9f68edf4527855 1-22
+scripts/test.mjs
+  h_9f68edf4527855 1-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "14d3c86a50a277a0ae9fc401bfc527e82b135fed",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
