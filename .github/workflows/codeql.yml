@@ -17,7 +17,7 @@ concurrency:
 jobs:
   analyze:
     name: Analyze JavaScript and TypeScript
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    runs-on: freestyle-linux
     timeout-minutes: 45
     permissions:
       actions: read
