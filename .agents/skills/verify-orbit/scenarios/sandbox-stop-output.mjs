@@ -5,7 +5,73 @@ const cases = [
   { scenario: "run-spin", printed: "" },
 ];
 
-const containerRunning = () => execFileSync("docker", ["ps", "--filter", "label=orbit.sandbox=true", "--filter", "status=running", "--format", "{{.ID}}"], { encoding: "utf8" }).trim() !== "";
+const SANDBOX_LABEL_FILTER = "label=orbit.sandbox=true";
+const CONTAINER_FORMAT = "{{.ID}}\t{{.Status}}";
+const CLEANUP_TIMEOUT_MS = 10_000;
+const CLEANUP_POLL_MS = 250;
+
+export function parseSandboxContainers(output) {
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [id, ...statusParts] = line.split("\t");
+      return { id: id.trim(), status: statusParts.join("\t").trim() || "unknown" };
+    });
+}
+
+export function formatSandboxContainers(containers) {
+  return containers.map(({ id, status }) => `${id} (${status})`).join(", ");
+}
+
+function listSandboxContainers({ running = false } = {}) {
+  const args = ["ps"];
+  if (!running) args.push("-a");
+  args.push("--filter", SANDBOX_LABEL_FILTER);
+  if (running) args.push("--filter", "status=running");
+  args.push("--format", CONTAINER_FORMAT);
+  return parseSandboxContainers(execFileSync("docker", args, { encoding: "utf8" }));
+}
+
+export async function waitForNoSandboxContainers({
+  list = () => listSandboxContainers(),
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  now = Date.now,
+  timeoutMs = CLEANUP_TIMEOUT_MS,
+  pollMs = CLEANUP_POLL_MS,
+} = {}) {
+  const started = now();
+  let remaining = list();
+  const waited = remaining.length > 0;
+  while (remaining.length > 0 && now() - started < timeoutMs) {
+    const remainingMs = timeoutMs - (now() - started);
+    await sleep(Math.min(pollMs, Math.max(0, remainingMs)));
+    remaining = list();
+  }
+  return {
+    cleared: remaining.length === 0,
+    remaining,
+    elapsedMs: Math.max(0, now() - started),
+    waited,
+  };
+}
+
+async function assertNoSandboxContainers(step, label, page) {
+  const result = await waitForNoSandboxContainers({
+    sleep: (ms) => page.waitForTimeout(ms),
+  });
+  if (result.cleared && result.waited) {
+    console.log(`${label} cleared after ${result.elapsedMs}ms`);
+  }
+  step(
+    label,
+    result.cleared,
+    result.cleared ? "" : `after ${result.elapsedMs}ms: ${formatSandboxContainers(result.remaining)}`,
+  );
+}
+
+const containerRunning = () => listSandboxContainers({ running: true }).length > 0;
 
 // What a person sees on the card: header, the outcome line with its duration, and the output wells.
 const inspect = (card) => card.evaluate((node) => {
@@ -96,9 +162,7 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
     await card.scrollIntoViewIfNeeded();
     await shot(`${scenario}-stopped`);
 
-    await page.waitForTimeout(2_500);
-    const left = execFileSync("docker", ["ps", "-a", "--filter", "label=orbit.sandbox=true", "--format", "{{.ID}}"], { encoding: "utf8" }).trim();
-    step(`${scenario} leaves no sandbox container`, left === "", left);
+    await assertNoSandboxContainers(step, `${scenario} leaves no sandbox container`, page);
   }
 
   // Regenerate a stopped run and stop it again, then switch between the two versions. Both keep their result.
@@ -134,9 +198,7 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
     await page.waitForTimeout(500);
     await shot("branch-next");
   }
-  await page.waitForTimeout(2_500);
-  const left = execFileSync("docker", ["ps", "-a", "--filter", "label=orbit.sandbox=true", "--format", "{{.ID}}"], { encoding: "utf8" }).trim();
-  step("regenerate after Stop leaves no sandbox container", left === "", left);
+  await assertNoSandboxContainers(step, "regenerate after Stop leaves no sandbox container", page);
 
   // Regenerate the moment Stop lands, before the saved result can reach the first version.
   const quick = (await (await page.request.post(`${origin}/api/chats`)).json()).id;
@@ -160,9 +222,7 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
   step("regenerate right after Stop still gives the first version its Stopped line", quickFirstShown && quickFirst, `picker ${quickFirstShown}, line ${quickFirst}`);
   await page.waitForTimeout(500);
   await shot("quick-regenerate-previous");
-  await page.waitForTimeout(2_500);
-  const quickLeft = execFileSync("docker", ["ps", "-a", "--filter", "label=orbit.sandbox=true", "--format", "{{.ID}}"], { encoding: "utf8" }).trim();
-  step("regenerate right after Stop leaves no sandbox container", quickLeft === "", quickLeft);
+  await assertNoSandboxContainers(step, "regenerate right after Stop leaves no sandbox container", page);
 
   // Send a message typed during the run the moment Stop lands. The stopped card still gets its saved result.
   const sent = (await (await page.request.post(`${origin}/api/chats`)).json()).id;
@@ -190,7 +250,5 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
   step("a message sent right after Stop leaves the stopped card its Stopped line and output", sentLanded && sentCard.header === "Cancelled" && sentCard.stdout === "before-timeout\n", JSON.stringify(sentCard));
   await card.scrollIntoViewIfNeeded();
   await shot("send-after-stop");
-  await page.waitForTimeout(2_500);
-  const sentLeft = execFileSync("docker", ["ps", "-a", "--filter", "label=orbit.sandbox=true", "--format", "{{.ID}}"], { encoding: "utf8" }).trim();
-  step("a message sent right after Stop leaves no sandbox container", sentLeft === "", sentLeft);
+  await assertNoSandboxContainers(step, "a message sent right after Stop leaves no sandbox container", page);
 }
