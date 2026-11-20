@@ -25,8 +25,8 @@ This decision adds to ADR 0001 and does not replace it. romper stays the fallbac
 
 ## Consequences
 
-- The free plan covers about 28 to 32 rounds a month before the 85% switch, at the cost measured on 2026-11-19. The estimate is about 48 rounds once Freestyle creates VMs in about 13 s. After the switch, CI runs on romper until the allowance resets on the 13th at 00:16 IST (18:46 UTC on the 12th).
-- A round took 40 minutes on Freestyle against 28 on romper, because VM creation was slow that day. [freestyle-runners#12](https://github.com/aduthekaddu/freestyle-runners/issues/12) and [freestyle-runners#13](https://github.com/aduthekaddu/freestyle-runners/issues/13) track the causes.
+- The free plan covers about 35 rounds a month before the 85% switch, at the cost measured on 2026-11-20 (4.8 vCPU-hours a round, 41 rounds to the full 200). If downloads ran at the speed of 2026-11-19, it would cover about 58 rounds. That is an estimate from one round. After the switch, CI runs on romper until the allowance resets on the 13th at 00:16 IST (18:46 UTC on the 12th).
+- A round took 12 minutes (713 s) on Freestyle on 2026-11-20, against 28 minutes (1,657 s) on romper. The first round, on 2026-11-19, took 40 minutes because VM creation was slow. [freestyle-runners#12](https://github.com/aduthekaddu/freestyle-runners/issues/12) and [freestyle-runners#13](https://github.com/aduthekaddu/freestyle-runners/issues/13) tracked the causes, and [freestyle-runners#15](https://github.com/aduthekaddu/freestyle-runners/pull/15) fixed them.
 - romper runs only the service. During the proof round the service used 5.7 s of CPU in 65 minutes.
 - Jobs run on Freestyle's machines, so a job's checkout and its short-lived `GITHUB_TOKEN` reach a third party, as they do on GitHub's hosted runners.
 - Freestyle's API reports no usage, so the 85% switch acts on the service's estimate.
@@ -34,7 +34,7 @@ This decision adds to ADR 0001 and does not replace it. romper stays the fallbac
 
 ## Evidence
 
-- The [proof comment](https://github.com/aduthekaddu/orbit/pull/94#issuecomment-7021145263) on pull request 94 records one full round of 14 jobs on Freestyle, with its cost, its timing, and romper's load. The proof's workflows named `freestyle-linux` directly and left `CI_RUNNER` at `romper-linux`, so the variable switch itself was not part of it.
+- The [proof comment](https://github.com/aduthekaddu/orbit/pull/94#issuecomment-7021145263) on pull request 94 records the first full round of 14 jobs on Freestyle, with its cost, its timing, and romper's load. The [second round](https://github.com/aduthekaddu/freestyle-runners/pull/15#issuecomment-7031596476), on a throwaway pull request 96 after the fixes in freestyle-runners#15, is measured there. The proof's workflows named `freestyle-linux` directly and left `CI_RUNNER` at `romper-linux`, so the variable switch itself was not part of it.
 - [aduthekaddu/freestyle-runners#3](https://github.com/aduthekaddu/freestyle-runners/pull/3) builds the VM image and runs one job. [aduthekaddu/freestyle-runners#6](https://github.com/aduthekaddu/freestyle-runners/pull/6) adds the service.
 - The [freestyle-runners design](https://github.com/aduthekaddu/freestyle-runners/blob/main/docs/design.md), with the free plan's limits and the budget rules.
 - The [Notion decision](https://app.notion.com/p/41d52153fdc981fca60ffd45d6a4a616), status Proposed.

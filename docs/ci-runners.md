@@ -48,21 +48,26 @@ The free allowance resets on the 13th of each month at 00:16 IST, which is 18:46
 
 ### Cost and capacity
 
-One round is the 14 jobs that one push to a pull request starts. A full Orbit round ran on Freestyle on 2026-11-19 ([proof](https://github.com/aduthekaddu/orbit/pull/94#issuecomment-7021145263)). The table gives its cost from the service's budget ledger, and the rounds a month that cost allows before the 85% switch.
+One round is the 14 jobs that one push to a pull request starts. Two full Orbit rounds ran on Freestyle. Round 1 was on 2026-11-19 ([proof](https://github.com/aduthekaddu/orbit/pull/94#issuecomment-7021145263)). Round 2 was on 2026-11-20, after [freestyle-runners#15](https://github.com/aduthekaddu/freestyle-runners/pull/15) fixed the slow, failing VM creates of round 1 ([measurements](https://github.com/aduthekaddu/freestyle-runners/pull/15#issuecomment-7031596476)). Both ran on the same Orbit commit. The costs come from the service's budget ledger.
 
-| Cost per round | vCPU-hours | Rounds before the 85% switch |
-| --- | --- | --- |
-| Measured, with one re-run of the flaky `End to end (sandbox)` job | 5.9 | 28 |
-| Measured, without the re-run | 5.2 | 32 |
-| Estimated, with Freestyle creating VMs in about 13 s | 3.5 | 48 |
+| Cost per round | vCPU-hours | Rounds before the 85% switch | Rounds before 200 |
+| --- | --- | --- | --- |
+| Measured, round 1 (2026-11-19), with one re-run of the flaky `End to end (sandbox)` job | 5.9 | 28 | 33 |
+| Measured, round 1, without the re-run | 5.2 | 32 | 38 |
+| Measured, round 2 (2026-11-20), all 14 jobs green on the first attempt | 4.8 | 35 | 41 |
+| Estimated, round 2's VM overhead with round 1's job time | 2.9 | 58 | 68 |
 
-At the measured cost, the free plan covers about 28 to 32 rounds a month. The estimate is the round's job time plus about 77 s of overhead for each of the 14 VMs, at the create time Freestyle reached late in the proof. A VM has 2 GiB per vCPU, so the plan's 400 GiB-hours allow the same number of rounds.
+At the round 2 cost, the free plan covers about 35 rounds a month before the 85% switch, and 41 to the full 200 vCPU-hours. The estimate is one round's job time at round 1 speed (2,104 s) plus round 2's 36 s of overhead for each of the 14 VMs. It comes from one round and holds only if downloads run as fast as they did in round 1. A VM has 2 GiB per vCPU, so the plan's 400 GiB-hours allow the same number of rounds.
 
-The `End to end (sandbox)` job failed once in the proof, in its `sandbox-stop-output` scenario. That scenario fails the same way on romper, and the job passed when re-run.
+Round 2 cost little less than round 1 although VM overhead fell from 77 s or more to 36 s a VM. Its jobs ran 81% longer (3,807 s against 2,104 s), all of it in steps that download from GitHub, the CodeQL bundle, the vulnerability database and registries. Steps that only use CPU did not slow. One round cannot say whether Freestyle's network was slower that morning or whether 8 VMs started in the same second share one link.
+
+The `End to end (sandbox)` job failed once in round 1, in its `sandbox-stop-output` scenario. That scenario fails the same way on romper, and the job passed when re-run. It passed first try in round 2.
 
 ### Speed
 
-The proof round took 40 minutes (2,415 s) on Freestyle, against 28 minutes (1,657 s) for the last green round on romper. VM creation set that time, not the jobs. The Docker image job took 374 s on Freestyle against 616 s on romper. That day the service created VMs one after another, and each create took 35 s to 5 minutes. Four creates failed, and three failures in a row paused creation for 10 minutes. [freestyle-runners#12](https://github.com/aduthekaddu/freestyle-runners/issues/12) and [freestyle-runners#13](https://github.com/aduthekaddu/freestyle-runners/issues/13) track the two problems.
+Round 2 took 713 s (12 minutes), against 1,657 s (28 minutes) for the last green round on romper. VM creates took 1 to 2 s, and all four required checks passed on the first attempt.
+
+Round 1 took 2,415 s (40 minutes), and VM creation set that time. The service then created VMs one after another, and each create took 35 s to 5 minutes. Four creates failed, and three failures in a row paused creation for 10 minutes. [freestyle-runners#12](https://github.com/aduthekaddu/freestyle-runners/issues/12) and [freestyle-runners#13](https://github.com/aduthekaddu/freestyle-runners/issues/13) tracked the two problems, and [freestyle-runners#15](https://github.com/aduthekaddu/freestyle-runners/pull/15) fixed them.
 
 ## What runs on romper
 
