@@ -38,13 +38,13 @@ To send new runs back to romper:
 gh variable set CI_RUNNER --body romper-linux --repo aduthekaddu/orbit
 ```
 
-GitHub reads the variable when it queues a run, so a switch changes only the runs queued after it. When GitHub's allowance is back, delete the variable as in [Roll back to GitHub's runners](#roll-back-to-githubs-runners).
+GitHub reads the variable when it queues a run, so a switch changes only the runs queued after it. When GitHub's allowance is back, delete the variable as in [Roll back to GitHub's runners](#roll-back-to-githubs-runners). To stop Freestyle altogether, also run `systemctl --user stop freestyle-runners` on romper. Runs already queued for `freestyle-linux` wait until the service runs again or you cancel them.
 
 ### What the service does at 85% of the free plan
 
 Freestyle's API reports no usage, so the service keeps its own estimate. When the estimate reaches 85% of the free plan, 170 of its 200 vCPU-hours a month, the service stops creating VMs. If Orbit's `CI_RUNNER` is `freestyle-linux`, the service sets it to `romper-linux`, so new runs go to romper. It also opens an issue with the label `budget-limit` in [aduthekaddu/freestyle-runners](https://github.com/aduthekaddu/freestyle-runners/issues).
 
-The free allowance resets on the 13th of each month at 00:16 IST, which is 18:46 UTC on the 12th. After the reset, the service sets `CI_RUNNER` back to `freestyle-linux` and closes the issue.
+The free allowance resets on the 13th of each month at 00:16 IST, which is 18:46 UTC on the 12th. After the reset, the service sets `CI_RUNNER` back to `freestyle-linux` and closes the issue. It does this only if it made the 85% switch itself and the variable still says `romper-linux`. A variable you deleted or set by hand stays as you left it.
 
 ### Cost and capacity
 
