@@ -3,7 +3,7 @@ import type { UIMessage, UIMessageChunk } from "ai";
 import { orbitChatTransport } from "../src/lib/chat-transport";
 import { OPENCODE_GO_BASE_URL, outboundSessionHeader, reasoningAllowed } from "../src/lib/provider";
 
-const origin = "http://127.0.0.1:3210";
+const origin = new URL(process.env.ORBIT_QA_ORIGIN || "http://127.0.0.1:3210").origin;
 const email = "smoke@orbit.local";
 const password = "orbit-smoke-pass";
 const model = "deepseek-v4.1-flash";

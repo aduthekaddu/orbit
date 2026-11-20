@@ -4,7 +4,7 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 
 ## Baseline preconditions
 
-- The dev server and any other process on `127.0.0.1:3210` are stopped.
+- The port set by `ORBIT_VERIFY_PORT` on `127.0.0.1` is free, default `3210`. Export another port if the deployment owns `3210`.
 - `npm run build` has produced `.next`.
 - Launch with `node .agents/skills/verify-orbit/verify.mjs launch` so the server cwd is `.verify/sandbox` and `data/orbit.db` is created there.
 - Run `node .agents/skills/verify-orbit/verify.mjs doctor` and require `doctor ok` plus the sandbox cwd.
@@ -13,6 +13,7 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 ## Driving conventions
 
 - Start from the baseline unless the feature names a different precondition.
+- `<port>` in a recipe is the port in `ORBIT_VERIFY_PORT`, default `3210`. The sandbox origin is `http://127.0.0.1:<port>`. Where the deployment owns `3210`, `http://127.0.0.1:3210` opens the deployment, not the sandbox.
 - Page checks use the visible strings `Create account`, `Sign in`, `Ask anything`, and the settings labels `Base URL` and `API key`.
 - Run every command through `node .agents/skills/verify-orbit/verify.mjs`.
 - Keep `.verify/evidence/` after cleanup.
