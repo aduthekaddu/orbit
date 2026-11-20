@@ -1,0 +1,19 @@
+docs/ci-runners.md
+  s_82ef4c6c578a7a::t_a630970cdf115a 55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8219130685630adf02a84cf48d51fa68ae80daea",
+  "prompts": {},
+  "sessions": {
+    "s_82ef4c6c578a7a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f974-03f3-7f30-85e3-a71d24191573",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
