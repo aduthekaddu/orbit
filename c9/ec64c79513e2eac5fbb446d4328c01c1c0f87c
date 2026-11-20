@@ -1,0 +1,19 @@
+src/lib/tools/github.test.ts
+  s_82ef4c6c578a7a::t_6cf02abf5bff3c 27-48,79,95,118,133,141-142,144,152-153,158-176,217,371,398
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c9ec64c79513e2eac5fbb446d4328c01c1c0f87c",
+  "prompts": {},
+  "sessions": {
+    "s_82ef4c6c578a7a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f974-03f3-7f30-85e3-a71d24191573",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
