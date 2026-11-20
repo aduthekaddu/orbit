@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
 
-const require = createRequire(path.join(process.cwd(), "package.json"));
+const require = createRequire(import.meta.url);
 
 test("the app and @json-render/react load the same @json-render/core", () => {
   const react = path.dirname(require.resolve("@json-render/react"));
