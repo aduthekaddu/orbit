@@ -23,8 +23,8 @@ export default async function artifacts({ page, origin, step, shot }) {
   const reply = page.locator('[data-message-role="assistant"]').last();
   const previews = reply.getByRole("button", { name: "Preview", exact: true });
   const panel = page.getByRole("complementary", { name: "Artifact", exact: true });
-  const iframe = page.locator("iframe").last();
-  const frame = page.frameLocator("iframe").last();
+  const iframe = page.locator('iframe[title="Artifact preview"]');
+  const frame = iframe.contentFrame();
 
   async function send(kind) {
     const previousReplies = await page.locator('[data-message-role="assistant"]').count();
@@ -37,8 +37,19 @@ export default async function artifacts({ page, origin, step, shot }) {
   async function open() {
     await previews.click();
     await iframe.waitFor({ timeout: 10_000 });
-    const handle = await iframe.elementHandle();
-    return handle.contentFrame();
+  }
+
+  async function openHtml() {
+    const deadline = Date.now() + 10_000;
+    const [loaded] = await Promise.all([
+      page.waitForEvent("framenavigated", {
+        predicate: (child) => child.parentFrame() === page.mainFrame() && child.url() === "about:srcdoc",
+        timeout: 10_000,
+      }),
+      open(),
+    ]);
+    await loaded.waitForLoadState("load", { timeout: Math.max(1, deadline - Date.now()) });
+    return loaded;
   }
 
   async function close() {
@@ -54,12 +65,13 @@ export default async function artifacts({ page, origin, step, shot }) {
     return;
   }
   step("HTML code block has a Preview button", true);
-  await open();
+  const html = await openHtml();
   await frame.getByRole("heading", { name: "Artifact HTML", exact: true }).waitFor();
   step("HTML heading renders in the preview", true);
   step("iframe sandbox is exactly allow-scripts", await iframe.getAttribute("sandbox") === "allow-scripts");
-  await frame.getByRole("button", { name: "Change color" }).click();
-  step("HTML button responds to a click", await frame.getByRole("button", { name: "Change color" }).evaluate(node => node.style.backgroundColor === "green"));
+  const htmlButton = html.getByRole("button", { name: "Change color" });
+  await htmlButton.click();
+  step("HTML button responds to a click", await htmlButton.evaluate(node => node.style.backgroundColor === "green"));
   await security(frame, origin, "HTML", step);
   // The forged message goes to the page itself, so the wildcard target is the point of the check.
   await page.evaluate(() => window.postMessage({ type: "orbit-artifact-error", message: "Forged artifact error" }, "*")); // nosemgrep: javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration
@@ -71,10 +83,12 @@ export default async function artifacts({ page, origin, step, shot }) {
   step("desktop page has no horizontal overflow", await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await frame.getByRole("button", { name: "Change color" }).focus();
   await page.keyboard.press("Escape");
-  await iframe.waitFor({ state: "hidden" });
+  await iframe.waitFor({ state: "detached" });
   step("Escape closes the panel while the frame has focus", !new URL(page.url()).searchParams.has("artifact"));
-  await open();
-  await frame.getByRole("button", { name: "Change color" }).click();
+  const reopened = await openHtml();
+  const reopenedButton = reopened.getByRole("button", { name: "Change color" });
+  await reopenedButton.click();
+  step("reopened HTML button responds to a click", await reopenedButton.evaluate(node => node.style.backgroundColor === "green"));
 
   await panel.getByRole("tab", { name: "Code", exact: true }).click();
   step("Code tab shows the artifact source", await panel.getByRole("tabpanel").innerText().then(text => text.includes("Artifact HTML")));
@@ -86,7 +100,7 @@ export default async function artifacts({ page, origin, step, shot }) {
   await panel.getByRole("button", { name: "Copied", exact: true }).waitFor();
   step("Copy reports the copied source", true);
   await panel.getByRole("tab", { name: "Preview", exact: true }).click();
-  step("switching tabs keeps the running artifact", await frame.getByRole("button", { name: "Change color" }).evaluate(node => node.style.backgroundColor === "green"));
+  step("switching tabs keeps the running artifact", !reopened.isDetached() && await reopenedButton.evaluate(node => node.style.backgroundColor === "green"));
   await panel.getByRole("button", { name: "Reload", exact: true }).click();
   await frame.getByRole("button", { name: "Change color" }).waitFor();
   step("Reload resets the running artifact", await frame.getByRole("button", { name: "Change color" }).evaluate(node => node.style.backgroundColor === ""));
