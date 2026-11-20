@@ -5,7 +5,9 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 ## [Unreleased]
 
 - Override Drizzle tooling's `@esbuild-kit/core-utils` dependency to use patched `esbuild` 0.25.12, removing GHSA-67mh-4wv8-2f99. (#71)
+- Update Next.js from 16.4.3 to 16.4.6 to fix GHSA-mfr8-8qww-v76h, an information disclosure vulnerability.
 - The server log has an `auth miss` line for each request that reaches Orbit without a valid session. It says whether the browser sent a session cookie and the Access cookie, by name only.
+- Signed-out request logs use explicit character checks to keep requests from adding log fields.
 - Settings can remove a saved GitHub token. The stored token is cleared and GitHub tools stop.
 - Check says "GitHub rejected the token (bad request)." when GitHub answers HTTP 400.
 - Keep earlier prompts and replies when editing or regenerating. Switch versions with the message arrows. Reload opens the last written branch.
