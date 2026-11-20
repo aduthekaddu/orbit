@@ -1,0 +1,14 @@
+.agents/skills/verify-orbit/scenarios/sandbox-stop-output.mjs
+  h_9f68edf4527855 8-74,165,201,225,253
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7c185bd7e618953e21ef98c17bb9beb6bc1be420",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
