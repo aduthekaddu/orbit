@@ -1,0 +1,75 @@
+.agents/skills/verify-orbit/scenarios/artifacts.mjs
+  s_82ef4c6c578a7a::t_736d1227386c01 26-27,40-52,68,72-74,86,88-91,103
+.agents/skills/verify-orbit/scenarios/sandbox-stop-output.mjs
+  s_82ef4c6c578a7a::t_0530aa3fa78df6 8-74,165,201,225,253
+.agents/skills/verify-orbit/scenarios/sandbox.mjs
+  s_82ef4c6c578a7a::t_1bfad66e005a10 19-23
+.github/workflows/ci.yml
+  s_82ef4c6c578a7a::t_eeef03e5c75c52 44,151
+CHANGELOG.md
+  s_82ef4c6c578a7a::t_7b904d24613090 8-9,11
+CONTRIBUTING.md
+  s_82ef4c6c578a7a::t_6ed52beace477e 30,32
+docs/slices/13.md
+  s_82ef4c6c578a7a::t_c50e25e6f787d8 213
+docs/slices/15.md
+  s_82ef4c6c578a7a::t_27a931d7b633b8 216
+docs/slices/18.md
+  s_82ef4c6c578a7a::t_4f6d2ca1f39480 370
+docs/slices/19.md
+  s_82ef4c6c578a7a::t_5acd5b1365bd57 245
+docs/slices/20.md
+  s_82ef4c6c578a7a::t_f9df1aa574a466 272
+docs/slices/22.md
+  s_82ef4c6c578a7a::t_01dafcfdbfb76a 241
+docs/slices/23.md
+  s_82ef4c6c578a7a::t_8f127d7412b3b7 346
+package-lock.json
+  s_82ef4c6c578a7a::t_f6ab67975aa260 12,33,41,52,364-366,376,388-390,393,404-406,409,420-422,425,430-432,435,446-448,451,466-468,471,1733-1735,1739-1741,1755-1757,1771-1773,1790-1792,1809-1811,1828-1830,1847-1849,1863-1865,4330-4341,4346,4431-4433,7389-7391,7394,7408-7415
+package.json
+  s_82ef4c6c578a7a::t_a80f97a2f99ad7 11,38,46,72-76
+scripts/ci/test-with-ollama.sh
+  s_82ef4c6c578a7a::t_bb42e73db84ba4 1-22
+scripts/qa/genui-qa.cjs
+  s_82ef4c6c578a7a::t_ca13f959a4005d 2,466-468,471
+scripts/qa/mock-provider.mjs
+  s_82ef4c6c578a7a::t_de678897af230b 517
+scripts/test.mjs
+  s_82ef4c6c578a7a::t_2ca9e48a751278 1-35
+src/lib/auth-miss.test.ts
+  s_82ef4c6c578a7a::t_17f5bd02f713f8 79-88
+src/lib/auth-miss.ts
+  s_82ef4c6c578a7a::t_f5143a95adc392 24-28
+src/lib/chat-write.test.ts
+  s_82ef4c6c578a7a::t_abb7349a84288e 5,19-26,30-32
+src/lib/messages.test.ts
+  s_82ef4c6c578a7a::t_a3614df803caad 5,19-26,30-32
+src/lib/pr-checks.test.ts
+  s_82ef4c6c578a7a::t_b136ce05eee98b 11-22,37,86-87,129
+src/lib/slice-plan-rules.test.ts
+  s_82ef4c6c578a7a::t_756aeefe84a92b 285,288-290,295,311-313
+src/lib/test-data-dir.ts
+  s_82ef4c6c578a7a::t_b7690c0e32ef80 1-11
+src/lib/test-runner.test.ts
+  s_82ef4c6c578a7a::t_f4b61624db698f 1-45
+src/lib/tools/github.test.ts
+  s_82ef4c6c578a7a::t_bbe090d6042383 1,3,29-50,81,97,120,135,139,143-147,155-177,218,372,399,422-426
+src/lib/tools/run-code.test.ts
+  s_82ef4c6c578a7a::t_637550faa62b02 1,3,10-11,26-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "589e40ef9a7be50d207e5e8d47f56938f9ba3bc5",
+  "prompts": {},
+  "sessions": {
+    "s_82ef4c6c578a7a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f974-03f3-7f30-85e3-a71d24191573",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
