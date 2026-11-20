@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test \"src/**/*.test.ts\" \"src/**/*.test.tsx\"",
+    "test": "node scripts/test.mjs",
     "db:generate": "drizzle-kit generate",
     "smoke": "tsx scripts/smoke.ts",
     "dream": "tsx scripts/dream.ts"
@@ -35,7 +35,7 @@
     "@tavily/core": "0.7.14",
     "ai": "7.0.159",
     "axios": "1.21.0",
-    "better-auth": "1.7.14",
+    "better-auth": "1.7.22",
     "better-sqlite3": "13.0.3",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
