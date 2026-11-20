@@ -8,7 +8,18 @@ import test, { after, before } from "node:test";
 const script = path.join(process.cwd(), "scripts/ci/pr-checks.sh");
 const template = fs.readFileSync(path.join(process.cwd(), ".github/PULL_REQUEST_TEMPLATE.md"), "utf8");
 const goodBody = "## Why\n\nA real reason.\n\n## What changed\n\n- A change.\n\n## How I checked it\n\n- [x] ran it\n";
-const tools = ["git", "jq", "bash"].every((tool) => spawnSync(tool, ["--version"]).status === 0);
+const gitEnv = { ...process.env };
+for (const name of Object.keys(gitEnv)) {
+  if (name.startsWith("GIT_")) delete gitEnv[name];
+}
+Object.assign(gitEnv, {
+  GIT_CONFIG_GLOBAL: os.devNull,
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_CONFIG_COUNT: "1",
+  GIT_CONFIG_KEY_0: "core.hooksPath",
+  GIT_CONFIG_VALUE_0: os.devNull,
+});
+const tools = ["git", "jq", "bash"].every((tool) => spawnSync(tool, ["--version"], { env: gitEnv }).status === 0);
 
 let repo: string;
 let docsOnly: string;
@@ -23,7 +34,7 @@ let base: string;
 const changelog = "# Changelog\n\n## [Unreleased]\n\n### Added\n\n## [0.1.0] - 2026-11-01\n\n- An old entry.\n";
 
 function git(...args: string[]) {
-  const result = spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+  const result = spawnSync("git", args, { cwd: repo, encoding: "utf8", env: gitEnv });
   assert.equal(result.status, 0, result.stderr);
   return result.stdout.trim();
 }
@@ -72,8 +83,8 @@ before(() => {
   docsOnly = commit("docs/a.md", "y\n", "change docs");
 });
 
-after(() => {
-  if (repo) fs.rmSync(repo, { recursive: true, force: true });
+after(async () => {
+  if (repo) await fs.promises.rm(repo, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 type Case = { name: string; commit: () => string; env: Record<string, string>; ok: boolean };
@@ -115,7 +126,7 @@ const cases: Case[] = [
 for (const item of cases) {
   test(item.name, { skip: tools ? false : "git, jq, and bash are needed" }, () => {
     git("checkout", "-q", item.commit());
-    const result = spawnSync("bash", [script], { cwd: repo, encoding: "utf8", env: { ...process.env, ...item.env, BASE_SHA: base } });
+    const result = spawnSync("bash", [script], { cwd: repo, encoding: "utf8", env: { ...gitEnv, ...item.env, BASE_SHA: base } });
     assert.equal(result.status === 0, item.ok, `${result.stdout}${result.stderr}`);
   });
 }
