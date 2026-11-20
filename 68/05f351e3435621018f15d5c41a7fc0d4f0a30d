@@ -1,0 +1,40 @@
+.agents/skills/verify-orbit/scenarios/artifacts.mjs
+  h_9f68edf4527855 26-27,40-52,68,72-74,86,88-91,103
+.agents/skills/verify-orbit/scenarios/sandbox.mjs
+  h_9f68edf4527855 19-23
+.github/workflows/ci.yml
+  h_9f68edf4527855 44,151
+CHANGELOG.md
+  h_9f68edf4527855 8,10
+CONTRIBUTING.md
+  h_9f68edf4527855 30,32
+package-lock.json
+  h_9f68edf4527855 33,41,364-366,376,388-390,393,404-406,409,420-422,425,430-432,435,446-448,451,466-468,471,1733-1735,1739-1741,1755-1757,1771-1773,1790-1792,1809-1811,1828-1830,1847-1849,1863-1865,4330-4341,4346,4431-4433,7389-7391,7394,7408-7415
+package.json
+  h_9f68edf4527855 11,38,46
+scripts/ci/test-with-ollama.sh
+  h_9f68edf4527855 1-22
+scripts/qa/genui-qa.cjs
+  h_9f68edf4527855 2,466-468,471
+scripts/qa/mock-provider.mjs
+  h_9f68edf4527855 517
+scripts/test.mjs
+  h_9f68edf4527855 1-35
+src/lib/auth-miss.test.ts
+  h_9f68edf4527855 79-88
+src/lib/auth-miss.ts
+  h_9f68edf4527855 24-28
+src/lib/test-runner.test.ts
+  h_9f68edf4527855 1-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6805f351e3435621018f15d5c41a7fc0d4f0a30d",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
