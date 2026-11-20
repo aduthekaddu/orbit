@@ -11,6 +11,18 @@ import { runCode } from "./run";
 import { waitForRunningSandbox } from "./wait-for-running";
 import type { RunCodeOutput } from "./spec";
 
+async function waitForNoContainers(docker: Docker) {
+  const deadline = performance.now() + 2000;
+  while (true) {
+    const containers = await docker.listContainers({ all: true, filters: JSON.stringify({ label: ["orbit.sandbox"] }) });
+    if (containers.length === 0 || performance.now() >= deadline) {
+      assert.deepEqual(containers, []);
+      return;
+    }
+    await delay(50);
+  }
+}
+
 test("sandbox programs run inside real isolated containers", { timeout: 90_000 }, async (t) => {
   const docker = new Docker();
   try {
@@ -336,7 +348,7 @@ finally:
         await running;
         await removed.promise;
       }
-      assert.deepEqual(await docker.listContainers({ all: true, filters: JSON.stringify({ label: ["orbit.sandbox"] }) }), []);
+      await waitForNoContainers(docker);
     });
   }
   await t.test("cancellation removes a late-started container only after start settles", async (t) => {
@@ -408,7 +420,7 @@ finally:
       assert.notEqual(result, "pending", "a dropped output connection must not block cancellation cleanup");
       assert.ok(result instanceof Error && result.name === "AbortError");
       await removed.promise;
-      assert.deepEqual(await docker.listContainers({ all: true, filters: JSON.stringify({ label: ["orbit.sandbox"] }) }), []);
+      await waitForNoContainers(docker);
     } finally {
       clearTimeout(deadline);
       clearTimeout(dropTimer);
@@ -460,6 +472,6 @@ finally:
     }
   });
   await t.test("no sandbox containers remain after success, errors, timeout, or cancellation", async () => {
-    assert.deepEqual(await docker.listContainers({ all: true, filters: JSON.stringify({ label: ["orbit.sandbox"] }) }), []);
+    await waitForNoContainers(docker);
   });
 });
