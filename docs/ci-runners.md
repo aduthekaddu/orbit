@@ -73,7 +73,7 @@ Round 2 cost little less than round 1 although VM overhead fell from 77 s or mor
 
 The `End to end (sandbox)` job failed once in round 1, in its `sandbox-stop-output` scenario. That scenario fails the same way on romper, and the job passed when re-run. It passed first try in round 2.
 
-Round 3 took 1.85 vCPU-hours because the preloads removed 1,466 s of job time, and because Freestyle's network was faster that morning, which removed another 820 s of downloads that still happen. So it is a good-network-day number. The jobs ran 1,252 s in total, against 3,807 s in round 2. All 14 jobs found Node, the CodeQL bundle and the actions in the snapshot. Round 3 is one sample ([measured 2026-11-20](https://github.com/aduthekaddu/freestyle-runners/pull/16#issuecomment-7032745098)).
+Round 3 took 1.85 vCPU-hours because the preloads removed 1,466 s of job time, and because Freestyle's network was faster that morning, which removed another 820 s of downloads that still happen. So it is a good-network-day number. The jobs ran 1,252 s in total, against 3,807 s in round 2. The other 269 s of the drop came from CPU steps whose time varies between rounds. For example, the Node 22 tests took 52 s in round 2 and 81 s in round 3, and the Node 24 tests took 73 s and 44 s. All 14 jobs found Node, the CodeQL bundle and the actions in the snapshot. Round 3 is one sample ([measured 2026-11-20](https://github.com/aduthekaddu/freestyle-runners/pull/16#issuecomment-7032745098)).
 
 ### Speed
 
