@@ -22,7 +22,7 @@ GitHub reads the variable when it queues a run. Changing it affects new runs, no
 
 When GitHub's allowance is used up and romper is busy, Orbit's CI can run on short-lived Freestyle VMs instead. The order of use is GitHub's runners, then Freestyle, then romper. The decision is [ADR 0003](adr/0003-freestyle-overflow.md).
 
-[freestyle-runners](https://github.com/aduthekaddu/freestyle-runners) runs on romper as the `ubuntu` user's systemd user service `freestyle-runners`. It watches Orbit for queued jobs with the label `freestyle-linux`. For each job it starts a fresh Freestyle VM with 4 vCPU and 8 GiB, starts GitHub's runner in it for that one job, and deletes the VM afterwards. The VMs run on Freestyle's machines, so the romper safeguards below do not apply to them. Each VM can reach public addresses and accepts no inbound connections. Jobs from forks' pull requests are refused, as on romper. To check or stop the service, see [Running the service](https://github.com/aduthekaddu/freestyle-runners/blob/main/docs/service.md).
+[freestyle-runners](https://github.com/aduthekaddu/freestyle-runners) runs on romper as the `ubuntu` user's systemd user service `freestyle-runners`. It watches Orbit for queued jobs with the label `freestyle-linux`. For each job it starts a fresh Freestyle VM with 4 vCPU and 8 GiB, starts GitHub's runner in it for that one job, and deletes the VM afterwards. The VMs run on Freestyle's machines, so the romper safeguards below do not apply to them. Each VM can reach public addresses and accepts no inbound connections. Jobs from forks' pull requests are refused, as on romper. The [freestyle-runners README](https://github.com/aduthekaddu/freestyle-runners#readme) is the owner's guide to switching, upkeep and fixing problems. [Running the service](https://github.com/aduthekaddu/freestyle-runners/blob/main/docs/service.md) is the reference behind it.
 
 ### Switch to Freestyle and back
 
@@ -38,17 +38,25 @@ To send new runs back to romper:
 gh variable set CI_RUNNER --body romper-linux --repo aduthekaddu/orbit
 ```
 
-GitHub reads the variable when it queues a run, so a switch changes only the runs queued after it. When GitHub's allowance is back, delete the variable as in [Roll back to GitHub's runners](#roll-back-to-githubs-runners). To stop Freestyle altogether, also run `systemctl --user stop freestyle-runners` on romper. Runs already queued for `freestyle-linux` wait until the service runs again or you cancel them.
+To send new runs back to GitHub's runners, wait until GitHub's allowance is back, then delete the variable. Before that, jobs on GitHub's runners fail at once with a spending-limit error. [Roll back to GitHub's runners](#roll-back-to-githubs-runners) has more.
+
+```bash
+gh variable delete CI_RUNNER --repo aduthekaddu/orbit
+```
+
+To see which runner is active, run `gh variable get CI_RUNNER --repo aduthekaddu/orbit`. It prints `freestyle-linux` or `romper-linux`. It prints `variable CI_RUNNER was not found` when jobs go to GitHub's runners.
+
+GitHub reads the variable when it queues a run, so a switch changes only the runs queued after it. To stop Freestyle altogether, also run `systemctl --user stop freestyle-runners` on romper. Runs already queued for `freestyle-linux` wait until the service runs again or you cancel them.
 
 ### What the service does at 85% of the free plan
 
-Freestyle's API reports no usage, so the service keeps its own estimate. When the estimate reaches 85% of the free plan, 170 of its 200 vCPU-hours a month, the service stops creating VMs. If Orbit's `CI_RUNNER` is `freestyle-linux`, the service sets it to `romper-linux`, so new runs go to romper. It also opens an issue with the label `budget-limit` in [aduthekaddu/freestyle-runners](https://github.com/aduthekaddu/freestyle-runners/issues).
+Freestyle's API reports no usage, so the service keeps its own estimate. When the estimate, plus room for the jobs it is about to start, goes over 85% of any limit of the free plan, the service stops creating VMs. For Orbit's jobs that means 170 of the plan's 200 vCPU-hours a month. If Orbit's `CI_RUNNER` is `freestyle-linux`, the service sets it to `romper-linux`, so new runs go to romper. It also opens an issue with the label `budget-limit` in [aduthekaddu/freestyle-runners](https://github.com/aduthekaddu/freestyle-runners/issues).
 
-The free allowance resets on the 13th of each month at 00:16 IST, which is 18:46 UTC on the 12th. After the reset, the service sets `CI_RUNNER` back to `freestyle-linux` and closes the issue. It does this only if it made the 85% switch itself and the variable still says `romper-linux`. A variable you deleted or set by hand stays as you left it.
+The free allowance resets on the 13th of each month at 00:16 IST, which is 18:46 UTC on the 12th. After the reset, the service sets `CI_RUNNER` back to `freestyle-linux` and closes the issue. It does this only if it made the 85% switch itself, the variable still says `romper-linux`, and Orbit is still in the service's `config.json`. A variable you deleted or set by hand stays as you left it.
 
 ### Cost and capacity
 
-One round is the 14 jobs that one push to a pull request starts. Three full Orbit rounds ran on Freestyle. Round 1 was on 2026-11-19 ([proof](https://github.com/aduthekaddu/orbit/pull/94#issuecomment-7021145263)). Round 2 was on 2026-11-20, after [freestyle-runners#15](https://github.com/aduthekaddu/freestyle-runners/pull/15) fixed the slow, failing VM creates of round 1 ([measurements](https://github.com/aduthekaddu/freestyle-runners/pull/15#issuecomment-7031596476)). Round 3 was on 2026-11-20, on throwaway pull request 97, after [freestyle-runners#16](https://github.com/aduthekaddu/freestyle-runners/pull/16) (merged as d58f359) preloaded Node 22 and 24, the CodeQL bundle, Orbit's 4 pinned actions and 9 Docker images into the snapshot ([proof](https://github.com/aduthekaddu/freestyle-runners/pull/16#issuecomment-7032745098)). All three rounds ran the same Orbit tree. The costs come from the service's budget ledger.
+One round is the 14 jobs that one push to a pull request starts. Three full Orbit rounds ran on Freestyle. Round 1 was on 2026-11-19 ([proof](https://github.com/aduthekaddu/orbit/pull/94#issuecomment-7021145263)). Round 2 was on 2026-11-20, after [freestyle-runners#15](https://github.com/aduthekaddu/freestyle-runners/pull/15) fixed the slow, failing VM creates of round 1 ([measurements](https://github.com/aduthekaddu/freestyle-runners/pull/15#issuecomment-7031596476)). Round 3 was on 2026-11-20, on throwaway pull request 97, after [freestyle-runners#16](https://github.com/aduthekaddu/freestyle-runners/pull/16) (merged as d58f359) preloaded Node 22 and 24, the CodeQL bundle, Orbit's 4 pinned actions and 9 Docker images into the snapshot ([proof](https://github.com/aduthekaddu/freestyle-runners/pull/16#issuecomment-7032745098)). All three rounds ran the same Orbit tree. The costs come from the service's budget ledger. Each month the free plan gives 200 vCPU-hours, 400 GiB-hours of memory, 60,000 storage GiB-hours and 10 VMs at once. The kept VM snapshot uses about 28,800 of those storage GiB-hours, so storage does not run out while only one snapshot is kept.
 
 | Cost per round | vCPU-hours | Rounds before the 85% switch | Rounds before 200 |
 | --- | --- | --- | --- |

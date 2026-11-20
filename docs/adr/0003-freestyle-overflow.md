@@ -12,7 +12,7 @@ Status: Proposed
 
 When GitHub's allowance is used up, Orbit's CI runs on Freestyle VMs through [freestyle-runners](https://github.com/aduthekaddu/freestyle-runners), a systemd user service on romper. The owner sets `CI_RUNNER=freestyle-linux`, and the service starts one fresh Freestyle VM with 4 vCPU and 8 GiB for each queued job with that label. The VM runs that one job and is deleted afterwards. The order of use is GitHub's runners, then Freestyle, then romper.
 
-The service keeps its own estimate of Freestyle usage. At 85% of the free plan it stops creating VMs, sets Orbit's `CI_RUNNER` back to `romper-linux`, and opens a `budget-limit` issue in aduthekaddu/freestyle-runners. After the allowance resets, it sets `CI_RUNNER` to `freestyle-linux` again.
+The service keeps its own estimate of Freestyle usage. At 85% of the free plan it stops creating VMs, sets Orbit's `CI_RUNNER` back to `romper-linux`, and opens a `budget-limit` issue in aduthekaddu/freestyle-runners. After the allowance resets on the 13th at 00:16 IST (18:46 UTC on the 12th), it sets `CI_RUNNER` back to `freestyle-linux` if the variable still says `romper-linux`. To return to GitHub's runners when their allowance is back, the owner deletes `CI_RUNNER`.
 
 This decision adds to ADR 0001 and does not replace it. romper stays the fallback, and its setup does not change. [The runbook](../ci-runners.md#freestyle-overflow) has the commands.
 
@@ -39,3 +39,4 @@ This decision adds to ADR 0001 and does not replace it. romper stays the fallbac
 - The [freestyle-runners design](https://github.com/aduthekaddu/freestyle-runners/blob/main/docs/design.md), with the free plan's limits and the budget rules.
 - The [Notion decision](https://app.notion.com/p/41d52153fdc981fca60ffd45d6a4a616), status Proposed.
 - [docs/ci-runners.md](../ci-runners.md#freestyle-overflow) for the commands and the numbers.
+- The [freestyle-runners README](https://github.com/aduthekaddu/freestyle-runners#readme), the owner's guide to switching, upkeep and fixing problems.
