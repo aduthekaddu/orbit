@@ -1,4 +1,6 @@
+import { testDataDir } from "../test-data-dir";
 import assert from "node:assert/strict";
+import path from "node:path";
 import test from "node:test";
 import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
@@ -415,6 +417,11 @@ test("a turn without a GitHub token does not open GitHub", async () => {
   assert.equal(Object.keys(opened.tools).some((name) => name.startsWith("github_")), false);
   assert.equal("render_ui" in opened.tools, true);
   await opened.close();
+});
+
+test("the tool registry opens its database in the test data directory", async () => {
+  const { db } = await import("../db");
+  assert.equal(db.$client.name, path.join(testDataDir, "orbit.db"));
 });
 
 test("issue, pull request, and file results become GitHub links", () => {

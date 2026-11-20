@@ -41,7 +41,7 @@ jobs:
         run: |
           grep -oE '[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[a-f0-9]{64}' src/lib/sandbox/images.ts | sort -u | xargs -n1 docker pull
       - name: Test
-        run: npm test
+        run: scripts/ci/test-with-ollama.sh
       - name: Check that no sandbox container remains
         run: test -z "$(docker ps -aq --filter label=orbit.sandbox)"
       - name: Build
@@ -148,7 +148,7 @@ jobs:
             --format plain .
 
   ci:
-    name: CI passed
+    name: Full suite passed
     if: always()
     needs: [checks, e2e, docker, workflows]
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
