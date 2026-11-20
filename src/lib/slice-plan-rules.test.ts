@@ -282,14 +282,17 @@ test("the deploy proof signs in on the local origin", () => {
   assert.equal(signsIn, true);
 });
 
-test("the branch backfill proof allows a chat with no messages", async () => {
+test("the branch backfill proof allows a chat with no messages", async (t) => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-plan-"));
   const cwd = process.cwd();
-  fs.mkdirSync(path.join(sandbox, "data"));
+  const originalDataDir = process.env.ORBIT_DATA_DIR;
+  process.env.ORBIT_DATA_DIR = path.join(sandbox, "data");
+  fs.mkdirSync(process.env.ORBIT_DATA_DIR);
   fs.cpSync(path.join(repo, "drizzle"), path.join(sandbox, "drizzle"), { recursive: true });
   process.chdir(sandbox);
   try {
     const { db } = await import("./db");
+    t.after(() => db.$client.close());
     const schema = await import("./db/schema");
     const { createChat, listMessages, upsertMessage } = await import("./messages");
     db.insert(schema.user).values({ id: "u1", name: "Test", email: "plan@orbit.local" }).run();
@@ -305,5 +308,8 @@ test("the branch backfill proof allows a chat with no messages", async () => {
     assert.equal(agrees, true, `roots ${roots}, chats ${chats}, nonempty ${nonempty}`);
   } finally {
     process.chdir(cwd);
+    if (originalDataDir === undefined) delete process.env.ORBIT_DATA_DIR;
+    else process.env.ORBIT_DATA_DIR = originalDataDir;
+    t.after(() => fs.rmSync(sandbox, { recursive: true, force: true }));
   }
 });

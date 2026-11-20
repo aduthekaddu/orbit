@@ -1,12 +1,14 @@
+import { testDataDir } from "../test-data-dir";
 import assert from "node:assert/strict";
+import path from "node:path";
 import test, { type TestContext } from "node:test";
 import http from "node:http";
 import { once } from "node:events";
 import { createRunCodeTool } from "./run-code";
-import { toolsFor } from "./index";
 import { runCodeInputSchema } from "../sandbox/spec";
 
-test("run_code exists only when the server explicitly enables it", () => {
+test("run_code exists only when the server explicitly enables it", async () => {
+  const { toolsFor } = await import("./index");
   const original = process.env.ORBIT_SANDBOX;
   const settings = { baseUrl: "http://localhost/v1", apiKey: "fake", model: "fake", reasoningEffort: "low" as const, searxngUrl: "", tavilyApiKey: "", githubToken: "", githubMcpUrl: "" };
   try {
@@ -19,6 +21,11 @@ test("run_code exists only when the server explicitly enables it", () => {
     if (original === undefined) delete process.env.ORBIT_SANDBOX;
     else process.env.ORBIT_SANDBOX = original;
   }
+});
+
+test("the tool registry opens its database in the test data directory", async () => {
+  const { db } = await import("../db");
+  assert.equal(db.$client.name, path.join(testDataDir, "orbit.db"));
 });
 
 test("model input allows only the two languages and at most 20000 characters", () => {

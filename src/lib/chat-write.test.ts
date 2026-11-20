@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import test, { before } from "node:test";
+import test, { before, after } from "node:test";
 
 type Modules = {
   db: typeof import("./db").db;
@@ -16,11 +16,20 @@ type Modules = {
 };
 
 let mods: Modules;
+let sandbox: string;
+const originalCwd = process.cwd();
+
+after(() => {
+  mods?.db.$client.close();
+  process.chdir(originalCwd);
+  if (sandbox) fs.rmSync(sandbox, { recursive: true, force: true });
+});
 
 before(async () => {
   const repo = process.cwd();
-  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-chat-write-"));
-  fs.mkdirSync(path.join(sandbox, "data"));
+  sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-chat-write-"));
+  process.env.ORBIT_DATA_DIR = path.join(sandbox, "data");
+  fs.mkdirSync(process.env.ORBIT_DATA_DIR);
   fs.cpSync(path.join(repo, "drizzle"), path.join(sandbox, "drizzle"), { recursive: true });
   process.chdir(sandbox);
 
