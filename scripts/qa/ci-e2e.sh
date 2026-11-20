@@ -5,12 +5,15 @@
 #   scripts/qa/ci-e2e.sh browse   every mock-provider browser scenario, sandbox off
 #   scripts/qa/ci-e2e.sh sandbox  every sandbox scenario, sandbox on, with real Docker
 #
-# Run it after `npm run build`, with nothing listening on 127.0.0.1:3210. The browse and
-# sandbox suites find their scenarios by name, so a new scenario runs in CI without an edit.
+# Run it after `npm run build`, with ORBIT_VERIFY_PORT free on 127.0.0.1 (default 3210).
+# Set ORBIT_VERIFY_PORT=3230 to use another port. The browse and sandbox suites find their
+# scenarios by name, so a new scenario runs in CI without an edit.
 # Scenarios that need a real provider (`*-real`) are skipped. Every scenario runs even when an
 # earlier one fails, and the script exits 1 if any failed.
 set -uo pipefail
 cd "$(dirname "$0")/../.." || exit 1
+
+export ORBIT_VERIFY_PORT="${ORBIT_VERIFY_PORT:-3210}"
 
 suite=${1:-}
 scenarios_dir=.agents/skills/verify-orbit/scenarios
