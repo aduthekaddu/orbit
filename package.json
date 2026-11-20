@@ -50,7 +50,7 @@
     "remark-gfm": "4.0.1",
     "sqlite-vec": "0.1.9",
     "sucrase": "3.35.1",
-    "tailwind-merge": "3.4.0",
+    "tailwind-merge": "3.7.0",
     "zod": "4.6.7"
   },
   "devDependencies": {
