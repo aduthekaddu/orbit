@@ -48,24 +48,28 @@ The free allowance resets on the 13th of each month at 00:16 IST, which is 18:46
 
 ### Cost and capacity
 
-One round is the 14 jobs that one push to a pull request starts. Two full Orbit rounds ran on Freestyle. Round 1 was on 2026-11-19 ([proof](https://github.com/aduthekaddu/orbit/pull/94#issuecomment-7021145263)). Round 2 was on 2026-11-20, after [freestyle-runners#15](https://github.com/aduthekaddu/freestyle-runners/pull/15) fixed the slow, failing VM creates of round 1 ([measurements](https://github.com/aduthekaddu/freestyle-runners/pull/15#issuecomment-7031596476)). Both ran on the same Orbit commit. The costs come from the service's budget ledger.
+One round is the 14 jobs that one push to a pull request starts. Three full Orbit rounds ran on Freestyle. Round 1 was on 2026-11-19 ([proof](https://github.com/aduthekaddu/orbit/pull/94#issuecomment-7021145263)). Round 2 was on 2026-11-20, after [freestyle-runners#15](https://github.com/aduthekaddu/freestyle-runners/pull/15) fixed the slow, failing VM creates of round 1 ([measurements](https://github.com/aduthekaddu/freestyle-runners/pull/15#issuecomment-7031596476)). Round 3 was on 2026-11-20, on throwaway pull request 97, after [freestyle-runners#16](https://github.com/aduthekaddu/freestyle-runners/pull/16) (merged as d58f359) preloaded Node 22 and 24, the CodeQL bundle, Orbit's 4 pinned actions and 9 Docker images into the snapshot ([proof](https://github.com/aduthekaddu/freestyle-runners/pull/16#issuecomment-7032745098)). All three rounds ran the same Orbit tree. The costs come from the service's budget ledger.
 
 | Cost per round | vCPU-hours | Rounds before the 85% switch | Rounds before 200 |
 | --- | --- | --- | --- |
 | Measured, round 1 (2026-11-19), with one re-run of the flaky `End to end (sandbox)` job | 5.9 | 28 | 33 |
 | Measured, round 1, without the re-run | 5.2 | 32 | 38 |
 | Measured, round 2 (2026-11-20), all 14 jobs green on the first attempt | 4.8 | 35 | 41 |
+| Measured, round 3 (2026-11-20), all 14 jobs green on the first attempt, after the preloads | 1.85 | 91 | 108 |
 | Estimated, round 2's VM overhead with round 1's job time | 2.9 | 58 | 68 |
+| Estimated, a slow-network day like round 2, with the preloads (round 3 plus the 820 s of downloads that remain) | 2.8 | 60 | 71 |
 
-At the round 2 cost, the free plan covers about 35 rounds a month before the 85% switch, and 41 to the full 200 vCPU-hours. The estimate is one round's job time at round 1 speed (2,104 s) plus round 2's 36 s of overhead for each of the 14 VMs. It comes from one round and holds only if downloads run as fast as they did in round 1. A VM has 2 GiB per vCPU, so the plan's 400 GiB-hours allow the same number of rounds.
+At the round 3 cost, the free plan covers about 91 rounds a month before the 85% switch, and 108 to the full 200 vCPU-hours (measured, one round, 2026-11-20). On a slow-network day like round 2 it covers about 60 rounds (estimated, about 2.8 vCPU-hours a round). At the round 2 cost, before the preloads, it covered about 35 rounds before the switch, and 41 to the full 200. The first estimated row is one round's job time at round 1 speed (2,104 s) plus round 2's 36 s of overhead for each of the 14 VMs. It comes from one round and holds only if downloads run as fast as they did in round 1. A VM has 2 GiB per vCPU, so the plan's 400 GiB-hours allow the same number of rounds.
 
 Round 2 cost little less than round 1 although VM overhead fell from 77 s or more to 36 s a VM. Its jobs ran 81% longer (3,807 s against 2,104 s), all of it in steps that download from GitHub, the CodeQL bundle, the vulnerability database and registries. Steps that only use CPU did not slow. One round cannot say whether Freestyle's network was slower that morning or whether 8 VMs started in the same second share one link.
 
 The `End to end (sandbox)` job failed once in round 1, in its `sandbox-stop-output` scenario. That scenario fails the same way on romper, and the job passed when re-run. It passed first try in round 2.
 
+Round 3 took 1.85 vCPU-hours because the preloads removed 1,466 s of job time, and because Freestyle's network was faster that morning, which removed another 820 s of downloads that still happen. So it is a good-network-day number. The jobs ran 1,252 s in total, against 3,807 s in round 2. All 14 jobs found Node, the CodeQL bundle and the actions in the snapshot. Round 3 is one sample ([measured 2026-11-20](https://github.com/aduthekaddu/freestyle-runners/pull/16#issuecomment-7032745098)).
+
 ### Speed
 
-Round 2 took 713 s (12 minutes), against 1,657 s (28 minutes) for the last green round on romper. VM creates took 1 to 2 s, and all four required checks passed on the first attempt.
+Round 3 took 369 s (6 minutes), with 14 of 14 jobs on Freestyle and all four required checks green on the first attempt. It is bound by the service's limit of 8 VMs at once, as four jobs waited 87 s for a slot (measured 2026-11-20, [proof](https://github.com/aduthekaddu/freestyle-runners/pull/16#issuecomment-7032745098)). Round 2 took 713 s (12 minutes), against 1,657 s (28 minutes) for the last green round on romper. VM creates took 1 to 2 s, and all four required checks passed on the first attempt.
 
 Round 1 took 2,415 s (40 minutes), and VM creation set that time. The service then created VMs one after another, and each create took 35 s to 5 minutes. Four creates failed, and three failures in a row paused creation for 10 minutes. [freestyle-runners#12](https://github.com/aduthekaddu/freestyle-runners/issues/12) and [freestyle-runners#13](https://github.com/aduthekaddu/freestyle-runners/issues/13) tracked the two problems, and [freestyle-runners#15](https://github.com/aduthekaddu/freestyle-runners/pull/15) fixed them.
 
