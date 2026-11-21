@@ -1,6 +1,16 @@
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { hasFailedOutput, hasStoppedOutput } from "./metadata";
 
+/** The errorText of a tool call whose stream stopped first. Saved chats store it, so the value must not change. */
+export const STOPPED_ERROR = "Stopped";
+
+/** The errorText @assistant-ui/ai-sdk writes when a follow-up message cancels an unresolved tool call. */
+const CANCELLED_ON_SEND_ERROR = "User cancelled tool call by sending a new message.";
+
+export function isStoppedRenderUiError(error: string | undefined): boolean {
+  return error === STOPPED_ERROR || error === CANCELLED_ON_SEND_ERROR;
+}
+
 export type ToolRunStatus = "running" | "succeeded" | "failed" | "cancelled";
 export type ToolRunPart =
   | { state: "input-streaming" | "input-available" }
@@ -10,6 +20,7 @@ export type ToolRunPart =
 export function toolRunStatus(part: ToolRunPart, stopped = false, toolName?: string): ToolRunStatus {
   switch (part.state) {
     case "output-available":
+      if (toolName === "render_ui" && part.output == null) return stopped ? "cancelled" : "running";
       if (part.output && typeof part.output === "object" && "ok" in part.output && part.output.ok === false) {
         return "error" in part.output && part.output.error === "Search was stopped" ? "cancelled" : "failed";
       }
@@ -18,7 +29,9 @@ export function toolRunStatus(part: ToolRunPart, stopped = false, toolName?: str
       if (part.output && typeof part.output === "object" && "isError" in part.output && part.output.isError === true) return "failed";
       return "succeeded";
     case "output-error":
-      return part.errorText === "Stopped" || part.errorText === "Code run was stopped" ? "cancelled" : "failed";
+      if (part.errorText === STOPPED_ERROR || part.errorText === "Code run was stopped") return "cancelled";
+      if (toolName === "render_ui" && isStoppedRenderUiError(part.errorText)) return "cancelled";
+      return "failed";
     case "input-streaming":
     case "input-available":
       return stopped ? "cancelled" : "running";
