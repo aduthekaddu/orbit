@@ -33,9 +33,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-orbit
+        id: setup
         with:
           node-version: ${{ matrix.node }}
-          seed-dependency-cache: "true"
       - name: Typecheck
         run: npm run typecheck
       - name: Pull the pinned sandbox images
@@ -47,6 +47,18 @@ jobs:
         run: test -z "$(docker ps -aq --filter label=orbit.sandbox)"
       - name: Build
         run: npm run build
+      - name: Save verified node_modules
+        if: >-
+          success() &&
+          github.ref == 'refs/heads/main' &&
+          (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
+          steps.setup.outputs.cache-key != '' &&
+          (steps.setup.outputs.cache-state == 'miss' || steps.setup.outputs.cache-state == 'restore-error')
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules
+          key: ${{ steps.setup.outputs.cache-key }}
 
   e2e:
     name: End to end (${{ matrix.suite }})

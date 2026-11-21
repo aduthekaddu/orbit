@@ -36,7 +36,7 @@ GitHub Actions runs the checks on every pull request and every push to `main`, a
 
 Every third-party action is pinned to a commit SHA and every tool image to a digest. The local `setup-orbit` action comes with the checkout. Update a pin on purpose, and keep the version comment next to it.
 
-The Node matrix seeds the installed dependency cache on `main` and on same-repository PRs. PR saves are scoped to that PR's merge ref; they cannot replace the cache from `main`. The cache requires an exact match on the Node version, runner platform, and install inputs. A miss runs `npm ci`.
+The Node matrix saves the installed `node_modules` cache only on `main`, and only after typecheck, the full test suite, container cleanup, and build succeed. Pull requests read the cache from `main` when the exact key matches and never write cache entries. The key matches the runner platform, Linux distribution, glibc, Node target and ABI, exact Node version, and install inputs. If key computation, cache restore, or restored-tree verification fails, or if the key misses, `setup-orbit` removes `node_modules` and runs a clean `npm ci`.
 
 ## Security checks
 

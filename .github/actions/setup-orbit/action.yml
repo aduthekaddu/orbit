@@ -7,9 +7,13 @@ inputs:
   build:
     description: Run `npm run build` after the install.
     default: "false"
-  seed-dependency-cache:
-    description: Allow this job to save the installed dependency tree.
-    default: "false"
+outputs:
+  cache-key:
+    description: Exact cache key for the locked node_modules tree.
+    value: ${{ steps.key.outputs.key }}
+  cache-state:
+    description: Outcome of dependency cache restoration (hit, miss, restore-error, invalid-restore, or key-error).
+    value: ${{ steps.verify.outputs.state }}
 runs:
   using: composite
   steps:
@@ -18,33 +22,118 @@ runs:
       with:
         node-version: ${{ inputs.node-version }}
         package-manager-cache: false
-    - name: Identify the native dependency platform
-      id: platform
+    - name: Compute the dependency cache key
+      id: key
+      continue-on-error: true
       shell: bash
+      env:
+        RUNNER_OS: ${{ runner.os }}
+        RUNNER_ARCH: ${{ runner.arch }}
+        NODE_VERSION: ${{ steps.node.outputs.node-version }}
+        LOCK_HASH: ${{ hashFiles('package.json', 'package-lock.json', '.npmrc', '.github/actions/setup-orbit/action.yml') }}
       run: |
+        set -euo pipefail
+        ID=""
+        VERSION_ID=""
+        # shellcheck source=/dev/null
         . /etc/os-release
         libc=$(getconf GNU_LIBC_VERSION)
-        printf 'key=%s-%s-%s\n' "$ID" "$VERSION_ID" "${libc// /-}" >> "$GITHUB_OUTPUT"
+        libc=${libc// /-}
+        node_target=$(node -p 'process.platform + "-" + process.arch')
+        node_abi=$(node -p 'process.versions.modules')
+        for value in "$RUNNER_OS" "$RUNNER_ARCH" "$ID" "$VERSION_ID" "$libc" "$node_target" "$node_abi" "$NODE_VERSION" "$LOCK_HASH"; do
+          if [[ -z "$value" ]]; then
+            echo "Missing dependency cache key component." >&2
+            exit 1
+          fi
+        done
+        printf 'key=orbit-modules-%s-%s-%s-%s-%s-%s-abi%s-%s-%s\n' \
+          "$RUNNER_OS" "$RUNNER_ARCH" "$ID" "$VERSION_ID" "$libc" "$node_target" "$node_abi" "$NODE_VERSION" "$LOCK_HASH" >> "$GITHUB_OUTPUT"
     - name: Restore locked node_modules
+      if: steps.key.outcome == 'success' && steps.key.outputs.key != ''
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       id: modules
+      continue-on-error: true
       with:
         path: node_modules
-        key: orbit-modules-${{ runner.os }}-${{ runner.arch }}-${{ steps.platform.outputs.key }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package.json', 'package-lock.json', '.npmrc', '.github/actions/setup-orbit/action.yml') }}
-    - name: Install dependencies
-      if: steps.modules.outputs.cache-hit != 'true'
+        key: ${{ steps.key.outputs.key }}
+    - name: Verify restored node_modules
+      id: verify
       shell: bash
-      run: npm ci
-    - name: Seed locked node_modules
-      if: >-
-        inputs.seed-dependency-cache == 'true' &&
-        steps.modules.outputs.cache-hit != 'true' &&
-        (github.ref == 'refs/heads/main' ||
-        (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
-      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: node_modules
-        key: ${{ steps.modules.outputs.cache-primary-key }}
+      env:
+        KEY_OUTCOME: ${{ steps.key.outcome }}
+        CACHE_KEY: ${{ steps.key.outputs.key }}
+        RESTORE_OUTCOME: ${{ steps.modules.outcome }}
+        CACHE_HIT: ${{ steps.modules.outputs.cache-hit }}
+      run: |
+        set -euo pipefail
+        if [[ "$KEY_OUTCOME" != "success" || -z "$CACHE_KEY" ]]; then
+          echo "::warning::Dependency cache key could not be computed; falling back to clean npm ci."
+          printf 'state=key-error\n' >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        if [[ "$RESTORE_OUTCOME" != "success" ]]; then
+          echo "::warning::Dependency cache restore failed; falling back to clean npm ci."
+          printf 'state=restore-error\n' >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        if [[ "$CACHE_HIT" != "true" ]]; then
+          printf 'state=miss\n' >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        if test -d node_modules &&
+          test -s node_modules/.package-lock.json &&
+          test -x node_modules/.bin/tsc &&
+          test -x node_modules/.bin/next &&
+          test -x node_modules/.bin/tsx &&
+          test -x node_modules/.bin/playwright &&
+          node --input-type=commonjs -e '
+            const fs = require("node:fs");
+            const path = require("node:path");
+            const root = process.cwd();
+            const modulesDir = path.join(root, "node_modules") + path.sep;
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            const hidden = JSON.parse(fs.readFileSync("node_modules/.package-lock.json", "utf8"));
+            if (!hidden || typeof hidden.packages !== "object" || Object.keys(hidden.packages).length === 0) {
+              throw new Error("Incomplete hidden lockfile");
+            }
+            for (const section of ["dependencies", "devDependencies"]) {
+              for (const name of Object.keys(pkg[section] ?? {})) {
+                if (!fs.existsSync(path.join("node_modules", name, "package.json"))) {
+                  throw new Error("Missing installed package: " + name);
+                }
+              }
+            }
+            const sqlitePath = require.resolve("better-sqlite3", { paths: [root] });
+            const vecPath = require.resolve("sqlite-vec", { paths: [root] });
+            if (!sqlitePath.startsWith(modulesDir) || !vecPath.startsWith(modulesDir)) {
+              throw new Error("Native modules resolved outside workspace node_modules");
+            }
+            const Database = require(sqlitePath);
+            const sqliteVec = require(vecPath);
+            const db = new Database(":memory:");
+            try {
+              sqliteVec.load(db);
+              db.prepare("select vec_version()").get();
+            } finally {
+              db.close();
+            }
+          '; then
+          printf 'state=hit\n' >> "$GITHUB_OUTPUT"
+        else
+          echo "::warning::Restored node_modules failed verification; falling back to clean npm ci."
+          printf 'state=invalid-restore\n' >> "$GITHUB_OUTPUT"
+        fi
+    - name: Install dependencies
+      if: steps.verify.outputs.state != 'hit'
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ -d node_modules && ! -L node_modules ]]; then
+          chmod -R u+w node_modules 2>/dev/null || true
+        fi
+        rm -rf node_modules
+        npm ci
     - name: Build
       if: inputs.build == 'true'
       shell: bash
