@@ -1,0 +1,22 @@
+.github/dependabot.yml
+  s_7d86c8a5d24281::t_b026c3cea329cb 53-55
+  s_7d86c8a5d24281::t_becdd2d7e8dad5 24-26
+CONTRIBUTING.md
+  s_7d86c8a5d24281::t_d028601a1919c4 77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5e90b007c85a48f03b1ae6d35c5722b99bd1a19b",
+  "prompts": {},
+  "sessions": {
+    "s_7d86c8a5d24281": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44c1f2da-3169-55b4-b18b-296a40ea5aac",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
