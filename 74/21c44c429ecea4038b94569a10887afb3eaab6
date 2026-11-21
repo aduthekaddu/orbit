@@ -1,0 +1,21 @@
+scripts/test.mjs
+  s_82ef4c6c578a7a::t_7cc766a13d9b39 11-12
+src/lib/test-runner.test.ts
+  s_82ef4c6c578a7a::t_2911be1ae82169 107,110,114,117-120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7421c44c429ecea4038b94569a10887afb3eaab6",
+  "prompts": {},
+  "sessions": {
+    "s_82ef4c6c578a7a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f974-03f3-7f30-85e3-a71d24191573",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}

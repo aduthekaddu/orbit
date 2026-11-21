@@ -1,0 +1,123 @@
+.agents/skills/verify-orbit/SKILL.md
+  s_82ef4c6c578a7a::t_f840fff5e5aa08 3,10,12-20,28,31,39,55
+.agents/skills/verify-orbit/features/README.md
+  s_82ef4c6c578a7a::t_28f8f54f766c40 7,16
+.agents/skills/verify-orbit/features/chat.md
+  s_82ef4c6c578a7a::t_70427fcf87e9f1 25
+.agents/skills/verify-orbit/features/public.md
+  s_82ef4c6c578a7a::t_46c3e0dd41573a 23
+.agents/skills/verify-orbit/features/signin.md
+  s_82ef4c6c578a7a::t_2bd7260f9f9197 12
+.agents/skills/verify-orbit/features/signup.md
+  s_82ef4c6c578a7a::t_e8d95690640021 14,25
+.agents/skills/verify-orbit/scenarios/artifacts.mjs
+  s_82ef4c6c578a7a::t_cd185c6150f269 35,53-65
+.agents/skills/verify-orbit/scenarios/genui-stopped.mjs
+  s_82ef4c6c578a7a::t_6536c8e8622c80 1-85
+.agents/skills/verify-orbit/scenarios/sandbox-stop-output.mjs
+  s_82ef4c6c578a7a::t_a43e26526fffd5 8-74,165,201,225,253
+.agents/skills/verify-orbit/scenarios/sandbox.mjs
+  s_82ef4c6c578a7a::t_e9dcc849af260c 19-23
+.agents/skills/verify-orbit/verify.mjs
+  s_82ef4c6c578a7a::t_4f3736f84b919b 8,33-39,112-113,198-200,247,363-364,367,370,373,384,391,398,401,648
+AGENTS.md
+  s_82ef4c6c578a7a::t_2768e9eecef3f1 18,21-26
+CHANGELOG.md
+  s_82ef4c6c578a7a::t_5ea7217630935d 7-10
+CONTRIBUTING.md
+  s_82ef4c6c578a7a::t_8cd0867b8dcf6f 32-33
+docs/slices/13.md
+  s_82ef4c6c578a7a::t_e05718282c59a7 213
+docs/slices/14.md
+  s_82ef4c6c578a7a::t_92e3f71e07f30e 235
+docs/slices/15.md
+  s_82ef4c6c578a7a::t_79e64a4f178c4a 216
+docs/slices/16.md
+  s_82ef4c6c578a7a::t_5c12a7247b8baa 331
+docs/slices/17.md
+  s_82ef4c6c578a7a::t_0dab90848ef398 267
+docs/slices/18.md
+  s_82ef4c6c578a7a::t_7f40e2d4a65d9e 370
+docs/slices/19.md
+  s_82ef4c6c578a7a::t_8bb5fb8ecce1e9 245
+docs/slices/20.md
+  s_82ef4c6c578a7a::t_93fce8c1fdd02c 272
+docs/slices/21.md
+  s_82ef4c6c578a7a::t_a09370fbee2925 209
+docs/slices/22.md
+  s_82ef4c6c578a7a::t_a73424e7af4c36 241
+docs/slices/23.md
+  s_82ef4c6c578a7a::t_c6a239daebf3ef 346
+package-lock.json
+  s_82ef4c6c578a7a::t_a9098acbffac44 18-19,41,48,1655-1657,1667-1669,1672,1734-1736,1740-1742,1756-1758,1772-1774,1791-1793,1810-1812,1829-1831,1848-1850,1864-1866,7538-7540,7543,7557-7564,8903-8905
+package.json
+  s_82ef4c6c578a7a::t_a9cc095c1bb9c3 23-24,46,53,73-77
+scripts/ci/test-with-ollama.sh
+  s_82ef4c6c578a7a::t_6dfaa22a811218 6,8-9,13,22,24-41
+scripts/qa/ci-e2e.sh
+  s_82ef4c6c578a7a::t_052e2058b4e199 8-10,16-17
+scripts/qa/genui-qa.cjs
+  s_82ef4c6c578a7a::t_cf2e68d13c9bb2 2,466-468,471
+scripts/qa/mock-provider.mjs
+  s_82ef4c6c578a7a::t_757f9bc6f31007 517
+scripts/smoke.ts
+  s_82ef4c6c578a7a::t_6b9247c6478285 6
+scripts/test.mjs
+  s_82ef4c6c578a7a::t_50efa8929ef32f 1-3,6-53,56,59
+src/app/icon.svg
+  s_82ef4c6c578a7a::t_fbefe287e4c597 1
+src/components/genui/render-ui.tsx
+  s_82ef4c6c578a7a::t_5a3e744142470a 9,20-23,78-81,83-84,106
+src/components/genui/render.test.tsx
+  s_82ef4c6c578a7a::t_448e3cbf660784 4-5,24-63
+src/components/tools/run-card.test.tsx
+  s_82ef4c6c578a7a::t_b8746610903586 5,53-148
+src/components/tools/run-card.tsx
+  s_82ef4c6c578a7a::t_19bdda4fe4aa99 48
+src/lib/chat-write.test.ts
+  s_82ef4c6c578a7a::t_fe623a29bfd53a 5,19-26,30-32
+src/lib/genui/json-render-copy.test.ts
+  s_82ef4c6c578a7a::t_fbaf81430170b0 1-13
+src/lib/genui/spec.ts
+  s_82ef4c6c578a7a::t_c1a6397bde4ccb 3,87
+src/lib/memory/recall.ollama.test.ts
+  s_82ef4c6c578a7a::t_740ea546db0ef6 31,37
+src/lib/memory/store.test.ts
+  s_82ef4c6c578a7a::t_c96977e73f88df 157-158
+src/lib/messages.test.ts
+  s_82ef4c6c578a7a::t_0ca3fc99e27b2c 5,19-26,30-32
+src/lib/pr-checks.test.ts
+  s_82ef4c6c578a7a::t_e4dc280c258c38 11-22,37,86-87,129
+src/lib/sandbox/run.test.ts
+  s_82ef4c6c578a7a::t_77b6bbc049da72 14-25,351,423,475
+src/lib/slice-plan-rules.test.ts
+  s_82ef4c6c578a7a::t_561a4c626d672d 285,288-290,295,311-313
+src/lib/test-data-dir.ts
+  s_82ef4c6c578a7a::t_3a46354f872a55 1-11
+src/lib/test-runner.test.ts
+  s_82ef4c6c578a7a::t_85dbcba9e4fa14 16-21,26-29,32-36,38,42,53,59-134
+src/lib/tools/github.test.ts
+  s_82ef4c6c578a7a::t_609ba9ea527369 1,3,29-50,81,97,120,135,139,143-147,155-177,218,372,399,422-426
+src/lib/tools/run-code.test.ts
+  s_82ef4c6c578a7a::t_a3d8fc59f35cc2 1,3,10-11,26-30
+src/lib/tools/run-status.test.ts
+  s_82ef4c6c578a7a::t_98a6cf1bead907 100-121
+src/lib/tools/run-status.ts
+  s_82ef4c6c578a7a::t_436828cff1e7a4 4-13,23,32-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "68a7868920d7238518bc538a061711cdc4fe0e5e",
+  "prompts": {},
+  "sessions": {
+    "s_82ef4c6c578a7a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f974-03f3-7f30-85e3-a71d24191573",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+.github/workflows/ci.yml
+  s_715034143bbde0::t_80a536983b3702 53-56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7ce3f2a317a0d2fda3618638a8d7c46cae387ef3",
+  "prompts": {},
+  "sessions": {
+    "s_715034143bbde0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1fccf-2e67-7513-9385-3067f848c64d",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}

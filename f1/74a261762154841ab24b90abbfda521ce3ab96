@@ -1,0 +1,31 @@
+docs/slices/13.md
+  s_82ef4c6c578a7a::t_a9f73e37d84c07 213
+docs/slices/15.md
+  s_82ef4c6c578a7a::t_295c21f87d03c4 216
+docs/slices/18.md
+  s_82ef4c6c578a7a::t_5a719a27801310 370
+docs/slices/19.md
+  s_82ef4c6c578a7a::t_4ffb2d2f652b9a 245
+docs/slices/20.md
+  s_82ef4c6c578a7a::t_39b203b927591f 272
+docs/slices/22.md
+  s_82ef4c6c578a7a::t_a8b1865468479a 241
+docs/slices/23.md
+  s_82ef4c6c578a7a::t_51a336e4b66794 346
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f174a261762154841ab24b90abbfda521ce3ab96",
+  "prompts": {},
+  "sessions": {
+    "s_82ef4c6c578a7a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f974-03f3-7f30-85e3-a71d24191573",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+CONTRIBUTING.md
+  s_82ef4c6c578a7a::t_f2098b81ddf652 32
+scripts/ci/test-with-ollama.sh
+  s_82ef4c6c578a7a::t_80c05a86b433c6 41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cb5f7a36533df589291db0c1e9bff914aa5a2421",
+  "prompts": {},
+  "sessions": {
+    "s_82ef4c6c578a7a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1f974-03f3-7f30-85e3-a71d24191573",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
