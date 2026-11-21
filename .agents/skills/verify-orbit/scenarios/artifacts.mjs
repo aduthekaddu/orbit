@@ -32,6 +32,7 @@ export default async function artifacts({ page, origin, step, shot }) {
     await composer.press("Enter");
     await page.locator('[data-message-role="assistant"]').nth(previousReplies).waitFor({ timeout: 30_000 });
     await reply.getByRole("button", { name: "Regenerate", exact: true }).waitFor({ timeout: 30_000 });
+    await reply.locator('[data-status="complete"]').waitFor({ timeout: 30_000 });
   }
 
   async function open() {
@@ -49,7 +50,19 @@ export default async function artifacts({ page, origin, step, shot }) {
       open(),
     ]);
     await loaded.waitForLoadState("load", { timeout: Math.max(1, deadline - Date.now()) });
-    return loaded;
+    // A sandboxed srcdoc iframe has an opaque origin (OOPIF), so Chromium can still route browser clicks
+    // to the parent <iframe> until Viz aggregates the child's hit-test region. Confirm pointer routing first.
+    const body = loaded.locator("body");
+    await body.waitFor({ timeout: Math.max(1, deadline - Date.now()) });
+    for (let attempt = 0; Date.now() < deadline; attempt += 1) {
+      await body.hover({
+        position: { x: 1 + (attempt % 2), y: 1 },
+        timeout: Math.max(1, deadline - Date.now()),
+      });
+      if (await body.evaluate((node) => node.matches(":hover"))) return loaded;
+      await page.waitForTimeout(25);
+    }
+    throw new Error("HTML artifact frame did not accept pointer input before timeout");
   }
 
   async function close() {

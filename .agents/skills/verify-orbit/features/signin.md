@@ -9,7 +9,7 @@ Sign in takes the existing account from `/login` back to a chat.
 
 ## How to get to it (user POV)
 
-- Open `http://127.0.0.1:3210/login`.
+- Open `http://127.0.0.1:<port>/login`.
 - Submit Email, Password, and `Sign in`.
 - From a chat, the sidebar `Sign out` button returns to `/login`.
 

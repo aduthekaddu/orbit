@@ -1,12 +1,62 @@
+import { createHash, randomInt } from "node:crypto";
+import { globSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { run } from "node:test";
 import { tap } from "node:test/reporters";
+import { parseArgs } from "node:util";
 
-const requireAll = process.argv.includes("--require-all");
+function parseWorkers(raw, source) {
+  if (raw === undefined) return undefined;
+  const count = Number(raw);
+  if (!/^[1-9]\d*$/.test(raw) || !Number.isSafeInteger(count)) {
+    throw new Error(source + " must be a positive safe integer");
+  }
+  return count;
+}
+
+const { values, tokens } = parseArgs({
+  args: process.argv.slice(2),
+  options: {
+    "require-all": { type: "boolean", default: false },
+    shuffle: { type: "boolean", default: false },
+    workers: { type: "string" },
+  },
+  strict: true,
+  allowPositionals: false,
+  tokens: true,
+});
+
+if (tokens.some((token) => token.kind === "option-terminator")) {
+  throw new Error("Unexpected argument '--'. This command does not take positional arguments");
+}
+
+const requireAll = values["require-all"];
+const workers = values.workers !== undefined
+  ? parseWorkers(values.workers, "--workers")
+  : parseWorkers(process.env.ORBIT_TEST_WORKERS, "ORBIT_TEST_WORKERS");
+const effectiveWorkers = workers ?? Math.max(availableParallelism() - 1, 1);
+
+const globs = ["src/**/*.test.ts", "src/**/*.test.tsx"];
+const seed = process.env.ORBIT_TEST_SEED ?? (values.shuffle ? String(randomInt(2 ** 32)) : undefined);
+let files;
+if (seed !== undefined) {
+  if (!/^\d{1,10}$/.test(seed)) throw new Error("ORBIT_TEST_SEED must be a decimal number");
+  files = globs
+    .flatMap((pattern) => globSync(pattern))
+    .map((file) => ({ file, rank: createHash("sha256").update(seed).update("\0").update(file).digest("hex") }))
+    .sort((a, b) => a.rank.localeCompare(b.rank))
+    .map(({ file }) => file);
+  if (files.length === 0) throw new Error("No Orbit test files were found");
+  const fileLabel = files.length === 1 ? "file" : "files";
+  const workerLabel = effectiveWorkers === 1 ? "worker" : "workers";
+  console.error(`Orbit test order seed: ${seed} (${files.length} ${fileLabel}, ${effectiveWorkers} ${workerLabel})`);
+}
+
 const tests = run({
-  globPatterns: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+  ...(files ? { files } : { globPatterns: globs }),
   execArgv: ["--import", "tsx"],
   isolation: "process",
-  concurrency: true,
+  concurrency: workers ?? true,
 });
 
 // The summary counts leave out a skipped suite, so count every skip or todo mark, on tests and suites.

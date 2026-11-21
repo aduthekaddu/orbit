@@ -16,7 +16,11 @@ export default async function sandbox({ page, origin, step, shot }) {
     return;
   }
   const python = cards.first();
-  step("Python card shows source, stdout 2, exit 0, and duration", (await python.innerText()).includes("print(1+1)") && await python.locator('[data-code-stdout]').textContent() === "2\n" && (await python.innerText()).includes("Exit 0") && /\d+ ms/.test(await python.innerText()));
+  const pythonText = await python.innerText();
+  step("Python card shows source, stdout 2, exit 0, and duration",
+    pythonText.includes("print(1+1)") &&
+    await python.locator('[data-code-stdout]').textContent() === "2\n" &&
+    /\bExit 0\s+(?:\d+ ms|\d+\.\d s)\b/.test(pythonText));
   step("Python card succeeds", await python.locator('[data-tool-status="succeeded"]').count() === 1);
   await shot("python");
   await page.reload();
