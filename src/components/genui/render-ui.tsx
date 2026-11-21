@@ -6,7 +6,7 @@ import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { Component, useMemo, type ReactNode } from "react";
 import { registry } from "@/components/genui/registry";
 import { parseRenderSpec, type RenderOutcome } from "@/lib/genui/spec";
-import { STOPPED_ERROR } from "@/lib/tools/run-status";
+import { isStoppedRenderUiError } from "@/lib/tools/run-status";
 
 function pretty(value: unknown) {
   if (typeof value === "string") return value;
@@ -81,7 +81,7 @@ export function RenderUiPart({ result, args, argsText, status, isError, toolCall
 
   if (isError) {
     const error = errorText(result);
-    return error === STOPPED_ERROR ? <StoppedFallback /> : <Fallback error={error} raw={argsText || args} />;
+    return isStoppedRenderUiError(error) ? <StoppedFallback /> : <Fallback error={error} raw={argsText || args} />;
   }
 
   const outcome = readOutcome(result);

@@ -97,3 +97,25 @@ test("a remember or forget result with an error is failed, and one without is su
   assert.equal(toolCallRunStatus({ toolName: "remember", status: done, result: { id: "mem-1", text: "I deploy to Fly.io" }, isError: false }), "succeeded");
   assert.equal(toolCallRunStatus({ toolName: "forget", status: done, result: { id: "mem-1" }, isError: false }), "succeeded");
 });
+
+test("a render_ui call cancelled by a follow-up message stays cancelled without changing other tools or real errors", () => {
+  const cancelledOnSend = "User cancelled tool call by sending a new message.";
+  const done = { type: "complete" } as const;
+  assert.equal(toolRunStatus({ state: "output-error", errorText: cancelledOnSend }, false, "render_ui"), "cancelled");
+  assert.equal(toolCallRunStatus({ toolName: "render_ui", status: done, result: { error: cancelledOnSend }, isError: true }), "cancelled");
+  assert.equal(toolCallRunStatus({ toolName: "render_ui", status: done, result: { error: "Invalid tool arguments" }, isError: true }), "failed");
+  for (const toolName of [undefined, "web_search", "run_code", "github_list_issues", "remember"] as const) {
+    assert.equal(toolRunStatus({ state: "output-error", errorText: cancelledOnSend }, false, toolName), "failed");
+    assert.equal(toolCallRunStatus({ toolName, status: done, result: { error: cancelledOnSend }, isError: true }), "failed");
+  }
+});
+
+test("a missing or null render_ui result matches its stopped or running state without changing other tools", () => {
+  assert.equal(toolRunStatus({ state: "output-available", output: null }, false, "render_ui"), "running");
+  assert.equal(toolRunStatus({ state: "output-available", output: null }, true, "render_ui"), "cancelled");
+  assert.equal(toolCallRunStatus({ toolName: "render_ui", status: { type: "running" }, result: null, isError: false }), "running");
+  assert.equal(toolCallRunStatus({ toolName: "render_ui", status: { type: "complete" }, result: null, isError: false }), "cancelled");
+  assert.equal(toolCallRunStatus({ toolName: "render_ui", status: { type: "incomplete", reason: "error" }, result: null, isError: false }), "cancelled");
+  assert.equal(toolRunStatus({ state: "output-available", output: null }, true, "web_search"), "succeeded");
+  assert.equal(toolCallRunStatus({ toolName: "web_search", status: { type: "complete" }, result: null, isError: false }), "succeeded");
+});

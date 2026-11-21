@@ -50,6 +50,17 @@ test("a rejected spec keeps its error fallback", () => {
   assert.doesNotMatch(html, />Stopped</);
 });
 
+test("a spec cancelled by a follow-up message shows one muted Stopped fallback without raw arguments", () => {
+  const html = renderPart({
+    argsText: '{"root":"unfinished',
+    result: { error: "User cancelled tool call by sending a new message." },
+    isError: true,
+    status: { type: "complete" },
+  });
+  assert.match(html, /<p data-genui-fallback="[^"]*" class="text-sm text-muted-foreground">Stopped<\/p>/);
+  assert.doesNotMatch(html, /text-destructive|unfinished|User cancelled|<pre|<details/);
+});
+
 test("a valid card renders its title and metric", () => {
   const outcome = parseRenderSpec(card);
   assert.equal(outcome.ok, true);
