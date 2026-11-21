@@ -104,15 +104,19 @@ test("unknown flags and positional arguments fail explicitly instead of silently
 
 test("worker count overrides are validated and logged alongside the seed", () => {
   const fixture = `test("runs", () => {});`;
-  for (const invalid of ["0", "-1", "1.5", "abc", "", "257"]) {
+  for (const invalid of ["0", "-1", "1.5", "abc", "", "9007199254740992"]) {
     const envResult = runSuite(fixture, ["--require-all"], { workers: invalid });
     assert.equal(envResult.status, 1, `ORBIT_TEST_WORKERS=${JSON.stringify(invalid)} should fail`);
-    assert.match(envResult.stderr, /ORBIT_TEST_WORKERS must be an integer between 1 and 256/);
+    assert.match(envResult.stderr, /ORBIT_TEST_WORKERS must be a positive safe integer/);
 
     const cliResult = runSuite(fixture, ["--require-all", `--workers=${invalid}`], { workers: null });
     assert.equal(cliResult.status, 1, `--workers=${JSON.stringify(invalid)} should fail`);
-    assert.match(cliResult.stderr, /--workers must be an integer between 1 and 256/);
+    assert.match(cliResult.stderr, /--workers must be a positive safe integer/);
   }
+
+  const largeHostReplay = runSuite(fixture, ["--require-all"], { workers: "257", seed: "419" });
+  assert.equal(largeHostReplay.status, 0, largeHostReplay.stderr);
+  assert.match(largeHostReplay.stderr, /seed: 419 \(1 file, 257 workers\)/);
 
   const missingValue = runSuite(fixture, ["--workers"], { workers: null });
   assert.equal(missingValue.status, 1);

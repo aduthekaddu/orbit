@@ -5,16 +5,11 @@ import { run } from "node:test";
 import { tap } from "node:test/reporters";
 import { parseArgs } from "node:util";
 
-const MAX_WORKERS = 256;
-
 function parseWorkers(raw, source) {
   if (raw === undefined) return undefined;
-  if (!/^[1-9]\d*$/.test(raw)) {
-    throw new Error(`${source} must be an integer between 1 and ${MAX_WORKERS}`);
-  }
   const count = Number(raw);
-  if (!Number.isSafeInteger(count) || count > MAX_WORKERS) {
-    throw new Error(`${source} must be an integer between 1 and ${MAX_WORKERS}`);
+  if (!/^[1-9]\d*$/.test(raw) || !Number.isSafeInteger(count)) {
+    throw new Error(source + " must be a positive safe integer");
   }
   return count;
 }
