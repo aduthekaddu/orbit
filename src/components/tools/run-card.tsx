@@ -45,7 +45,7 @@ export function RunCard(props: ToolCallMessagePartProps) {
         {language && <span className="shrink-0 rounded-sm border px-1.5 font-mono text-2xs leading-4 text-muted-foreground">{languageLabels[language]}</span>}
         <span role="status" data-tool-status={status} className={`ml-auto shrink-0 ${status === "failed" ? "text-destructive" : "text-muted-foreground"}`}>{statusLabels[status]}</span>
       </div>
-      {(kind === "code" || status !== "running" && status !== "cancelled") && (
+      {(kind === "code" || status !== "running" && (kind === "genui" || status !== "cancelled")) && (
         <div className="min-w-0 p-3">
           {kind === "code" ? <CodeRun input={props.args} output={status === "cancelled" && !hasStoppedCodeOutput(props.result) ? undefined : props.result} /> : kind === "genui" ? <RenderUiPart {...props} /> : props.isError ? <p className="text-sm text-destructive">Tool failed</p> : kind === "search" ? <SearchResults output={props.result} /> : kind === "github" ? <GithubOutput output={props.result} input={props.args} /> : savedText ? <p className="break-words text-sm text-foreground">{savedText}</p> : <GenericOutput output={props.result} />}
         </div>
