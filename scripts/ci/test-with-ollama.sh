@@ -38,5 +38,4 @@ if [[ "$actual_threads" != "$threads" ]]; then
   exit 1
 fi
 printf 'Ollama fixture uses the pinned weights with %s inference threads.\n' "$actual_threads"
-# 90s sandbox test ceiling plus scheduling margin across shuffled workers.
-timeout 120s npm test -- --require-all --shuffle
+timeout 60s npm test -- --require-all --shuffle
