@@ -26,10 +26,17 @@ weights=$(docker exec "$container" ollama show --modelfile "$model" | awk '/^FRO
 docker exec "$container" ollama cp "$model" "$base_model"
 printf 'FROM %s\nPARAMETER num_thread %s\n' "$base_model" "$threads" |
   docker exec -i "$container" ollama create "$model" --file /dev/stdin
-actual_weights=$(docker exec "$container" ollama show --modelfile "$model" | awk '/^FROM / { print $2 }')
+modelfile=$(docker exec "$container" ollama show --modelfile "$model")
+actual_weights=$(awk '/^FROM / { print $2 }' <<< "$modelfile")
+actual_threads=$(awk '$1 == "PARAMETER" && $2 == "num_thread" { print $3 }' <<< "$modelfile")
 if [[ "$weights" != */blobs/sha256-* || "$weights" != "$actual_weights" ]]; then
   echo "The Ollama fixture must use the pinned model weights." >&2
   exit 1
 fi
-printf 'Ollama fixture uses the pinned weights with %s inference threads.\n' "$threads"
-timeout 60s npm test -- --require-all --shuffle
+if [[ "$actual_threads" != "$threads" ]]; then
+  echo "The Ollama fixture must set num_thread to $threads (got '${actual_threads:-unset}')." >&2
+  exit 1
+fi
+printf 'Ollama fixture uses the pinned weights with %s inference threads.\n' "$actual_threads"
+# 90s sandbox test ceiling plus scheduling margin across shuffled workers.
+timeout 120s npm test -- --require-all --shuffle
