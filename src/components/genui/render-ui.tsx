@@ -6,6 +6,7 @@ import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { Component, useMemo, type ReactNode } from "react";
 import { registry } from "@/components/genui/registry";
 import { parseRenderSpec, type RenderOutcome } from "@/lib/genui/spec";
+import { isStoppedRenderUiError } from "@/lib/tools/run-status";
 
 function pretty(value: unknown) {
   if (typeof value === "string") return value;
@@ -14,6 +15,10 @@ function pretty(value: unknown) {
   } catch {
     return String(value);
   }
+}
+
+function StoppedFallback() {
+  return <p data-genui-fallback className="text-sm text-muted-foreground">Stopped</p>;
 }
 
 function Fallback({ error, raw }: { error: string; raw: unknown }) {
@@ -70,8 +75,13 @@ export function RenderUiPart({ result, args, argsText, status, isError, toolCall
     return <p className="text-sm text-muted-foreground">Building</p>;
   }
 
+  if (status.type !== "running" && result == null && !isError) {
+    return <StoppedFallback />;
+  }
+
   if (isError) {
-    return <Fallback error={errorText(result)} raw={argsText || args} />;
+    const error = errorText(result);
+    return isStoppedRenderUiError(error) ? <StoppedFallback /> : <Fallback error={error} raw={argsText || args} />;
   }
 
   const outcome = readOutcome(result);
@@ -93,7 +103,7 @@ export function RenderUiPart({ result, args, argsText, status, isError, toolCall
   }
 
   if (status.type === "incomplete") {
-    return <Fallback error="Stopped" raw={argsText || args} />;
+    return <StoppedFallback />;
   }
 
   return <Fallback error="No tool result" raw={argsText || args} />;

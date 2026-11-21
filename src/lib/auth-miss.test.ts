@@ -76,6 +76,16 @@ test("request headers cannot add or overwrite fields in the line", () => {
   assert.equal(value.access, "no");
 });
 
+test("log fields quote control characters, quotes, backslashes, spaces and non-ASCII text", () => {
+  const headers = new Headers();
+  const bare = "/c/!#-[]~";
+  assert.ok(describeAuthMiss(bare, headers).startsWith(`auth miss path=${bare} kind=`));
+  for (const character of ["\0", "\t", "\n", "\r", " ", '"', "\\", "\x7f", "é", "\u{1f680}"]) {
+    const pathname = `/c/${character}`;
+    assert.ok(describeAuthMiss(pathname, headers).startsWith(`auth miss path=${JSON.stringify(pathname)} kind=`));
+  }
+});
+
 test("the line holds no cookie value and no raw user agent", () => {
   const line = describeAuthMiss(
     "/c/abc",
