@@ -14,9 +14,9 @@
     "dream": "tsx scripts/dream.ts"
   },
   "dependencies": {
-    "@ai-sdk/mcp": "2.0.88",
-    "@ai-sdk/openai-compatible": "3.0.82",
-    "@ai-sdk/react": "4.0.163",
+    "@ai-sdk/mcp": "2.0.99",
+    "@ai-sdk/openai-compatible": "3.0.92",
+    "@ai-sdk/react": "4.0.177",
     "@assistant-ui/react": "0.15.32",
     "@assistant-ui/react-ai-sdk": "1.4.21",
     "@assistant-ui/react-markdown": "0.14.24",
@@ -33,7 +33,7 @@
     "@radix-ui/react-toggle-group": "1.2.1",
     "@radix-ui/react-tooltip": "1.4.1",
     "@tavily/core": "0.7.14",
-    "ai": "7.0.159",
+    "ai": "7.0.173",
     "axios": "1.21.0",
     "better-auth": "1.7.22",
     "better-sqlite3": "13.0.3",
