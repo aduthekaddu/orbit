@@ -11,7 +11,7 @@ Sign up creates the only account from `/signup`, opens a new chat, and rejects a
 
 ## How to get to it (user POV)
 
-- Open `http://127.0.0.1:3210/signup` and submit Name, Email, Password, and `Create account`.
+- Open `http://127.0.0.1:<port>/signup` and submit Name, Email, Password, and `Create account`.
 - After the account exists, `/signup` shows `Signup is closed` and a `Sign in` link.
 
 ## Driving it with verify-orbit
@@ -22,7 +22,7 @@ Preconditions:
 - `signupOpen` is `yes`. An empty sandbox from launch has this. If it is `no`, the drive fails and the reason is a user already in the sandbox database.
 
 - **Open the form.** Visit `/signup`. The drive checks HTTP 200 and the text `Create account`.
-- **Create the account.** The drive posts name `Verify`, email `verify@orbit.local`, and the fixture password to `/api/auth/sign-up/email` with `Origin: http://127.0.0.1:3210`. Status 200.
+- **Create the account.** The drive posts name `Verify`, email `verify@orbit.local`, and the fixture password to `/api/auth/sign-up/email` with `Origin: http://127.0.0.1:<port>`. Status 200.
 - **Land in a chat.** `GET /` with the session cookie returns 302 or 307 to `/c/<id>`. `GET` that path returns 200 and the text `Connect a provider`. Launch gives the server no provider settings, so the first chat shows the provider form and not the composer.
 - **See the chat in the list.** `GET /api/chats` returns 200 and at least one chat. The same request without a cookie returns 401.
 - **Read the database.** `.verify/sandbox/data/orbit.db` has 1 row in `user` and at least 1 row in `chats`.

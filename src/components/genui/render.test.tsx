@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { SpecView } from "./render-ui";
+import { RenderUiPart, SpecView } from "./render-ui";
+import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { parseRenderSpec } from "../../lib/genui/spec";
 
 const card = {
@@ -19,6 +20,46 @@ const card = {
     },
   },
 };
+
+function renderPart(overrides: Partial<ToolCallMessagePartProps>) {
+  return renderToStaticMarkup(<RenderUiPart
+    type="tool-call" toolCallId="view" toolName="render_ui" args={{}} argsText=""
+    status={{ type: "running" }} addResult={() => {}} resume={() => {}}
+    respondToApproval={async () => {}} {...overrides}
+  />);
+}
+
+test("a stopped spec shows a muted fallback without raw arguments", () => {
+  const html = renderPart({ argsText: '{"root":"unfinished', status: { type: "incomplete", reason: "error" } });
+  assert.match(html, /data-genui-fallback/);
+  assert.match(html, /text-muted-foreground/);
+  assert.match(html, />Stopped</);
+  assert.doesNotMatch(html, /unfinished|<pre|<details/);
+});
+
+test("a running spec keeps building until the stream stops", () => {
+  const html = renderPart({ argsText: '{"root":"unfinished' });
+  assert.match(html, />Building</);
+  assert.doesNotMatch(html, /data-genui-fallback|Stopped/);
+});
+
+test("a rejected spec keeps its error fallback", () => {
+  const html = renderPart({ result: { error: "Invalid tool arguments" }, isError: true, status: { type: "complete" } });
+  assert.match(html, /data-genui-fallback/);
+  assert.match(html, /Invalid tool arguments/);
+  assert.doesNotMatch(html, />Stopped</);
+});
+
+test("a spec cancelled by a follow-up message shows one muted Stopped fallback without raw arguments", () => {
+  const html = renderPart({
+    argsText: '{"root":"unfinished',
+    result: { error: "User cancelled tool call by sending a new message." },
+    isError: true,
+    status: { type: "complete" },
+  });
+  assert.match(html, /<p data-genui-fallback="[^"]*" class="text-sm text-muted-foreground">Stopped<\/p>/);
+  assert.doesNotMatch(html, /text-destructive|unfinished|User cancelled|<pre|<details/);
+});
 
 test("a valid card renders its title and metric", () => {
   const outcome = parseRenderSpec(card);
