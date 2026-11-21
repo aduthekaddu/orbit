@@ -87,20 +87,24 @@ runs:
           test -x node_modules/.bin/next &&
           test -x node_modules/.bin/tsx &&
           test -x node_modules/.bin/playwright &&
+          node_modules/.bin/tsrs --version > /dev/null &&
           node --input-type=commonjs -e '
             const fs = require("node:fs");
             const path = require("node:path");
             const root = process.cwd();
             const modulesDir = path.join(root, "node_modules") + path.sep;
             const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            const locked = JSON.parse(fs.readFileSync("package-lock.json", "utf8")).packages;
             const hidden = JSON.parse(fs.readFileSync("node_modules/.package-lock.json", "utf8"));
             if (!hidden || typeof hidden.packages !== "object" || Object.keys(hidden.packages).length === 0) {
               throw new Error("Incomplete hidden lockfile");
             }
             for (const section of ["dependencies", "devDependencies"]) {
               for (const name of Object.keys(pkg[section] ?? {})) {
-                if (!fs.existsSync(path.join("node_modules", name, "package.json"))) {
-                  throw new Error("Missing installed package: " + name);
+                const key = "node_modules/" + name;
+                const installed = JSON.parse(fs.readFileSync(path.join(key, "package.json"), "utf8"));
+                if (!installed.version || installed.version !== locked[key]?.version) {
+                  throw new Error("Installed package does not match the lockfile: " + name);
                 }
               }
             }
