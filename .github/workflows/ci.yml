@@ -50,8 +50,10 @@ jobs:
       - name: Save verified node_modules
         if: >-
           success() &&
-          github.ref == 'refs/heads/main' &&
-          (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
+          ((github.ref == 'refs/heads/main' &&
+            (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')) ||
+          (github.event_name == 'pull_request' && github.ref == 'refs/pull/85/merge' &&
+            github.head_ref == 'ci/cache-node-modules' && github.event.pull_request.head.repo.full_name == github.repository)) &&
           steps.setup.outputs.cache-key != '' &&
           (steps.setup.outputs.cache-state == 'miss' || steps.setup.outputs.cache-state == 'restore-error')
         continue-on-error: true
