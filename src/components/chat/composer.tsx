@@ -1,5 +1,6 @@
 "use client";
 
+import type { Ref } from "react";
 import Link from "next/link";
 import { AuiIf, ComposerPrimitive } from "@assistant-ui/react";
 import { ArrowUpIcon, StopIcon } from "@phosphor-icons/react";
@@ -8,7 +9,7 @@ import { cn } from "@/lib/utils";
 const roundAction =
   "flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground transition-[background-color,color,scale] duration-150 ease-orbit hover:bg-primary/90 enabled:active:scale-90 disabled:bg-surface-raised disabled:text-muted-foreground/60";
 
-export function Composer({ ready, model }: { ready: boolean; model: string }) {
+export function Composer({ ready, model, inputRef }: { ready: boolean; model: string; inputRef?: Ref<HTMLTextAreaElement> }) {
   return (
     <ComposerPrimitive.Root
       className={cn(
@@ -17,7 +18,8 @@ export function Composer({ ready, model }: { ready: boolean; model: string }) {
       )}
     >
       <ComposerPrimitive.Input
-        placeholder="Message orbit"
+        ref={inputRef}
+        placeholder="Ask anything"
         rows={1}
         disabled={!ready}
         autoFocus={ready}

@@ -22,12 +22,18 @@ export function connectionFromResponse(
 export type SettingsSnapshot = {
   baseUrl: string;
   apiKey: string;
+  searxngUrl: string;
+  tavilyApiKey: string | null;
+  githubToken: string | null;
+  githubMcpUrl: string;
   model: string;
   effort: ReasoningEffort;
 };
 
 export type AppliedSave = {
   clearKey: boolean;
+  clearTavilyKey: boolean;
+  clearGithubToken: boolean;
   applyKeySet: boolean;
   saved: boolean;
 };
@@ -35,9 +41,13 @@ export type AppliedSave = {
 export function appliedSave(submitted: SettingsSnapshot, current: SettingsSnapshot): AppliedSave {
   const sameBaseUrl = current.baseUrl === submitted.baseUrl;
   const sameKey = current.apiKey === submitted.apiKey;
+  const sameTavilyKey = current.tavilyApiKey === submitted.tavilyApiKey;
+  const sameGithubToken = current.githubToken === submitted.githubToken;
   return {
     clearKey: sameKey,
+    clearTavilyKey: sameTavilyKey,
+    clearGithubToken: sameGithubToken,
     applyKeySet: sameBaseUrl,
-    saved: sameBaseUrl && sameKey && current.model === submitted.model && current.effort === submitted.effort,
+    saved: sameBaseUrl && sameKey && sameTavilyKey && sameGithubToken && current.githubMcpUrl === submitted.githubMcpUrl && current.searxngUrl === submitted.searxngUrl && current.model === submitted.model && current.effort === submitted.effort,
   };
 }

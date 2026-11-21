@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogOverlay, DialogPortal, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Sidebar, type ChatSummary } from "@/components/chat/sidebar";
+import { Sidebar, chatLabel, type ChatSummary } from "@/components/chat/sidebar";
 import { CommandPalette } from "./command-palette";
 import { ShortcutKbd, useShortcuts } from "./shortcuts";
 import { SIDEBAR_COOKIE } from "./sidebar-cookie";
@@ -103,7 +103,8 @@ export function AppShell({
     sidebar: toggleSidebar,
   });
 
-  const title = pathname === "/settings" ? "Settings" : chats.find((chat) => pathname === `/c/${chat.id}`)?.title;
+  const current = chats.find((chat) => pathname === `/c/${chat.id}`);
+  const title = pathname === "/settings" ? "Settings" : pathname === "/memory" ? "Memory" : current && chatLabel(current.title);
 
   const sidebarProps = {
     chats,

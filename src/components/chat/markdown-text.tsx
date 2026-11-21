@@ -1,11 +1,17 @@
 "use client";
 
-import type { ComponentProps, ElementType, JSX } from "react";
+import { useMemo, useState, type ComponentProps, type ElementType, type JSX } from "react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
+import { useAui, useAuiState } from "@assistant-ui/react";
+import { useAISDKChat } from "@assistant-ui/react-ai-sdk";
+import { textPartIndex } from "@/lib/chat-parts";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
+import { rehypeCodeBlocks } from "@/lib/markdown-code";
 import { ScrollFade } from "@/components/ui/scroll-fade";
+import { CodeEditContext } from "./code-edit-context";
 import { CodeHeader, SyntaxHighlighter } from "./code-block";
+import { useSaveMessageText } from "./use-save-message";
 
 type Tag = keyof JSX.IntrinsicElements;
 
@@ -67,12 +73,44 @@ function Table({ node: _node, className, ...props }: ComponentProps<"table"> & {
 const components = { ...styledElements, a: Link, table: Table, CodeHeader, SyntaxHighlighter };
 const remarkPlugins = [remarkGfm];
 
-export function MarkdownText({ className }: { className?: string }) {
+const rehypePlugins = [rehypeCodeBlocks];
+
+export function MarkdownText({ className, editable = false }: { className?: string; editable?: boolean }) {
+  const aui = useAui();
+  const chat = useAISDKChat();
+  const partText = useAuiState((s) => (s.part.type === "text" ? s.part.text : ""));
+  const textOrdinal = useAuiState((s) => {
+    const query = aui.part.query;
+    if (!query || !("index" in query) || typeof query.index !== "number") return undefined;
+    return s.message.parts.slice(0, query.index).filter((part) => part.type === "text").length;
+  });
+  const messageId = useAuiState((s) => s.message.id);
+  const sourceMessage = chat?.messages.find((message) => message.id === messageId);
+  const sourceIndex = sourceMessage && textOrdinal !== undefined ? textPartIndex(sourceMessage.parts, textOrdinal) : undefined;
+  const running = useAuiState((s) => s.message.status?.type === "running");
+  const [active, setActive] = useState<number | null>(null);
+  const { save, saving, error } = useSaveMessageText();
+
+  const codeEdit = useMemo(
+    () => ({
+      enabled: editable && Boolean(messageId) && !running,
+      text: partText, textOrdinal, active, setActive, messageId, saving, error,
+      save: (id: string, text: string) => {
+        if (sourceIndex === undefined) return Promise.resolve(false);
+        return save(id, text, sourceIndex);
+      },
+    }),
+    [editable, messageId, running, partText, textOrdinal, active, save, saving, error, sourceIndex],
+  );
+
   return (
-    <MarkdownTextPrimitive
-      remarkPlugins={remarkPlugins}
-      components={components}
-      className={cn("text-sm leading-6 break-words [&>:first-child]:mt-0 [&>:last-child]:mb-0", className)}
-    />
+    <CodeEditContext.Provider value={codeEdit}>
+      <MarkdownTextPrimitive
+        remarkPlugins={remarkPlugins}
+        rehypePlugins={rehypePlugins}
+        components={components}
+        className={cn("text-sm leading-6 break-words [&>:first-child]:mt-0 [&>:last-child]:mb-0", className)}
+      />
+    </CodeEditContext.Provider>
   );
 }

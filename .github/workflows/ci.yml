@@ -1,0 +1,161 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  checks:
+    name: Typecheck, test, build (Node ${{ matrix.node }})
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22", "24"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-orbit
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Pull the pinned sandbox images
+        run: |
+          grep -oE '[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[a-f0-9]{64}' src/lib/sandbox/images.ts | sort -u | xargs -n1 docker pull
+      - name: Test
+        run: scripts/ci/test-with-ollama.sh
+      - name: Check that no sandbox container remains
+        run: test -z "$(docker ps -aq --filter label=orbit.sandbox)"
+      - name: Build
+        run: npm run build
+
+  e2e:
+    name: End to end (${{ matrix.suite }})
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [core, browse, sandbox]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-orbit
+        with:
+          build: "true"
+      - name: Pull the pinned sandbox images
+        if: matrix.suite == 'sandbox'
+        run: |
+          grep -oE '[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[a-f0-9]{64}' src/lib/sandbox/images.ts | sort -u | xargs -n1 docker pull
+      - name: Run the suite
+        env:
+          SUITE: ${{ matrix.suite }}
+        run: scripts/qa/ci-e2e.sh "$SUITE"
+      - name: Show the server logs
+        if: failure()
+        run: tail -n 150 .verify/evidence/logs/*.log || true
+      - name: Keep the evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: evidence-${{ matrix.suite }}
+          path: .verify/evidence
+          include-hidden-files: true
+          retention-days: 7
+          if-no-files-found: ignore
+
+  docker:
+    name: Docker image
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Lint the Dockerfile
+        run: |
+          docker run --rm --volume "$PWD:/work:ro" --workdir /work \
+            hadolint/hadolint@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d \
+            hadolint --config .hadolint.yaml Dockerfile
+      - name: Validate the Compose files
+        run: |
+          docker compose --file docker-compose.yml config --quiet
+          docker compose --file docker-compose.yml --file docker-compose.sandbox.yml config --quiet
+      - name: Build the image
+        run: docker build --tag orbit:ci .
+      - name: Start the image
+        run: docker run --detach --name orbit-ci --publish 127.0.0.1:3210:3210 orbit:ci
+      - name: Require a non-root server process
+        run: scripts/qa/assert-nonroot.sh --running orbit-ci
+      - name: Require a non-root server on every start path
+        run: scripts/qa/assert-nonroot.sh orbit:ci
+      - name: Wait for the setup route
+        run: |
+          curl --fail --silent --show-error --retry 60 --retry-delay 2 --retry-all-errors \
+            http://127.0.0.1:3210/api/setup | tee setup.json
+          jq --exit-status '.signupOpen == true' setup.json
+      - name: Show the container logs
+        if: failure()
+        run: docker logs orbit-ci || true
+      - name: Stop the image
+        if: always()
+        run: docker rm --force orbit-ci || true
+
+  workflows:
+    name: Workflow files
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: actionlint
+        run: |
+          docker run --rm --volume "$PWD:/repo:ro" --workdir /repo \
+            rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
+            -color
+      - name: zizmor
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          docker run --rm --volume "$PWD:/repo:ro" --workdir /repo --env GH_TOKEN \
+            ghcr.io/zizmorcore/zizmor@sha256:3014cc8f68f663935f69b3c3e0e41f5ce102b268d97db13db0f62208747f860d \
+            --format plain .
+
+  ci:
+    name: Full suite passed
+    if: always()
+    needs: [checks, e2e, docker, workflows]
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require every job to pass
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: echo "$NEEDS" | jq --exit-status 'all(.[]; .result == "success")'

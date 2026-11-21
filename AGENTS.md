@@ -1,67 +1,34 @@
-# Orbit
+# AGENTS.md
 
-Self-hosted chat for one user. Chats and settings live in `data/orbit.db`. The provider key stays on the server.
+Orbit is a self-hosted chat app for one user: Next.js App Router, the AI SDK, assistant-ui, and SQLite through Drizzle. Read `ARCHITECTURE.md` before you change a route, a table, or the chat stream. Read `docs/design.md` before you change UI.
 
-## Stack
+## Done
 
-`package.json` is what npm installs. If a pin below and `package.json` disagree, follow `package.json`.
+- `npm test`, `npm run typecheck`, and `npm run build` exit 0. `package.json` holds every script and version.
+- A behavior change also passes a verify-orbit drive or browse scenario: `.agents/skills/verify-orbit/SKILL.md`. A green unit test alone is not proof.
+- Planned work follows its plan in `docs/slices/NN.md` and the three-turn workflow in `docs/slices/README.md`: reproduce and fail, then pass, then prove.
 
-- Next.js 16.4.3, React 19.3.1, and React DOM 19.3.1
-- `@assistant-ui/react` 0.15.32 and `@assistant-ui/react-ai-sdk` 1.4.21
-- `ai` 7.0.159, `@ai-sdk/react` 4.0.163, and `@ai-sdk/openai-compatible` 3.0.82
-- zod 4.6.7
-- drizzle-orm 0.45.4, drizzle-kit 0.31.11, and better-sqlite3 13.0.3
-- better-auth 1.7.14
-- Tailwind CSS 4.3.3
-- Node 22 in the image `node:22-bookworm-slim`. The dev machine may be newer.
+## Guardrails
 
-`@ai-sdk/react` 4.0.163 is the peer that `@assistant-ui/react-ai-sdk` 1.4.21 requires.
+- Secrets stay on the server. Pass keys through the environment. Never print, log, or commit one. `GET /api/settings` returns `keySet` and never a key.
+- Routes parse request bodies with zod. Code behind a route trusts its types.
+- Message writes go through `planChatWrite` and `upsertMessage` in `src/lib/messages.ts`.
+- For a schema change, edit `src/lib/db/schema.ts`, then run `npm run db:generate`. FTS5 and `vec0` tables need `npx drizzle-kit generate --custom`.
+- Colors and sizes come from the tokens in `src/app/globals.css`. UI copy has no taglines, helper text, or secondary labels.
+- verify-orbit owns the port set by `ORBIT_VERIFY_PORT` on `127.0.0.1` during a drive, default `3210`. Stop only processes you started.
+- Leave `~/kodus` and the host's `cloudflared` untouched.
 
-## Commands
+## Gotchas
 
-Run these from the repo root. Each one is done when it exits 0.
+- Auth trusts `BETTER_AUTH_URL` plus `ORBIT_TRUSTED_ORIGINS`. A server on any other port needs that port in `ORBIT_TRUSTED_ORIGINS`, or sign-in fails.
+- The Docker image runs Node 22. The dev machine may run a newer Node, so avoid APIs added after 22.
+- The json-render packages are `@json-render/core` and `@json-render/react`. The unscoped `json-render` on npm is a different, unpublished package.
 
-- Run `npm run dev` to start the dev server on `127.0.0.1:3210`.
-- Run `npm run typecheck` for `tsc --noEmit`.
-- Run `npm test` for the unit tests.
-- Run `npm run build` for `next build`.
-- For smoke, start the built app with `npm start -- -p 3210 -H 127.0.0.1`, then run `npm run smoke`. The process needs `ORBIT_BASE_URL` and `ORBIT_API_KEY`. Done when the script prints `smoke passed`. Stop the server after the run. Read a key into the environment and keep it out of the output.
-- Run `docker compose build`, then `docker compose config`. The published port is `127.0.0.1:3210` only.
+## Git and pull requests
 
-## Slice workflow
-
-`docs/SPEC.md` lists the slices. For slice N, use two digits in the filename.
-
-1. Write the spec at `docs/slices/NN.md`. Done when it names what ships and how to tell that it worked.
-2. Build the slice on its branch.
-3. Verify with typecheck, build, and the checks the spec names. Done when those commands exit 0.
-4. Write the result at `docs/slices/NN-result.md`. Done when it records the commands, the exit status, and any failure.
-5. Review the branch with Greptile and CodeAnt.
-6. Open a draft pull request while the slice is in progress. Done when the draft exists. Mark it ready only under Pull requests below.
-
-## Branches
-
-Prefix a branch with `feat/`, `fix/`, `chore/`, or `docs/`.
-
-Slice branches are `feat/walking-skeleton`, `feat/design-system`, `feat/generative-ui`, `feat/search`, `feat/sandbox`, `feat/github-mcp`, `feat/memory`, and `feat/deploy`.
-
-## Pull requests
-
-Keep the pull request a draft while work on that slice continues. Run `gh pr ready` only when the slice is complete. Complete means the checks passed, the bot review fixes are applied, and the docs are done. After it is ready, leave that branch alone unless Aditya asks for another commit. Put later fixes on a `fix/...` branch or the next slice.
-
-## Models
-
-1. Start with grok-4.7 at xhigh.
-2. If that model is unavailable, use OpenCode `deepseek-v4.1-flash`.
-3. Use Codex for one piece that is genuinely complex, then return to grok-4.7.
-4. Use Claude for design only.
-
-## How to work
-
-Work in pstack poteto-mode and unslop.
-
-Write commit and pull request text that describes the change, with no AI credit.
-
-Push only when asked, and use a regular push. Leave history in place. `git reset --hard` and force-push stay unused.
-
-Leave `~/kodus` and cloudflared untouched. When a command needs a secret, pass it through the environment and keep it out of logs, docs, and commits.
+- Branch names are `<type>/<kebab-topic>` with type `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`, or `ci`. Slice branches are named in `docs/slices/README.md`.
+- Commit subjects use Conventional Commits: `feat:`, `fix:`, `test:`, `docs:`, `chore:`.
+- Push only when asked, with a plain `git push`. Ask before `git reset --hard` or any force-push.
+- Keep a PR as a draft while its slice is in progress. Run `gh pr ready` once the checks pass, every Greptile and CodeAnt finding is fixed or answered with a reason, and the changelog is updated. After that, add commits only when the maintainer asks. Later fixes go on a new `fix/` branch.
+- Proof goes in PR comments: real command output, plus screenshots when something visible changed. Never commit logs, screenshots, or QA reports.
+- Add each user-visible change under `## [Unreleased]` in `CHANGELOG.md`.

@@ -1,21 +1,58 @@
 "use client";
 
-import { useRef } from "react";
-import { ThreadPrimitive, useAuiState } from "@assistant-ui/react";
+import { useEffect, useRef, useState } from "react";
+import { ThreadPrimitive, useAui, useAuiEvent, useAuiState } from "@assistant-ui/react";
 import { ArrowDownIcon } from "@phosphor-icons/react";
 import { Figure } from "@/components/figure";
+import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Composer } from "./composer";
 import { messageByRole } from "./messages";
 import { ThreadMap } from "./thread-map";
 
-export function Thread({ ready, model }: { ready: boolean; model: string }) {
+const STARTERS = [
+  { label: "Make a table", prompt: "Make a table comparing " },
+  { label: "Explain code", prompt: "Explain this code:\n\n" },
+  { label: "Summarize", prompt: "Summarize this in five bullets:\n\n" },
+  { label: "Brainstorm", prompt: "Give me ten ideas for " },
+];
+
+export function Thread({ ready, model, focusMessageId }: { ready: boolean; model: string; focusMessageId?: string | null }) {
   const empty = useAuiState((state) => state.thread.isEmpty);
+  const [autoScroll, setAutoScroll] = useState(!focusMessageId);
+  useAuiEvent("thread.runStart", () => setAutoScroll(true));
   const viewport = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const root = viewport.current;
+    if (!focusMessageId || empty || !root) return;
+    let ring: number | undefined;
+    const focus = () => {
+      const el = root.querySelector(`[data-message-id="${CSS.escape(focusMessageId)}"]`);
+      if (!(el instanceof HTMLElement)) return;
+      observer.disconnect();
+      el.scrollIntoView({ block: "center" });
+      el.style.boxShadow = "0 0 0 2px var(--sun)";
+      ring = window.setTimeout(() => {
+        el.style.boxShadow = "";
+      }, 1600);
+    };
+    const observer = new MutationObserver(focus);
+    observer.observe(root, { childList: true, subtree: true });
+    focus();
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(ring);
+    };
+  }, [empty, focusMessageId]);
   return (
     <TooltipProvider>
       <ThreadPrimitive.Root className="@container/thread relative flex h-full min-h-0 flex-col">
-        <ThreadPrimitive.Viewport ref={viewport} className="@container flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-8 scrollbar-thin">
+        <ThreadPrimitive.Viewport
+          ref={viewport}
+          scrollToBottomOnInitialize={!focusMessageId}
+          autoScroll={autoScroll}
+          className="@container flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-8 scrollbar-thin"
+        >
           {empty ? (
             <EmptyState model={model} />
           ) : (
@@ -50,13 +87,35 @@ export function Thread({ ready, model }: { ready: boolean; model: string }) {
 
 // An empty chat centers the figure and the composer as one group; the composer drops to the bottom on the first send.
 function EmptyState({ model }: { model: string }) {
+  const aui = useAui();
+  const input = useRef<HTMLTextAreaElement>(null);
+
+  function start(prompt: string) {
+    input.current?.focus();
+    aui.composer.setText(prompt);
+    requestAnimationFrame(() => input.current?.setSelectionRange(prompt.length, prompt.length));
+  }
+
   return (
     <div className="flex flex-1 flex-col items-center justify-center pb-[12vh]">
       <div className="w-64 max-w-[70%]">
         <Figure name="dish" />
       </div>
       <div className="mt-8 w-full max-w-widget animate-rise">
-        <Composer ready model={model} />
+        <Composer ready model={model} inputRef={input} />
+        <div className="mt-3 flex flex-wrap justify-center gap-2">
+          {STARTERS.map((starter) => (
+            <Button
+              key={starter.label}
+              variant="outline"
+              size="sm"
+              onClick={() => start(starter.prompt)}
+              className="rounded-full font-normal text-muted-foreground hover:text-foreground pointer-coarse:h-11 pointer-coarse:px-4"
+            >
+              {starter.label}
+            </Button>
+          ))}
+        </div>
       </div>
     </div>
   );

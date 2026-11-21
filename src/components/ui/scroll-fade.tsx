@@ -23,6 +23,7 @@ export function ScrollFade({
   fade,
   className,
   scrollerClassName,
+  scrollerLabel,
   style,
   children,
   ...props
@@ -30,6 +31,7 @@ export function ScrollFade({
   axis: Axis;
   fade: string;
   scrollerClassName?: string;
+  scrollerLabel?: string;
 } & React.ComponentProps<"div">) {
   const scroller = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState<Edges>(NONE);
@@ -64,7 +66,10 @@ export function ScrollFade({
       <div aria-hidden className={cn(edge, side[0], "from-(color:--fade)", edges.start ? "opacity-100" : "opacity-0")} />
       <div
         ref={scroller}
-        className={cn(axis === "x" ? "overflow-x-auto" : "overflow-y-auto", "scrollbar-thin", scrollerClassName)}
+        role={scrollerLabel ? "region" : undefined}
+        aria-label={scrollerLabel}
+        tabIndex={scrollerLabel ? 0 : undefined}
+        className={cn(axis === "x" ? "overflow-x-auto" : "overflow-y-auto", "scrollbar-thin", scrollerLabel && "outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", scrollerClassName)}
       >
         {children}
       </div>

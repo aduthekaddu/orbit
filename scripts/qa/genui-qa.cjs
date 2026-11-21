@@ -1,16 +1,17 @@
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const { chromium } = require("playwright");
 
 const ORIGIN = process.env.ORBIT_QA_ORIGIN ?? "http://127.0.0.1:3213";
-const OUT = path.join(process.cwd(), "docs", "qa", "screenshots");
+const OUT = path.join(process.cwd(), ".verify", "evidence", "genui-qa");
 const EMAIL = process.env.ORBIT_QA_EMAIL ?? "qa@orbit.local";
 const PASSWORD = process.env.ORBIT_QA_PASSWORD ?? "orbit-qa-pass";
 const REAL_KEY = process.env.ORBIT_REAL_API_KEY ?? "";
 const REAL_BASE = process.env.ORBIT_REAL_BASE_URL ?? "https://opencode.ai/inference/go/openai/v1";
 const REAL_MODEL = process.env.ORBIT_REAL_MODEL ?? "deepseek-v4.1-flash";
 const MOCK_BASE = process.env.ORBIT_MOCK_BASE_URL ?? "http://127.0.0.1:3299/v1";
-const COMPOSER = 'textarea[placeholder="Message orbit"]';
+const COMPOSER = 'textarea[placeholder="Ask anything"]';
 const ASSISTANT = '[data-message-role="assistant"]';
 const FALLBACK = "[data-genui-fallback]";
 
@@ -108,7 +109,7 @@ async function mobileCheck(page, label) {
       "medium",
       "mobile",
       `${label}: document scrolls horizontally (${metrics.docScrollWidth}px content in ${metrics.innerWidth}px viewport)`,
-      `docs/qa/screenshots/genui-${label}-mobile.png`,
+      `.verify/evidence/genui-qa/genui-${label}-mobile.png`,
     );
   }
   if (!metrics.composer || metrics.composer.left < 0 || metrics.composer.right > metrics.innerWidth + 1) {
@@ -116,7 +117,7 @@ async function mobileCheck(page, label) {
       "high",
       "mobile",
       `${label}: composer sits outside the 390px viewport ${JSON.stringify(metrics.composer)}`,
-      `docs/qa/screenshots/genui-${label}-mobile.png`,
+      `.verify/evidence/genui-qa/genui-${label}-mobile.png`,
     );
   }
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -158,7 +159,7 @@ async function runScenario(page, name, prompt, expected, options = {}) {
   await mobileCheck(page, name);
   if (consoleErrors.length > errorsBefore) {
     for (const error of consoleErrors.slice(errorsBefore)) {
-      finding("medium", "console", `${name}: ${error}`, `docs/qa/screenshots/genui-${name}-desktop.png`);
+      finding("medium", "console", `${name}: ${error}`, `.verify/evidence/genui-qa/genui-${name}-desktop.png`);
     }
   }
   return { text, metrics: desktopMetrics };
@@ -189,19 +190,19 @@ async function main() {
       check: async (target, text) => {
         for (const expected of ["Active users", "1,234", "Owner", "Budget", "Ada", "Ship the renderer", "Heads up", "Editable text", "Save note"]) {
           if (!text.includes(expected) && !text.includes(expected.replace(",", ""))) {
-            finding("high", "catalog", `all: missing rendered text "${expected}"`, "docs/qa/screenshots/genui-all-desktop.png");
+            finding("high", "catalog", `all: missing rendered text "${expected}"`, ".verify/evidence/genui-qa/genui-all-desktop.png");
           }
         }
         const rows = await target.locator("table tbody tr").count();
-        if (rows !== 3) finding("high", "catalog", `all: table rendered ${rows} rows instead of 3`, "docs/qa/screenshots/genui-all-desktop.png");
+        if (rows !== 3) finding("high", "catalog", `all: table rendered ${rows} rows instead of 3`, ".verify/evidence/genui-qa/genui-all-desktop.png");
         for (const tag of ["section", "dl", "table", "ul"]) {
           if ((await target.locator(tag).count()) === 0) {
-            finding("high", "catalog", `all: no ${tag} element rendered`, "docs/qa/screenshots/genui-all-desktop.png");
+            finding("high", "catalog", `all: no ${tag} element rendered`, ".verify/evidence/genui-qa/genui-all-desktop.png");
           }
         }
         const textBoxes = target.locator('[role="textbox"]');
         if ((await textBoxes.count()) !== 1) {
-          finding("high", "text", `all: expected one editable textbox, saw ${await textBoxes.count()}`, "docs/qa/screenshots/genui-all-desktop.png");
+          finding("high", "text", `all: expected one editable textbox, saw ${await textBoxes.count()}`, ".verify/evidence/genui-qa/genui-all-desktop.png");
         }
 
         const button = target.getByRole("button", { name: "Save note" });
@@ -209,10 +210,10 @@ async function main() {
         await target.getByText("Saved from the generated button.").first().waitFor({ timeout: 5_000 });
         const afterClick = await assistantText(target);
         if (!afterClick.includes("Saved from the generated button.")) {
-          finding("high", "button", "all: the note did not appear after a click", "docs/qa/screenshots/genui-all-desktop.png");
+          finding("high", "button", "all: the note did not appear after a click", ".verify/evidence/genui-qa/genui-all-desktop.png");
         }
         if (afterClick.split("Saved from the generated button.").length < 3) {
-          finding("medium", "button", "all: the callout watching /note did not pick up the button note", "docs/qa/screenshots/genui-all-desktop.png");
+          finding("medium", "button", "all: the callout watching /note did not pick up the button note", ".verify/evidence/genui-qa/genui-all-desktop.png");
         }
 
         await button.focus();
@@ -225,16 +226,16 @@ async function main() {
         await target.keyboard.type("Edited in place without validation errors.");
         const edited = await editable.innerText();
         if (!edited.includes("Edited in place")) {
-          finding("high", "text", "all: the editable text did not accept keyboard input", "docs/qa/screenshots/genui-all-desktop.png");
+          finding("high", "text", "all: the editable text did not accept keyboard input", ".verify/evidence/genui-qa/genui-all-desktop.png");
         }
         await screenshot(target, "all-text-edited");
         if ((await target.locator(FALLBACK).count()) > 0) {
-          finding("high", "text", "all: editing text triggered a validation fallback", "docs/qa/screenshots/genui-all-text-edited.png");
+          finding("high", "text", "all: editing text triggered a validation fallback", ".verify/evidence/genui-qa/genui-all-text-edited.png");
         }
         await button.click();
         await target.waitForTimeout(150);
         if (!(await editable.innerText()).includes("Edited in place")) {
-          finding("medium", "text", "all: a state update reset the edited text", "docs/qa/screenshots/genui-all-text-edited.png");
+          finding("medium", "text", "all: a state update reset the edited text", ".verify/evidence/genui-qa/genui-all-text-edited.png");
         }
         await editable.blur();
       },
@@ -247,10 +248,10 @@ async function main() {
   await page.getByText("Quarterly report").first().waitFor({ timeout: 30_000 });
   const reloaded = await assistantText(page);
   if (!reloaded.includes("Quarterly report") || !reloaded.includes("Active users")) {
-    finding("high", "reload", "reload did not restore the rendered card and metric", "docs/qa/screenshots/genui-reload-desktop.png");
+    finding("high", "reload", "reload did not restore the rendered card and metric", ".verify/evidence/genui-qa/genui-reload-desktop.png");
   }
   if (!reloaded.includes("Click this sentence to edit it in place.")) {
-    finding("medium", "reload", "reload did not restore the original generated text", "docs/qa/screenshots/genui-reload-desktop.png");
+    finding("medium", "reload", "reload did not restore the original generated text", ".verify/evidence/genui-qa/genui-reload-desktop.png");
   }
   await screenshot(page, "reload-desktop");
   await mobileCheck(page, "reload");
@@ -259,13 +260,13 @@ async function main() {
     timeout: 120_000,
     check: async (target) => {
       const rows = await target.locator("table tbody tr").count();
-      if (rows !== 220) finding("high", "huge", `huge: rendered ${rows} rows instead of 220`, "docs/qa/screenshots/genui-huge-desktop.png");
+      if (rows !== 220) finding("high", "huge", `huge: rendered ${rows} rows instead of 220`, ".verify/evidence/genui-qa/genui-huge-desktop.png");
       const box = await target.locator("div.overflow-x-auto").first().evaluate((node) => ({
         scrollWidth: node.scrollWidth,
         clientWidth: node.clientWidth,
       }));
       if (box.scrollWidth <= box.clientWidth) {
-        finding("low", "huge", "huge: the table did not need its own horizontal scroll at 1440px", "docs/qa/screenshots/genui-huge-desktop.png");
+        finding("low", "huge", "huge: the table did not need its own horizontal scroll at 1440px", ".verify/evidence/genui-qa/genui-huge-desktop.png");
       }
     },
   });
@@ -273,7 +274,7 @@ async function main() {
   await runScenario(page, "long", "[qa:long] Render long text.", "Long callout", {
     check: async (target, text) => {
       if (!text.includes("supercalifragilisticexpialidocious")) {
-        finding("high", "long", "long: long word did not render", "docs/qa/screenshots/genui-long-desktop.png");
+        finding("high", "long", "long: long word did not render", ".verify/evidence/genui-qa/genui-long-desktop.png");
       }
     },
   });
@@ -282,7 +283,7 @@ async function main() {
     check: async (target) => {
       const text = await assistantText(target);
       if (!text.includes("elements.card.props.title")) {
-        finding("high", "fallback", "invalid: the fallback did not name the bad prop", "docs/qa/screenshots/genui-invalid-desktop.png");
+        finding("high", "fallback", "invalid: the fallback did not name the bad prop", ".verify/evidence/genui-qa/genui-invalid-desktop.png");
       }
     },
   });
@@ -292,7 +293,7 @@ async function main() {
   {
     const count = await reloadAndCountAssistants(page, "Recovered after the failed stream.", "invalid");
     if (count !== 2) {
-      finding("high", "reload", `invalid: reload shows ${count} assistant messages instead of 2 after a follow-up`, "docs/qa/screenshots/genui-invalid-reload-desktop.png");
+      finding("high", "reload", `invalid: reload shows ${count} assistant messages instead of 2 after a follow-up`, ".verify/evidence/genui-qa/genui-invalid-reload-desktop.png");
     }
   }
 
@@ -300,7 +301,7 @@ async function main() {
     check: async (target) => {
       const text = await assistantText(target);
       if (!text.includes("elements.callout.props.tone")) {
-        finding("high", "fallback", "missing: the fallback did not name the missing callout tone", "docs/qa/screenshots/genui-missing-desktop.png");
+        finding("high", "fallback", "missing: the fallback did not name the missing callout tone", ".verify/evidence/genui-qa/genui-missing-desktop.png");
       }
     },
   });
@@ -311,13 +312,13 @@ async function main() {
     check: async (target) => {
       const text = await assistantText(target);
       if (!text.includes("Chart")) {
-        finding("low", "fallback", "unknown: the fallback raw payload did not show the unknown type", "docs/qa/screenshots/genui-unknown-desktop.png");
+        finding("low", "fallback", "unknown: the fallback raw payload did not show the unknown type", ".verify/evidence/genui-qa/genui-unknown-desktop.png");
       }
       if (!/invalid input|rejected/i.test(text)) {
-        finding("medium", "fallback", "unknown: the fallback did not explain that the tool arguments were rejected", "docs/qa/screenshots/genui-unknown-desktop.png");
+        finding("medium", "fallback", "unknown: the fallback did not explain that the tool arguments were rejected", ".verify/evidence/genui-qa/genui-unknown-desktop.png");
       }
       if (!(await target.locator(FALLBACK).count())) {
-        finding("high", "fallback", "unknown: no fallback block was rendered", "docs/qa/screenshots/genui-unknown-desktop.png");
+        finding("high", "fallback", "unknown: no fallback block was rendered", ".verify/evidence/genui-qa/genui-unknown-desktop.png");
       }
     },
   });
@@ -326,7 +327,7 @@ async function main() {
   {
     const count = await reloadAndCountAssistants(page, "Recovered after the failed stream.", "unknown");
     if (count !== 2) {
-      finding("high", "reload", `unknown: reload shows ${count} assistant messages instead of 2 after a follow-up`, "docs/qa/screenshots/genui-unknown-reload-desktop.png");
+      finding("high", "reload", `unknown: reload shows ${count} assistant messages instead of 2 after a follow-up`, ".verify/evidence/genui-qa/genui-unknown-reload-desktop.png");
     }
   }
 
@@ -334,7 +335,7 @@ async function main() {
     check: async (target) => {
       const text = await assistantText(target);
       if (!text.includes("ghost")) {
-        finding("high", "fallback", "dangling: the fallback did not name the missing child", "docs/qa/screenshots/genui-dangling-desktop.png");
+        finding("high", "fallback", "dangling: the fallback did not name the missing child", ".verify/evidence/genui-qa/genui-dangling-desktop.png");
       }
     },
   });
@@ -344,7 +345,7 @@ async function main() {
   await runScenario(page, "malformed", "[qa:malformed] Render malformed arguments.", null, {
     check: async (target) => {
       if (!(await target.locator(FALLBACK).count())) {
-        finding("high", "fallback", "malformed: no fallback block was rendered", "docs/qa/screenshots/genui-malformed-desktop.png");
+        finding("high", "fallback", "malformed: no fallback block was rendered", ".verify/evidence/genui-qa/genui-malformed-desktop.png");
       }
     },
   });
@@ -356,10 +357,10 @@ async function main() {
       const text = await assistantText(target);
       const fallback = await target.locator(FALLBACK).count();
       if (!fallback) {
-        finding("high", "truncated", "truncated: no fallback block was rendered", "docs/qa/screenshots/genui-truncated-desktop.png");
+        finding("high", "truncated", "truncated: no fallback block was rendered", ".verify/evidence/genui-qa/genui-truncated-desktop.png");
       }
       if (!/Stopped|failed|No tool result/i.test(text)) {
-        finding("medium", "truncated", "truncated: the fallback did not explain the stop", "docs/qa/screenshots/genui-truncated-desktop.png");
+        finding("medium", "truncated", "truncated: the fallback did not explain the stop", ".verify/evidence/genui-qa/genui-truncated-desktop.png");
       }
     },
   });
@@ -369,7 +370,7 @@ async function main() {
   {
     const count = await reloadAndCountAssistants(page, "Recovered after the failed stream.", "truncated");
     if (count !== 2) {
-      finding("high", "reload", `truncated: reload shows ${count} assistant messages instead of 2 after a follow-up`, "docs/qa/screenshots/genui-truncated-reload-desktop.png");
+      finding("high", "reload", `truncated: reload shows ${count} assistant messages instead of 2 after a follow-up`, ".verify/evidence/genui-qa/genui-truncated-reload-desktop.png");
     }
   }
 
@@ -380,7 +381,7 @@ async function main() {
       await target.keyboard.press("Control+A");
       await target.keyboard.type("Edited generated text.");
       if (!(await box.innerText()).includes("Edited generated text.")) {
-        finding("high", "text", "text: the editable text did not accept input", "docs/qa/screenshots/genui-text-desktop.png");
+        finding("high", "text", "text: the editable text did not accept input", ".verify/evidence/genui-qa/genui-text-desktop.png");
       }
       await box.blur();
     },
@@ -402,7 +403,7 @@ async function main() {
       return `${node.tagName}[${node.getAttribute("aria-label") ?? ""}][${node.getAttribute("placeholder") ?? ""}]`;
     });
     focusOrder.push(entry);
-    reachedComposer = entry.includes("[Message orbit]");
+    reachedComposer = entry.includes("[Ask anything]");
   }
   if (!reachedComposer) {
     finding("high", "keyboard", `keyboard: Tab never reached the composer. Order: ${focusOrder.join(" > ")}`, null);
@@ -436,7 +437,7 @@ async function main() {
         await waitIdle(page, 180_000);
         const text = await assistantText(page);
         if (!text.includes("Real provider") || !text.includes("Tokens")) {
-          finding("high", "real", "real provider: the response did not render the requested card", "docs/qa/screenshots/genui-real-desktop.png");
+          finding("high", "real", "real provider: the response did not render the requested card", ".verify/evidence/genui-qa/genui-real-desktop.png");
         }
         await screenshot(page, "real-desktop");
         await mobileCheck(page, "real");
@@ -445,7 +446,7 @@ async function main() {
           "high",
           "real",
           `real provider: no rendered card within 180s (${error instanceof Error ? error.message.split("\n")[0] : "timeout"})`,
-          "docs/qa/screenshots/genui-real-desktop.png",
+          ".verify/evidence/genui-qa/genui-real-desktop.png",
         );
         await screenshot(page, "real-desktop");
       }
@@ -455,16 +456,19 @@ async function main() {
 
   console.log(`desktop metrics viewport=${all.metrics.innerWidth} doc=${all.metrics.docScrollWidth}`);
   if (all.metrics.docScrollWidth > all.metrics.innerWidth + 1) {
-    finding("medium", "desktop", `all: document overflows horizontally at 1440px (${all.metrics.docScrollWidth}px)`, "docs/qa/screenshots/genui-all-desktop.png");
+    finding("medium", "desktop", `all: document overflows horizontally at 1440px (${all.metrics.docScrollWidth}px)`, ".verify/evidence/genui-qa/genui-all-desktop.png");
   }
 
   await browser.close();
   browser = null;
 
   const report = { findings, consoleErrors, focusOrder };
-  fs.writeFileSync("/tmp/orbit-genui-qa-report.json", JSON.stringify(report, null, 2));
+  const reportDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-genui-qa-"));
+  const reportFile = path.join(reportDir, "report.json");
+  fs.writeFileSync(reportFile, JSON.stringify(report, null, 2));
   console.log(`scenarios done. findings=${findings.length} consoleErrors=${consoleErrors.length}`);
   console.log(JSON.stringify(findings, null, 2));
+  console.log(`report ${reportFile}`);
   if (findings.some((item) => item.severity === "high")) process.exitCode = 2;
 }
 

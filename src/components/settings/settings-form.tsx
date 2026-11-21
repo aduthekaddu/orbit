@@ -30,6 +30,14 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(initial.model);
   const [effort, setEffort] = useState<ReasoningEffort>(initial.reasoningEffort);
+  const [searxngUrl, setSearxngUrl] = useState(initial.searxngUrl);
+  const [tavilyApiKey, setTavilyApiKey] = useState<string | null>("");
+  const [tavilyKeySet, setTavilyKeySet] = useState(initial.tavilyKeySet);
+  const [githubToken, setGithubToken] = useState<string | null>("");
+  const [githubTokenSet, setGithubTokenSet] = useState(initial.githubTokenSet);
+  const [githubMcpUrl, setGithubMcpUrl] = useState(initial.githubMcpUrl);
+  const [githubCheck, setGithubCheck] = useState<GithubCheck>({ status: "idle" });
+  const githubCheckRequest = useRef(0);
   const [keySet, setKeySet] = useState(initial.keySet);
   const hasKey = keySet || apiKey.trim().length > 0;
   const [connection, setConnection] = useState<Connection>(() => canLoadStored(initial) ? { status: "checking" } : { status: "idle" });
@@ -38,7 +46,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
   const [saved, setSaved] = useState(false);
   const [pending, setPending] = useState(false);
   const modelLoad = useRef<{ id: number; controller: AbortController | null }>({ id: 0, controller: null });
-  const formValues: SettingsSnapshot = { baseUrl, apiKey, model, effort };
+  const formValues: SettingsSnapshot = { baseUrl, apiKey, model, effort, searxngUrl, tavilyApiKey, githubToken, githubMcpUrl };
   const latestValues = useRef(formValues);
   latestValues.current = formValues;
 
@@ -98,6 +106,10 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
           apiKey: formValues.apiKey || undefined,
           model: formValues.model,
           reasoningEffort: formValues.effort,
+          searxngUrl: formValues.searxngUrl.trim(),
+          tavilyApiKey: formValues.tavilyApiKey === null ? null : formValues.tavilyApiKey || undefined,
+          githubToken: formValues.githubToken === null ? null : formValues.githubToken || undefined,
+          githubMcpUrl: formValues.githubMcpUrl.trim(),
         }),
       });
       const body = (await response.json()) as PublicSettings & { error?: string };
@@ -110,11 +122,38 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
       const applied = appliedSave(formValues, latestValues.current);
       if (applied.applyKeySet) setKeySet(body.keySet);
       if (applied.clearKey) setApiKey("");
+      setTavilyKeySet(body.tavilyKeySet);
+      if (applied.clearTavilyKey) setTavilyApiKey("");
+      setGithubTokenSet(body.githubTokenSet);
+      if (applied.clearGithubToken) setGithubToken("");
       if (applied.saved) setSaved(true);
     } catch {
       setError("Could not save");
     } finally {
       setPending(false);
+    }
+  }
+
+  async function onCheckGithub() {
+    const id = ++githubCheckRequest.current;
+    setGithubCheck({ status: "checking" });
+    try {
+      const response = await fetch("/api/settings/github/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          token: (githubToken ?? "").trim() || undefined,
+          mcpUrl: githubMcpUrl.trim(),
+        }),
+      });
+      if (id !== githubCheckRequest.current) return;
+      const body = (await response.json().catch(() => ({}))) as { ok?: boolean; login?: string; error?: string };
+      if (id !== githubCheckRequest.current) return;
+      if (body.ok && body.login) setGithubCheck({ status: "connected", login: body.login });
+      else setGithubCheck({ status: "failed", error: body.error || "GitHub is unavailable." });
+    } catch {
+      if (id !== githubCheckRequest.current) return;
+      setGithubCheck({ status: "failed", error: "GitHub is unavailable." });
     }
   }
 
@@ -230,6 +269,53 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
             </Row>
           ) : null}
         </div>
+        <div className="border-y px-5 py-3.5">
+          <h2 className="text-sm font-medium">Search</h2>
+        </div>
+        <div className="divide-y">
+          <Row id="searxngUrl" label="SearXNG URL">
+            <Input id="searxngUrl" value={searxngUrl} autoComplete="off" onChange={(event) => { setError(""); setSearxngUrl(event.target.value); }} />
+          </Row>
+          <Row id="tavilyApiKey" label="Tavily key">
+            <div className="flex min-w-0 items-center gap-2">
+              <Input id="tavilyApiKey" type="password" value={tavilyApiKey ?? ""} placeholder={tavilyKeySet && tavilyApiKey !== null ? "Key set" : ""} autoComplete="off" onChange={(event) => { setError(""); setTavilyApiKey(event.target.value); }} />
+              {tavilyKeySet && tavilyApiKey !== null ? (
+                <Button type="button" variant="ghost" size="sm" aria-label="Remove Tavily key" disabled={pending} onClick={() => { setError(""); setSaved(false); setTavilyApiKey(null); }}>
+                  Remove
+                </Button>
+              ) : null}
+            </div>
+          </Row>
+        </div>
+        <div className="flex items-center justify-between gap-3 border-y px-5 py-3.5">
+          <h2 className="text-sm font-medium">GitHub</h2>
+          <GithubCheckStatus check={githubCheck} />
+        </div>
+        <div className="divide-y">
+          <Row id="githubToken" label="Token">
+            <div className="flex min-w-0 items-center gap-2">
+              <Input id="githubToken" type="password" value={githubToken ?? ""} placeholder={githubTokenSet && githubToken !== null ? "Key set" : ""} autoComplete="off" onChange={(event) => { setError(""); setGithubToken(event.target.value); }} />
+              {githubTokenSet && githubToken !== null ? (
+                <Button type="button" variant="ghost" size="sm" aria-label="Remove GitHub token" disabled={pending} onClick={() => { setError(""); setSaved(false); setGithubToken(null); }}>
+                  Remove
+                </Button>
+              ) : null}
+              <Button type="button" variant="ghost" size="sm" disabled={githubCheck.status === "checking"} onClick={() => void onCheckGithub()}>
+                Check
+              </Button>
+            </div>
+          </Row>
+          <Row id="githubMcpUrl" label="MCP URL">
+            <Input id="githubMcpUrl" value={githubMcpUrl} autoComplete="off" onChange={(event) => { setError(""); setGithubMcpUrl(event.target.value); }} />
+          </Row>
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t px-5 py-3.5">
+          <h2 className="text-sm font-medium">Code sandbox</h2>
+          <span data-sandbox-status={initial.sandbox ? "on" : "off"} className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className={cn("size-1.5 rounded-full", initial.sandbox ? "bg-positive" : "bg-muted-foreground/40")} />
+            {initial.sandbox ? "On" : "Off"}
+          </span>
+        </div>
         <div className="flex items-center justify-end gap-3 border-t px-5 py-3">
           {error ? (
             <p role="alert" className="mr-auto flex min-w-0 items-center gap-2 text-xs text-destructive">
@@ -291,6 +377,25 @@ const STATUS_DOT: Record<Connection["status"], string> = {
   connected: "bg-positive",
   failed: "bg-destructive",
 };
+
+type GithubCheck =
+  | { status: "idle" }
+  | { status: "checking" }
+  | { status: "connected"; login: string }
+  | { status: "failed"; error: string };
+
+function GithubCheckStatus({ check }: { check: GithubCheck }) {
+  if (check.status === "idle") return null;
+  const dot = check.status === "connected" ? "bg-positive" : check.status === "failed" ? "bg-destructive" : "bg-warning motion-safe:animate-pulse";
+  return (
+    <span data-github-status={check.status} aria-live="polite" className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+      <span className={cn("size-1.5 shrink-0 rounded-full", dot)} />
+      {check.status === "checking" ? "Checking" : null}
+      {check.status === "connected" ? <span className="truncate">Connected <span className="text-foreground">{check.login}</span></span> : null}
+      {check.status === "failed" ? <span className="truncate text-destructive">{check.error}</span> : null}
+    </span>
+  );
+}
 
 function ConnectionStatus({ connection, hasKey }: { connection: Connection; hasKey: boolean }) {
   return (

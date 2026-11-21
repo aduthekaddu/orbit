@@ -2,21 +2,30 @@ import { notFound } from "next/navigation";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { Figure } from "@/components/figure";
 import { SettingsForm } from "@/components/settings/settings-form";
-import { getChatForUser, listMessages } from "@/lib/messages";
+import { getChatForUser, messageRepository } from "@/lib/messages";
 import { getSettings, toPublicSettings } from "@/lib/settings";
+import { artifactHistory } from "@/lib/artifacts/history";
 import { requireUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
-export default async function ChatPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ChatPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ m?: string | string[]; artifact?: string | string[] }>;
+}) {
   const session = await requireUser();
   const { id } = await params;
+  const query = await searchParams;
+  const focusMessageId = typeof query.m === "string" ? query.m : null;
   const chat = getChatForUser(id, session.user.id);
   if (!chat) notFound();
-  const messages = listMessages(id);
+  const repository = artifactHistory(messageRepository(id), typeof query.artifact === "string" ? query.artifact : undefined);
   const settings = getSettings();
   const ready = Boolean(settings?.baseUrl && settings.apiKey && settings.model);
-  if (!ready && messages.length === 0) {
+  if (!ready && repository.messages.length === 0) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto pt-[8vh] scrollbar-thin">
         <div className="w-40 animate-rise">
@@ -28,7 +37,7 @@ export default async function ChatPage({ params }: { params: Promise<{ id: strin
   }
   return (
     <div className="min-h-0 flex-1">
-      <ChatPanel key={id} chatId={id} initialMessages={messages} ready={ready} model={settings?.model ?? ""} />
+      <ChatPanel key={`${id}:${focusMessageId ?? ""}`} chatId={id} focusMessageId={focusMessageId} initialHistory={repository} ready={ready} model={settings?.model ?? ""} />
     </div>
   );
 }

@@ -1,0 +1,20 @@
+import { z } from "zod";
+import { searchMessages } from "@/lib/search";
+import { getSession, unauthorized } from "@/lib/session";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const querySchema = z.object({
+  q: z.string().max(500),
+});
+
+export async function GET(request: Request) {
+  const session = await getSession();
+  if (!session) return unauthorized();
+  const parsed = querySchema.safeParse({
+    q: new URL(request.url).searchParams.get("q") ?? "",
+  });
+  if (!parsed.success) return Response.json({ error: "Invalid search" }, { status: 400 });
+  return Response.json({ hits: searchMessages(session.user.id, parsed.data.q) });
+}

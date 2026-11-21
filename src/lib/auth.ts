@@ -4,7 +4,7 @@ import path from "node:path";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";
-import { resolveTrustedOrigins } from "./auth-origins";
+import { LOCAL_AUTH_URL, resolveAuthBaseUrl, resolveTrustedOrigins } from "./auth-origins";
 import { db, signupOpen } from "./db";
 import { account, session, user, verification } from "./db/schema";
 import { readEnv } from "./env";
@@ -24,12 +24,14 @@ function authSecret() {
   return secret;
 }
 
-const baseURL = readEnv("BETTER_AUTH_URL") ?? "http://127.0.0.1:3210";
+const localURL = readEnv("BETTER_AUTH_URL") ?? LOCAL_AUTH_URL;
+const publicURL = readEnv("ORBIT_PUBLIC_URL");
 
 export const auth = betterAuth({
-  baseURL,
+  baseURL: resolveAuthBaseUrl({ BETTER_AUTH_URL: localURL, ORBIT_PUBLIC_URL: publicURL }),
   secret: authSecret(),
-  trustedOrigins: resolveTrustedOrigins(baseURL, readEnv("ORBIT_TRUSTED_ORIGINS")),
+  // The local origin stays trusted, so 127.0.0.1:3210 still signs in when a public URL is set.
+  trustedOrigins: resolveTrustedOrigins(localURL, readEnv("ORBIT_TRUSTED_ORIGINS"), publicURL),
   database: drizzleAdapter(db, {
     provider: "sqlite",
     schema: { user, session, account, verification },

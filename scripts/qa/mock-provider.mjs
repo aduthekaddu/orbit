@@ -1,7 +1,41 @@
+import fs from "node:fs";
 import http from "node:http";
+import path from "node:path";
 
 const PORT = Number(process.env.MOCK_PORT ?? 3299);
 const MODEL = process.env.MOCK_MODEL ?? "mock-genui";
+const sandboxPrograms = new Map([
+  ["run-python", "print(1+1)"],
+  ["run-escape", 'import urllib.request\nurllib.request.urlopen("http://1.1.1.1", timeout=2)'],
+  ["run-timeout", 'print("before-timeout")\nwhile True: pass'],
+  ["run-oom", 'print("before-oom")\nx = bytearray(1024 * 1024 * 1024)'],
+  ["run-unicode", 'import os\nos.write(1, b"x" * 65534 + b"\\xe2\\x82")'],
+  ["run-wide", 'print("x" * 150 + "END")'],
+  ["run-copy", 'import sys\ndef show():\n    print("  indented ✓ héllo 🚀")\n    print("line two")\n    print("err ✗", file=sys.stderr)\nshow()'],
+  ["run-spin", "while True: pass"],
+  ["run-pass", "pass"],
+  ["run-exit", "import sys\nsys.exit(3)"],
+  ["run-exit-high", "import sys\nsys.exit(137)"],
+  ["run-color", String.raw`import sys
+print("\x1b[31mred\x1b[0m")
+print("\x1b[1;33mwarn\x1b[0m", file=sys.stderr)`],
+  ["run-osc", String.raw`print("\x1b]0;pwned\x07\x1b]8;;https://example.com/steal\x1b\\click\x1b]8;;\x1b\\ done\x1b[2K")`],
+  ["run-html", 'print("<img src=x onerror=alert(1)>")'],
+  ["run-cut", String.raw`print("\x1b[31\x1b[0mred")`],
+  ["run-blank", "import sys\nprint()\nprint(file=sys.stderr)"],
+  ["run-token", '# sourceonlytoken5\na = "gizmo"\nb = "wobble7"\nprint(a + b)'],
+  ["run-token-err", 'import sys\nprint("kettle" + "whistle9", file=sys.stderr)'],
+  ["run-token-echo", 'print("echoed" + "token42")'],
+]);
+const javascriptPrograms = new Map([
+  ["run-js", "console.log(1 + 1)"],
+  ["run-js-exit", "process.exit(2)"],
+  ["run-js-token", "// jssourceonlytoken3\nconsole.log(2 + 3)"],
+]);
+const invalidSandboxCalls = new Map([
+  ["run-long", { language: "python", code: "#".repeat(20_001) }],
+  ["run-ruby", { language: "ruby", code: "puts 1" }],
+]);
 
 function allSpec() {
   return {
@@ -208,6 +242,21 @@ function specFor(scenario) {
   }
 }
 
+const artifactReplies = {
+  "artifact-tsx": ["tsx", `type Label = string;
+export default function Typed() { const label: Label = 'Typed button'; return <button>{label}</button>; }`],
+  "artifact-long-error": ["html", `<script>throw new Error(${JSON.stringify(Array.from({ length: 80 }, (_, index) => `Error line ${index + 1}`).join("\n"))});</script>`],
+  "artifact-html": ["html", `<h1>Artifact HTML</h1>
+<button id="color" onclick="this.style.backgroundColor='green'">Change color</button>`],
+  "artifact-svg": ["svg", `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200"><title>Artifact SVG</title><rect width="400" height="200" fill="#ff9e5e"/><circle cx="200" cy="100" r="60" fill="#131418"/></svg>`],
+  "artifact-react": ["jsx", `import { useState } from 'react';
+export default () => {
+  const [count, setCount] = useState(0);
+  return <button onClick={() => setCount(count + 1)}>Count {count}</button>;
+};`],
+  "artifact-error": ["html", `<h1>Artifact error</h1><script>throw new Error('Artifact exploded');</script>`],
+};
+
 function lastUserText(body) {
   const messages = Array.isArray(body?.messages) ? body.messages : [];
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -226,6 +275,35 @@ function lastUserText(body) {
 function scenarioOf(text) {
   const match = /\[qa:([a-z-]+)\]/.exec(text);
   return match?.[1] ?? "text";
+}
+
+function firstGithubLink(value) {
+  let found = null;
+  const visit = (node) => {
+    if (found) return;
+    if (typeof node === "string") {
+      try {
+        visit(JSON.parse(node));
+      } catch {
+        return;
+      }
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+      return;
+    }
+    if (!node || typeof node !== "object") return;
+    const href = typeof node.html_url === "string" ? node.html_url : "";
+    const title = typeof node.title === "string" ? node.title : typeof node.path === "string" ? node.path : "";
+    if (/^https?:\/\//.test(href) && title) {
+      found = { title, href };
+      return;
+    }
+    for (const child of Object.values(node)) visit(child);
+  };
+  visit(value);
+  return found;
 }
 
 function chunk(choices, extra = {}) {
@@ -252,6 +330,58 @@ function start(res) {
   send(res, chunk([{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: null }]));
 }
 
+function jsonTitle(res) {
+  res.writeHead(200, { "content-type": "application/json" });
+  res.end(
+    JSON.stringify({
+      id: "chatcmpl-title",
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1000),
+      model: MODEL,
+      choices: [{ index: 0, message: { role: "assistant", content: "Mock title" }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+    }),
+  );
+}
+
+function dreamCandidates(prompt) {
+  const candidates = [];
+  for (const line of prompt.split("\n")) {
+    const match = /^msg (\S+) (user|assistant): (.*)$/.exec(line);
+    if (!match) continue;
+    if (match[2] !== "user" && !match[3].includes("[qa:dream-cite]")) continue;
+    const text = match[3].replace(/\[qa:dream(?:-fail|-cite)?\]\s*/g, "").trim();
+    if (!text) continue;
+    candidates.push({
+      kind: /prefer|dark mode/i.test(text) ? "preference" : "fact",
+      text,
+      sourceMessageId: match[1],
+    });
+    if (candidates.length >= 10) break;
+  }
+  return candidates;
+}
+
+function jsonDream(res, prompt) {
+  res.writeHead(200, { "content-type": "application/json" });
+  res.end(
+    JSON.stringify({
+      id: "chatcmpl-dream",
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1000),
+      model: MODEL,
+      choices: [
+        {
+          index: 0,
+          message: { role: "assistant", content: JSON.stringify({ candidates: dreamCandidates(prompt) }) },
+          finish_reason: "stop",
+        },
+      ],
+      usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+    }),
+  );
+}
+
 function textResponse(res, text) {
   start(res);
   for (const part of text.match(/.{1,24}/gs) ?? []) {
@@ -262,7 +392,24 @@ function textResponse(res, text) {
   res.end();
 }
 
-function toolResponse(res, scenario, spec) {
+function slowResponse(res) {
+  start(res);
+  let index = 0;
+  const timer = setInterval(() => {
+    index += 1;
+    if (index > 50) {
+      clearInterval(timer);
+      send(res, chunk([{ index: 0, delta: {}, finish_reason: "stop" }]));
+      res.write("data: [DONE]\n\n");
+      res.end();
+      return;
+    }
+    send(res, chunk([{ index: 0, delta: { content: `word${index} ` }, finish_reason: null }]));
+  }, 200);
+  res.on("close", () => clearInterval(timer));
+}
+
+function toolResponse(res, scenario, spec, toolName = "render_ui") {
   const args = JSON.stringify(spec);
   const id = `call_${scenario}_${Date.now()}`;
   start(res);
@@ -272,7 +419,7 @@ function toolResponse(res, scenario, spec) {
       {
         index: 0,
         delta: {
-          tool_calls: [{ index: 0, id, type: "function", function: { name: "render_ui", arguments: "" } }],
+          tool_calls: [{ index: 0, id, type: "function", function: { name: toolName, arguments: "" } }],
         },
         finish_reason: null,
       },
@@ -336,6 +483,9 @@ function malformedResponse(res) {
   res.end();
 }
 
+// The AI SDK retries a 500 twice, so three failures make the first send fail in the browser.
+const failuresByPrompt = new Map();
+
 const server = http.createServer((req, res) => {
   if (!req.url) {
     res.writeHead(404).end();
@@ -362,8 +512,139 @@ const server = http.createServer((req, res) => {
     } catch {
       body = {};
     }
-    const scenario = scenarioOf(lastUserText(body));
-    console.log(`mock request scenario=${scenario}`);
+    const prompt = lastUserText(body);
+    const scenario = scenarioOf(prompt);
+    console.log(`mock request scenario=${scenario.replace(/\n|\r/g, "")}`);
+    const requestLog = process.env.MOCK_REQUEST_LOG ?? path.join(process.cwd(), ".verify", "mock-requests.jsonl");
+    fs.mkdirSync(path.dirname(requestLog), { recursive: true });
+    fs.appendFileSync(requestLog, `${JSON.stringify({ at: new Date().toISOString(), scenario, body })}\n`);
+    if (scenario === "remember") {
+      if (body.messages?.at(-1)?.role === "tool") {
+        textResponse(res, "Saved.");
+        return;
+      }
+      const text = prompt.replace(/\[qa:remember\]\s*/, "").trim();
+      toolResponse(res, scenario, { text, kind: "fact" }, "remember");
+      return;
+    }
+    if (raw.includes("Write a title of at most six words.") && body.stream !== true) {
+      jsonTitle(res);
+      return;
+    }
+    if (scenario === "dream-fail") {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "mock failure", type: "server_error" } }));
+      return;
+    }
+    if (scenario === "dream") {
+      jsonDream(res, prompt);
+      return;
+    }
+    if (invalidSandboxCalls.has(scenario)) {
+      toolResponse(res, scenario, invalidSandboxCalls.get(scenario), "run_code");
+      return;
+    }
+    if (scenario === "run-token-echo" && body.messages?.at(-1)?.role === "tool") {
+      textResponse(res, "The program printed echoedtoken42.");
+      return;
+    }
+    if (scenario === "github") {
+      const messages = Array.isArray(body.messages) ? body.messages : [];
+      const reply = messages.findLast((message) => message.role === "tool");
+      if (reply) {
+        const link = firstGithubLink(reply.content);
+        textResponse(res, link ? `Found [${link.title}](${link.href}).` : "GitHub is unavailable.");
+        return;
+      }
+      if (body.tools?.some((entry) => entry.function?.name === "github_list_issues")) {
+        toolResponse(res, scenario, { owner: "aduthekaddu", repo: "orbit" }, "github_list_issues");
+        return;
+      }
+      textResponse(res, "GitHub is unavailable.");
+      return;
+    }
+    if (scenario !== "search" && scenario !== "search-loop" && body.messages?.at(-1)?.role === "tool") {
+      textResponse(res, "Done.");
+      return;
+    }
+    if (sandboxPrograms.has(scenario)) {
+      toolResponse(res, scenario, {
+        language: "python",
+        code: sandboxPrograms.get(scenario),
+      }, "run_code");
+      return;
+    }
+    if (javascriptPrograms.has(scenario)) {
+      toolResponse(res, scenario, {
+        language: "javascript",
+        code: javascriptPrograms.get(scenario),
+      }, "run_code");
+      return;
+    }
+    if (scenario === "search" || scenario === "search-loop") {
+      if (!body.tools?.some((entry) => entry.function?.name === "web_search")) {
+        let history;
+        try { history = JSON.parse(prompt); } catch { history = null; }
+        const result = Array.isArray(history)
+          ? history.filter((message) => message.role === "tool").flatMap((message) => Array.isArray(message.content) ? message.content : []).findLast((part) => part.type === "tool-result" && part.toolName === "web_search")
+          : null;
+        const output = result?.output?.type === "json" ? result.output.value : null;
+        if (output) {
+          if (prompt.includes("[qa:search-loop] orbit card") && body.tools?.some((entry) => entry.function?.name === "render_ui")) {
+            toolResponse(res, scenario, { root: "card", elements: { card: { type: "Card", props: { title: "Researched orbit" }, children: [] } } });
+            return;
+          }
+          if (prompt.includes("[qa:search-loop] orbit artifact")) {
+            const instructed = body.messages?.some((message) => message.role === "system" && message.content?.includes("fenced code block"));
+            textResponse(res, instructed ? "```html\n<h1>Researched orbit</h1>\n```" : "Artifact instructions missing.");
+            return;
+          }
+          const first = output.ok === true ? output.results?.[0] : null;
+          textResponse(res, first ? `Found [${first.title}](${first.url}).` : "Search is unavailable.");
+          return;
+        }
+      }
+      const messages = Array.isArray(body.messages) ? body.messages : [];
+      const latestUser = messages.findLastIndex((message) => message.role === "user");
+      const reply = messages.slice(latestUser + 1).findLast((message) => message.role === "tool");
+      if (reply && (scenario !== "search-loop" || body.tool_choice === "none" || !body.tools?.length)) {
+        let output;
+        try { output = JSON.parse(reply.content); } catch { output = null; }
+        const first = output?.ok === true ? output.results?.[0] : null;
+        textResponse(res, first ? `Found [${first.title}](${first.url}).` : "Search is unavailable.");
+      } else {
+        toolResponse(res, scenario, { query: prompt.replace(/\[qa:search(?:-loop)?\]\s*/, "").trim() }, "web_search");
+      }
+      return;
+    }
+    if (scenario === "zebracorn") {
+      textResponse(res, "A zebracorn stood in the road.");
+      return;
+    }
+    if (scenario === "artifact-multiple") {
+      textResponse(res, "```html\n<h1>First artifact</h1>\n```\n\n```html\n<h1>Second artifact</h1>\n```\n\n```html\n<h1>Third artifact</h1>\n```");
+      return;
+    }
+    if (Object.hasOwn(artifactReplies, scenario)) {
+      const [language, code] = artifactReplies[scenario];
+      textResponse(res, "\`\`\`" + language + "\n" + code + "\n\`\`\`");
+      return;
+    }
+    if (scenario === "fail-first") {
+      const failures = failuresByPrompt.get(prompt) ?? 0;
+      if (failures < 3) {
+        failuresByPrompt.set(prompt, failures + 1);
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: { message: "mock failure", type: "server_error" } }));
+        return;
+      }
+      slowResponse(res);
+      return;
+    }
+    if (scenario === "slow") {
+      slowResponse(res);
+      return;
+    }
     if (scenario === "truncated") {
       toolResponse(res, scenario, allSpec());
       return;
@@ -386,7 +667,9 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  console.log(`mock provider on http://127.0.0.1:${PORT}/v1 model=${MODEL}`);
+  const address = server.address();
+  const bound = address && typeof address === "object" ? address.port : PORT;
+  console.log(`mock provider on http://127.0.0.1:${bound}/v1 model=${MODEL}`);
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {

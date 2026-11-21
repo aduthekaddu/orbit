@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { normalizeBaseUrl } from "@/lib/base-url";
 import { REASONING_EFFORTS, getSettings, saveSettings, toPublicSettings } from "@/lib/settings";
+import { githubMcpTarget } from "@/lib/tools/github";
 import { getSession, unauthorized } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -9,6 +10,10 @@ export const dynamic = "force-dynamic";
 const putSchema = z.object({
   baseUrl: z.string().trim().url(),
   apiKey: z.string().optional(),
+  searxngUrl: z.union([z.literal(""), z.url({ protocol: /^https?$/ })]).optional(),
+  tavilyApiKey: z.string().nullable().optional(),
+  githubToken: z.string().nullable().optional(),
+  githubMcpUrl: z.string().optional().refine((value) => value === undefined || githubMcpTarget(value).ok),
   model: z.string().trim().min(1).max(200),
   reasoningEffort: z.enum(REASONING_EFFORTS),
 });
@@ -24,7 +29,7 @@ export async function PUT(request: Request) {
   if (!session) return unauthorized();
   const parsed = putSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return Response.json({ error: "Check the base URL, model, and reasoning effort." }, { status: 400 });
+    return Response.json({ error: "Check the URLs, model, and reasoning effort." }, { status: 400 });
   }
   const current = getSettings();
   const nextKey = parsed.data.apiKey?.trim() ?? "";

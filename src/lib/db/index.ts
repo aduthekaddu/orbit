@@ -1,11 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
+import * as sqliteVec from "sqlite-vec";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { eq } from "drizzle-orm";
 import { readEnv } from "../env";
 import { dataDirectory } from "../paths";
+import { stripTerminalControls } from "../sandbox/terminal";
 import { withMigrationLock } from "./migration-lock";
 import * as schema from "./schema";
 
@@ -21,6 +23,9 @@ const sqlite = new Database(dbPath);
 sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("foreign_keys = ON");
 sqlite.pragma("busy_timeout = 5000");
+sqliteVec.load(sqlite);
+// Migration 0004 calls this to clean saved code output the way new saves do.
+sqlite.function("orbit_clean_output", { deterministic: true }, (text) => (typeof text === "string" ? stripTerminalControls(text) : null));
 
 function restrictDbFile(name: "orbit.db" | "orbit.db-wal" | "orbit.db-shm") {
   try {
@@ -57,12 +62,19 @@ function seedSettings() {
   const baseUrl = readEnv("ORBIT_BASE_URL") ?? "";
   const apiKey = readEnv("ORBIT_API_KEY") ?? "";
   const model = readEnv("ORBIT_MODEL") ?? "";
-  if (!baseUrl && !apiKey && !model) return;
+  const searxngUrl = readEnv("ORBIT_SEARXNG_URL") ?? "";
+  const tavilyApiKey = readEnv("ORBIT_TAVILY_API_KEY") ?? "";
+  const githubToken = readEnv("ORBIT_GITHUB_TOKEN") ?? "";
+  if (!baseUrl && !apiKey && !model && !searxngUrl && !tavilyApiKey && !githubToken) return;
   db.insert(schema.settings)
     .values({
       id: 1,
       baseUrl,
       apiKey,
+      searxngUrl,
+      tavilyApiKey,
+      githubToken,
+      githubMcpUrl: "",
       model,
       reasoningEffort: "medium",
       updatedAt: new Date(),

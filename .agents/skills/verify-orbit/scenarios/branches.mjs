@@ -1,0 +1,67 @@
+export default async function branches({ page, origin, step, shot }) {
+  const requests = [];
+  page.on("request", (request) => {
+    if (request.method() !== "POST" || !request.url().endsWith("/api/chat")) return;
+    const body = request.postDataJSON();
+    const ids = body.messages.map(({ id, role }) => ({ id, role }));
+    requests.push(body);
+    console.log(JSON.stringify({ trigger: body.trigger, messageId: body.messageId, editMessageId: body.editMessageId, messages: ids }));
+  });
+  if (process.env.ORBIT_BASE_URL && process.env.ORBIT_API_KEY && process.env.ORBIT_MODEL) {
+    const settings = await page.request.put(`${origin}/api/settings`, { data: {
+      baseUrl: process.env.ORBIT_BASE_URL, apiKey: process.env.ORBIT_API_KEY,
+      model: process.env.ORBIT_MODEL, reasoningEffort: "low",
+    } });
+    if (!settings.ok()) throw new Error(`Provider settings status ${settings.status()}`);
+  }
+  const { id } = await (await page.request.post(`${origin}/api/chats`)).json();
+  await page.goto(`${origin}/c/${id}`);
+  await page.getByRole("textbox").fill(process.env.ORBIT_API_KEY ? "Reply with the single word first" : "[qa:text] first");
+  await page.getByRole("textbox").press("Enter");
+  const regenerate = page.getByRole("button", { name: "Regenerate", exact: true });
+  await regenerate.waitFor({ timeout: 120_000 });
+  const originalTree = await (await page.request.get(`${origin}/api/chats/${id}`)).json();
+  const originalReply = originalTree.messages.find(entry => (entry.message ?? entry).role === "assistant");
+  const originalReplyId = (originalReply?.message ?? originalReply)?.id;
+  await regenerate.click();
+  await page.getByRole("button", { name: "Stop", exact: true }).waitFor({ state: "hidden", timeout: 120_000 });
+  await regenerate.waitFor();
+  const picker = page.locator('[data-message-role="assistant"] [data-branch-picker]');
+  const exists = await picker.getByText("2 / 2", { exact: true }).waitFor({ timeout: 3000 }).then(() => true, () => false);
+  await shot("regenerated");
+  step("regenerate shows 2 / 2 picker", exists, "no assistant branch picker");
+  if (exists) {
+    await picker.getByRole("button", { name: "Previous", exact: true }).click();
+    step("Previous opens first reply", await picker.getByText("1 / 2", { exact: true }).isVisible() && await page.locator('[data-message-role="assistant"]').getAttribute("data-message-id") === originalReplyId);
+    await shot("previous");
+  }
+  const prompt = page.locator('[data-turn-id]').first();
+  await prompt.hover();
+  await prompt.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.getByRole("textbox", { name: "Edit message" }).fill(process.env.ORBIT_API_KEY ? "Reply with the single word edited" : "[qa:text] edited");
+  await page.getByRole("button", { name: "Send", exact: true }).first().click();
+  await regenerate.waitFor({ timeout: 120_000 });
+  await shot("edited");
+  const edited = requests.at(-1);
+  const original = requests[0]?.messages[0]?.id;
+  step("edit sends a new user id", edited?.messages.at(-1)?.id !== original, `old=${original} new=${edited?.messages.at(-1)?.id}`);
+  step("edit shows user picker", await page.locator('[data-turn-id] [data-branch-picker]').getByText("2 / 2", { exact: true }).isVisible().catch(() => false));
+  await page.reload();
+  await page.locator('[data-turn-id]').first().waitFor();
+  await shot("reloaded");
+  step("reload opens last written edit", await page.locator('[data-turn-id]').first().innerText().then(text => text.includes("edited")));
+  const tree = await (await page.request.get(`${origin}/api/chats/${id}`)).json();
+  const count = tree.messages.length;
+  step("tree keeps both prompts and all replies", count === 5 && tree.headId != null, `messages=${count} headId=${tree.headId}`);
+  const badPath = [tree.messages.find(({ message }) => message.id === original), tree.messages.find(({ message }) => message.id === tree.headId)].map(entry => entry.message);
+  const stale = await page.request.post(`${origin}/api/chat`, { data: { id, messages: badPath, trigger: "regenerate-message" } });
+  step("missing-link path gets 409", stale.status() === 409, `status=${stale.status()}`);
+  const afterStale = await (await page.request.get(`${origin}/api/chats/${id}`)).json();
+  step("stale request changes nothing", JSON.stringify(afterStale) === JSON.stringify(tree));
+  await page.locator('[data-turn-id] [data-branch-picker]').getByRole("button", { name: "Previous", exact: true }).click({ timeout: 3000 });
+  step("original reply picker survives reload", await page.locator('[data-message-role="assistant"] [data-branch-picker]').isVisible());
+  step("restored branch shows original reply", await page.locator('[data-message-role="assistant"]').getAttribute("data-message-id") === originalReplyId);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await shot("mobile");
+  step("mobile has no horizontal overflow", await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+}

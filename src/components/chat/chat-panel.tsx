@@ -1,36 +1,83 @@
 "use client";
 
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AssistantRuntimeProvider } from "@assistant-ui/react";
+import { AssistantRuntimeProvider, type ThreadHistoryAdapter } from "@assistant-ui/react";
 import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
-import type { UIMessage } from "ai";
+import { focusedHead, type toRepository } from "@/lib/chat-tree";
+import { hasOpenCodeRun } from "@/lib/chat-stopped-runs";
 import { orbitChatTransport } from "@/lib/chat-transport";
+import { ArtifactProvider } from "@/components/artifacts/use-artifact";
+import { ArtifactWorkspace } from "@/components/artifacts/artifact-panel";
+import { ChatIdProvider } from "./chat-id";
+import { StoppedRunSync } from "./stopped-run-sync";
 import { Thread } from "./thread";
 
 export function ChatPanel({
   chatId,
-  initialMessages,
+  initialHistory,
+  focusMessageId,
   ready,
   model,
 }: {
   chatId: string;
-  initialMessages: UIMessage[];
+  initialHistory: ReturnType<typeof toRepository>;
+  focusMessageId: string | null;
   ready: boolean;
   model: string;
 }) {
   const router = useRouter();
+  const editMessageId = useRef<string | null>(null);
+  const [stopped, setStopped] = useState<string[]>([]);
+  const history = useMemo<ThreadHistoryAdapter>(() => ({
+    async load() { throw new Error("Chat history requires the ai-sdk/v6 format"); },
+    async append() {},
+    withFormat(format) {
+      if (format.format !== "ai-sdk/v6") throw new Error("Unsupported chat history format");
+      return {
+        async load() {
+          const headId = focusedHead(
+            initialHistory.messages.map(({ parentId, message }) => ({ id: message.id, parentId })),
+            initialHistory.headId,
+            focusMessageId,
+          );
+          return {
+            headId,
+            messages: initialHistory.messages.map(({ parentId, message: { id, ...content } }) => format.decode({
+              id, parent_id: parentId, format: format.format,
+              content: content as unknown as Parameters<typeof format.decode>[0]["content"],
+            })),
+          };
+        },
+        // POST /api/chat already stores each message, so the history adapter must not write it again.
+        async append() {},
+      };
+    },
+  }), [focusMessageId, initialHistory]);
   const runtime = useChatRuntime({
     id: chatId,
-    messages: initialMessages,
-    transport: orbitChatTransport(chatId),
-    onFinish: () => {
+    adapters: { history },
+    transport: orbitChatTransport(chatId, { editMessageId: () => { const id = editMessageId.current; editMessageId.current = null; return id; } }),
+    onFinish: ({ message, isAbort }) => {
       router.refresh();
+      if (isAbort && hasOpenCodeRun(message)) setStopped((ids) => [...ids, message.id]);
     },
   });
 
+  useEffect(() => {
+    void runtime.threads.mainItem.initialize();
+  }, [runtime]);
+
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <Thread ready={ready} model={model} />
+      <ChatIdProvider chatId={chatId} onEdit={(id) => { editMessageId.current = id; }}>
+        <ArtifactProvider>
+          <StoppedRunSync chatId={chatId} stopped={stopped} />
+          <ArtifactWorkspace>
+            <Thread ready={ready} model={model} focusMessageId={focusMessageId} />
+          </ArtifactWorkspace>
+        </ArtifactProvider>
+      </ChatIdProvider>
     </AssistantRuntimeProvider>
   );
 }

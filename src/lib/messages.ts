@@ -1,7 +1,12 @@
-import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { UIMessage } from "ai";
+import { replaceTextPart, replaceTextParts } from "./chat-parts";
 import { db } from "./db";
+import { assistantHasVisiblePart } from "./genui/spec";
 import { chats, messages } from "./db/schema";
+import { isPath, pathTo, toRepository, type StoredMessage } from "./chat-tree";
+import { runCodeOutputSchema } from "./sandbox/spec";
+import { stripTerminalControls } from "./sandbox/terminal";
 
 export function textFromParts(parts: unknown): string {
   if (!Array.isArray(parts)) return "";
@@ -13,6 +18,31 @@ export function textFromParts(parts: unknown): string {
       return "";
     })
     .join("");
+}
+
+// What search sees for a message: its text, then the standard output and standard
+// error of each finished code run, then the source of each code run.
+export function searchTextFromParts(parts: unknown): string {
+  const text = textFromParts(parts);
+  if (!Array.isArray(parts)) return text;
+  const output: string[] = [];
+  const source: string[] = [];
+  for (const part of parts) {
+    if (!part || typeof part !== "object") continue;
+    const record = part as { type?: string; state?: string; input?: unknown; output?: unknown };
+    if (record.type !== "tool-run_code") continue;
+    const code = (record.input as { code?: unknown } | null | undefined)?.code;
+    if (typeof code === "string" && code.trim()) source.push(code);
+    if (record.state !== "output-available") continue;
+    const result = runCodeOutputSchema.safeParse(record.output);
+    if (!result.success) continue;
+    for (const channel of [result.data.stdout, result.data.stderr]) {
+      const clean = stripTerminalControls(channel);
+      if (clean.trim()) output.push(clean);
+    }
+  }
+  const pieces = [...output, ...source];
+  return pieces.length === 0 ? text : [text, ...pieces].filter((piece) => piece !== "").join("\n");
 }
 
 export function ensureChat(id: string, userId: string) {
@@ -51,126 +81,171 @@ export function touchChat(id: string, title?: string) {
   db.update(chats).set({ title: nextTitle, updatedAt: new Date() }).where(eq(chats.id, id)).run();
 }
 
+export function storedMessageCount(chatId: string): number {
+  const row = db.$client.prepare("select count(*) as n from messages where chat_id = ?").get(chatId) as { n: number };
+  return row.n;
+}
+
+export function replaceFallbackTitle(chatId: string, fallback: string, title: string) {
+  if (!title || title === fallback) return;
+  db.update(chats).set({ title }).where(and(eq(chats.id, chatId), eq(chats.title, fallback))).run();
+}
+
+type ReplyEnd = {
+  regenerate: boolean;
+  interrupted: boolean;
+  hadReply: boolean;
+  visible: boolean;
+};
+
+export function shouldSaveReply({ visible }: ReplyEnd): boolean {
+  return visible;
+}
+
+export type ExpectedMessage = { id: string; content: string; parts: string };
+
+export function replyGuard(chatId: string, _regenerate: boolean, _responseId: string, promptId?: string) {
+  const prompt = promptId ? db.select().from(messages)
+    .where(and(eq(messages.id, promptId), eq(messages.chatId, chatId))).get() : undefined;
+  return { hadReply: false, expected: prompt && { id: prompt.id, content: prompt.content, parts: prompt.parts } };
+}
+
 export function upsertMessage(
   chatId: string,
   message: { id: string; role: string; parts: unknown },
-  replyTo?: string,
+  replyTo?: string | null,
+  expected?: ExpectedMessage,
 ) {
   if (message.role !== "user" && message.role !== "assistant") return true;
-  if (message.role === "assistant" && Array.isArray(message.parts) && message.parts.length === 0) return true;
-  const content = textFromParts(message.parts);
-  const parts = JSON.stringify(message.parts ?? []);
-  const existing = db.select({ chatId: messages.chatId }).from(messages).where(eq(messages.id, message.id)).get();
-  if (existing) {
-    if (existing.chatId !== chatId) return false;
-    db.update(messages).set({ role: message.role, content, parts }).where(eq(messages.id, message.id)).run();
-    return true;
-  }
+  if (message.role === "assistant" && !assistantHasVisiblePart(message.parts)) return true;
   return db.transaction((tx) => {
-    const prompt = replyTo
-      ? tx
-          .select({ position: messages.position })
-          .from(messages)
-          .where(and(eq(messages.id, replyTo), eq(messages.chatId, chatId)))
-          .get()
-      : undefined;
-    const row = tx
-      .select({ position: sql<number>`coalesce(max(${messages.position}), -1)` })
-      .from(messages)
-      .where(eq(messages.chatId, chatId))
-      .get();
-    const position = prompt ? prompt.position + 1 : (row?.position ?? -1) + 1;
-    if (prompt) {
-      tx.update(messages)
-        .set({ position: sql`${messages.position} + 1` })
-        .where(and(eq(messages.chatId, chatId), gte(messages.position, position)))
-        .run();
+    if (expected) {
+      const current = tx.select().from(messages)
+        .where(and(eq(messages.id, expected.id), eq(messages.chatId, chatId))).get();
+      if (!current || current.content !== expected.content || current.parts !== expected.parts) return false;
     }
-    tx.insert(messages)
-      .values({
-        id: message.id,
-        chatId,
-        role: message.role,
-        content,
-        parts,
-        position,
-        createdAt: new Date(),
-      })
-      .run();
+    const content = searchTextFromParts(message.parts);
+    const parts = JSON.stringify(message.parts ?? []);
+    const existing = tx.select().from(messages).where(eq(messages.id, message.id)).get();
+    if (existing) {
+      if (existing.chatId !== chatId) return false;
+      tx.update(messages).set({ role: message.role, content, parts }).where(eq(messages.id, message.id)).run();
+      return true;
+    }
+    const chat = tx.select().from(chats).where(eq(chats.id, chatId)).get();
+    if (!chat) return false;
+    const parentId = replyTo === undefined ? chat.headId : replyTo;
+    const parent = parentId ? tx.select().from(messages)
+      .where(and(eq(messages.id, parentId), eq(messages.chatId, chatId))).get() : undefined;
+    if (parentId && !parent) return false;
+    tx.insert(messages).values({
+      id: message.id, chatId, parentId,
+      role: message.role, content, parts,
+      position: parent ? parent.position + 1 : 0,
+      createdAt: new Date(),
+    }).run();
+    tx.update(chats).set({ headId: message.id }).where(eq(chats.id, chatId)).run();
     return true;
   });
 }
 
 export type IncomingMessage = { id: string; role: string; parts?: unknown };
+export type WriteResult = "ok" | "cross-chat" | "stale";
 
-export function persistIncoming(chatId: string, incoming: IncomingMessage[]) {
-  const withParts = incoming.filter(
-    (message): message is IncomingMessage & { parts: unknown } => Boolean(message.parts),
-  );
-  if (withParts.length === 0) return true;
-  const saved = db
-    .select({ id: messages.id, chatId: messages.chatId, role: messages.role, content: messages.content, parts: messages.parts })
-    .from(messages)
-    .where(inArray(messages.id, withParts.map((message) => message.id)))
-    .all();
-  const byId = new Map(saved.map((row) => [row.id, row]));
-  for (const message of withParts) {
-    const existing = byId.get(message.id);
-    if (existing && existing.chatId === chatId) {
-      // The server owns answers. A stale tab echoes the pre-regenerate text under the same id.
-      if (existing.role === "assistant" && message.role === "assistant") continue;
-      const content = textFromParts(message.parts);
-      if (existing.role === message.role && existing.content === content && existing.parts === JSON.stringify(message.parts ?? [])) {
-        continue;
+export function persistIncoming(chatId: string, incoming: IncomingMessage[]): WriteResult {
+  return db.transaction(() => {
+    const rows = db.select().from(messages).where(eq(messages.chatId, chatId)).all();
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const ids = incoming.map((message) => message.id);
+    const referenced = ids.length ? db.select().from(messages).where(inArray(messages.id, ids)).all() : [];
+    if (referenced.some((row) => row.chatId !== chatId)) return "cross-chat";
+    const path = incoming.filter((message) => byId.has(message.id) ||
+      message.role !== "assistant" || assistantHasVisiblePart(message.parts));
+    const tail = path.at(-1);
+    const prefix = tail && !byId.has(tail.id) && tail.role === "user" ? path.slice(0, -1) : path;
+    if (!isPath(rows, prefix)) return "stale";
+    for (const message of path) {
+      const saved = byId.get(message.id);
+      if (!saved) {
+        if (message !== tail || message.role !== "user" || !Array.isArray(message.parts)) return "stale";
+      } else if (saved.role !== message.role || (saved.role === "user" && message.parts &&
+        (saved.content !== searchTextFromParts(message.parts) || saved.parts !== JSON.stringify(message.parts)))) {
+        return "stale";
       }
     }
-    if (!upsertMessage(chatId, message)) return false;
-  }
-  return true;
+    if (tail && !byId.has(tail.id)) {
+      if (!upsertMessage(chatId, { ...tail, parts: tail.parts }, prefix.at(-1)?.id ?? null)) return "cross-chat";
+    }
+    return "ok";
+  });
 }
 
-/** The id this response stores under. A regenerate reuses the answer it replaces, so a failed one leaves that answer alone. */
-function responseIdFor(chatId: string, incoming: IncomingMessage[], trigger?: string, messageId?: string) {
-  if (trigger !== "regenerate-message") return crypto.randomUUID();
-  const rows = db
-    .select({ id: messages.id, role: messages.role })
-    .from(messages)
-    .where(eq(messages.chatId, chatId))
-    .orderBy(asc(messages.position))
-    .all();
-  const target = messageId ? rows.find((row) => row.id === messageId) : undefined;
-  if (target?.role === "assistant") return target.id;
-  const lastUser = incoming.findLast((message) => message.role === "user");
-  const promptIndex = lastUser ? rows.findIndex((row) => row.id === lastUser.id) : -1;
-  if (promptIndex === -1) return crypto.randomUUID();
-  for (const row of rows.slice(promptIndex + 1)) {
-    if (row.role === "user") break;
-    if (row.role === "assistant") return row.id;
-  }
-  return crypto.randomUUID();
-}
+export type ChatWritePlan =
+  | { regenerate: boolean; responseId: string }
+  | { error: "invalid-edit" | "cross-chat" | "stale" };
 
-/** Persist the client list and pick the id the response stores under. Null means an id belongs to another chat. */
 export function planChatWrite(
   chatId: string,
   incoming: IncomingMessage[],
   trigger?: string,
-  messageId?: string,
-): { regenerate: boolean; responseId: string } | null {
-  if (!persistIncoming(chatId, incoming)) return null;
-  return {
-    regenerate: trigger === "regenerate-message",
-    responseId: responseIdFor(chatId, incoming, trigger, messageId),
-  };
+  _messageId?: string,
+  editMessageId?: string,
+): ChatWritePlan {
+  return db.transaction(() => {
+    if (editMessageId) {
+      const tree = storedMessages(chatId);
+      const target = tree.find((message) => message.id === editMessageId && message.role === "user");
+      const edited = incoming.at(-1);
+      if (trigger !== "submit-message" || !target || edited?.role !== "user" ||
+        edited.id === editMessageId || !Array.isArray(edited.parts)) return { error: "invalid-edit" };
+      const prefix = pathTo(tree, target.parentId);
+      if (incoming.length !== prefix.length + 1 || prefix.some((message, i) => incoming[i]?.id !== message.id)) {
+        return { error: "invalid-edit" };
+      }
+    }
+    const result = persistIncoming(chatId, incoming);
+    if (result !== "ok") return { error: result };
+    const prompt = incoming.findLast((message) => message.role === "user");
+    if (prompt) db.update(chats).set({ headId: prompt.id }).where(eq(chats.id, chatId)).run();
+    return { regenerate: trigger === "regenerate-message", responseId: crypto.randomUUID() };
+  });
 }
 
-export function listMessages(chatId: string): UIMessage[] {
-  const rows = db.select().from(messages).where(eq(messages.chatId, chatId)).orderBy(asc(messages.position)).all();
+export function updateMessageText(chatId: string, messageId: string, text: string, partIndex?: number) {
+  const row = db
+    .select()
+    .from(messages)
+    .where(and(eq(messages.id, messageId), eq(messages.chatId, chatId)))
+    .get();
+  if (!row || row.role !== "assistant") return false;
+  const current = JSON.parse(row.parts) as UIMessage["parts"];
+  const parts = partIndex == null ? replaceTextParts(current, text) : replaceTextPart(current, partIndex, text);
+  if (!parts) return false;
+  db.update(messages)
+    .set({ content: searchTextFromParts(parts), parts: JSON.stringify(parts) })
+    .where(eq(messages.id, messageId))
+    .run();
+  return true;
+}
+
+function storedMessages(chatId: string): StoredMessage[] {
+  const rows = db.select().from(messages).where(eq(messages.chatId, chatId))
+    .orderBy(asc(messages.createdAt), sql`rowid`).all();
   return rows.map((row) => ({
     id: row.id,
+    parentId: row.parentId,
     role: row.role as "user" | "assistant",
     parts: JSON.parse(row.parts) as UIMessage["parts"],
   }));
+}
+
+export function listMessages(chatId: string): UIMessage[] {
+  return storedMessages(chatId).map(({ parentId: _parentId, ...message }) => message);
+}
+
+export function messageRepository(chatId: string) {
+  const chat = db.select().from(chats).where(eq(chats.id, chatId)).get();
+  return toRepository(storedMessages(chatId), chat?.headId ?? null);
 }
 
 export function listChats(userId: string) {
