@@ -1,0 +1,67 @@
+src/lib/no-direct-fetch.test.ts
+  s_99e6b4fa97078c::t_1feef829fcc671 13
+  s_99e6b4fa97078c::t_6463eb269bbd72 1-12,14-44
+ARCHITECTURE.md
+  s_99e6b4fa97078c::t_06db7decfa8682 144
+AGENTS.md
+  s_99e6b4fa97078c::t_0707f265d50f3f 15
+src/lib/request-json.ts
+  s_99e6b4fa97078c::t_291557f4966186 1-11,13-44,46-83
+  s_99e6b4fa97078c::t_588da28ddabba6 12
+  s_99e6b4fa97078c::t_4ef7ac97afa04a 45
+src/lib/settings-form.ts
+  s_99e6b4fa97078c::t_cedf3c174805d1 1,3,12-31
+src/lib/request-json.test.tsx
+  s_99e6b4fa97078c::t_9fc89796372d77 1-87
+src/components/settings/settings-form.tsx
+  s_99e6b4fa97078c::t_a73523715eb900 14-15,18-20
+  s_99e6b4fa97078c::t_eb5db479ab454f 13
+  s_99e6b4fa97078c::t_6dec65c2cd8b37 46,49-50,59-71,74
+  s_99e6b4fa97078c::t_07c25eb23a8d40 292
+  s_99e6b4fa97078c::t_6d7094a9450f60 6
+  s_99e6b4fa97078c::t_3dc40f5ee9e11b 171,186
+  s_99e6b4fa97078c::t_f99e8723c1473a 90-103,105-121
+  s_99e6b4fa97078c::t_069fc79cf705c9 104,127,129-131,134,139-146
+  s_99e6b4fa97078c::t_e7705a37f06e4a 89
+  s_99e6b4fa97078c::t_43c40496570284 21
+.agents/skills/verify-orbit/features/browse.md
+  s_99e6b4fa97078c::t_8301a9227eb5d0 72-95
+src/components/shell/app-shell.tsx
+  s_99e6b4fa97078c::t_5294851332ad8b 99-109
+  s_99e6b4fa97078c::t_51ae9258d14c01 6-8
+  s_99e6b4fa97078c::t_c6b493779d484a 40-41,45,48-52
+  s_99e6b4fa97078c::t_c77ae22dc9211c 19-20
+  s_99e6b4fa97078c::t_72c8e03aef3542 194-203
+  s_99e6b4fa97078c::t_6f9340b7faf155 53
+src/components/chat/stopped-run-sync.tsx
+  s_99e6b4fa97078c::t_166369b615e20c 6,8,13-17,21-32
+CHANGELOG.md
+  s_99e6b4fa97078c::t_e04711f129faa0 7-9
+src/components/chat/use-save-message.ts
+  s_99e6b4fa97078c::t_7960096e2874d2 28,30-51,56
+  s_99e6b4fa97078c::t_1223cde2a77e59 5,7,11
+  s_99e6b4fa97078c::t_5fe1bd69ca6ca0 12
+.agents/skills/verify-orbit/scenarios/request-failures.mjs
+  s_99e6b4fa97078c::t_2fb5bbb56953fd 1-118
+.agents/skills/verify-orbit/features/README.md
+  s_99e6b4fa97078c::t_8d23c0dcffdd53 37
+src/lib/settings-form.test.ts
+  s_99e6b4fa97078c::t_8dac4aad56ede1 3-4
+  s_99e6b4fa97078c::t_6bc71011e5e729 57-59,62-80,82-95,98-102,105-106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5f2ae264ff7c744f87694c2709434d2bed3f0079",
+  "prompts": {},
+  "sessions": {
+    "s_99e6b4fa97078c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "30fc78cc-c8d5-5e67-be6f-766ace7f4ede",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
