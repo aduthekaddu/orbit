@@ -110,7 +110,7 @@ Every variable is optional.
 | `ORBIT_DATA_DIR` | `./data` | Where Orbit keeps `orbit.db` and `auth-secret`. |
 | `BETTER_AUTH_SECRET` | Generated into `data/auth-secret` | The key that signs session cookies. |
 | `BETTER_AUTH_URL` | `http://127.0.0.1:3210` | The URL you open Orbit at. |
-| `ORBIT_TRUSTED_ORIGINS` | Empty | Extra origins, separated by commas, that may sign in. Needed when you serve Orbit on another port or host. |
+| `ORBIT_TRUSTED_ORIGINS` | Empty | Extra origins, separated by commas, that may sign in and send API writes. Needed when you serve Orbit on another port or host. API writes match each origin exactly, not as a wildcard. |
 | `ORBIT_PUBLIC_URL` | Empty | The public address behind a Cloudflare tunnel, such as `https://orbit.example.com`. It becomes the auth URL and a trusted origin. `127.0.0.1:3210` still signs in. See [Deploy behind Cloudflare](#deploy-behind-cloudflare). |
 | `CLOUDFLARE_TUNNEL_TOKEN` | Empty | The tunnel token. Only the `cloudflared` container reads it, as a file secret. |
 

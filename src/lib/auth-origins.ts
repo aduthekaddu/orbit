@@ -26,3 +26,19 @@ export function resolveTrustedOrigins(baseURL: string, extra?: string, publicURL
   }
   return [...origins];
 }
+
+const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/**
+ * A write that another origin sent with the user's cookie. Sec-Fetch-Site must be same-origin when the browser sends it,
+ * and Origin must be a trusted origin when present. Unlike better-auth's sign-in check, the comparison is by exact string,
+ * so a wildcard pattern in ORBIT_TRUSTED_ORIGINS trusts nothing here. A request with neither header passes, so curl and
+ * scripts keep working. Browsers send Origin on every cross-origin write.
+ */
+export function isCrossOriginWrite(request: Pick<Request, "method" | "headers">, trustedOrigins: readonly string[]) {
+  if (READ_METHODS.has(request.method)) return false;
+  const site = request.headers.get("sec-fetch-site");
+  if (site !== null && site !== "same-origin") return true;
+  const origin = request.headers.get("origin");
+  return origin !== null && !trustedOrigins.includes(origin);
+}
