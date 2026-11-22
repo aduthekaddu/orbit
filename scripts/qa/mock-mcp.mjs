@@ -115,6 +115,11 @@ export async function startMockMcp({ port = 0 } = {}) {
       response.end(JSON.stringify({ message: "Bad credentials" }));
       return;
     }
+    if (mode === "error-token" && method === "tools/call") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ jsonrpc: "2.0", id: body.id, error: { code: -32000, message: `token ${mockGithubToken} cannot read this repository` } }));
+      return;
+    }
     if (mode === "fail-list" && method === "tools/list") {
       response.writeHead(500, { "content-type": "application/json" });
       response.end(JSON.stringify({ error: "unavailable" }));

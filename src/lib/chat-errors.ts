@@ -1,3 +1,6 @@
+import type { settings } from "./db/schema";
+import type { SettingsRecord } from "./settings";
+
 const INPUT_ERROR = /^(?:AI_InvalidToolInputError: )?Invalid input for tool ([\w-]+): (.*)$/s;
 const ISSUES_MARK = "\nError message: ";
 const ISSUE_LIMIT = 3;
@@ -6,20 +9,64 @@ const FIELD_LIMIT = 80;
 const MESSAGE_LIMIT = 120;
 const REASON_LIMIT = 240;
 
-export function sanitize(message: string, secret: string | readonly string[]) {
-  const secrets = (typeof secret === "string" ? [secret] : secret).filter((value) => value.length > 0).sort((left, right) => right.length - left.length);
+type StoredColumn = Exclude<keyof typeof settings.$inferSelect, "id" | "updatedAt">;
+
+// Every stored setting and every settings column must be listed here, so a new
+// credential cannot be added without the Redactor covering it.
+const SETTINGS_FIELDS = {
+  baseUrl: "setting",
+  apiKey: "credential",
+  searxngUrl: "setting",
+  tavilyApiKey: "credential",
+  githubToken: "credential",
+  githubMcpUrl: "setting",
+  model: "setting",
+  reasoningEffort: "setting",
+} as const satisfies Record<keyof SettingsRecord | StoredColumn, "credential" | "setting">;
+
+type SettingsField = keyof typeof SETTINGS_FIELDS;
+type CredentialField = { [Field in SettingsField]: (typeof SETTINGS_FIELDS)[Field] extends "credential" ? Field : never }[SettingsField];
+export type StoredCredentials = Readonly<Record<CredentialField, string>>;
+
+const CREDENTIAL_FIELDS = (Object.keys(SETTINGS_FIELDS) as SettingsField[]).filter(
+  (field): field is CredentialField => SETTINGS_FIELDS[field] === "credential",
+);
+
+function sanitize(message: string, secrets: readonly string[]) {
   let text = message;
   for (const value of secrets) text = text.split(value).join("[redacted]");
   return text;
 }
 
-export function redactValue(value: unknown, secret: string | readonly string[]): unknown {
-  if (typeof value === "string") return sanitize(value, secret);
-  if (Array.isArray(value)) return value.map((item) => redactValue(item, secret));
+function redactValue(value: unknown, secrets: readonly string[]): unknown {
+  if (typeof value === "string") return sanitize(value, secrets);
+  if (Array.isArray(value)) return value.map((item) => redactValue(item, secrets));
   if (!value || typeof value !== "object") return value;
   const copy: Record<string, unknown> = {};
-  for (const [key, child] of Object.entries(value)) copy[sanitize(key, secret)] = redactValue(child, secret);
+  for (const [key, child] of Object.entries(value)) copy[sanitize(key, secrets)] = redactValue(child, secrets);
   return copy;
+}
+
+export class Redactor {
+  readonly #secrets: readonly string[];
+
+  constructor(credentials: StoredCredentials) {
+    this.#secrets = CREDENTIAL_FIELDS.map((field) => credentials[field])
+      .filter((value) => value.length > 0)
+      .sort((left, right) => right.length - left.length);
+  }
+
+  text(message: string) {
+    return sanitize(message, this.#secrets);
+  }
+
+  value(value: unknown) {
+    return redactValue(value, this.#secrets);
+  }
+
+  logError(label: string, ...details: string[]) {
+    console.error(label, ...details.map((detail) => this.text(detail)));
+  }
 }
 
 function cleanErrorText(text: string) {
@@ -62,14 +109,14 @@ function shortToolInputError(text: string) {
   return match ? `Invalid input for tool ${match[1]}: ${inputProblem(match[2])}` : undefined;
 }
 
-export function streamErrorMessage(error: unknown, secret: string | readonly string[]) {
-  if (typeof error === "string") return sanitize(shortToolInputError(error) ?? cleanErrorText(error), secret);
+export function streamErrorMessage(error: unknown, redact: Redactor) {
+  if (typeof error === "string") return redact.text(shortToolInputError(error) ?? cleanErrorText(error));
   const message = error instanceof Error ? error.message : "The model request failed";
   if (error instanceof Error && error.name === "AI_InvalidToolInputError") {
-    const text = sanitize(shortToolInputError(message) ?? cleanErrorText(message), secret);
-    console.error("chat stream error", text);
+    const text = redact.text(shortToolInputError(message) ?? cleanErrorText(message));
+    redact.logError("chat stream error", text);
     return text;
   }
-  console.error("chat stream error", sanitize(message, secret));
+  redact.logError("chat stream error", message);
   return "The model request failed";
 }

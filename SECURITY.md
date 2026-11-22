@@ -14,7 +14,7 @@ Only the latest commit on `main` gets security fixes.
 
 Orbit is built for one person on their own machine. These are the protections it has today:
 
-- **The provider key stays on the server.** The API never returns it. `GET /api/settings` reports only whether a key is set, and the chat route removes the key from error text before it logs.
+- **The provider key stays on the server.** The API never returns it. `GET /api/settings` reports only whether a key is set, and the chat route removes every stored key and token from its log lines, stream errors, and saved replies.
 - **The GitHub token stays on the server.** `GET /api/settings` reports `githubTokenSet` and the MCP URL, never the token. GitHub tools are read-only and limited to repositories, issues, and pull requests. A check calls `get_me` and returns the login or an error, not the token. The token is sent only to `https://api.githubcopilot.com`, `https://github.com`, or `https://api.github.com`, and only on port 443. Plain HTTP and any other host are refused before the request. `ORBIT_GITHUB_MCP_FIXTURE=1` also allows `127.0.0.1`, `localhost`, and `::1` so the local test fixture can run. Leave that variable unset outside tests. The verify harness sets it for its own server.
 - **One account.** An auth hook and a SQLite trigger both reject a second signup.
 - **Every page and API route needs a session**, except the login and signup pages, `/api/auth/*`, and `/api/setup`.

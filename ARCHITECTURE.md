@@ -138,7 +138,7 @@ Tool output, generated UI specs, and reasoning all live inside `parts`. A new to
 
 ## Rules that hold across the code
 
-- **The key stays on the server.** `GET /api/settings` returns `keySet`, `tavilyKeySet`, and `sandbox` booleans. `sandbox` says only whether the server set `ORBIT_SANDBOX=on`. The browser cannot change it. Logs pass through `sanitize` in the chat route. Tests and smoke scripts redact `ORBIT_API_KEY`.
+- **The key stays on the server.** `GET /api/settings` returns `keySet`, `tavilyKeySet`, and `sandbox` booleans. `sandbox` says only whether the server set `ORBIT_SANDBOX=on`. The browser cannot change it. One `Redactor` (`src/lib/chat-errors.ts`), built from every stored credential, removes the provider key, the Tavily key, and the GitHub token from the chat route's log lines, stream errors, and saved replies, and from GitHub tool results and errors. A new settings field must be listed in its `SETTINGS_FIELDS` table, or typecheck fails. Tests and smoke scripts redact `ORBIT_API_KEY`.
 - **One user.** The auth hook and the database trigger both close signup after the first account.
 - **Validate at the edge.** Routes parse request bodies with zod. Tool input is parsed by the tool's schema and then by `parseRenderSpec`. Code behind those checks trusts its types.
 - **The server owns history.** The client sends its copy of the thread, but `planChatWrite` decides what is stored and refuses a write against a changed chat.

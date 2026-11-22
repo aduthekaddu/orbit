@@ -83,7 +83,9 @@ test("an explicit GitHub token removal clears the stored token", async () => {
   assert.equal(settings.getSettings()?.githubToken, "");
   assert.equal(JSON.stringify(removed).includes("good-token"), false);
   const { openGithubTurn } = await import("./tools/github");
-  const opened = await openGithubTurn({ githubToken: settings.getSettings()?.githubToken ?? "", githubMcpUrl: "https://api.githubcopilot.com/mcp/" });
+  const stored = settings.getSettings();
+  assert.ok(stored);
+  const opened = await openGithubTurn({ ...stored, githubMcpUrl: "https://api.githubcopilot.com/mcp/" });
   assert.deepEqual(Object.keys(opened.tools), []);
   await opened.close();
 });

@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
-import { streamErrorMessage } from "./chat-errors";
+import { Redactor, streamErrorMessage } from "./chat-errors";
 import { renderUiTool } from "./genui/tool";
 import { createRunCodeTool } from "./tools/run-code";
 
 type Chunk = { type: string; errorText?: string };
+
+const redact = new Redactor({ apiKey: "sk-test-secret", tavilyApiKey: "tvly-test-secret", githubToken: "secret-token-value" });
 
 async function rejectedCall(input: string, toolName: "run_code" | "render_ui" = "run_code") {
   const model = new MockLanguageModelV4({
@@ -36,7 +38,7 @@ async function rejectedCall(input: string, toolName: "run_code" | "render_ui" = 
   };
   const saved: string[] = [];
   try {
-    const stream = toUIMessageStream({ stream: result.stream, tools, onError: (error) => streamErrorMessage(error, "sk-test-secret") });
+    const stream = toUIMessageStream({ stream: result.stream, tools, onError: (error) => streamErrorMessage(error, redact) });
     for await (const chunk of stream as unknown as AsyncIterable<Chunk>) {
       if ((chunk.type === "tool-input-error" || chunk.type === "tool-output-error") && chunk.errorText) saved.push(chunk.errorText);
     }
@@ -90,11 +92,38 @@ test("other failures keep their messages", () => {
   const error = console.error;
   console.error = () => {};
   try {
-    assert.equal(streamErrorMessage("AI_APICallError: Rate limit reached", "sk-test-secret"), "Rate limit reached");
-    assert.equal(streamErrorMessage(new Error("socket hang up"), "sk-test-secret"), "The model request failed");
-    assert.equal(streamErrorMessage("token sk-test-secret was rejected", "sk-test-secret"), "token [redacted] was rejected");
-    assert.equal(streamErrorMessage("GitHub said secret-token-value", ["sk-test-secret", "secret-token-value"]), "GitHub said [redacted]");
+    assert.equal(streamErrorMessage("AI_APICallError: Rate limit reached", redact), "Rate limit reached");
+    assert.equal(streamErrorMessage(new Error("socket hang up"), redact), "The model request failed");
+    assert.equal(streamErrorMessage("token sk-test-secret was rejected", redact), "token [redacted] was rejected");
+    assert.equal(streamErrorMessage("GitHub said secret-token-value", redact), "GitHub said [redacted]");
+    assert.equal(streamErrorMessage("search said tvly-test-secret", redact), "search said [redacted]");
   } finally {
     console.error = error;
   }
+});
+
+test("every stored credential is redacted from text, nested values and field names", () => {
+  assert.equal(redact.text("a sk-test-secret b tvly-test-secret c secret-token-value"), "a [redacted] b [redacted] c [redacted]");
+  assert.deepEqual(redact.value({ issues: ["tvly-test-secret"], "secret-token-value": { title: "sk-test-secret" } }), {
+    issues: ["[redacted]"],
+    "[redacted]": { title: "[redacted]" },
+  });
+});
+
+test("an empty credential redacts nothing", () => {
+  const none = new Redactor({ apiKey: "", tavilyApiKey: "", githubToken: "" });
+  assert.equal(none.text("plain text"), "plain text");
+  assert.deepEqual(none.value({ key: "value" }), { key: "value" });
+});
+
+test("a log line through the redactor carries no stored credential", () => {
+  const lines: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => lines.push(args);
+  try {
+    redact.logError("chat title", "rejected tvly-test-secret", "and sk-test-secret");
+  } finally {
+    console.error = original;
+  }
+  assert.deepEqual(lines, [["chat title", "rejected [redacted]", "and [redacted]"]]);
 });

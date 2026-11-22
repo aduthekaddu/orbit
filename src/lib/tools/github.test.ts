@@ -17,6 +17,10 @@ const toolOptions = {
   context: undefined,
 };
 
+function githubSettings(githubToken: string, githubMcpUrl: string) {
+  return { apiKey: "", tavilyApiKey: "", githubToken, githubMcpUrl };
+}
+
 async function withMock(run: (mock: Awaited<ReturnType<typeof startMockMcp>>) => Promise<void>) {
   const mock = await startMockMcp();
   try {
@@ -50,7 +54,7 @@ async function waitForListRequest(
 
 test("GitHub tool names get the github_ prefix and the server sees read-only toolsets", { timeout: 20_000 }, async () => {
   await withMock(async (mock) => {
-    const opened = await githubTools({ token: mock.token, mcpUrl: mock.url });
+    const opened = await githubTools(githubSettings(mock.token, mock.url));
     try {
       assert.deepEqual(Object.keys(opened.tools).sort(), [
         "github_get_file_contents",
@@ -72,7 +76,7 @@ test("GitHub tool names get the github_ prefix and the server sees read-only too
 
 test("close runs after a successful tool call", { timeout: 20_000 }, async () => {
   await withMock(async (mock) => {
-    const opened = await githubTools({ token: mock.token, mcpUrl: mock.url });
+    const opened = await githubTools(githubSettings(mock.token, mock.url));
     const result = await opened.tools.github_list_issues?.execute?.({ owner: "aduthekaddu", repo: "orbit" }, toolOptions);
     assert.equal(githubLinks(result)[0]?.href, "https://github.com/aduthekaddu/orbit/issues/7");
     await opened.close();
@@ -90,7 +94,7 @@ test("a list failure closes the client and the turn keeps going without GitHub t
       logs.push(args.map(String).join(" "));
     };
     try {
-      const opened = await openGithubTurn({ githubToken: mock.token, githubMcpUrl: `${mock.url}?mode=fail-list` });
+      const opened = await openGithubTurn(githubSettings(mock.token, `${mock.url}?mode=fail-list`));
       assert.deepEqual(opened.tools, {});
       await opened.close();
       assert.ok(mock.closeCount() >= 1);
@@ -107,7 +111,7 @@ test("a list failure closes the client and the turn keeps going without GitHub t
 test("a stalled MCP list stops within the deadline and closes the client", { timeout: 5_000 }, async () => {
   await withMock(async (mock) => {
     const started = Date.now();
-    const pending = openGithubTurn({ githubToken: mock.token, githubMcpUrl: `${mock.url}?mode=stall-list` }, undefined, { setupMs: 300 });
+    const pending = openGithubTurn(githubSettings(mock.token, `${mock.url}?mode=stall-list`), undefined, { setupMs: 300 });
     const outcome = await Promise.race([
       pending.then((opened) => ({ kind: "done" as const, opened })).catch((error: unknown) => ({ kind: "error" as const, error })),
       new Promise<{ kind: "hung" }>((resolve) => setTimeout(() => resolve({ kind: "hung" }), 800)),
@@ -125,7 +129,7 @@ test("a stalled MCP list stops within the deadline and closes the client", { tim
 test("a stalled MCP initialize stops within the deadline", { timeout: 5_000 }, async () => {
   await withMock(async (mock) => {
     const started = Date.now();
-    const pending = openGithubTurn({ githubToken: mock.token, githubMcpUrl: `${mock.url}?mode=stall` }, undefined, { setupMs: 300 });
+    const pending = openGithubTurn(githubSettings(mock.token, `${mock.url}?mode=stall`), undefined, { setupMs: 300 });
     const outcome = await Promise.race([
       pending.then(() => "done").catch(() => "error"),
       new Promise((resolve) => setTimeout(() => resolve("hung"), 800)),
@@ -139,7 +143,7 @@ test("a stalled MCP initialize stops within the deadline", { timeout: 5_000 }, a
 test("aborting a stalled MCP list rejects the turn", { timeout: 5_000 }, async () => {
   await withMock(async (mock) => {
     const controller = new AbortController();
-    const pending = openGithubTurn({ githubToken: mock.token, githubMcpUrl: `${mock.url}?mode=stall-list` }, controller.signal, { setupMs: 5_000 });
+    const pending = openGithubTurn(githubSettings(mock.token, `${mock.url}?mode=stall-list`), controller.signal, { setupMs: 5_000 });
     await Promise.all([
       assert.rejects(pending),
       waitForListRequest(mock).finally(() => controller.abort()),
@@ -151,7 +155,7 @@ test("aborting a stalled MCP list rejects the turn", { timeout: 5_000 }, async (
 test("abort closes the client", { timeout: 20_000 }, async () => {
   await withMock(async (mock) => {
     const controller = new AbortController();
-    const pending = githubTools({ token: mock.token, mcpUrl: `${mock.url}?mode=slow-list` }, { signal: controller.signal });
+    const pending = githubTools(githubSettings(mock.token, `${mock.url}?mode=slow-list`), { signal: controller.signal });
     await Promise.all([
       assert.rejects(pending, (error: unknown) => {
         const name = error instanceof Error ? error.name : "";
@@ -165,7 +169,7 @@ test("abort closes the client", { timeout: 20_000 }, async () => {
 
 test("open-session cleanup check fails when a session stays open", { timeout: 5_000 }, async () => {
   await withMock(async (mock) => {
-    const opened = await githubTools({ token: mock.token, mcpUrl: mock.url });
+    const opened = await githubTools(githubSettings(mock.token, mock.url));
     try {
       await assert.rejects(
         () => assertNoOpenSessions(mock.openSessions, { timeoutMs: 80, pollMs: 10 }),
@@ -180,14 +184,14 @@ test("open-session cleanup check fails when a session stays open", { timeout: 5_
 
 test("a second call within five minutes skips the tool list and a tool call still reaches GitHub", { timeout: 20_000 }, async () => {
   await withMock(async (mock) => {
-    const first = await githubTools({ token: mock.token, mcpUrl: mock.url });
+    const first = await githubTools(githubSettings(mock.token, mock.url));
     await first.close();
-    const second = await githubTools({ token: mock.token, mcpUrl: mock.url });
+    const second = await githubTools(githubSettings(mock.token, mock.url));
     await second.tools.github_list_issues?.execute?.({ owner: "aduthekaddu", repo: "orbit" }, toolOptions);
     await second.close();
     assert.equal(mock.listCount(), 1);
     assert.equal(mock.callCount(), 1);
-    const third = await githubTools({ token: mock.token, mcpUrl: mock.url }, { now: Date.now() + 6 * 60 * 1000 });
+    const third = await githubTools(githubSettings(mock.token, mock.url), { now: Date.now() + 6 * 60 * 1000 });
     await third.close();
     assert.equal(mock.listCount(), 2);
   });
@@ -195,12 +199,12 @@ test("a second call within five minutes skips the tool list and a tool call stil
 
 test("a warm turn gets its tools before the MCP server answers the start", { timeout: 20_000 }, async () => {
   await withMock(async (mock) => {
-    const first = await githubTools({ token: mock.token, mcpUrl: mock.url });
+    const first = await githubTools(githubSettings(mock.token, mock.url));
     await first.close();
     const release = mock.holdStart();
     try {
       const warm = await Promise.race([
-        githubTools({ token: mock.token, mcpUrl: mock.url }),
+        githubTools(githubSettings(mock.token, mock.url)),
         new Promise<"hung">((resolve) => setTimeout(() => resolve("hung"), 1_000)),
       ]);
       assert.notEqual(warm, "hung");
@@ -226,14 +230,14 @@ test("a warm turn whose client fails to start fails the tool call and logs one l
   const logs: string[] = [];
   const original = console.error;
   await withMock(async (mock) => {
-    const first = await githubTools({ token: mock.token, mcpUrl: mock.url });
+    const first = await githubTools(githubSettings(mock.token, mock.url));
     await first.close();
     await mock.close();
     console.error = (...args: unknown[]) => {
       logs.push(args.map(String).join(" "));
     };
     try {
-      const warm = await githubTools({ token: mock.token, mcpUrl: mock.url });
+      const warm = await githubTools(githubSettings(mock.token, mock.url));
       assert.equal("github_list_issues" in warm.tools, true);
       await assert.rejects(warm.tools.github_list_issues?.execute?.({ owner: "aduthekaddu", repo: "orbit" }, toolOptions) ?? Promise.resolve());
       await warm.close();
@@ -254,7 +258,7 @@ test("a wrong token leaves the turn with no GitHub tools", { timeout: 20_000 }, 
       logs.push(args.map(String).join(" "));
     };
     try {
-      const opened = await openGithubTurn({ githubToken: "wrong-token", githubMcpUrl: mock.url });
+      const opened = await openGithubTurn(githubSettings("wrong-token", mock.url));
       assert.deepEqual(opened.tools, {});
       await opened.close();
       assert.equal(logs.length, 1);
@@ -269,13 +273,13 @@ test("a wrong token leaves the turn with no GitHub tools", { timeout: 20_000 }, 
 
 test("check asks for get_me when the chat toolsets omit it", { timeout: 20_000 }, async () => {
   await withMock(async (mock) => {
-    const opened = await githubTools({ token: mock.token, mcpUrl: mock.url });
+    const opened = await githubTools(githubSettings(mock.token, mock.url));
     try {
       assert.equal(opened.tools.github_get_me, undefined);
     } finally {
       await opened.close();
     }
-    const ok = await checkGithub({ token: mock.token, mcpUrl: mock.url });
+    const ok = await checkGithub(githubSettings(mock.token, mock.url));
     assert.deepEqual(ok, { ok: true, login: "octocat" });
     const lists = mock.requests.filter((entry) => entry.method === "tools/list");
     assert.equal(lists[0]?.tools, "");
@@ -285,14 +289,14 @@ test("check asks for get_me when the chat toolsets omit it", { timeout: 20_000 }
 
 test("check does not return the GitHub token when the server echoes it", { timeout: 20_000 }, async () => {
   await withMock(async (mock) => {
-    const checked = await checkGithub({ token: mock.token, mcpUrl: `${mock.url}?mode=echo-token` });
+    const checked = await checkGithub(githubSettings(mock.token, `${mock.url}?mode=echo-token`));
     assert.equal(JSON.stringify(checked).includes(mock.token), false);
   });
 });
 
 test("a GitHub tool result does not include the token when the server echoes it", { timeout: 20_000 }, async () => {
   await withMock(async (mock) => {
-    const opened = await githubTools({ token: mock.token, mcpUrl: `${mock.url}?mode=echo-token` });
+    const opened = await githubTools(githubSettings(mock.token, `${mock.url}?mode=echo-token`));
     try {
       const result = await opened.tools.github_list_issues?.execute?.({ owner: "aduthekaddu", repo: "orbit" }, toolOptions);
       assert.equal(JSON.stringify(result).includes(mock.token), false);
@@ -302,9 +306,25 @@ test("a GitHub tool result does not include the token when the server echoes it"
   });
 });
 
+test("a GitHub tool error does not include the token when the server echoes it", { timeout: 20_000 }, async () => {
+  await withMock(async (mock) => {
+    const opened = await githubTools(githubSettings(mock.token, `${mock.url}?mode=error-token`));
+    try {
+      const call = opened.tools.github_list_issues?.execute?.({ owner: "aduthekaddu", repo: "orbit" }, toolOptions);
+      await assert.rejects(Promise.resolve(call), (error: Error) => {
+        assert.match(error.message, /cannot read this repository/);
+        assert.equal(error.message.includes(mock.token), false, error.message);
+        return true;
+      });
+    } finally {
+      await opened.close();
+    }
+  });
+});
+
 test("a structured tool result does not carry the token as a field name into the chat", { timeout: 20_000 }, async () => {
   await withMock(async (mock) => {
-    const opened = await githubTools({ token: mock.token, mcpUrl: `${mock.url}?mode=echo-key` });
+    const opened = await githubTools(githubSettings(mock.token, `${mock.url}?mode=echo-key`));
     try {
       const tool = opened.tools.github_list_issues;
       assert.ok(tool?.execute);
@@ -358,7 +378,7 @@ test("a structured tool result does not carry the token as a field name into the
 
 test("check reports a malformed token as a bad request", { timeout: 20_000 }, async () => {
   await withMock(async (mock) => {
-    const bad = await checkGithub({ token: mock.token, mcpUrl: `${mock.url}?mode=bad-request` });
+    const bad = await checkGithub(githubSettings(mock.token, `${mock.url}?mode=bad-request`));
     assert.deepEqual(bad, { ok: false, error: "GitHub rejected the token (bad request)." });
     assert.equal(JSON.stringify(bad).includes(mock.token), false);
   });
@@ -366,11 +386,11 @@ test("check reports a malformed token as a bad request", { timeout: 20_000 }, as
 
 test("check reports the GitHub login and a rejected token", { timeout: 20_000 }, async () => {
   await withMock(async (mock) => {
-    const ok = await checkGithub({ token: mock.token, mcpUrl: mock.url });
+    const ok = await checkGithub(githubSettings(mock.token, mock.url));
     assert.deepEqual(ok, { ok: true, login: "octocat" });
     assert.equal(JSON.stringify(ok).includes(mock.token), false);
     await assertNoOpenSessions(mock.openSessions);
-    const bad = await checkGithub({ token: "wrong-token", mcpUrl: mock.url });
+    const bad = await checkGithub(githubSettings("wrong-token", mock.url));
     assert.deepEqual(bad, { ok: false, error: "GitHub rejected the token." });
     assert.equal(JSON.stringify(bad).includes("wrong-token"), false);
   });
