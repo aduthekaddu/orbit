@@ -1,0 +1,20 @@
+src/lib/tools/github.test.ts
+  s_f2663700d53379::t_94013087df2513 225-238,240-260
+  s_f2663700d53379::t_7aaaa135807f3b 239
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e0611dcac9d4e11e40c489a065f47881b9de0100",
+  "prompts": {},
+  "sessions": {
+    "s_f2663700d53379": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7e94eae7-d13c-48c0-8bfb-00fc8b06be1d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": null
+    }
+  }
+}
