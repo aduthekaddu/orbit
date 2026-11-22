@@ -1,0 +1,21 @@
+src/lib/memory/dream.ts
+  s_df7b0eca00a6d5::t_870d5861a9af3e 7,435-441
+CHANGELOG.md
+  s_df7b0eca00a6d5::t_3141f9bd44c59c 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cefe1ed389cd6d58ef2ecfacaf5f9b5079f98de2",
+  "prompts": {},
+  "sessions": {
+    "s_df7b0eca00a6d5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "acdd8997-5616-44aa-96b7-7652a32e0e76",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
