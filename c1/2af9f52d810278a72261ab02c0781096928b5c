@@ -1,0 +1,30 @@
+src/lib/sandbox/run-lifecycle.test.ts
+  s_6d6f669fed7156::t_9fef8a46e038e7 116
+  s_6d6f669fed7156::t_2ec5adfea72d50 15,19,26-27,29-33,41-46,49-52,56-66,70-74,80,87-89,115,117-119,127-129,139,142,155,174,190,193,211-281,294,339,356,369,383,427,429-430
+ARCHITECTURE.md
+  s_6d6f669fed7156::t_88385d68a1ab96 137
+CHANGELOG.md
+  s_6d6f669fed7156::t_538d9c3d800bab 7
+docs/slices/08.md
+  s_6d6f669fed7156::t_ea759c52259857 68
+src/lib/sandbox/run.test.ts
+  s_6d6f669fed7156::t_961d00fc5bc223 190,192-193,200,211-262
+src/lib/sandbox/run.ts
+  s_6d6f669fed7156::t_23a11ca08e269d 71,76,97,105-106,108,117,147-148,151,157,173-178,180-183
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c12af9f52d810278a72261ab02c0781096928b5c",
+  "prompts": {},
+  "sessions": {
+    "s_6d6f669fed7156": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "23c3bf8f-11ea-47f7-a37c-774701612673",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
