@@ -6,8 +6,9 @@
 #   scripts/qa/ci-e2e.sh sandbox  every sandbox scenario, sandbox on, with real Docker
 #
 # Run it after `npm run build`, with ORBIT_VERIFY_PORT free on 127.0.0.1 (default 3210).
-# Set ORBIT_VERIFY_PORT=3230 to use another port. The browse and sandbox suites find their
-# scenarios by name, so a new scenario runs in CI without an edit.
+# Set ORBIT_VERIFY_PORT=3230 to use another port. The mock providers pick their own free ports,
+# so two runs on one host need only different ORBIT_VERIFY_PORT values. The browse and sandbox
+# suites find their scenarios by name, so a new scenario runs in CI without an edit.
 # Scenarios that need a real provider (`*-real`) are skipped. Every scenario runs even when an
 # earlier one fails, and the script exits 1 if any failed.
 set -uo pipefail
@@ -42,24 +43,23 @@ save_logs() {
   done
 }
 mock_ollama_pid=""
+# The mock binds port 0 and prints the port it got, so two runs on one host never share a port.
 start_mock_ollama() {
   mkdir -p .verify
-  if ss -ltn 2>/dev/null | grep -q '127.0.0.1:11435'; then
-    echo "port 11435 is already in use" >&2
-    return 1
-  fi
-  MOCK_OLLAMA_PORT=11435 node scripts/qa/mock-ollama.mjs > .verify/mock-ollama.log 2>&1 &
+  node scripts/qa/mock-ollama.mjs > .verify/mock-ollama.log 2>&1 &
   mock_ollama_pid=$!
-  export ORBIT_OLLAMA_URL=http://127.0.0.1:11435
-  local tries=0
-  while ! ss -ltn 2>/dev/null | grep -q '127.0.0.1:11435'; do
-    tries=$((tries + 1))
-    if [ "$tries" -gt 50 ]; then
-      echo "mock ollama did not listen on 11435" >&2
+  local port="" tries=0
+  while :; do
+    port=$(sed -n 's/^mock-ollama port=\([0-9]*\)$/\1/p' .verify/mock-ollama.log)
+    [ -n "$port" ] && break
+    if [ "$tries" -ge 50 ] || ! kill -0 "$mock_ollama_pid" 2>/dev/null; then
+      echo "mock ollama did not report a port" >&2
       return 1
     fi
+    tries=$((tries + 1))
     sleep 0.1
   done
+  export ORBIT_OLLAMA_URL="http://127.0.0.1:$port"
 }
 stop_mock_ollama() {
   if [ -n "$mock_ollama_pid" ]; then

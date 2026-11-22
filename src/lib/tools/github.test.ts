@@ -380,7 +380,7 @@ test("a turn merges GitHub tools when a token is set and closes the client", { t
   await withMock(async (mock) => {
     const { toolsForTurn } = await import("./index");
     const opened = await toolsForTurn({
-      baseUrl: "http://127.0.0.1:3299/v1",
+      baseUrl: "https://provider.invalid/v1",
       apiKey: "test-key-not-real",
       model: "mock-genui",
       reasoningEffort: "low",
@@ -405,7 +405,7 @@ test("a turn merges GitHub tools when a token is set and closes the client", { t
 test("a turn without a GitHub token does not open GitHub", async () => {
   const { toolsForTurn } = await import("./index");
   const opened = await toolsForTurn({
-    baseUrl: "http://127.0.0.1:3299/v1",
+    baseUrl: "https://provider.invalid/v1",
     apiKey: "test-key-not-real",
     model: "mock-genui",
     reasoningEffort: "low",

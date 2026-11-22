@@ -30,7 +30,7 @@ Done when the command prints `ready` and `signupOpen=yes` on an empty sandbox.
 
 A second launch reuses a healthy sandbox server when the requested port and sandbox mode match its recorded ones. A mismatch or unknown recorded mode exits with a cleanup instruction and leaves the server and data in place. Run `cleanup`, then launch with the intended `ORBIT_VERIFY_PORT` and `ORBIT_SANDBOX` values.
 
-`launch --mock` also starts `scripts/qa/mock-provider.mjs` on `127.0.0.1:3299` and saves settings for it as `verify@orbit.local`. Done when it also prints `mock ready` and `settings baseUrl=http://127.0.0.1:3299/v1 model=mock-genui keySet=yes`. That account blocks `drive signup` and `drive chat` on the same sandbox.
+`launch --mock` also starts `scripts/qa/mock-provider.mjs` and saves settings for it as `verify@orbit.local`. The mock binds a free port that the OS picks, and launch records it in `.verify/mock.json`, so two checkouts on one host share no mock port. Give each its own `ORBIT_VERIFY_PORT`. Done when it also prints `mock ready` and `settings baseUrl=http://127.0.0.1:<mock port>/v1 model=mock-genui keySet=yes`. A browse scenario that needs the mock URL reads `mockUrl` from its context. That account blocks `drive signup` and `drive chat` on the same sandbox.
 
 ## Doctor
 

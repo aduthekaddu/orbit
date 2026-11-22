@@ -7,7 +7,7 @@ Thanks for helping. This guide covers setting up Orbit for development, the chec
 1. Install the tools in the README's [requirements table](README.md#requirements).
 2. Clone the repository and run `npm ci`.
 3. Run `npm run dev`. The dev server listens on `http://127.0.0.1:3210`.
-4. Create the account, then add a provider on the **Settings** page. For work that does not need a real model, run the mock provider with `node scripts/qa/mock-provider.mjs` and use the base URL `http://127.0.0.1:3299/v1` with any key.
+4. Create the account, then add a provider on the **Settings** page. For work that does not need a real model, run the mock provider with `node scripts/qa/mock-provider.mjs`. It picks a free port and prints its base URL (`mock provider on http://127.0.0.1:<port>/v1`). Use that URL with any key.
 
 Development uses `data/orbit.db` in the repository. To start over, stop the server and delete `data/orbit.db`, `data/orbit.db-wal`, `data/orbit.db-shm`, and `data/auth-secret`.
 

@@ -25,7 +25,6 @@ let provider: { url: string; stop: () => Promise<void> } | undefined;
 
 function startMockProvider(): Promise<{ url: string; stop: () => Promise<void> }> {
   const child: ChildProcess = spawn(process.execPath, [path.join(process.cwd(), "scripts/qa/mock-provider.mjs")], {
-    env: { ...process.env, MOCK_PORT: "0" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   return new Promise((resolve, reject) => {

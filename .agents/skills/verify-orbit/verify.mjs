@@ -7,7 +7,6 @@ import Database from "better-sqlite3";
 
 const PORT = parsePort(process.env.ORBIT_VERIFY_PORT);
 const ORIGIN = `http://127.0.0.1:${PORT}`;
-const MOCK_PORT = 3299;
 const MOCK_MODEL = "mock-genui";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "../../..");
@@ -270,43 +269,52 @@ async function startServer() {
   }
 }
 
+function mockBaseUrl() {
+  const state = readState(mockStatePath);
+  return state?.port ? `http://127.0.0.1:${state.port}/v1` : null;
+}
+
+// The mock binds port 0 and prints the port it got, so two runs on one host never share a port.
+async function waitMockPort(pid) {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const match = /mock provider on http:\/\/127\.0\.0\.1:(\d+)\/v1/.exec(fs.readFileSync(mockLogPath, "utf8"));
+    if (match) return Number(match[1]);
+    if (!alive(pid)) break;
+    await sleep(100);
+  }
+  try {
+    process.kill(-pid, "SIGTERM");
+  } catch {
+    // The child already exited.
+  }
+  fail(`mock provider did not report a port. Log: ${mockLogPath}`);
+}
+
 async function startMock() {
   const state = readState(mockStatePath);
-  if (state && alive(state.pid) && listenerPids(MOCK_PORT).includes(state.pid)) {
+  if (state && alive(state.pid) && state.port && listenerPids(state.port).includes(state.pid)) {
     console.log(`mock already running pid=${state.pid}`);
   } else {
-    const listeners = listenerPids(MOCK_PORT);
-    if (listeners.length > 0) {
-      fail(`port ${MOCK_PORT} is in use by pid ${listeners[0]} cwd ${procCwd(listeners[0]) || "unknown"}. Stop it before launch --mock.`);
-    }
+    await stopMock();
     const logFd = fs.openSync(mockLogPath, "w");
     const child = spawn(process.execPath, [mockScript], {
-      env: { PATH: process.env.PATH ?? "", MOCK_PORT: String(MOCK_PORT), MOCK_MODEL },
+      env: { PATH: process.env.PATH ?? "", MOCK_MODEL },
       detached: true,
       stdio: ["ignore", logFd, logFd],
     });
     child.unref();
     fs.closeSync(logFd);
-    fs.writeFileSync(mockStatePath, JSON.stringify({ pid: child.pid, port: MOCK_PORT }, null, 2));
-    const deadline = Date.now() + 10_000;
-    while (!listenerPids(MOCK_PORT).includes(child.pid)) {
-      if (Date.now() > deadline) {
-        try {
-          process.kill(-child.pid, "SIGTERM");
-        } catch {
-          // The child already exited.
-        }
-        fail(`mock provider did not listen on ${MOCK_PORT}. Log: ${mockLogPath}`);
-      }
-      await sleep(100);
-    }
-    console.log(`mock ready pid=${child.pid} base=http://127.0.0.1:${MOCK_PORT}/v1 model=${MOCK_MODEL}`);
+    fs.writeFileSync(mockStatePath, JSON.stringify({ pid: child.pid }, null, 2));
+    const port = await waitMockPort(child.pid);
+    fs.writeFileSync(mockStatePath, JSON.stringify({ pid: child.pid, port }, null, 2));
+    console.log(`mock ready pid=${child.pid} base=${mockBaseUrl()} model=${MOCK_MODEL}`);
   }
   const cookies = await signInVerify();
   const saved = await request("/api/settings", {
     method: "PUT",
     cookies,
-    json: { baseUrl: `http://127.0.0.1:${MOCK_PORT}/v1`, apiKey: FAKE_KEY, model: MOCK_MODEL, reasoningEffort: "low" },
+    json: { baseUrl: mockBaseUrl(), apiKey: FAKE_KEY, model: MOCK_MODEL, reasoningEffort: "low" },
   });
   const body = JSON.parse(saved.text);
   if (saved.status !== 200 || body.model !== MOCK_MODEL || body.keySet !== true) {
@@ -701,7 +709,7 @@ async function browse(scenario) {
   };
   try {
     const run = (await import(scenarioPath)).default;
-    await run({ page, origin: ORIGIN, step, shot });
+    await run({ page, origin: ORIGIN, mockUrl: mockBaseUrl(), step, shot });
   } catch (error) {
     step("scenario finished", false, redact(error instanceof Error ? error.message.split("\n")[0] : String(error)));
     await shot("error").catch(() => {});

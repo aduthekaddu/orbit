@@ -2,7 +2,6 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 
-const PORT = Number(process.env.MOCK_PORT ?? 3299);
 const MODEL = process.env.MOCK_MODEL ?? "mock-genui";
 const sandboxPrograms = new Map([
   ["run-python", "print(1+1)"],
@@ -666,10 +665,8 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(PORT, "127.0.0.1", () => {
-  const address = server.address();
-  const bound = address && typeof address === "object" ? address.port : PORT;
-  console.log(`mock provider on http://127.0.0.1:${bound}/v1 model=${MODEL}`);
+server.listen(0, "127.0.0.1", () => {
+  console.log(`mock provider on http://127.0.0.1:${server.address().port}/v1 model=${MODEL}`);
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {

@@ -14,7 +14,7 @@ A scenario exports one default function that receives `{ page, origin, step, sho
 
 ## Preconditions
 
-- Run `node .agents/skills/verify-orbit/verify.mjs launch --mock`. It starts the sandbox server, starts `scripts/qa/mock-provider.mjs` on `127.0.0.1:3299`, and saves the settings for it: base URL `http://127.0.0.1:3299/v1`, key `test-key-not-real`, and model `mock-genui`.
+- Run `node .agents/skills/verify-orbit/verify.mjs launch --mock`. It starts the sandbox server, starts `scripts/qa/mock-provider.mjs` on a free port that the OS picks (saved in `.verify/mock.json`), and saves the settings for it: base URL `http://127.0.0.1:<mock port>/v1`, key `test-key-not-real`, and model `mock-genui`.
 - `doctor` prints `doctor ok`. `browse` runs the same check first and stops if it fails.
 - `launch --mock` creates `verify@orbit.local`, so `drive signup` and `drive chat` cannot run on that sandbox. Use a fresh launch for them.
 - `cleanup` stops the mock provider and the server.
