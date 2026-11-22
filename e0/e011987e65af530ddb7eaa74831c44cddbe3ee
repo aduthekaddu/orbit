@@ -1,0 +1,27 @@
+src/lib/chat-tree.ts
+  s_7fadc2ca0760b7::t_0175637a169d5a 20,46-54
+.agents/skills/verify-orbit/scenarios/search-focus.mjs
+  s_7fadc2ca0760b7::t_936747ca897c12 90
+src/lib/search.ts
+  s_7fadc2ca0760b7::t_0175637a169d5a 4,94-97
+ARCHITECTURE.md
+  s_7fadc2ca0760b7::t_cb526f9fcd1b27 153
+CHANGELOG.md
+  s_7fadc2ca0760b7::t_cb526f9fcd1b27 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e0e011987e65af530ddb7eaa74831c44cddbe3ee",
+  "prompts": {},
+  "sessions": {
+    "s_7fadc2ca0760b7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "39b3e7e1-02c2-422a-9da5-d153e844bd91",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
