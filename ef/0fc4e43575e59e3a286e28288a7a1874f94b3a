@@ -1,0 +1,23 @@
+src/lib/artifacts/history.ts
+  s_9955bd525eda23::t_7e73c94f7085b0 1,10-12
+CHANGELOG.md
+  s_9955bd525eda23::t_7e73c94f7085b0 7
+src/lib/artifacts/history.test.ts
+  s_9955bd525eda23::t_91eddb4b17de89 22-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ef0fc4e43575e59e3a286e28288a7a1874f94b3a",
+  "prompts": {},
+  "sessions": {
+    "s_9955bd525eda23": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a203dd-ed4b-75a3-aea4-37dafc805a84",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
