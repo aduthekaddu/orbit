@@ -101,9 +101,9 @@ export function MemoryList({
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ text: draft, kind }),
-      });
-      if (!response.ok) {
-        setError(memoryWriteError(await response.json().catch(() => null)));
+      }).catch(() => null);
+      if (!response?.ok) {
+        setError(memoryWriteError(await response?.json().catch(() => null)));
         return;
       }
       setEditing(null);
@@ -117,15 +117,15 @@ export function MemoryList({
     setPending(true);
     setError("");
     try {
-      const response = await fetch(`/api/memories/${id}`, { method: "DELETE" });
-      if (!response.ok) {
+      const response = await fetch(`/api/memories/${id}`, { method: "DELETE" }).catch(() => null);
+      if (!response?.ok) {
         setError("Could not delete");
         return;
       }
-      setPendingDelete(null);
       setEditing(null);
       router.refresh();
     } finally {
+      setPendingDelete(null);
       setPending(false);
     }
   }
