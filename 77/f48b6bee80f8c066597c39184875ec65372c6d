@@ -1,0 +1,32 @@
+docs/slices/08.md
+  s_a38ec6b76665cc::t_bbbc01d595461f 54
+ARCHITECTURE.md
+  s_a38ec6b76665cc::t_f96cb29ee95d80 137
+src/lib/sandbox/sweep.ts
+  s_a38ec6b76665cc::t_d03ba07f9cc4a0 33-34
+  s_a38ec6b76665cc::t_8ee075273361d5 9,11-17,22,28-30,32,44
+scripts/qa/ci-e2e.sh
+  s_a38ec6b76665cc::t_5a618da615e9b4 159-164
+src/lib/sandbox/run.test.ts
+  s_a38ec6b76665cc::t_1d0cdd894dcb73 7,578-579,605-606
+  s_a38ec6b76665cc::t_31b09d8d81da3c 601
+  s_a38ec6b76665cc::t_12a36ff11a182e 604,607
+CHANGELOG.md
+  s_a38ec6b76665cc::t_a1f8efeda73adf 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "77f48b6bee80f8c066597c39184875ec65372c6d",
+  "prompts": {},
+  "sessions": {
+    "s_a38ec6b76665cc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5d1b7ffc-1d73-4192-91f0-06c6f5b2dd99",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
