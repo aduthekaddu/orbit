@@ -1,0 +1,71 @@
+scripts/ci/tlc.sh
+  s_99e6b4fa97078c::t_37bf1eb0fa4da3 29
+  s_99e6b4fa97078c::t_9cbd77fa120954 43,46-47
+  s_99e6b4fa97078c::t_69e6405ed8557a 48
+  s_99e6b4fa97078c::t_cca9f4afd5945f 59
+  s_99e6b4fa97078c::t_ff32dd398e0dd4 1-28,30-42,44-45,49-58,60-77
+docs/architecture/ChatWrite.tla
+  s_99e6b4fa97078c::t_5d2e25dcb40df4 48
+  s_99e6b4fa97078c::t_3292fcb05b39e5 1-15,17,21-47,49-90
+  s_99e6b4fa97078c::t_2fb36e6e3a4fe7 16,18-20
+docs/architecture/ChatTurnRegression.tla
+  s_99e6b4fa97078c::t_b16a95e69cfea8 8,11
+docs/architecture/ChatTurn.tla
+  s_99e6b4fa97078c::t_0cb518f8d4894b 9-10,14-15
+  s_99e6b4fa97078c::t_b16a95e69cfea8 3
+  s_99e6b4fa97078c::t_2fe47fe3ae3c36 17,19,25,33,42,50-52,60-62,67,70,74,76
+  s_99e6b4fa97078c::t_45745728985a3e 2,8,11-13,16,21-22,28-29,36,40-41,44-47,54-57
+src/lib/chat-write.test.ts
+  s_99e6b4fa97078c::t_b654e77a39d507 72
+  s_99e6b4fa97078c::t_5c57320d663ecd 137,139,141,148,151,155-170
+  s_99e6b4fa97078c::t_abb4541b8cbb5c 171-172
+.github/workflows/ci.yml
+  s_99e6b4fa97078c::t_0c40e0ebce8b53 40-42
+docs/architecture/ChatWrite.in-place-edit.cfg
+  s_99e6b4fa97078c::t_f28277a945f2be 1-12
+src/lib/model-sync.test.ts
+  s_99e6b4fa97078c::t_568e8c8f7f77d8 1-50
+docs/slices/13.md
+  s_99e6b4fa97078c::t_08f80c8da1066d 112
+  s_99e6b4fa97078c::t_4e521398f65c55 208
+ARCHITECTURE.md
+  s_99e6b4fa97078c::t_e2e2d2cfacb941 28
+  s_99e6b4fa97078c::t_ad7ec47131565d 85,87-91
+  s_99e6b4fa97078c::t_6a274cbfaa6f00 92
+  s_99e6b4fa97078c::t_0f1d38e5bdaaf4 128
+.agents/skills/verify-chat-turn/SKILL.md
+  s_99e6b4fa97078c::t_8bdabf9b250fe7 1-49
+docs/architecture/ChatWrite.stale-echo.cfg
+  s_99e6b4fa97078c::t_ae369ccd313747 1-7,9-14
+  s_99e6b4fa97078c::t_d05b08a9c70295 8
+docs/architecture/model-sync.json
+  s_99e6b4fa97078c::t_b08f70e8a68ea9 3-13
+  s_99e6b4fa97078c::t_979122db1c6452 1-2,14
+docs/architecture/ChatWrite.edited-prompt.cfg
+  s_99e6b4fa97078c::t_d05b08a9c70295 5
+  s_99e6b4fa97078c::t_678a683e818399 1-4,6-15
+docs/architecture/chat-write.view.mjs
+  s_99e6b4fa97078c::t_a41f6f4c57851b 24
+  s_99e6b4fa97078c::t_e0eee2a0f63fde 7-8
+  s_99e6b4fa97078c::t_bb1075e3e3ebc8 1-6,9-23,25-26
+docs/architecture/chat-turn.view.mjs
+  s_99e6b4fa97078c::t_b16a95e69cfea8 5,18
+docs/architecture/ChatWrite.cfg
+  s_99e6b4fa97078c::t_23a96251e3c1ae 1-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "55f8fd95ebe7143a802ab1c6b79fb96b9bdcc5c8",
+  "prompts": {},
+  "sessions": {
+    "s_99e6b4fa97078c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "30fc78cc-c8d5-5e67-be6f-766ace7f4ede",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
