@@ -4,6 +4,7 @@ import Docker from "dockerode";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { Duplex } from "node:stream";
+import { format } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
@@ -574,6 +575,8 @@ finally:
     const list = docker.listContainers.bind(docker);
     t.mock.method(docker, "listContainers", (options: { filters: { label: string[] } }) =>
       list({ ...options, filters: { ...options.filters, label: [...options.filters.label, `orbit.test=${owner}`] } }));
+    const removals: string[] = [];
+    t.mock.method(console, "warn", (...args: unknown[]) => { removals.push(format(...args)); });
     const spec = containerSpec({ language: "python", code: "" });
     const labels = { ...spec.Labels, "orbit.test": owner };
     const made: Record<string, Docker.Container> = {};
@@ -595,8 +598,13 @@ finally:
       await made.running.start();
       await removeStaleSandboxes(docker, Date.now() + 5_000);
       assert.deepEqual(await states(), { created: "created", exited: "exited", running: "running", unlabeled: "created" }, "a young container may belong to a live run");
+      assert.equal(removals.length, 0, "a container the sweep keeps is not logged as removed");
       await removeStaleSandboxes(docker, Date.now() + 60_000);
       assert.deepEqual(await states(), { created: "removed", exited: "removed", running: "removed", unlabeled: "created" });
+      assert.deepEqual(
+        [...removals].sort(),
+        ["created", "exited", "running"].map((state) => `Sandbox sweep removed a stale container id=${made[state]!.id} state=${state}`).sort(),
+      );
     } finally {
       for (const container of Object.values(made)) {
         await container.remove({ force: true }).catch((error: unknown) => {
