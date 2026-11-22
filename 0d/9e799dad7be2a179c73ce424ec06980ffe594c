@@ -1,0 +1,27 @@
+src/lib/submit-state.ts
+  s_759d2a4eb66d22::t_ab563fde465163 1-28
+src/components/settings/settings-form.tsx
+  s_759d2a4eb66d22::t_19e14030c07310 3,14,46-47,90-91,93,97,115,127-128,130,176,191,205,235,253,274,278,280,294,296,306,317,320,327,330
+src/lib/submit-state.test.ts
+  s_759d2a4eb66d22::t_c7016a4159bfb0 1-35
+CHANGELOG.md
+  s_759d2a4eb66d22::t_bdf547f5815fe3 7
+src/components/auth/auth-form.tsx
+  s_759d2a4eb66d22::t_086bf3588877e9 3,8,18,22,26,29,33,52-53,64,68,72,75,79,101-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0d9e799dad7be2a179c73ce424ec06980ffe594c",
+  "prompts": {},
+  "sessions": {
+    "s_759d2a4eb66d22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "21c1bcc8-3bce-4961-8052-6470dae6b8d9",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
