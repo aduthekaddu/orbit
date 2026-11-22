@@ -1,0 +1,19 @@
+src/lib/tools/github.test.ts
+  s_f2663700d53379::t_94013087df2513 225-259
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "27dc6cd148baad12c829e7cb9ed36fd9a1941c64",
+  "prompts": {},
+  "sessions": {
+    "s_f2663700d53379": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7e94eae7-d13c-48c0-8bfb-00fc8b06be1d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
