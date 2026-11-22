@@ -1,0 +1,26 @@
+src/components/chat/markdown-text.test.tsx
+  s_4e7bf88a626cd6::t_6a0aac5698673a 1-3,9-11,13-19,21-25,27-29,37
+  s_4e7bf88a626cd6::t_0df149f29c1ec9 4-8,12,20,26,30-36
+CHANGELOG.md
+  s_4e7bf88a626cd6::t_fd17435fcfb0e1 7
+src/components/chat/markdown-text.tsx
+  s_4e7bf88a626cd6::t_294a1b914574a5 69-72
+  s_4e7bf88a626cd6::t_fd17435fcfb0e1 3,52-53,56-63,67-68,85
+  s_4e7bf88a626cd6::t_88860faad4fa50 73-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5140c0b12ee7e626bbc1f1ad44a7435deb40e4b1",
+  "prompts": {},
+  "sessions": {
+    "s_4e7bf88a626cd6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2029b-0c8b-7732-ad6a-1990a83bb4fd",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
