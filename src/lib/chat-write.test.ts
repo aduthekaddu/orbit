@@ -152,20 +152,30 @@ test("a stale tab cannot overwrite an answer changed after it loaded", () => {
   );
 });
 
-test("a regenerated reply is refused when its prompt changed while it streamed", () => {
+// docs/architecture/ChatWrite.edited-prompt.trace, step by step.
+test("a retry's reply is refused after another tab edits its prompt in place", () => {
+  // State 1: P is saved, and its first reply stopped before any visible part, so no reply row exists.
   write("c-prompt-changed", [message("pc1", "user", "before")]);
+  assert.equal(mods.upsertMessage("c-prompt-changed", { id: "pc-empty", role: "assistant", parts: [] }, "pc1"), true);
+  assert.deepEqual(ids("c-prompt-changed"), ["pc1"]);
+
+  // State 2, Plan: tab a presses Retry.
   const responseId = write("c-prompt-changed", [message("pc1", "user", "before")], "regenerate-message");
   const { expected } = mods.replyGuard("c-prompt-changed", true, responseId, "pc1");
 
+  // State 3, EditPromptInPlace: tab b edits P under its own id. The code refuses that edit now,
+  // so the test writes it the way planChatWrite did at fa399a2: delete P, then insert the new text under P's id.
   assert.deepEqual(
     mods.planChatWrite("c-prompt-changed", [message("pc1", "user", "after")], "submit-message", undefined, "pc1"),
     { error: "invalid-edit" },
   );
   assert.deepEqual(mods.planChatWrite("c-prompt-changed", [message("pc1", "user", "after")]), { error: "stale" });
+  mods.db.$client.prepare("delete from messages where id = ?").run("pc1");
   mods.db.$client
-    .prepare("update messages set content = ?, parts = ? where id = ?")
-    .run("after", JSON.stringify([{ type: "text", text: "after" }]), "pc1");
+    .prepare("insert into messages (id, chat_id, parent_id, role, content, parts, position, created_at) values (?, ?, null, 'user', ?, ?, 0, ?)")
+    .run("pc1", "c-prompt-changed", "after", JSON.stringify([{ type: "text", text: "after" }]), Date.now());
 
+  // State 4, Finish: tab a's reply ends. It must not be saved under the edited P.
   assert.equal(mods.upsertMessage("c-prompt-changed", message(responseId, "assistant", "answer to before"), "pc1", expected), false);
   assert.deepEqual(ids("c-prompt-changed"), ["pc1"]);
 });

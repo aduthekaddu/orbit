@@ -89,7 +89,7 @@ The model tracks up to three reply attempts per prompt with separate ids. A rege
 - **A saved reply keeps its newest text (ReplyKeepsNewestText).** A tab that loaded the reply before an edit cannot undo the edit when it sends.
 - **A saved reply answers its prompt's current text (ReplyAnswersItsPrompt).** A regenerate that streamed while the prompt changed is not saved under the changed prompt.
 
-Each of its mutant configs switches off one guard to replay a past bug, and CI fails if TLC stops finding that bug. `.agents/skills/verify-chat-turn/SKILL.md` says how to run the models, read a result, and update a model when the code changes. `src/lib/model-sync.test.ts` fails when a function a model names changes after the model was last checked.
+Both models have mutant configs. Each switches off one guard to replay a past bug, and its `.trace` file holds the counterexample TLC must print, state by state. CI fails if TLC stops finding that counterexample. `ChatWrite.tla` assumes one server process, as Orbit runs, because it treats `planChatWrite` and `replyGuard` as one step. `.agents/skills/verify-chat-turn/SKILL.md` says how to run the models, read a result, update a model when the code changes, and which past bugs the models leave out. `src/lib/model-sync.test.ts` fails when a function a model names changes after the model was last checked.
 
 To rebuild the chart, run the [statechart skill](https://github.com/cursor/plugins/blob/main/pstack/skills/statechart/SKILL.md) on [`docs/architecture/ChatTurn.tla`](docs/architecture/ChatTurn.tla):
 

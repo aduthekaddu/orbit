@@ -1,14 +1,14 @@
 {
-  "syncCommit": "58d3c109d984b81824e4a857ccb0b716be74120f",
-  "functions": {
-    "src/app/api/chat/route.ts POST": "1f42245cfe9677a641bc068c47334ff0f6e0c74ccf3777005b4be5688d812401",
-    "src/lib/genui/spec.ts assistantHasVisiblePart": "200229a216241e29622cb4bb6b86a673fae54d5297a4d5dd513e8470d7fbafd9",
-    "src/lib/messages.ts messageRepository": "b21b611811f06bf40c5fb812304a58fe1a057316074317730c5010a508e34032",
-    "src/lib/messages.ts persistIncoming": "d0b2c767447c9b285daafc7b6d8aa838a5e4a30210b55a25984a103054f820fe",
-    "src/lib/messages.ts planChatWrite": "98e6a797b0f725c0c9d633c731c3e3b8c2147b4f0888d5b9d6ba607806c02b98",
-    "src/lib/messages.ts replyGuard": "eb396fe2b824bd76c535e62344a901bc055073c78c62d8e685cbeb81524f891f",
-    "src/lib/messages.ts shouldSaveReply": "de92759b87cf38c33613c17e30c8f156486191b8addc2a54be9ace55a12ac827",
-    "src/lib/messages.ts updateMessageText": "081773ac7e7aaaeb966d578383b660163d22c01868db33df0c59493d9f00e4a9",
-    "src/lib/messages.ts upsertMessage": "e61a2450553daa393713bb11089bda23b74f6fb9cfdec2786c56e2a50418af3e"
-  }
+  "src/app/api/chat/route.ts POST": "10604f592bcab96480e813a92ad6fb1d96d67a225f4e62abdeebc6d861bbe665",
+  "src/lib/chat-parts.ts replaceTextParts": "065af95baa15a5abefb0ef7912537991ec768de615b08102da21958ca443b309",
+  "src/lib/chat-tree.ts isPath": "6079fdb2e7244ec44b62f930b2a810625f0f50ca50d255b313e6765874b30ca8",
+  "src/lib/genui/spec.ts assistantHasVisiblePart": "63b6266e47c3e0ad37fab2719d8cdbbf669635f01defd0f3ae7b6822c74b00ae",
+  "src/lib/genui/spec.ts settleInterruptedParts": "3ac4872c6fc4dc4576f65d5159f21bef4abf33e221f0634abb87fa943294d81f",
+  "src/lib/messages.ts messageRepository": "3ac6ef77a4d4d35e722bff32d2b75350c581a2e5b6d4432b7d5eebd4fecebaf5",
+  "src/lib/messages.ts persistIncoming": "c1f31eb216451d454bcb2c29efaa0b6326e472b529c46238039453d8f0eaec25",
+  "src/lib/messages.ts planChatWrite": "4b972600e4007727b4239ada5905443a346d474746f4da008552585686516dff",
+  "src/lib/messages.ts replyGuard": "0293f2b608a551418ec7315249f0278c027997b1811ddb10981b5ccdd7aa7e75",
+  "src/lib/messages.ts shouldSaveReply": "0d9652a67f8232b600d841806cd5e37db715e3a56f7a4afcb727d899b5ba1be3",
+  "src/lib/messages.ts updateMessageText": "5c6ecaf2e4f4eb0d7cf1188e5b6d160c336b2a019c4fcc08cea177ed61b2ac33",
+  "src/lib/messages.ts upsertMessage": "7acbe2cbccd398d4b7ebbec2c0d741c9461f161d2ccbd81f28766a802ccc5398"
 }

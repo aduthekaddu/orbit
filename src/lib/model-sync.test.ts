@@ -16,6 +16,41 @@ function functionText(file: string, name: string): string | undefined {
   return end === -1 ? undefined : lines.slice(start, end + 1).join("\n");
 }
 
+// Drops `//` and `/* */` comments and every run of whitespace outside string and template
+// literals. A run between two word characters becomes one space, so `return x` stays apart.
+// A regex literal or a nested template literal is read as plain code.
+function withoutFormatting(code: string): string {
+  let out = "";
+  let gap = false;
+  let i = 0;
+  while (i < code.length) {
+    const rest = code.slice(i, i + 2);
+    if (rest === "//" || rest === "/*") {
+      const end = rest === "//" ? code.indexOf("\n", i) : code.indexOf("*/", i + 2) + 1;
+      i = end <= 0 ? code.length : end + 1;
+      gap = true;
+      continue;
+    }
+    const char = code[i];
+    if (/\s/.test(char)) {
+      gap = true;
+      i += 1;
+      continue;
+    }
+    let token = char;
+    if (char === '"' || char === "'" || char === "`") {
+      let j = i + 1;
+      while (j < code.length && code[j] !== char) j += code[j] === "\\" ? 2 : 1;
+      token = code.slice(i, j + 1);
+    }
+    if (gap && /[\w$]$/.test(out) && /^[\w$]/.test(token)) out += " ";
+    out += token;
+    gap = false;
+    i += token.length;
+  }
+  return out;
+}
+
 function namedFunctions(): string[] {
   const named = new Set<string>();
   for (const file of fs.readdirSync(models).filter((name) => name.endsWith(".tla"))) {
@@ -26,8 +61,16 @@ function namedFunctions(): string[] {
   return [...named].sort();
 }
 
-test("the chat models were checked against the current text of every function they name", () => {
-  const record = JSON.parse(fs.readFileSync(recordFile, "utf8")) as { syncCommit: string; functions: Record<string, string> };
+test("formatting and comments do not change a function's hashed text, and code does", () => {
+  const code = 'function f(a) {\n  // why\n  return a + "x  y"; /* note */\n}';
+  assert.equal(withoutFormatting(code), 'function f(a){return a+"x  y";}');
+  assert.equal(withoutFormatting("function f(a){ return a+'x  y' }"), "function f(a){return a+'x  y'}");
+  assert.notEqual(withoutFormatting(code), withoutFormatting(code.replace("a +", "a -")));
+  assert.notEqual(withoutFormatting(code), withoutFormatting(code.replace('"x  y"', '"x y"')));
+});
+
+test("the chat models were checked against the current code of every function they name", () => {
+  const record = JSON.parse(fs.readFileSync(recordFile, "utf8")) as Record<string, string>;
   const named = namedFunctions();
   assert.ok(named.length > 0, "no `\\* code:` lines found in docs/architecture/*.tla");
   const problems: string[] = [];
@@ -38,13 +81,13 @@ test("the chat models were checked against the current text of every function th
       problems.push(`${key}: a model names this function, but ${file} has no top-level \`function ${name}(\` block ending in a lone \`}\`. Point the model's \`code:\` line at the function that now does this step.`);
       continue;
     }
-    const hash = createHash("sha256").update(text).digest("hex");
-    if (record.functions[key] !== hash) {
-      problems.push(`${key} changed after the models were last checked against it at ${record.syncCommit}. Recheck each model action whose \`code:\` line names it, run scripts/ci/tlc.sh, then record "${key}": "${hash}".`);
+    const hash = createHash("sha256").update(withoutFormatting(text)).digest("hex");
+    if (record[key] !== hash) {
+      problems.push(`${key} changed after the models were last checked against it. Recheck each model action whose \`code:\` line names it, run scripts/ci/tlc.sh, then record "${key}": "${hash}".`);
     }
   }
-  for (const key of Object.keys(record.functions)) {
+  for (const key of Object.keys(record)) {
     if (!named.includes(key)) problems.push(`${key} is in docs/architecture/model-sync.json, but no model names it. Remove it.`);
   }
-  assert.deepEqual(problems, [], `Follow .agents/skills/verify-chat-turn/SKILL.md, then update docs/architecture/model-sync.json and its syncCommit:\n${problems.join("\n")}`);
+  assert.deepEqual(problems, [], `Follow .agents/skills/verify-chat-turn/SKILL.md, then update docs/architecture/model-sync.json:\n${problems.join("\n")}`);
 });
