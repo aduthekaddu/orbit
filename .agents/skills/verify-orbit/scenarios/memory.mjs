@@ -118,6 +118,27 @@ export default async function memory({ page, origin, step, shot }) {
   await shot("edited");
   step("edit saves the new text", editedVisible);
 
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.route("**/api/memories/*", (route) => route.abort());
+  await page.getByRole("button", { name: "Edit" }).click();
+  await editor.fill("I ship to Fly.io");
+  await page.getByRole("button", { name: "Save" }).click();
+  const saveFailed = await page.getByText("Could not save", { exact: true }).waitFor({ timeout: 5_000 }).then(() => true, () => false);
+  await shot("save-offline");
+  step("a save that fails on the network shows an error", saveFailed, "no error line");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("button", { name: "Delete" }).click();
+  const offlineConfirm = page.getByRole("dialog", { name: "Delete this memory?" });
+  await offlineConfirm.waitFor({ timeout: 5_000 });
+  await offlineConfirm.getByRole("button", { name: "Delete" }).click();
+  const deleteFailed = await page.getByText("Could not delete", { exact: true }).waitFor({ timeout: 5_000 }).then(() => true, () => false);
+  const confirmClosed = await offlineConfirm.waitFor({ state: "hidden", timeout: 5_000 }).then(() => true, () => false);
+  await shot("delete-offline");
+  step("a delete that fails on the network shows an error", deleteFailed && confirmClosed, deleteFailed ? "the confirm dialog covers the error" : "no error line");
+  step("a save or delete that fails on the network raises no page error", pageErrors.length === 0, pageErrors.join("; "));
+  await page.unroute("**/api/memories/*");
+
   const ollamaUrl = process.env.ORBIT_OLLAMA_URL;
   if (ollamaUrl) {
     await page.request.post(`${ollamaUrl}/qa/fail`);
