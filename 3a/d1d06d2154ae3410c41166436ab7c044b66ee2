@@ -1,0 +1,24 @@
+src/lib/auth.ts
+  s_3542e2487dff37::t_209e5a8abefbd7 54-55
+  s_3542e2487dff37::t_5c8bec1019ff5c 56
+CHANGELOG.md
+  s_3542e2487dff37::t_dbb0aab6e1608c 16
+SECURITY.md
+  s_3542e2487dff37::t_0b0fe83143134c 29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3ad1d06d2154ae3410c41166436ab7c044b66ee2",
+  "prompts": {},
+  "sessions": {
+    "s_3542e2487dff37": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bc179c0b-9c06-437a-a67e-8c17e64b9a20",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
