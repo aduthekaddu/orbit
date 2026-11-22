@@ -1,0 +1,22 @@
+scripts/qa/mock-provider.mjs
+  s_3c670595e30ded::t_ba60886228723f 540-541
+src/lib/tools/answer-step.test.ts
+  s_3c670595e30ded::t_b1ab3f0f4ac373 12,18-19,22-24
+  s_3c670595e30ded::t_7f0a7804af48f7 42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5beb07bd22c91775c0ee684e1f3e5e6797cbf1fd",
+  "prompts": {},
+  "sessions": {
+    "s_3c670595e30ded": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "793ba69f-b8af-4d20-9887-4a25b5dc5de6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
