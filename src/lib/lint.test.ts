@@ -17,7 +17,6 @@ after(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-// Lints one file with the repository's config and returns "rule line" for each finding.
 function lint(name: string, source: string) {
   const file = path.join(dir, name);
   fs.writeFileSync(file, source);

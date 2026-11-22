@@ -37,6 +37,10 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Typecheck
         run: npm run typecheck
+      - name: Lint the React hooks
+        # Reports only until the findings that predate the lint are fixed (#145).
+        continue-on-error: true
+        run: npm run lint
       - name: Pull the pinned sandbox images
         run: |
           grep -oE '[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[a-f0-9]{64}' src/lib/sandbox/images.ts | sort -u | xargs -n1 docker pull
