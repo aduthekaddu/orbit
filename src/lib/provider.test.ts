@@ -131,15 +131,19 @@ test("a throwing OpenCode primary falls back to the Go model list with the saved
 });
 
 test("a throwing model list for another provider returns null", async (t) => {
-  mockFetch(t, () => {
+  const base = "https://other.example/v1";
+  const fetch = mockFetch(t, () => {
     throw new Error("down");
   });
-  assert.equal(await listModels("https://other.example/v1", savedApiKey), null);
+  assert.equal(await listModels(base, savedApiKey), null);
+  assert.deepEqual(fetch.mock.calls.map((c) => String(c.arguments[0])), [`${base}/models`]);
 });
 
 test("a model list that answers with an error status returns null", async (t) => {
-  mockFetch(t, () => json({ error: "unauthorized" }, 401));
-  assert.equal(await listModels("https://denied.example/v1", savedApiKey), null);
+  const base = "https://denied.example/v1";
+  const fetch = mockFetch(t, () => json({ error: "unauthorized" }, 401));
+  assert.equal(await listModels(base, savedApiKey), null);
+  assert.deepEqual(fetch.mock.calls.map((c) => String(c.arguments[0])), [`${base}/models`]);
 });
 
 const payloads = [
@@ -160,8 +164,9 @@ const payloads = [
 for (const [index, { shape, body, models }] of payloads.entries()) {
   test(`the model list reads ${shape}`, async (t) => {
     const base = `https://payload-${index}.example/v1`;
-    mockFetch(t, (url) => (url === `${base}/models` ? json(body) : json({ error: "unexpected" }, 500)));
+    const fetch = mockFetch(t, (url) => (url === `${base}/models` ? json(body) : json({ error: "unexpected" }, 500)));
     assert.deepEqual(await listModels(base, savedApiKey), models);
+    assert.deepEqual(fetch.mock.calls.map((c) => String(c.arguments[0])), [`${base}/models`]);
   });
 }
 
