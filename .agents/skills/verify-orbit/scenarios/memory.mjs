@@ -52,6 +52,32 @@ async function widths(locator) {
   return locator.evaluate((element) => ({ scroll: element.scrollWidth, client: element.clientWidth }));
 }
 
+// The memory list scrolls inside its own box, so a line counts as shown only inside that box and the viewport.
+async function onScreen(locator) {
+  return locator.evaluate((element) => {
+    let frame = element.parentElement;
+    while (frame && getComputedStyle(frame).overflowY !== "auto") frame = frame.parentElement;
+    const line = element.getBoundingClientRect();
+    const box = frame ? frame.getBoundingClientRect() : new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+    const top = Math.max(0, box.top);
+    const bottom = Math.min(window.innerHeight, box.bottom);
+    return {
+      shown: line.top >= top && line.bottom <= bottom && line.left >= 0 && line.right <= window.innerWidth,
+      where: `line at y=${Math.round(line.top)} to ${Math.round(line.bottom)}, list shows y=${Math.round(top)} to ${Math.round(bottom)}`,
+    };
+  });
+}
+
+async function rowError(page, row, text) {
+  const line = page.getByText(text, { exact: true });
+  if (!(await line.waitFor({ timeout: 5_000 }).then(() => true, () => false))) return { ok: false, detail: "no error line" };
+  const { shown, where } = await onScreen(line);
+  const inRow = (await row.getByText(text, { exact: true }).count()) === 1;
+  const alert = (await line.getAttribute("role")) === "alert";
+  const problems = [!shown && "off screen", !inRow && "outside its row", !alert && "no alert role"].filter(Boolean);
+  return { ok: problems.length === 0, detail: `${problems.join(", ")}; ${where}` };
+}
+
 export default async function memory({ page, origin, step, shot }) {
   fs.mkdirSync(path.dirname(requestLog), { recursive: true });
   fs.writeFileSync(requestLog, "");
@@ -207,4 +233,47 @@ export default async function memory({ page, origin, step, shot }) {
   await dialog.getByText("Memory", { exact: true }).click();
   await page.waitForURL(/\/memory$/, { timeout: 10_000 }).catch(() => {});
   step("palette opens Memory", page.url().endsWith("/memory"), `url is ${page.url()}`);
+
+  const fillers = Array.from({ length: 8 }, (_, index) => `Scroll check memory ${index + 1}`);
+  let fillersSaved = 0;
+  for (const text of fillers) {
+    const chat = await page.request.post(`${origin}/api/chats`);
+    const { id: chatId } = await chat.json();
+    await page.goto(`${origin}/c/${chatId}`);
+    await page.getByRole("textbox").fill(`[qa:remember] ${text}`);
+    await page.getByRole("textbox").press("Enter");
+    const saved = page.locator('[data-message-role="assistant"]').getByText("Saved.", { exact: true });
+    if (await saved.waitFor({ timeout: 30_000 }).then(() => true, () => false)) fillersSaved += 1;
+  }
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`${origin}/memory`);
+  const rows = page.locator('input[aria-label="Search"] ~ ul > li');
+  await rows.filter({ hasText: fillers.at(-1) }).waitFor({ timeout: 10_000 });
+  const lastRow = rows.last();
+  const lastTop = await lastRow.evaluate((element) => element.getBoundingClientRect().top);
+  step("the memory list scrolls to reach its last row", fillersSaved === fillers.length && lastTop > 800, `saved ${fillersSaved} of ${fillers.length}, last row starts at y=${Math.round(lastTop)}`);
+
+  await page.route("**/api/memories/*", (route) => route.abort());
+  await lastRow.getByRole("button", { name: "Edit" }).click();
+  await lastRow.getByRole("textbox", { name: "Memory" }).fill("Scroll check edit");
+  await lastRow.getByRole("button", { name: "Save" }).click();
+  const saveLine = await rowError(page, lastRow, "Could not save");
+  await shot("save-offline-scrolled");
+  step("a failed save on the last row shows its error in that row, on screen", saveLine.ok, saveLine.detail);
+  await lastRow.getByRole("button", { name: "Cancel" }).click();
+  await lastRow.getByRole("button", { name: "Delete" }).click();
+  const scrolledConfirm = page.getByRole("dialog", { name: "Delete this memory?" });
+  await scrolledConfirm.waitFor({ timeout: 5_000 });
+  await scrolledConfirm.getByRole("button", { name: "Delete" }).click();
+  await scrolledConfirm.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => {});
+  const deleteLine = await rowError(page, lastRow, "Could not delete");
+  await shot("delete-offline-scrolled");
+  step("a failed delete on the last row shows its error in that row, on screen", deleteLine.ok, deleteLine.detail);
+  await page.unroute("**/api/memories/*");
+
+  const remaining = await page.request.get(`${origin}/api/memories`);
+  const { memories } = await remaining.json();
+  for (const memory of memories.filter((item) => fillers.includes(item.text))) {
+    await page.request.delete(`${origin}/api/memories/${memory.id}`);
+  }
 }

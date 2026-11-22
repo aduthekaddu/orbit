@@ -523,7 +523,8 @@ const server = http.createServer((req, res) => {
         textResponse(res, "Saved.");
         return;
       }
-      const text = prompt.replace(/\[qa:remember\]\s*/, "").trim();
+      const tag = "[qa:remember]";
+      const text = prompt.slice(prompt.lastIndexOf(tag) + tag.length).trim();
       toolResponse(res, scenario, { text, kind: "fact" }, "remember");
       return;
     }
