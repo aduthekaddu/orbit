@@ -11,8 +11,10 @@ async function main() {
   const times: number[] = [];
   for (let index = 0; index < 10; index += 1) {
     const started = performance.now();
-    const result = await runCode(docker, { language: "python", code: "print(1)" });
+    const run = runCode(docker, { language: "python", code: "print(1)" });
+    const [result, cleanup] = await Promise.all([run.result, run.cleanup]);
     const elapsed = performance.now() - started;
+    assert.equal(cleanup, "removed");
     assert.equal(result.stdout, "1\n");
     assert.equal(result.stderr, "");
     assert.equal(result.exitCode, 0);

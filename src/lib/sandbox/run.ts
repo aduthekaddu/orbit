@@ -65,92 +65,122 @@ export function sandboxDocker(): Docker {
   return new Docker({ protocol: "http", host: url.hostname, port: url.port || "2375", timeout: 12_000 });
 }
 
-export async function runCode(docker: Docker, input: RunCodeInput, signal?: AbortSignal): Promise<RunCodeOutput> {
+type Outcome =
+  | { kind: "exited"; exitCode: number; oomKilled: boolean }
+  | { kind: "timed-out" }
+  | { kind: "cancelled" }
+  | { kind: "failed"; error: unknown };
+
+export type CodeRun = {
+  // Settles once, with the first of: the program exits, the deadline passes, the signal aborts, Docker fails.
+  result: Promise<RunCodeOutput>;
+  // Settles once the container is removed or was never made, or once removing it failed. Never rejects.
+  cleanup: Promise<"removed" | "failed">;
+};
+
+function statusCodeOf(error: unknown): number | undefined {
+  return error && typeof error === "object" && "statusCode" in error && typeof error.statusCode === "number" ? error.statusCode : undefined;
+}
+
+// A run moves through: Docker setup (create, attach, start), running, exited, settled.
+// `settle` is the only place the outcome is set; the first call wins, and it disarms the deadline and the abort listener.
+// The cleanup task is the only owner of the container. It removes it after the outcome settles, even when Docker
+// finishes creating it after a stop already returned, and kills it first when the program had not exited.
+export function runCode(docker: Docker, input: RunCodeInput, signal?: AbortSignal): CodeRun {
   signal?.throwIfAborted();
   const started = performance.now();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let onAbort: (() => void) | undefined;
-  let stopReason: "timed-out" | "cancelled" | undefined;
-  const stopped = new Promise<"timed-out" | "cancelled">((resolve) => {
-    const stop = (reason: "timed-out" | "cancelled") => {
-      stopReason ??= reason;
-      resolve(stopReason);
-    };
-    timer = setTimeout(() => stop("timed-out"), RUN_TIMEOUT_MS);
-    onAbort = () => stop("cancelled");
-    signal?.addEventListener("abort", onAbort, { once: true });
-    if (signal?.aborted) stop("cancelled");
-  });
   const stdout = outputCollector();
   const stderr = outputCollector();
-  let oomKilled = false;
-  const completed = async (): Promise<number | "timed-out" | "cancelled"> => {
-    const container = await docker.createContainer(containerSpec(input, sandboxOwner()));
-    let attached: Duplex | undefined;
-    try {
-      if (stopReason) return stopReason;
-      const connection = await container.attach({ stream: true, stdin: true, stdout: true, stderr: true, hijack: true, abortSignal: signal });
-      if (!(connection instanceof Duplex)) throw new Error("Docker did not provide a duplex attach stream");
-      attached = connection;
-      if (stopReason) return stopReason;
-      const outputFinished = new Promise<{ kind: "ended" } | { kind: "failed"; error: Error }>((resolve) => {
-        connection.once("end", () => resolve({ kind: "ended" }));
-        connection.once("error", (error: Error) => resolve({ kind: "failed", error }));
-        connection.once("close", () => resolve({ kind: "failed", error: new Error("Docker output connection closed before ending") }));
-      });
-      docker.modem.demuxStream(connection, stdout.stream, stderr.stream);
-      await container.start();
-      if (stopReason) return stopReason;
-      const exited = async () => {
-        connection.end(input.code);
-        const result = waitResultSchema.parse(await container.wait());
-        const output = await outputFinished;
-        if (output.kind === "failed") throw output.error;
-        clearTimeout(timer);
-        if (result.StatusCode === SIGKILL_EXIT) oomKilled = await killedForMemory(container);
-        return result.StatusCode;
-      };
-      return await Promise.race([exited(), stopped]);
-    } finally {
-      attached?.destroy();
-      stdout.stream.destroy();
-      stderr.stream.destroy();
-      try {
-        try {
-          if (stopReason) {
-            try {
-              await container.kill({ signal: "SIGKILL" });
-            } catch (error) {
-              if (!(error && typeof error === "object" && "statusCode" in error && error.statusCode === 409)) throw error;
-            }
-          }
-        } finally {
-          await container.remove({ force: true });
-        }
-      } catch (error) {
-        const statusCode = error && typeof error === "object" && "statusCode" in error && typeof error.statusCode === "number" ? error.statusCode : undefined;
-        console.error("Sandbox cleanup failed", { statusCode });
-        throw error;
-      }
-    }
+  const settled = Promise.withResolvers<Outcome>();
+  let outcome: Outcome | undefined;
+  let exitCode: number | undefined;
+  const settle = (next: Outcome) => {
+    if (outcome) return;
+    outcome = next;
+    clearTimeout(deadline);
+    signal?.removeEventListener("abort", cancel);
+    settled.resolve(next);
   };
-  try {
-    const outcome = await Promise.race([completed(), stopped]);
+  const cancel = () => settle({ kind: "cancelled" });
+  // After the program exits, the deadline only stops waiting for its last output.
+  const deadline = setTimeout(() => settle(exitCode === undefined ? { kind: "timed-out" } : { kind: "exited", exitCode, oomKilled: false }), RUN_TIMEOUT_MS);
+  signal?.addEventListener("abort", cancel, { once: true });
+
+  const result = settled.promise.then((done) => {
+    if (done.kind === "failed") throw done.error;
     const out = stdout.result();
     const err = stderr.result();
     const output: RunCodeOutput = {
       stdout: out.text,
       stderr: err.text,
-      exitCode: typeof outcome === "number" ? outcome : null,
+      exitCode: done.kind === "exited" ? done.exitCode : null,
       durationMs: Math.round(performance.now() - started),
-      timedOut: outcome === "timed-out",
+      timedOut: done.kind === "timed-out",
       truncated: out.truncated || err.truncated,
-      ...(oomKilled ? { oomKilled: true } : {}),
+      ...(done.kind === "exited" && done.oomKilled ? { oomKilled: true } : {}),
     };
-    if (outcome === "cancelled") throw new RunStopped({ ...output, cancelled: true });
+    if (done.kind === "cancelled") throw new RunStopped({ ...output, cancelled: true });
     return output;
-  } finally {
-    clearTimeout(timer);
-    if (onAbort) signal?.removeEventListener("abort", onAbort);
-  }
+  });
+
+  let attached: Duplex | undefined;
+  const execute = async (container: Docker.Container) => {
+    if (outcome) return;
+    const connection = await container.attach({ stream: true, stdin: true, stdout: true, stderr: true, hijack: true, abortSignal: signal });
+    if (!(connection instanceof Duplex)) throw new Error("Docker did not provide a duplex attach stream");
+    attached = connection;
+    if (outcome) return;
+    const outputFinished = new Promise<{ kind: "ended" } | { kind: "failed"; error: Error }>((resolve) => {
+      connection.once("end", () => resolve({ kind: "ended" }));
+      connection.once("error", (error: Error) => resolve({ kind: "failed", error }));
+      connection.once("close", () => resolve({ kind: "failed", error: new Error("Docker output connection closed before ending") }));
+    });
+    docker.modem.demuxStream(connection, stdout.stream, stderr.stream);
+    await container.start();
+    if (outcome) return;
+    const program = async () => {
+      connection.end(input.code);
+      const { StatusCode } = waitResultSchema.parse(await container.wait());
+      if (outcome) return;
+      exitCode = StatusCode;
+      const output = await outputFinished;
+      if (outcome) return;
+      if (output.kind === "failed") throw output.error;
+      settle({ kind: "exited", exitCode, oomKilled: exitCode === SIGKILL_EXIT && await killedForMemory(container) });
+    };
+    await Promise.race([program(), settled.promise]);
+  };
+
+  const cleanup = (async (): Promise<"removed" | "failed"> => {
+    let container: Docker.Container;
+    try {
+      container = await docker.createContainer(containerSpec(input, sandboxOwner()));
+    } catch (error) {
+      settle({ kind: "failed", error });
+      return "removed";
+    }
+    try {
+      await execute(container);
+    } catch (error) {
+      settle({ kind: "failed", error });
+    }
+    attached?.destroy();
+    stdout.stream.destroy();
+    stderr.stream.destroy();
+    try {
+      try {
+        if (exitCode === undefined) await container.kill({ signal: "SIGKILL" });
+      } catch (error) {
+        if (statusCodeOf(error) !== 409) throw error;
+      } finally {
+        await container.remove({ force: true });
+      }
+      return "removed";
+    } catch (error) {
+      console.error("Sandbox cleanup failed", { statusCode: statusCodeOf(error) });
+      return "failed";
+    }
+  })();
+
+  return { result, cleanup };
 }
