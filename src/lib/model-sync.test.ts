@@ -20,35 +20,20 @@ function functionText(file: string, name: string): string | undefined {
 // or `}`, all outside string and template literals. A run of whitespace between two word
 // characters becomes one space, so `return x` stays apart. A regex literal or a nested template
 // literal is read as plain code.
+const token = /\/\/[^\n]*|\/\*[\s\S]*?(?:\*\/|$)|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|`(?:\\[\s\S]|[^`\\])*`|\s+|[\w$]+|[\s\S]/g;
+
 function withoutFormatting(code: string): string {
   let out = "";
   let gap = false;
-  let i = 0;
-  while (i < code.length) {
-    const rest = code.slice(i, i + 2);
-    if (rest === "//" || rest === "/*") {
-      const end = rest === "//" ? code.indexOf("\n", i) : code.indexOf("*/", i + 2) + 1;
-      i = end <= 0 ? code.length : end + 1;
+  for (const [text] of code.matchAll(token)) {
+    if (/^(\/\/|\/\*|\s)/.test(text)) {
       gap = true;
       continue;
     }
-    const char = code[i];
-    if (/\s/.test(char)) {
-      gap = true;
-      i += 1;
-      continue;
-    }
-    let token = char;
-    if (char === '"' || char === "'" || char === "`") {
-      let j = i + 1;
-      while (j < code.length && code[j] !== char) j += code[j] === "\\" ? 2 : 1;
-      token = code.slice(i, j + 1);
-    }
-    if (gap && /[\w$]$/.test(out) && /^[\w$]/.test(token)) out += " ";
-    if (/^[)\]}]$/.test(token) && out.endsWith(",")) out = out.slice(0, -1);
-    out += token;
+    if (gap && /[\w$]$/.test(out) && /^[\w$]/.test(text)) out += " ";
+    if (/^[)\]}]$/.test(text) && out.endsWith(",")) out = out.slice(0, -1);
+    out += text;
     gap = false;
-    i += token.length;
   }
   return out;
 }
