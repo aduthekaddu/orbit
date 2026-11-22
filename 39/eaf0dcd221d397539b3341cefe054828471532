@@ -1,0 +1,21 @@
+.agents/skills/verify-orbit/features/browse.md
+  s_62c1ee00b46d33::t_509370b355f142 95
+.agents/skills/verify-orbit/scenarios/thread-map.mjs
+  s_62c1ee00b46d33::t_509370b355f142 34,36-38,45-46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "39eaf0dcd221d397539b3341cefe054828471532",
+  "prompts": {},
+  "sessions": {
+    "s_62c1ee00b46d33": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a203e3-57e1-7610-ad23-784ba66b1506",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
