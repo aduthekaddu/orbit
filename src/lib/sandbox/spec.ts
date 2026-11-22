@@ -21,14 +21,23 @@ export const runCodeOutputSchema = z.object({
 export type RunCodeInput = z.infer<typeof runCodeInputSchema>;
 export type RunCodeOutput = z.infer<typeof runCodeOutputSchema>;
 
-export function hasStoppedCodeOutput(output: unknown): boolean {
-  const parsed = runCodeOutputSchema.safeParse(output);
-  return parsed.success && parsed.data.cancelled === true;
+export type CodeRunOutcome =
+  | { kind: "stopped" }
+  | { kind: "timed-out" }
+  | { kind: "out-of-memory"; exitCode: number | null }
+  | { kind: "killed" }
+  | { kind: "exited"; exitCode: number };
+
+export function codeRunOutcome(output: RunCodeOutput): CodeRunOutcome {
+  if (output.cancelled) return { kind: "stopped" };
+  if (output.timedOut) return { kind: "timed-out" };
+  if (output.oomKilled) return { kind: "out-of-memory", exitCode: output.exitCode };
+  if (output.exitCode === null) return { kind: "killed" };
+  return { kind: "exited", exitCode: output.exitCode };
 }
 
-export function hasFailedCodeOutput(output: unknown): boolean {
-  const parsed = runCodeOutputSchema.safeParse(output);
-  return parsed.success && !parsed.data.cancelled && (parsed.data.timedOut || parsed.data.exitCode !== 0);
+export function codeRunFailed(outcome: CodeRunOutcome): boolean {
+  return outcome.kind !== "stopped" && !(outcome.kind === "exited" && outcome.exitCode === 0);
 }
 
 export function containerSpec(input: RunCodeInput): Docker.ContainerCreateOptions {

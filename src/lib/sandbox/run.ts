@@ -3,6 +3,7 @@ import { Duplex, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { z } from "zod";
 import { containerSpec, type RunCodeInput, type RunCodeOutput } from "./spec";
+import { STOP_MARKERS } from "../tools/run-status";
 
 const OUTPUT_LIMIT = 65_536;
 const RUN_TIMEOUT_MS = 10_000;
@@ -45,7 +46,7 @@ export class RunStopped extends Error {
   readonly output: RunCodeOutput;
 
   constructor(output: RunCodeOutput) {
-    super("Code run was stopped");
+    super(STOP_MARKERS.codeRunStopped);
     this.name = "AbortError";
     this.output = output;
   }
