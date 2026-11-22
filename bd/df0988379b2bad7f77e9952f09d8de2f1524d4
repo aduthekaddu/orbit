@@ -1,0 +1,33 @@
+.agents/skills/verify-orbit/scenarios/sandbox-validation.mjs
+  s_ac57f4f790ed49::t_c9efff12f830f8 1
+CHANGELOG.md
+  s_ac57f4f790ed49::t_08d02587beef15 7
+scripts/qa/mock-provider.mjs
+  s_ac57f4f790ed49::t_41682a3041771f 555-556
+.agents/skills/verify-orbit/features/memory.md
+  s_ac57f4f790ed49::t_4d793de83a0c9e 10-11
+src/lib/tools/answer-step.ts
+  s_ac57f4f790ed49::t_be1a2f401184e3 24-27,29
+  s_ac57f4f790ed49::t_3c42bd4b423e9a 23
+.agents/skills/verify-orbit/features/sandbox.md
+  s_ac57f4f790ed49::t_82b5cbda0e19f9 74
+  s_ac57f4f790ed49::t_2f0aae24e59dd8 163
+ARCHITECTURE.md
+  s_ac57f4f790ed49::t_c2b160d70a8a0a 21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bddf0988379b2bad7f77e9952f09d8de2f1524d4",
+  "prompts": {},
+  "sessions": {
+    "s_ac57f4f790ed49": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d53d8ea5-5318-4614-82c2-062d6e529bf1",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
