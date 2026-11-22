@@ -1,0 +1,25 @@
+package.json
+  s_99e6b4fa97078c::t_7a3be5cd53dd13 72-73
+src/lib/fixed-runners.test.ts
+  s_99e6b4fa97078c::t_7a3be5cd53dd13 4-5,7-8,10-20,23,25-27,31-52,55-57,60-64
+docs/adr/0003-ci-on-github-hosted-runners.md
+  s_99e6b4fa97078c::t_067a95236799c9 11,15,29-30,35
+package-lock.json
+  s_99e6b4fa97078c::t_0a4850a7e9f30b 67-68,10305-10320
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2f0c3b73b50311009a3e420bed7e12886d1c5502",
+  "prompts": {},
+  "sessions": {
+    "s_99e6b4fa97078c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "30fc78cc-c8d5-5e67-be6f-766ace7f4ede",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
