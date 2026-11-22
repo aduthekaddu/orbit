@@ -51,8 +51,7 @@ function inChild(script: string) {
 
 test("ORBIT_SANDBOX_OWNER names the owner, and a value that could change a Docker filter is refused", () => {
   assert.equal(ownerFromEnv({ ORBIT_SANDBOX_OWNER: "verify-3f2a.1_b" }), "verify-3f2a.1_b");
-  assert.equal(ownerFromEnv({}), undefined);
-  assert.equal(ownerFromEnv({ ORBIT_SANDBOX_OWNER: "" }), undefined);
+  assert.deepEqual([ownerFromEnv({}), ownerFromEnv({ ORBIT_SANDBOX_OWNER: "" })], [undefined, undefined]);
   for (const value of ["a b", "--filter", "a=b", "x".repeat(129)]) {
     assert.throws(() => ownerFromEnv({ ORBIT_SANDBOX_OWNER: value }), /sandbox owner/);
   }
