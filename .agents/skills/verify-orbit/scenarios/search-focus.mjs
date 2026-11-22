@@ -87,6 +87,7 @@ export default async function searchFocus({ page, origin, step, shot }) {
   await branchHit.click();
   await page.waitForURL(`${origin}/c/${branchChat}?m=${edited.id}`);
   await page.locator(`[data-turn-id="${edited.id}"]`).waitFor();
+  await dialog.waitFor({ state: "hidden" });
   const expected = hitBranch.map(({ id }) => id);
   const shownIds = () => page.locator("[data-message-id]").evaluateAll((els) => els.map((el) => el.dataset.messageId));
   const opened = await page.waitForFunction((expected) => JSON.stringify([...document.querySelectorAll("[data-message-id]")].map((el) => el.dataset.messageId)) === JSON.stringify(expected), expected, { timeout: 3_000 }).then(() => true, () => false);
