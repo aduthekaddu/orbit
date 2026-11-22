@@ -92,7 +92,7 @@ Screenshots: `starters.png`, `filled.png`, `phone-390x844.png`.
 
 ### thread-map
 
-Sends three `[qa:plain]` prompts. Types two lines in the composer and presses `Alt+ArrowUp`. Then clicks a reply outside any field and presses `Alt+ArrowUp` again.
+Sends three `[qa:plain]` prompts. Types two lines in the composer and presses `Alt+ArrowUp`. Then moves focus off the composer without scrolling and reads the current prompt from the map. Presses `Alt+ArrowUp` again and checks that focus moves to the prompt before it.
 
 Pass lines:
 

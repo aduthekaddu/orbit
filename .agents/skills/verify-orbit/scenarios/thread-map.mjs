@@ -31,15 +31,18 @@ export default async function threadMap({ page, origin, step, shot }) {
     `focus=${JSON.stringify(inComposer)} text=${JSON.stringify(text)}`,
   );
 
-  await page.locator('[data-message-role="assistant"]').first().getByText("pong", { exact: true }).click();
+  await composer.evaluate((element) => element.blur());
   const onPage = await focused();
+  const currentIndex = await page
+    .locator('nav[aria-label="Prompts in this chat"] ul button')
+    .evaluateAll((buttons) => buttons.findIndex((button) => button.getAttribute("aria-current") === "location"));
   await page.keyboard.press("Alt+ArrowUp");
   await page.waitForTimeout(700);
   const afterPage = await focused();
   await shot("page");
   step(
     "Alt+Up on the page moves focus to the previous prompt",
-    onPage.tag !== "TEXTAREA" && afterPage.turnId === turnIds[1],
-    `before=${JSON.stringify(onPage)} after=${JSON.stringify(afterPage)} prompts=${JSON.stringify(turnIds)}`,
+    onPage.tag !== "TEXTAREA" && currentIndex > 0 && afterPage.turnId === turnIds[currentIndex - 1],
+    `before=${JSON.stringify(onPage)} after=${JSON.stringify(afterPage)} currentIndex=${currentIndex} prompts=${JSON.stringify(turnIds)}`,
   );
 }
