@@ -47,7 +47,7 @@ const STOP_WORDS = new Set(
 function contentWords(input: string): string[] {
   const words = input
     .toLowerCase()
-    .replace(/\p{L}+n['’]t(?!\p{L})/gu, " ")
+    .replace(/(?<!\p{L})\p{L}+n['’]t(?!\p{L})/gu, " ")
     .match(/[\p{L}\p{N}]+/gu);
   return [...new Set((words ?? []).filter((word) => word.length > 1 && !STOP_WORDS.has(word)))];
 }
