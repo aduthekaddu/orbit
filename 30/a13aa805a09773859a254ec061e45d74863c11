@@ -1,0 +1,80 @@
+src/lib/sandbox/owner.mjs
+  s_99e6b4fa97078c::t_563d2847f49ed7 1-41
+src/lib/sandbox/run.ts
+  s_99e6b4fa97078c::t_16b880afaf9e04 5
+  s_99e6b4fa97078c::t_6eead2d5624aba 88
+scripts/qa/sandbox-timing.ts
+  s_99e6b4fa97078c::t_61424946fcd0f8 29
+  s_99e6b4fa97078c::t_fc48e879c38447 4
+scripts/qa/sandbox-leftovers.mjs
+  s_99e6b4fa97078c::t_c8e007baa992c9 1-16
+.agents/skills/verify-orbit/scenarios/sandbox-outcome.mjs
+  s_99e6b4fa97078c::t_31c3780cb917c6 2,4
+src/lib/sandbox/spec.ts
+  s_99e6b4fa97078c::t_2addbfa178fd06 4
+  s_99e6b4fa97078c::t_639414cc7c3eb1 35
+  s_99e6b4fa97078c::t_3a2ce2a2012b41 48
+.github/workflows/ci.yml
+  s_99e6b4fa97078c::t_c62f47a7a60581 31-33
+  s_99e6b4fa97078c::t_23fbbdb1760d2f 49
+.agents/skills/verify-orbit/verify.mjs
+  s_99e6b4fa97078c::t_698f13a1893cc5 256
+  s_99e6b4fa97078c::t_86f49e9292458b 242-243
+  s_99e6b4fa97078c::t_63a61163300a0f 267
+  s_99e6b4fa97078c::t_887f2d3d97f752 7
+  s_99e6b4fa97078c::t_55a226b732ec20 685-688
+  s_99e6b4fa97078c::t_88fa8da32ff97b 214-217
+src/lib/sandbox/wait-for-running.ts
+  s_99e6b4fa97078c::t_ad00b1a88bcb52 2,4
+  s_99e6b4fa97078c::t_99f5a2c313a1ee 7
+.agents/skills/verify-orbit/scenarios/sandbox-stop-output.mjs
+  s_99e6b4fa97078c::t_b302f06e7ba4ba 2
+  s_99e6b4fa97078c::t_b912b6582df72e 31
+.agents/skills/verify-orbit/scenarios/sandbox-language.mjs
+  s_99e6b4fa97078c::t_8160621ae07512 2,4
+scripts/qa/ci-e2e.sh
+  s_99e6b4fa97078c::t_cce8c6fef2a7af 166
+  s_99e6b4fa97078c::t_1a7f2757888a37 17-19
+.agents/skills/verify-orbit/features/sandbox.md
+  s_99e6b4fa97078c::t_2d6b60aa9aaa2c 223
+ARCHITECTURE.md
+  s_99e6b4fa97078c::t_887c14c1d725fe 139-140
+src/lib/sandbox/spec.test.ts
+  s_99e6b4fa97078c::t_74eeee409329b9 16
+  s_99e6b4fa97078c::t_210410dc4ee932 44
+  s_99e6b4fa97078c::t_ae49ffb91cad58 28
+  s_99e6b4fa97078c::t_59a63406b40277 3,6
+  s_99e6b4fa97078c::t_531a4f17dc12f2 7
+.agents/skills/verify-orbit/SKILL.md
+  s_99e6b4fa97078c::t_dd87f770cb176d 33
+  s_99e6b4fa97078c::t_b42af39d312d19 31-32
+src/lib/sandbox/owner.d.mts
+  s_99e6b4fa97078c::t_fcb0f1d27f552d 1-10
+src/lib/sandbox/run.test.ts
+  s_99e6b4fa97078c::t_94af2dcfb52593 193,245
+  s_99e6b4fa97078c::t_f102436d26ca1e 11,16-19,21
+  s_99e6b4fa97078c::t_6a82a7ca0e0c9e 40-42,45,49,52,55-57,59,61-63
+  s_99e6b4fa97078c::t_22dee9a2e1438c 43-44,46-48,50-51,53-54,58,60,64
+  s_99e6b4fa97078c::t_a767e161a986b3 10
+src/lib/sandbox/owner.test.ts
+  s_99e6b4fa97078c::t_a6d500f89a2407 1-6,8-36
+  s_99e6b4fa97078c::t_b839b059070c71 7
+.agents/skills/verify-orbit/fixture-process.mjs
+  s_99e6b4fa97078c::t_99c9b832f0b890 9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "30a13aa805a09773859a254ec061e45d74863c11",
+  "prompts": {},
+  "sessions": {
+    "s_99e6b4fa97078c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "30fc78cc-c8d5-5e67-be6f-766ace7f4ede",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
