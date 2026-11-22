@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Docker from "dockerode";
+import { randomUUID } from "node:crypto";
 import { Duplex } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
 import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } from "ai";
@@ -14,6 +15,10 @@ import { waitForRunningSandbox } from "./wait-for-running";
 import type { RunCodeOutput } from "./spec";
 
 const owner = sandboxOwner();
+
+function isDockerStatus(error: unknown, status: number) {
+  return typeof error === "object" && error !== null && "statusCode" in error && error.statusCode === status;
+}
 
 async function waitForNoContainers(docker: Docker, timeoutMs = 2000) {
   const deadline = performance.now() + timeoutMs;
@@ -30,7 +35,7 @@ async function waitForNoContainers(docker: Docker, timeoutMs = 2000) {
 test("sandbox programs run inside real isolated containers", { timeout: 90_000 }, async (t) => {
   const docker = new Docker();
   try {
-    await docker.listContainers();
+    await docker.ping();
   } catch (error) {
     if (!(error && typeof error === "object" && "code" in error && ["ECONNREFUSED", "ENOENT", "EACCES", "ENOTFOUND", "EHOSTUNREACH"].includes(String(error.code)))) throw error;
     t.skip("Docker is unreachable. Start a local Docker daemon to run the sandbox escape checks.");
@@ -38,7 +43,7 @@ test("sandbox programs run inside real isolated containers", { timeout: 90_000 }
   }
   const runPython = (code: string) => runCode(docker, { language: "python", code });
   // Code without owner filters sees a planted container, so each one lives only inside its own subtest.
-  const withPlantedContainer = async (planted: SandboxOwner, check: () => Promise<void>) => {
+  const withPlantedContainer = async (planted: SandboxOwner, check: (container: Docker.Container) => Promise<void>) => {
     const container = await docker.createContainer({
       Image: sandboxImages.python.image,
       Cmd: ["sleep", "30"],
@@ -47,12 +52,28 @@ test("sandbox programs run inside real isolated containers", { timeout: 90_000 }
     });
     try {
       await container.start();
-      await check();
+      await check(container);
     } finally {
-      await container.remove({ force: true });
+      // AutoRemove can delete the container first (404), or be deleting it as this call arrives (409).
+      await container.remove({ force: true }).catch((error: unknown) => {
+        if (!isDockerStatus(error, 404) && !isDockerStatus(error, 409)) throw error;
+      });
     }
   };
-  const foreign = parseSandboxOwner(`foreign-${owner}`);
+  // A name no other run can take, so a planted container is never another run's own.
+  const foreign = parseSandboxOwner(randomUUID());
+  await t.test("a planted container that is already gone does not fail the check", () => withPlantedContainer(foreign, async (container) => {
+    await container.kill();
+    while (true) {
+      try {
+        await container.inspect();
+      } catch (error) {
+        if (isDockerStatus(error, 404)) return;
+        throw error;
+      }
+      await delay(50);
+    }
+  }));
   await t.test("another run's running container is not taken for this run's start", () => withPlantedContainer(foreign, async () => {
     await assert.rejects(waitForRunningSandbox(docker, owner, 500), /no sandbox container started/);
   }));
@@ -125,7 +146,7 @@ finally:
     assert.match(result.stdout, /Resource temporarily unavailable/);
     assert.equal(result.timedOut, false);
     assert.equal(result.exitCode, 0);
-    assert.ok(Array.isArray(await docker.listContainers()));
+    assert.equal(String(await docker.ping()), "OK");
   });
   await t.test("an infinite loop times out within 12 seconds", async () => {
     const started = performance.now();
