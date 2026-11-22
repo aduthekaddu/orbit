@@ -1,0 +1,31 @@
+SECURITY.md
+  s_1b48e9b3a2b37a::t_7549a78dce4ef5 21
+README.md
+  s_1b48e9b3a2b37a::t_7549a78dce4ef5 113
+src/proxy.ts
+  s_1b48e9b3a2b37a::t_be61ff4ddad473 2,4,24,38-39
+src/lib/auth.ts
+  s_1b48e9b3a2b37a::t_be61ff4ddad473 30-32,36
+src/lib/auth-origins.ts
+  s_1b48e9b3a2b37a::t_be61ff4ddad473 29-44
+CHANGELOG.md
+  s_1b48e9b3a2b37a::t_7549a78dce4ef5 7
+ARCHITECTURE.md
+  s_1b48e9b3a2b37a::t_7549a78dce4ef5 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "feb18efaf012a70782c45dcea482281dcce77403",
+  "prompts": {},
+  "sessions": {
+    "s_1b48e9b3a2b37a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d0642e6c-ab8e-4135-9ee6-252cba8a4162",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
