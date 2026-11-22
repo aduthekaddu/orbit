@@ -1,0 +1,29 @@
+CHANGELOG.md
+  s_692cc3e541f823::t_b4022ee820c23a 7
+CONTRIBUTING.md
+  s_692cc3e541f823::t_66b8df065a1739 34
+.dockerignore
+  s_692cc3e541f823::t_49db033e677954 3-12
+scripts/qa/assert-docker-context.sh
+  s_692cc3e541f823::t_b313f82183e882 71-75
+  s_692cc3e541f823::t_91d4dcd9d16b69 1-67,76-78
+  s_692cc3e541f823::t_fc105beed2b820 68-70
+.github/workflows/ci.yml
+  s_692cc3e541f823::t_85a14a8715f5fc 107-108
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4b1165f3fbdf2277b775cdf15e0256c8e57a194e",
+  "prompts": {},
+  "sessions": {
+    "s_692cc3e541f823": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ac0f91c5-8fea-43f1-bb1f-470f49e914b4",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
