@@ -12,6 +12,8 @@ markers=(
   ".claude/worktrees/$name/package.json"
   ".claude/worktrees/$name/data/orbit.db"
   ".worktrees/$name/package.json"
+  "$name/.claude/worktrees/$name/package.json"
+  "$name/.worktrees/$name/package.json"
   "$name/data/orbit.db"
   "$name/data/auth-secret"
   "$name/.env"
