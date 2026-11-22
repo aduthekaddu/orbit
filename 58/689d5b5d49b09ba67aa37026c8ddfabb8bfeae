@@ -1,0 +1,54 @@
+scripts/qa/mock-provider.mjs
+  s_99e6b4fa97078c::t_46618f5e5ef724 516-517
+scripts/qa/genui-qa.cjs
+  s_99e6b4fa97078c::t_d5dd0d94a31717 50,53-62
+.agents/skills/verify-orbit/verify.mjs
+  s_99e6b4fa97078c::t_338432c1c0f612 36-39,43-51
+  s_99e6b4fa97078c::t_67cad9ed6e3091 298,300-301,304
+  s_99e6b4fa97078c::t_a620509e16f7d6 299
+  s_99e6b4fa97078c::t_6f9d3cc1644d92 386-387,390
+  s_99e6b4fa97078c::t_ff1ca4d0889160 892-894
+  s_99e6b4fa97078c::t_e3308cd39dd350 52,287-294,297,302-303,305,307-360,362-368,370-381,388,391,397
+  s_99e6b4fa97078c::t_3e6c4d5b1dbafa 407-409,411-412
+  s_99e6b4fa97078c::t_a13e1f9098620e 53
+  s_99e6b4fa97078c::t_f3d71de6a6c3b2 306
+  s_03b21ea7d827bf::t_810c71a59f53d7 784-787,871
+.agents/skills/verify-orbit/SKILL.md
+  s_99e6b4fa97078c::t_3d61dad9c075c2 12,33
+.agents/skills/verify-orbit/features/README.md
+  s_99e6b4fa97078c::t_e0de7ec24772eb 8
+.agents/skills/verify-orbit/features/browse.md
+  s_99e6b4fa97078c::t_7f32215743720d 13
+CHANGELOG.md
+  s_99e6b4fa97078c::t_0242c221e49139 9
+docs/slices/17.md
+  s_99e6b4fa97078c::t_b6cbc1aecb6d77 200
+scripts/qa/ci-e2e.sh
+  s_99e6b4fa97078c::t_b30d6f533f699c 10-12,46-47,50-56,59-62,123-125
+src/lib/qa-mock-ports.test.ts
+  s_99e6b4fa97078c::t_4d3013ed718130 3,6,41,47,67,87-101,134-140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "58689d5b5d49b09ba67aa37026c8ddfabb8bfeae",
+  "prompts": {},
+  "sessions": {
+    "s_03b21ea7d827bf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a65567a7b25a933d1",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    },
+    "s_99e6b4fa97078c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "30fc78cc-c8d5-5e67-be6f-766ace7f4ede",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
