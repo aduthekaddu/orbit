@@ -47,11 +47,19 @@ async function signIn(page) {
   await page.waitForURL(/\/c\/[0-9a-f-]+/, { timeout: 30_000 });
 }
 
-// `verify.mjs launch --mock` saves the port the mock bound in .verify/mock.json.
+// `verify.mjs launch --mock` publishes .verify/mock.json once the mock listens, with its port already in it.
 function mockBase() {
   if (process.env.ORBIT_MOCK_BASE_URL) return process.env.ORBIT_MOCK_BASE_URL;
-  const { port } = JSON.parse(fs.readFileSync(path.join(process.cwd(), ".verify", "mock.json"), "utf8"));
-  return `http://127.0.0.1:${port}/v1`;
+  let mock = null;
+  try {
+    mock = JSON.parse(fs.readFileSync(path.join(process.cwd(), ".verify", "mock.json"), "utf8"));
+  } catch {
+    // No mock launched.
+  }
+  if (!Number.isInteger(mock?.port)) {
+    throw new Error("no mock provider in .verify/mock.json. Run node .agents/skills/verify-orbit/verify.mjs launch --mock, or set ORBIT_MOCK_BASE_URL.");
+  }
+  return `http://127.0.0.1:${mock.port}/v1`;
 }
 
 async function useMockProvider(request) {

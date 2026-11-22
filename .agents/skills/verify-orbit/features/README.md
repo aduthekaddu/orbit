@@ -5,7 +5,7 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 ## Baseline preconditions
 
 - The port set by `ORBIT_VERIFY_PORT` on `127.0.0.1` is free, default `3210`. Export another port if the deployment owns `3210`.
-- Parallel runs on one host, each in its own checkout, need only different `ORBIT_VERIFY_PORT` values. The mock provider and the mock Ollama pick free ports.
+- Parallel runs on one host, each in its own checkout, need only different `ORBIT_VERIFY_PORT` values. The mock provider and the mock Ollama pick free ports. verify-orbit refuses a port inside the range in `/proc/sys/net/ipv4/ip_local_port_range`, where the OS picks those free ports.
 - `npm run build` has produced `.next`.
 - Launch with `node .agents/skills/verify-orbit/verify.mjs launch` so the server cwd is `.verify/sandbox` and `data/orbit.db` is created there.
 - Run `node .agents/skills/verify-orbit/verify.mjs doctor` and require `doctor ok` plus the sandbox cwd.

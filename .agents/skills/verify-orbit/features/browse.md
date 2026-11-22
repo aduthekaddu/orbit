@@ -10,7 +10,7 @@ Browse drives Chrome through Playwright. Use it to prove a click, a layout, or a
 - **Output.** Each check prints `PASS <name>` or `FAIL <name>: <detail>`. Screenshots go to `.verify/evidence/<scenario>/<name>.png`, and the step lines go to `summary.txt` in the same folder. Each run deletes that scenario's old evidence first.
 - **Exit code.** 1 when any step fails or the scenario throws. A throw prints `FAIL scenario finished` and saves `error.png`.
 
-A scenario exports one default function that receives `{ page, origin, step, shot }`. `step(name, ok, detail)` records a check. `shot(name, target)` saves a screenshot of `target`, which is `page` by default. Find elements by the label a user sees, such as `Ask anything`, `Retry`, or `Save`, not by CSS classes.
+A scenario exports one default function that receives `{ page, origin, mockUrl, step, shot }`. `mockUrl` is the base URL of the mock provider that `launch --mock` started. Reading it with no mock running fails the scenario with the command to run. `step(name, ok, detail)` records a check. `shot(name, target)` saves a screenshot of `target`, which is `page` by default. Find elements by the label a user sees, such as `Ask anything`, `Retry`, or `Save`, not by CSS classes.
 
 ## Preconditions
 

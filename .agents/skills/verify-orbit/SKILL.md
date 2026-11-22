@@ -9,7 +9,7 @@ Orbit is a web app. The `drive` commands send the same HTTP requests the pages s
 
 The database path is `process.cwd()/data/orbit.db`. Launch uses a sandbox cwd so a run does not open the repo `data/` directory.
 
-Launch reads `ORBIT_VERIFY_PORT`, a whole number from 1 to 65535, default `3210`, and sets auth to trust `127.0.0.1` and `localhost` on that port. One server at a time. If something else owns the selected port, launch stops and names that process. It does not kill it.
+Launch reads `ORBIT_VERIFY_PORT`, a whole number from 1 to 65535 outside the range in `/proc/sys/net/ipv4/ip_local_port_range`, default `3210`, and sets auth to trust `127.0.0.1` and `localhost` on that port. One server at a time. If something else owns the selected port, launch stops and names that process. It does not kill it.
 
 Run the commands from the repo root. To use another port, export it for the whole session.
 
@@ -30,7 +30,7 @@ Done when the command prints `ready` and `signupOpen=yes` on an empty sandbox.
 
 A second launch reuses a healthy sandbox server when the requested port and sandbox mode match its recorded ones. A mismatch or unknown recorded mode exits with a cleanup instruction and leaves the server and data in place. Run `cleanup`, then launch with the intended `ORBIT_VERIFY_PORT` and `ORBIT_SANDBOX` values.
 
-`launch --mock` also starts `scripts/qa/mock-provider.mjs` and saves settings for it as `verify@orbit.local`. The mock binds a free port that the OS picks, and launch records it in `.verify/mock.json`, so two checkouts on one host share no mock port. Give each its own `ORBIT_VERIFY_PORT`. Done when it also prints `mock ready` and `settings baseUrl=http://127.0.0.1:<mock port>/v1 model=mock-genui keySet=yes`. A browse scenario that needs the mock URL reads `mockUrl` from its context. That account blocks `drive signup` and `drive chat` on the same sandbox.
+`launch --mock` also starts `scripts/qa/mock-provider.mjs` and saves settings for it as `verify@orbit.local`. The mock binds a free port that the OS picks and prints it on its first stdout line. Launch reads that line from the mock's own pipe and then writes `.verify/mock.json` once, with the pid, its start time, and the port. Every later command trusts the record only while that pid still has that start time. Two checkouts on one host share no mock port. Give each its own `ORBIT_VERIFY_PORT`. Done when it also prints `mock ready` and `settings baseUrl=http://127.0.0.1:<mock port>/v1 model=mock-genui keySet=yes`. A browse scenario that needs the mock URL reads `mockUrl` from its context. With no mock running, that read fails the scenario and names `launch --mock`. That account blocks `drive signup` and `drive chat` on the same sandbox.
 
 ## Doctor
 

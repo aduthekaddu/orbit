@@ -513,7 +513,8 @@ const server = http.createServer((req, res) => {
     }
     const prompt = lastUserText(body);
     const scenario = scenarioOf(prompt);
-    console.log(`mock request scenario=${scenario.replace(/\n|\r/g, "")}`);
+    // stdout carries only the ready line. verify.mjs closes that pipe once it has read it.
+    console.error(`mock request scenario=${scenario.replace(/\n|\r/g, "")}`);
     const requestLog = process.env.MOCK_REQUEST_LOG ?? path.join(process.cwd(), ".verify", "mock-requests.jsonl");
     fs.mkdirSync(path.dirname(requestLog), { recursive: true });
     fs.appendFileSync(requestLog, `${JSON.stringify({ at: new Date().toISOString(), scenario, body })}\n`);

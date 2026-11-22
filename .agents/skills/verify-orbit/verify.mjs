@@ -33,7 +33,22 @@ function parsePort(value) {
   if (value === undefined || value === "") return 3210;
   const port = /^\d+$/.test(value) ? Number(value) : 0;
   if (port < 1 || port > 65535) fail(`ORBIT_VERIFY_PORT must be a whole number from 1 to 65535. Got "${value}".`);
+  const [low, high] = automaticPortRange();
+  if (port >= low && port <= high) {
+    fail(`ORBIT_VERIFY_PORT=${port} is inside the range ${low}-${high} that the OS hands to any program asking for a free port, so a mock could take it before Orbit binds it. Pick a port outside that range, such as 3230.`);
+  }
   return port;
+}
+
+// The mocks bind port 0, and the OS picks those ports from this range. A port outside it is never handed out.
+function automaticPortRange() {
+  try {
+    const [low, high] = fs.readFileSync("/proc/sys/net/ipv4/ip_local_port_range", "utf8").trim().split(/\s+/).map(Number);
+    if (Number.isInteger(low) && Number.isInteger(high)) return [low, high];
+  } catch {
+    // No such file outside Linux.
+  }
+  return [0, -1];
 }
 
 function sleep(ms) {
@@ -269,52 +284,117 @@ async function startServer() {
   }
 }
 
-function mockBaseUrl() {
-  const state = readState(mockStatePath);
-  return state?.port ? `http://127.0.0.1:${state.port}/v1` : null;
+// Field 22 of /proc/<pid>/stat is the start time in clock ticks since boot. A pid with its start time names one process.
+function startTime(pid) {
+  try {
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+    return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19] ?? "";
+  } catch {
+    return "";
+  }
 }
 
-// The mock binds port 0 and prints the port it got, so two runs on one host never share a port.
-async function waitMockPort(pid) {
-  const deadline = Date.now() + 10_000;
-  while (Date.now() < deadline) {
-    const match = /mock provider on http:\/\/127\.0\.0\.1:(\d+)\/v1/.exec(fs.readFileSync(mockLogPath, "utf8"));
-    if (match) return Number(match[1]);
-    if (!alive(pid)) break;
-    await sleep(100);
-  }
+// mock.json is published once, with pid, start time and port together. It names our mock only while that process runs.
+function isRunning(mock) {
+  return Boolean(mock?.startTime) && startTime(mock.pid) === mock.startTime;
+}
+
+function runningMock() {
+  const mock = readState(mockStatePath);
+  return isRunning(mock) ? mock : null;
+}
+
+function mockUrl() {
+  const mock = runningMock();
+  if (!mock) throw new Error("no mock provider runs for this checkout. Run node .agents/skills/verify-orbit/verify.mjs launch --mock.");
+  return `http://127.0.0.1:${mock.port}/v1`;
+}
+
+// The mock's first stdout line names the port it bound. Read it from this child's own pipe.
+function readyLine(child, pattern, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let buffer = "";
+    const finish = (error, match) => {
+      clearTimeout(timer);
+      child.stdout.off("data", onData);
+      child.off("exit", onExit);
+      if (error) reject(error);
+      else resolve(match);
+    };
+    const onData = (chunk) => {
+      buffer += chunk;
+      const end = buffer.indexOf("\n");
+      if (end === -1) return;
+      const line = buffer.slice(0, end);
+      const match = pattern.exec(line);
+      finish(match ? null : new Error(`first line was "${line}"`), match);
+    };
+    const onExit = (code) => finish(new Error(`exited ${code ?? "on a signal"} before its ready line`));
+    const timer = setTimeout(() => finish(new Error(`printed no ready line within ${timeoutMs} ms`)), timeoutMs);
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", onData);
+    child.once("exit", onExit);
+  });
+}
+
+async function spawnMock() {
+  const logFd = fs.openSync(mockLogPath, "a");
+  const child = spawn(process.execPath, [mockScript], {
+    env: { PATH: process.env.PATH ?? "", MOCK_MODEL },
+    detached: true,
+    stdio: ["ignore", "pipe", logFd],
+  });
+  fs.closeSync(logFd);
+  const stopChild = () => {
+    try {
+      process.kill(-child.pid, "SIGTERM");
+    } catch {
+      // The child already exited.
+    }
+  };
+  let match;
   try {
-    process.kill(-pid, "SIGTERM");
-  } catch {
-    // The child already exited.
+    match = await readyLine(child, /^mock provider on http:\/\/127\.0\.0\.1:(\d+)\/v1 model=\S+$/, 10_000);
+  } catch (error) {
+    stopChild();
+    fail(`mock provider ${error.message}. Log: ${mockLogPath}`);
   }
-  fail(`mock provider did not report a port. Log: ${mockLogPath}`);
+  // The mock's later stdout lines go nowhere. Its requests are in .verify/mock-requests.jsonl.
+  child.stdout.destroy();
+  child.unref();
+  const mock = { pid: child.pid, startTime: startTime(child.pid), port: Number(match[1]) };
+  // link() publishes the whole record at once and fails if another launch in this checkout published first.
+  const draft = `${mockStatePath}.${process.pid}`;
+  fs.writeFileSync(draft, JSON.stringify(mock, null, 2));
+  try {
+    fs.linkSync(draft, mockStatePath);
+    console.log(`mock ready pid=${mock.pid} base=http://127.0.0.1:${mock.port}/v1 model=${MOCK_MODEL}`);
+    return mock;
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+    stopChild();
+    const winner = runningMock();
+    if (!winner) fail("another launch --mock in this checkout recorded a mock that has stopped. Run cleanup, then launch --mock again.");
+    console.log(`mock already running pid=${winner.pid}`);
+    return winner;
+  } finally {
+    fs.rmSync(draft, { force: true });
+  }
 }
 
 async function startMock() {
-  const state = readState(mockStatePath);
-  if (state && alive(state.pid) && state.port && listenerPids(state.port).includes(state.pid)) {
-    console.log(`mock already running pid=${state.pid}`);
+  let mock = readState(mockStatePath);
+  if (isRunning(mock)) {
+    console.log(`mock already running pid=${mock.pid}`);
   } else {
-    await stopMock();
-    const logFd = fs.openSync(mockLogPath, "w");
-    const child = spawn(process.execPath, [mockScript], {
-      env: { PATH: process.env.PATH ?? "", MOCK_MODEL },
-      detached: true,
-      stdio: ["ignore", logFd, logFd],
-    });
-    child.unref();
-    fs.closeSync(logFd);
-    fs.writeFileSync(mockStatePath, JSON.stringify({ pid: child.pid }, null, 2));
-    const port = await waitMockPort(child.pid);
-    fs.writeFileSync(mockStatePath, JSON.stringify({ pid: child.pid, port }, null, 2));
-    console.log(`mock ready pid=${child.pid} base=${mockBaseUrl()} model=${MOCK_MODEL}`);
+    if (mock) fs.rmSync(mockStatePath, { force: true });
+    mock = await spawnMock();
   }
   const cookies = await signInVerify();
   const saved = await request("/api/settings", {
     method: "PUT",
     cookies,
-    json: { baseUrl: mockBaseUrl(), apiKey: FAKE_KEY, model: MOCK_MODEL, reasoningEffort: "low" },
+    json: { baseUrl: `http://127.0.0.1:${mock.port}/v1`, apiKey: FAKE_KEY, model: MOCK_MODEL, reasoningEffort: "low" },
   });
   const body = JSON.parse(saved.text);
   if (saved.status !== 200 || body.model !== MOCK_MODEL || body.keySet !== true) {
@@ -324,20 +404,12 @@ async function startMock() {
 }
 
 async function stopMock() {
-  const state = readState(mockStatePath);
-  if (!state) return;
-  let cmdline = "";
-  try {
-    cmdline = fs.readFileSync(`/proc/${state.pid}/cmdline`, "utf8");
-  } catch {
-    // The mock already exited.
-  }
-  if (cmdline) {
-    if (!cmdline.includes(mockScript)) fail(`pid ${state.pid} is not the mock provider. Not killing it.`);
-    process.kill(-state.pid, "SIGTERM");
+  const mock = runningMock();
+  if (mock) {
+    process.kill(-mock.pid, "SIGTERM");
     const deadline = Date.now() + 5_000;
-    while (alive(state.pid) && Date.now() < deadline) await sleep(100);
-    if (alive(state.pid)) process.kill(-state.pid, "SIGKILL");
+    while (isRunning(mock) && Date.now() < deadline) await sleep(100);
+    if (isRunning(mock)) process.kill(-mock.pid, "SIGKILL");
   }
   fs.rmSync(mockStatePath, { force: true });
   fs.rmSync(mockLogPath, { force: true });
@@ -709,7 +781,10 @@ async function browse(scenario) {
   };
   try {
     const run = (await import(scenarioPath)).default;
-    await run({ page, origin: ORIGIN, mockUrl: mockBaseUrl(), step, shot });
+    const context = { page, origin: ORIGIN, step, shot };
+    // Only a scenario that reads mockUrl needs the mock, so the check runs on that read.
+    Object.defineProperty(context, "mockUrl", { enumerable: true, get: mockUrl });
+    await run(context);
   } catch (error) {
     step("scenario finished", false, redact(error instanceof Error ? error.message.split("\n")[0] : String(error)));
     await shot("error").catch(() => {});
@@ -793,7 +868,7 @@ function runDreamCli(ollamaUrl) {
         ...process.env,
         ORBIT_DATA_DIR: path.join(sandbox, "data"),
         ...(ollamaUrl ? { ORBIT_OLLAMA_URL: ollamaUrl } : {}),
-        ...(readState(mockStatePath) ? { ORBIT_QA_TAGS: "1" } : {}),
+        ...(runningMock() ? { ORBIT_QA_TAGS: "1" } : {}),
       },
     });
     let output = "";
@@ -814,20 +889,9 @@ async function startDriveOllama() {
   const child = spawn(process.execPath, [path.join(repoRoot, "scripts/qa/mock-ollama.mjs")], {
     stdio: ["ignore", "pipe", "pipe"],
   });
-  const port = await new Promise((resolve, reject) => {
-    let buffer = "";
-    const timer = setTimeout(() => reject(new Error("mock ollama did not listen")), 5_000);
-    child.stdout.on("data", (chunk) => {
-      buffer += chunk.toString();
-      const match = /mock-ollama port=(\d+)/.exec(buffer);
-      if (!match) return;
-      clearTimeout(timer);
-      resolve(match[1]);
-    });
-    child.once("exit", (code) => {
-      clearTimeout(timer);
-      reject(new Error(`mock ollama exited ${code ?? "null"}`));
-    });
+  const [, port] = await readyLine(child, /^mock-ollama port=(\d+)$/, 5_000).catch((error) => {
+    child.kill("SIGTERM");
+    throw new Error(`mock ollama ${error.message}`);
   });
   return {
     url: `http://127.0.0.1:${port}`,

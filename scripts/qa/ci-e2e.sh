@@ -7,8 +7,9 @@
 #
 # Run it after `npm run build`, with ORBIT_VERIFY_PORT free on 127.0.0.1 (default 3210).
 # Set ORBIT_VERIFY_PORT=3230 to use another port. The mock providers pick their own free ports,
-# so two runs on one host need only different ORBIT_VERIFY_PORT values. The browse and sandbox
-# suites find their scenarios by name, so a new scenario runs in CI without an edit.
+# so two runs on one host need only different ORBIT_VERIFY_PORT values, each outside the OS's
+# automatic port range. The browse and sandbox suites find their scenarios by name, so a new
+# scenario runs in CI without an edit.
 # Scenarios that need a real provider (`*-real`) are skipped. Every scenario runs even when an
 # earlier one fails, and the script exits 1 if any failed.
 set -uo pipefail
@@ -42,30 +43,23 @@ save_logs() {
     cp "$file" ".verify/evidence/logs/$log_count-$(basename "$file")"
   done
 }
-mock_ollama_pid=""
-# The mock binds port 0 and prints the port it got, so two runs on one host never share a port.
+# The mock binds port 0 and prints `mock-ollama port=<n>` as its first stdout line. The coprocess pipe
+# carries that line from this child only, and bash sets MOCK_OLLAMA_PID before any trap can run.
 start_mock_ollama() {
   mkdir -p .verify
-  node scripts/qa/mock-ollama.mjs > .verify/mock-ollama.log 2>&1 &
-  mock_ollama_pid=$!
-  local port="" tries=0
-  while :; do
-    port=$(sed -n 's/^mock-ollama port=\([0-9]*\)$/\1/p' .verify/mock-ollama.log)
-    [ -n "$port" ] && break
-    if [ "$tries" -ge 50 ] || ! kill -0 "$mock_ollama_pid" 2>/dev/null; then
-      echo "mock ollama did not report a port" >&2
-      return 1
-    fi
-    tries=$((tries + 1))
-    sleep 0.1
-  done
-  export ORBIT_OLLAMA_URL="http://127.0.0.1:$port"
+  coproc MOCK_OLLAMA { exec node scripts/qa/mock-ollama.mjs 2> .verify/mock-ollama.log; }
+  local line=""
+  if ! read -r -t 10 line <&"${MOCK_OLLAMA[0]:-}" || [[ ! $line =~ ^mock-ollama\ port=([0-9]+)$ ]]; then
+    echo "mock ollama did not report a port: ${line:-no line}. Log: .verify/mock-ollama.log" >&2
+    return 1
+  fi
+  export ORBIT_OLLAMA_URL="http://127.0.0.1:${BASH_REMATCH[1]}"
 }
 stop_mock_ollama() {
-  if [ -n "$mock_ollama_pid" ]; then
-    kill "$mock_ollama_pid" 2>/dev/null || true
-    wait "$mock_ollama_pid" 2>/dev/null || true
-    mock_ollama_pid=""
+  local pid=${MOCK_OLLAMA_PID:-}
+  if [ -n "$pid" ]; then
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
   fi
 }
 
@@ -126,7 +120,9 @@ finish() {
 }
 trap finish EXIT
 
-cleanup_server
+# verify refuses a bad ORBIT_VERIFY_PORT here, before any mock takes a port.
+save_logs
+verify cleanup || die "verify cleanup"
 
 case $suite in
   core)

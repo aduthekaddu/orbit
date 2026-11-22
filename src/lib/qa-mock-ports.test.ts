@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
+import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import test, { after } from "node:test";
 
@@ -36,12 +38,13 @@ function stop(child: ChildProcess): Promise<void> {
 }
 
 after(async () => {
+  fs.rmSync(path.join(os.tmpdir(), `orbit-mock-requests-${process.pid}.jsonl`), { force: true });
   for (const holder of holders) await new Promise((resolve) => holder.close(resolve));
   await Promise.all(children.map(stop));
 });
 
 // The port comes from the first full line on stdout, never from a partial chunk.
-function start(mock: Mock, env: Record<string, string> = {}): Promise<{ child: ChildProcess; port: number }> {
+function start(mock: Mock, env: Record<string, string> = {}): Promise<{ child: ChildProcess; port: number; stdout: () => string }> {
   const child = spawn(process.execPath, [path.resolve(mock.script)], {
     env: { ...process.env, ...env },
     stdio: ["ignore", "pipe", "pipe"],
@@ -61,7 +64,7 @@ function start(mock: Mock, env: Record<string, string> = {}): Promise<{ child: C
       clearTimeout(timer);
       const line = stdout.slice(0, end);
       const match = mock.readyLine.exec(line);
-      if (match) resolve({ child, port: Number(match[1]) });
+      if (match) resolve({ child, port: Number(match[1]), stdout: () => stdout });
       else reject(new Error(`${mock.script} printed "${line}" as its first line`));
     });
     child.once("exit", (code) => {
@@ -78,6 +81,21 @@ function status(port: number, urlPath: string): Promise<number | string> {
       resolve(response.statusCode ?? 0);
     });
     request.on("error", (error: NodeJS.ErrnoException) => resolve(error.code ?? error.message));
+  });
+}
+
+function postChat(port: number): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({ model: "mock-genui", stream: true, messages: [{ role: "user", content: "[qa:plain] hi" }] });
+    const request = http.request(
+      { host: "127.0.0.1", port, path: "/v1/chat/completions", method: "POST", agent: false, headers: { "content-type": "application/json" } },
+      (response) => {
+        response.resume();
+        response.on("end", () => resolve(response.statusCode ?? 0));
+      },
+    );
+    request.on("error", reject);
+    request.end(body);
   });
 }
 
@@ -113,3 +131,10 @@ for (const mock of mocks) {
     assert.equal(await status(port, mock.probePath), 200);
   });
 }
+
+// verify.mjs reads the ready line, then closes the pipe and exits. A later stdout write would crash the mock with EPIPE.
+test("mock provider writes nothing to stdout after its ready line", async () => {
+  const provider = await start(mocks[0], { MOCK_REQUEST_LOG: path.join(os.tmpdir(), `orbit-mock-requests-${process.pid}.jsonl`) });
+  assert.equal(await postChat(provider.port), 200);
+  assert.deepEqual(provider.stdout().split("\n").filter(Boolean).slice(1), []);
+});
