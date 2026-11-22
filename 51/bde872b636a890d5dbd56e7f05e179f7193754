@@ -1,0 +1,21 @@
+ARCHITECTURE.md
+  s_41994679c86783::t_ceeb82a9e629a9 19
+SECURITY.md
+  s_41994679c86783::t_0bf83eb0089005 21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "51bde872b636a890d5dbd56e7f05e179f7193754",
+  "prompts": {},
+  "sessions": {
+    "s_41994679c86783": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9438b106-4502-4a1c-82c9-465930b76442",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
