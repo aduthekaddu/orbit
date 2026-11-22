@@ -1,0 +1,19 @@
+CHANGELOG.md
+  s_3304c644a43549::t_ab01357faf16d2 80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8c7b2fd604520e640a3b89121d316e279aecff5d",
+  "prompts": {},
+  "sessions": {
+    "s_3304c644a43549": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ff6ff791-283e-467c-b6d4-2580aabe53c3",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
