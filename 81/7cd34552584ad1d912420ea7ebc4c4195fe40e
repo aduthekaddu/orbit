@@ -1,0 +1,25 @@
+.dockerignore
+  s_7232a2d8f3052b::t_0d5494ea1e1db6 13-14
+CHANGELOG.md
+  s_7232a2d8f3052b::t_ee48d6da481053 7
+CONTRIBUTING.md
+  s_7232a2d8f3052b::t_14888fdd9cd47f 34
+scripts/qa/assert-docker-context.sh
+  s_7232a2d8f3052b::t_ae4fc8e512fe1c 10,14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "817cd34552584ad1d912420ea7ebc4c4195fe40e",
+  "prompts": {},
+  "sessions": {
+    "s_7232a2d8f3052b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00c41e05-1556-413c-ad9f-4c5abb2d2301",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
