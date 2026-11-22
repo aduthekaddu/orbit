@@ -1,0 +1,29 @@
+scripts/qa/assert-docker-context.sh
+  s_544849125e05ed::t_632678da9c66fa 15-16
+.dockerignore
+  s_46b6819203fe4a::t_e1ea2f3a38d7dd 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8698b63304cb148b41e419ad429dd56052870578",
+  "prompts": {},
+  "sessions": {
+    "s_46b6819203fe4a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a92be7f0a08eec461",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    },
+    "s_544849125e05ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7abac178-336f-4888-b680-f16212f46085",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
