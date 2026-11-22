@@ -537,6 +537,8 @@ const server = http.createServer((req, res) => {
         const latestUser = messages.findLastIndex((message) => message.role === "user");
         const notes = messages.slice(latestUser + 1).filter((message) => message.role === "tool").length;
         toolResponse(res, scenario, { text: `Loop note ${notes + 1}`, kind: "fact" }, "remember");
+      } else if (body.messages?.some((message) => message.role === "tool")) {
+        textResponse(res, '<｜DSML｜ calls><｜DSML｜ invoke name="remember"></｜DSML｜ invoke></｜DSML｜ calls>');
       } else {
         textResponse(res, "Answered after four notes.");
       }
