@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- An artifact preview can no longer load another web page into its frame, so its code cannot send data out in that page's URL. (#132)
 - An interrupted generated view shows Stopped instead of an empty cancelled tool card.
 - Set `ORBIT_VERIFY_PORT` to run verify-orbit on another port when the deployment owns `3210`. The default stays `3210`.
 - Override Drizzle tooling's `@esbuild-kit/core-utils` dependency to use patched `esbuild` 0.25.12, removing GHSA-67mh-4wv8-2f99. (#71)
