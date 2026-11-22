@@ -1,0 +1,21 @@
+src/components/chat/markdown-text.tsx
+  s_7fdc4f4461f66d::t_d4809524400cdb 84
+CHANGELOG.md
+  s_7fdc4f4461f66d::t_5fda89adba351f 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d515b53082f11bc27d7df63e776fd9aaf15e32d5",
+  "prompts": {},
+  "sessions": {
+    "s_7fdc4f4461f66d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dc56402d-a35f-45b7-b187-9745f652eda7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
