@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- A new chat's title request sends only the first 2,000 characters of the first message, not the whole message. A long paste is no longer sent to the model a second time. (#135)
 - An interrupted generated view shows Stopped instead of an empty cancelled tool card.
 - Set `ORBIT_VERIFY_PORT` to run verify-orbit on another port when the deployment owns `3210`. The default stays `3210`.
 - Override Drizzle tooling's `@esbuild-kit/core-utils` dependency to use patched `esbuild` 0.25.12, removing GHSA-67mh-4wv8-2f99. (#71)
