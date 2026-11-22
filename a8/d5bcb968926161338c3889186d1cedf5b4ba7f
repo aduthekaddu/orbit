@@ -1,0 +1,24 @@
+src/lib/db/branch-and-search-migrations.test.ts
+  s_a347e03e20f2e7::t_c24124f23d7b91 1-60
+src/lib/chat-write.test.ts
+  s_a347e03e20f2e7::t_293f509b52d9ca 72
+  s_a347e03e20f2e7::t_bd0aa8f0267605 328-335
+src/lib/memory/dream.test.ts
+  s_a347e03e20f2e7::t_9d2044aaf5a8b5 349-376
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a8d5bcb968926161338c3889186d1cedf5b4ba7f",
+  "prompts": {},
+  "sessions": {
+    "s_a347e03e20f2e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cc95665b-4bff-4fc0-9e70-631fe06e9d53",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
