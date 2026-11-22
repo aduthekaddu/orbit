@@ -16,9 +16,10 @@ function functionText(file: string, name: string): string | undefined {
   return end === -1 ? undefined : lines.slice(start, end + 1).join("\n");
 }
 
-// Drops `//` and `/* */` comments and every run of whitespace outside string and template
-// literals. A run between two word characters becomes one space, so `return x` stays apart.
-// A regex literal or a nested template literal is read as plain code.
+// Drops `//` and `/* */` comments, every run of whitespace, and a comma right before `)`, `]`
+// or `}`, all outside string and template literals. A run of whitespace between two word
+// characters becomes one space, so `return x` stays apart. A regex literal or a nested template
+// literal is read as plain code.
 function withoutFormatting(code: string): string {
   let out = "";
   let gap = false;
@@ -44,6 +45,7 @@ function withoutFormatting(code: string): string {
       token = code.slice(i, j + 1);
     }
     if (gap && /[\w$]$/.test(out) && /^[\w$]/.test(token)) out += " ";
+    if (/^[)\]}]$/.test(token) && out.endsWith(",")) out = out.slice(0, -1);
     out += token;
     gap = false;
     i += token.length;
@@ -64,7 +66,7 @@ function namedFunctions(): string[] {
 test("formatting and comments do not change a function's hashed text, and code does", () => {
   const code = 'function f(a) {\n  // why\n  return a + "x  y"; /* note */\n}';
   assert.equal(withoutFormatting(code), 'function f(a){return a+"x  y";}');
-  assert.equal(withoutFormatting("function f(a){ return a+'x  y' }"), "function f(a){return a+'x  y'}");
+  assert.equal(withoutFormatting("function f(\n  a,\n) {\n  return [a, 'x  y',];\n}"), "function f(a){return[a,'x  y'];}");
   assert.notEqual(withoutFormatting(code), withoutFormatting(code.replace("a +", "a -")));
   assert.notEqual(withoutFormatting(code), withoutFormatting(code.replace('"x  y"', '"x y"')));
 });
