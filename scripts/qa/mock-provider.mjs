@@ -531,6 +531,17 @@ const server = http.createServer((req, res) => {
       jsonTitle(res);
       return;
     }
+    if (scenario === "remember-loop") {
+      if (body.tools?.some((entry) => entry.function?.name === "remember")) {
+        const messages = Array.isArray(body.messages) ? body.messages : [];
+        const latestUser = messages.findLastIndex((message) => message.role === "user");
+        const notes = messages.slice(latestUser + 1).filter((message) => message.role === "tool").length;
+        toolResponse(res, scenario, { text: `Loop note ${notes + 1}`, kind: "fact" }, "remember");
+      } else {
+        textResponse(res, "Answered after four notes.");
+      }
+      return;
+    }
     if (scenario === "dream-fail") {
       res.writeHead(500, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: { message: "mock failure", type: "server_error" } }));

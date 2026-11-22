@@ -19,3 +19,7 @@ export function searchAnswerStep({ stepNumber, messages, initialInstructions }: 
     messages: [{ role: "user", content: JSON.stringify(messages) }],
   } satisfies PrepareStepResult<ToolSet>;
 }
+
+export function answerStepFor(tools: ToolSet) {
+  return tools.web_search ? searchAnswerStep : undefined;
+}
