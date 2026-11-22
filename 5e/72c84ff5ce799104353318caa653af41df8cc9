@@ -1,0 +1,19 @@
+.agents/skills/verify-orbit/scenarios/title-prompt.mjs
+  s_b5db481d1726e6::t_bc34bf7679b62f 27-28,43-45,48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5e72c84ff5ce799104353318caa653af41df8cc9",
+  "prompts": {},
+  "sessions": {
+    "s_b5db481d1726e6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "20bee539-1784-449a-ada5-53e2cdf345ce",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
