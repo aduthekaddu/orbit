@@ -13,7 +13,9 @@ export default async function sandboxScroll({ page, origin, step, shot }) {
       const chat = process.argv[1];
       const code = "# " + "x".repeat(500) + "\\nprint('\\\\n' * 65000 + 'END-STDOUT')\\nimport sys\\nsys.stderr.write('error\\\\n' * 80 + 'END-STDERR')\\n" + "# source line\\n".repeat(1000) + "# END-SOURCE";
       const input = { language: "python", code };
-      const output = await runCode(new Docker(), input);
+      const run = runCode(new Docker(), input);
+      const [output, cleanup] = await Promise.all([run.result, run.cleanup]);
+      if (cleanup !== "removed") process.exit(1);
       if (output.exitCode !== 0 || !output.stdout.endsWith("END-STDOUT\\n")) process.exit(1);
       upsertMessage(chat, { id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: "Show the full program and its output." }] });
       if (!upsertMessage(chat, { id: crypto.randomUUID(), role: "assistant", parts: [
