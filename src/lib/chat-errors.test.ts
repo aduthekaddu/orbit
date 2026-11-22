@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
-import { Redactor, streamErrorMessage, type SettingsLabels } from "./chat-errors";
+import { getTableColumns } from "drizzle-orm";
+import { CREDENTIAL_NOUNS, logProviderError, REDACTED, Redactor, streamErrorMessage, type SettingsLabels, type StoredCredentials } from "./chat-errors";
+import { settings } from "./db/schema";
 import { renderUiTool } from "./genui/tool";
 import { createRunCodeTool } from "./tools/run-code";
 
@@ -132,29 +134,65 @@ const PROVIDER_KEY = "made-up-provider-key";
 
 function toolInputError(path: string[]) {
   const issues = [{ code: "invalid_type", path, message: "Invalid input" }];
-  return `Invalid input for tool run_code: {}\nError message: ${JSON.stringify(issues)}`;
+  const error = new Error(`Invalid input for tool run_code: {}\nError message: ${JSON.stringify(issues)}`);
+  error.name = "AI_InvalidToolInputError";
+  return error;
 }
 
-test("a credential cut by the length limit leaves no part of itself in the tool error", () => {
+function capturedErrors(run: () => unknown) {
+  const lines: string[] = [];
   const original = console.error;
-  console.error = () => {};
+  console.error = (...args: unknown[]) => lines.push(args.map(String).join(" "));
   try {
-    const text = streamErrorMessage(toolInputError(["x".repeat(30) + PROVIDER_KEY]), redact);
-    assert.doesNotMatch(text, new RegExp(PROVIDER_KEY.slice(0, 6)));
+    return { result: run(), lines };
   } finally {
     console.error = original;
+  }
+}
+
+test("a credential cut by the length limit leaves no part of itself in the tool error or its log line", () => {
+  const { result, lines } = capturedErrors(() => streamErrorMessage(toolInputError(["x".repeat(30) + PROVIDER_KEY]), redact));
+  assert.match(String(result), /^Invalid input for tool run_code: x{30}\[redacted\]: Invalid input$/);
+  assert.deepEqual(lines, [`chat stream error ${result}`]);
+});
+
+test("a credential spelled by joining the error path leaves no part of itself, even where the field is cut", () => {
+  const dotted = new Redactor({ apiKey: "made.up.provider.key", tavilyApiKey: "", githubToken: "" });
+  for (const path of [["x".repeat(35), "x".repeat(35), "made", "up", "provider", "key"], ["x".repeat(34) + "made.up", "provider.key"]]) {
+    const { result, lines } = capturedErrors(() => streamErrorMessage(toolInputError(path), dotted));
+    assert.match(String(result), /^Invalid input for tool run_code: x{34}/);
+    for (const text of [String(result), ...lines]) assert.doesNotMatch(text, /made|provider\.key/);
   }
 });
 
-test("a credential rebuilt by joining the error path is redacted", () => {
-  const dotted = new Redactor({ apiKey: "made.up.provider.key", tavilyApiKey: "", githubToken: "" });
-  const original = console.error;
-  console.error = () => {};
-  try {
-    assert.doesNotMatch(streamErrorMessage(toolInputError(["made", "up", "provider", "key"]), dotted), /made\.up\.provider\.key/);
-  } finally {
-    console.error = original;
-  }
+test("a credential that starts inside a shorter one is masked whole", () => {
+  const overlap = new Redactor({ apiKey: "made-up-left-0001", tavilyApiKey: "", githubToken: "left-0001-made-up-right" });
+  assert.equal(overlap.text("made-up-left-0001-made-up-right"), "[redacted]");
+});
+
+test("a credential that the marker rebuilds again and again is masked in time that grows with the text, not its square", () => {
+  const secret = "]made-up-key";
+  const bracket = new Redactor({ apiKey: secret, tavilyApiKey: "", githubToken: "" });
+  const started = performance.now();
+  const masked = bracket.text(secret + "made-up-key".repeat(20_000));
+  const elapsed = performance.now() - started;
+  assert.ok(!masked.includes(secret), "the masked text carries the credential");
+  assert.ok(elapsed < 500, `masking 220,012 characters took ${elapsed.toFixed(0)} ms`);
+});
+
+test("a credential shorter than the minimum length never reaches a log line or stream error text", () => {
+  const short = new Redactor({ apiKey: "sk-1234", tavilyApiKey: "", githubToken: "" });
+  const { result, lines } = capturedErrors(() => {
+    short.logError("chat provider error", "AI_APICallError", "401", "key sk-1234 was rejected");
+    return streamErrorMessage("key sk-1234 was rejected", short);
+  });
+  assert.equal(result, "[redacted]");
+  assert.deepEqual(lines, ["chat provider error AI_APICallError 401 [redacted]"]);
+});
+
+test("a thrown value that is not an Error is logged by type", () => {
+  const { lines } = capturedErrors(() => logProviderError(Object.create(null), redact));
+  assert.deepEqual(lines, ["chat provider error object"]);
 });
 
 test("a credential shorter than the minimum length leaves saved text and field names alone", () => {
@@ -170,12 +208,28 @@ test("a credential rebuilt by the marker itself is redacted", () => {
 });
 
 test("a settings field named like a credential must be labelled one", () => {
-  const labels: SettingsLabels<"webhookSecret" | "proxyPassword" | "timeout"> = {
+  const labels: SettingsLabels<"webhookSecret" | "proxyPassword" | "githubPat" | "apiKeys" | "accessToken2" | "timeout"> = {
     // @ts-expect-error A name ending in Secret cannot be labelled setting.
     webhookSecret: "setting",
     // @ts-expect-error A name ending in Password cannot be labelled setting.
     proxyPassword: "setting",
+    // @ts-expect-error A name ending in Pat cannot be labelled setting.
+    githubPat: "setting",
+    // @ts-expect-error A plural credential name cannot be labelled setting.
+    apiKeys: "setting",
+    // @ts-expect-error A numbered credential name cannot be labelled setting.
+    accessToken2: "setting",
     timeout: "setting",
   };
   assert.equal(labels.timeout, "setting");
+});
+
+test("every settings column named like a credential is masked", () => {
+  const credentialName = new RegExp(`(?:${CREDENTIAL_NOUNS.join("|")})(?:s|\\d+)?$`, "i");
+  const columns = Object.keys(getTableColumns(settings));
+  const values = Object.fromEntries(columns.map((column) => [column, `made-up-${column}-value-0006`]));
+  const all = new Redactor(values as unknown as StoredCredentials);
+  const named = columns.filter((column) => credentialName.test(column));
+  assert.ok(named.length > 0, "no settings column is named like a credential");
+  for (const column of named) assert.equal(all.text(values[column]), REDACTED, `${column} is not masked`);
 });

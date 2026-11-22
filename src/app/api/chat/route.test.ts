@@ -114,7 +114,7 @@ before(async () => {
     apiKey: PROVIDER_KEY,
     tavilyApiKey: TAVILY_KEY,
     githubToken: github.token,
-    githubMcpUrl: `${github.url}?mode=error-token`,
+    githubMcpUrl: `${github.url}?mode=error-token&echo=${encodeURIComponent(`${TAVILY_KEY} and ${PROVIDER_KEY}`)}`,
     model: "mock",
     reasoningEffort: "medium",
   });
@@ -203,9 +203,9 @@ test("a tool input error that names the Tavily key leaves it out of the stream e
   assertNoCredential("log", logged);
 });
 
-test("a GitHub tool error that names the stored token leaves it out of the stream error text, the saved reply and the log", async () => {
+test("a GitHub tool error that names every stored credential leaves them out of the stream error text, the saved reply and the log", async () => {
   const { streamed, logged, saved } = await send("c-github", "[github-call] list issues");
-  assert.match(logged, /chat stream error token \[redacted\] cannot read this repository/);
+  assert.match(logged, /chat stream error token \[redacted\] cannot read this repository with \[redacted\] and \[redacted\]/);
   assert.match(errorTexts(streamed), /The model request failed/);
   assert.match(saved, /Done\./);
   assert.ok(github.callCount() > 0, "the GitHub tool was not called");

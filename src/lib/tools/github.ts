@@ -77,7 +77,7 @@ function redactTool(tool: Tool, redact: Redactor): Tool {
       try {
         return redact.value(await execute(input, options));
       } catch (error) {
-        if (error instanceof Error) throw new Error(redact.text(error.message));
+        if (error instanceof Error) throw new Error(redact.diagnostic(error.message));
         throw error;
       }
     },

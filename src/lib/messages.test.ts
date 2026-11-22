@@ -193,8 +193,17 @@ test("a saved reply's search text carries no credential that joining parts or st
     output: { stdout: `${key.slice(0, 7)}\u001b[31m${key.slice(7)}`, stderr: "", exitCode: 0, durationMs: 1, timedOut: false, truncated: false },
   };
   const parts = [{ type: "text", text: key.slice(0, 9) }, { type: "text", text: key.slice(9) }, run];
-  assert.equal(mods.upsertMessage("c1", { id: "redacted-reply", role: "assistant", parts }, null, undefined, redact), true);
-  const row = mods.db.$client.prepare("select content, parts from messages where id = ?").get("redacted-reply") as { content: string; parts: string };
-  assert.ok(!row.content.includes(key), `search text carries the key: ${row.content}`);
-  assert.ok(!row.parts.includes(key), "saved parts carry the key");
+  assert.equal(mods.upsertMessage("c1", { id: "joined-reply", role: "assistant", parts }, null, undefined, redact), true);
+  const row = mods.db.$client.prepare("select content from messages where id = ?").get("joined-reply") as { content: string };
+  assert.equal(row.content, "[redacted]\n[redacted]\nprint(1)");
+});
+
+test("a saved reply's parts and search text carry no credential that a part holds whole", () => {
+  const key = "made-up-provider-key";
+  const redact = new Redactor({ apiKey: key, tavilyApiKey: "", githubToken: "" });
+  const parts = [{ type: "text", text: `the key is ${key}` }];
+  assert.equal(mods.upsertMessage("c1", { id: "whole-reply", role: "assistant", parts }, null, undefined, redact), true);
+  const row = mods.db.$client.prepare("select content, parts from messages where id = ?").get("whole-reply") as { content: string; parts: string };
+  assert.equal(row.content, "the key is [redacted]");
+  assert.deepEqual(JSON.parse(row.parts), [{ type: "text", text: "the key is [redacted]" }]);
 });
