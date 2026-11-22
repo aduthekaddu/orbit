@@ -1,0 +1,24 @@
+.agents/skills/verify-orbit/features/memory.md
+  s_576d751a80529c::t_d2cae56d23d9d4 7
+  s_576d751a80529c::t_bd708ae7bba07e 5
+.agents/skills/verify-orbit/scenarios/memory.mjs
+  s_576d751a80529c::t_0215ddf5c2a16b 121-128,130-135,137,139-141
+  s_576d751a80529c::t_60c8c69291fe51 136,138
+  s_576d751a80529c::t_eb7185fd967b7a 129
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ae00b49875e79587b88434d9ad6d8f50f313d4bf",
+  "prompts": {},
+  "sessions": {
+    "s_576d751a80529c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8dba12cb-1c2f-4e73-9063-eff0103a63c7",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
