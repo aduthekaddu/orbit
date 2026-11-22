@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test, { before, after } from "node:test";
+import { Redactor } from "./chat-errors";
 
 type Modules = {
   db: typeof import("./db").db;
@@ -179,4 +180,21 @@ test("a finished regenerate saves its new reply", () => {
 
 test("a reply with nothing visible is not saved", () => {
   assert.equal(mods.shouldSaveReply({ regenerate: false, interrupted: false, hadReply: false, visible: false }), false);
+});
+
+test("a saved reply's search text carries no credential that joining parts or stripping terminal codes rebuilds", () => {
+  const key = "made-up-provider-key";
+  const redact = new Redactor({ apiKey: key, tavilyApiKey: "", githubToken: "" });
+  const run = {
+    type: "tool-run_code",
+    toolCallId: "run-1",
+    state: "output-available",
+    input: { language: "python", code: "print(1)" },
+    output: { stdout: `${key.slice(0, 7)}\u001b[31m${key.slice(7)}`, stderr: "", exitCode: 0, durationMs: 1, timedOut: false, truncated: false },
+  };
+  const parts = [{ type: "text", text: key.slice(0, 9) }, { type: "text", text: key.slice(9) }, run];
+  assert.equal(mods.upsertMessage("c1", { id: "redacted-reply", role: "assistant", parts }, null, undefined, redact), true);
+  const row = mods.db.$client.prepare("select content, parts from messages where id = ?").get("redacted-reply") as { content: string; parts: string };
+  assert.ok(!row.content.includes(key), `search text carries the key: ${row.content}`);
+  assert.ok(!row.parts.includes(key), "saved parts carry the key");
 });

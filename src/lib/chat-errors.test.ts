@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
-import { Redactor, streamErrorMessage } from "./chat-errors";
+import { Redactor, streamErrorMessage, type SettingsLabels } from "./chat-errors";
 import { renderUiTool } from "./genui/tool";
 import { createRunCodeTool } from "./tools/run-code";
 
 type Chunk = { type: string; errorText?: string };
 
-const redact = new Redactor({ apiKey: "sk-test-secret", tavilyApiKey: "tvly-test-secret", githubToken: "secret-token-value" });
+const redact = new Redactor({ apiKey: "made-up-provider-key", tavilyApiKey: "made-up-search-key", githubToken: "made-up-github-token" });
 
 async function rejectedCall(input: string, toolName: "run_code" | "render_ui" = "run_code") {
   const model = new MockLanguageModelV4({
@@ -94,17 +94,17 @@ test("other failures keep their messages", () => {
   try {
     assert.equal(streamErrorMessage("AI_APICallError: Rate limit reached", redact), "Rate limit reached");
     assert.equal(streamErrorMessage(new Error("socket hang up"), redact), "The model request failed");
-    assert.equal(streamErrorMessage("token sk-test-secret was rejected", redact), "token [redacted] was rejected");
-    assert.equal(streamErrorMessage("GitHub said secret-token-value", redact), "GitHub said [redacted]");
-    assert.equal(streamErrorMessage("search said tvly-test-secret", redact), "search said [redacted]");
+    assert.equal(streamErrorMessage("token made-up-provider-key was rejected", redact), "token [redacted] was rejected");
+    assert.equal(streamErrorMessage("GitHub said made-up-github-token", redact), "GitHub said [redacted]");
+    assert.equal(streamErrorMessage("search said made-up-search-key", redact), "search said [redacted]");
   } finally {
     console.error = error;
   }
 });
 
 test("every stored credential is redacted from text, nested values and field names", () => {
-  assert.equal(redact.text("a sk-test-secret b tvly-test-secret c secret-token-value"), "a [redacted] b [redacted] c [redacted]");
-  assert.deepEqual(redact.value({ issues: ["tvly-test-secret"], "secret-token-value": { title: "sk-test-secret" } }), {
+  assert.equal(redact.text("a made-up-provider-key b made-up-search-key c made-up-github-token"), "a [redacted] b [redacted] c [redacted]");
+  assert.deepEqual(redact.value({ issues: ["made-up-search-key"], "made-up-github-token": { title: "made-up-provider-key" } }), {
     issues: ["[redacted]"],
     "[redacted]": { title: "[redacted]" },
   });
@@ -121,9 +121,61 @@ test("a log line through the redactor carries no stored credential", () => {
   const original = console.error;
   console.error = (...args: unknown[]) => lines.push(args);
   try {
-    redact.logError("chat title", "rejected tvly-test-secret", "and sk-test-secret");
+    redact.logError("chat title", "rejected made-up-search-key", "and made-up-provider-key");
   } finally {
     console.error = original;
   }
   assert.deepEqual(lines, [["chat title", "rejected [redacted]", "and [redacted]"]]);
+});
+
+const PROVIDER_KEY = "made-up-provider-key";
+
+function toolInputError(path: string[]) {
+  const issues = [{ code: "invalid_type", path, message: "Invalid input" }];
+  return `Invalid input for tool run_code: {}\nError message: ${JSON.stringify(issues)}`;
+}
+
+test("a credential cut by the length limit leaves no part of itself in the tool error", () => {
+  const original = console.error;
+  console.error = () => {};
+  try {
+    const text = streamErrorMessage(toolInputError(["x".repeat(30) + PROVIDER_KEY]), redact);
+    assert.doesNotMatch(text, new RegExp(PROVIDER_KEY.slice(0, 6)));
+  } finally {
+    console.error = original;
+  }
+});
+
+test("a credential rebuilt by joining the error path is redacted", () => {
+  const dotted = new Redactor({ apiKey: "made.up.provider.key", tavilyApiKey: "", githubToken: "" });
+  const original = console.error;
+  console.error = () => {};
+  try {
+    assert.doesNotMatch(streamErrorMessage(toolInputError(["made", "up", "provider", "key"]), dotted), /made\.up\.provider\.key/);
+  } finally {
+    console.error = original;
+  }
+});
+
+test("a credential shorter than the minimum length leaves saved text and field names alone", () => {
+  const short = new Redactor({ apiKey: "type", tavilyApiKey: "ollama", githubToken: "[redacted]" });
+  const part = { type: "text", text: "type ollama into the [redacted] field" };
+  assert.deepEqual(short.value(part), part);
+  assert.equal(short.text("ollama"), "ollama");
+});
+
+test("a credential rebuilt by the marker itself is redacted", () => {
+  const rebuilt = new Redactor({ apiKey: "made-up-provider-key", tavilyApiKey: "[redacted]-tail-000005", githubToken: "" });
+  assert.equal(rebuilt.text("made-up-provider-key-tail-000005"), "[redacted]");
+});
+
+test("a settings field named like a credential must be labelled one", () => {
+  const labels: SettingsLabels<"webhookSecret" | "proxyPassword" | "timeout"> = {
+    // @ts-expect-error A name ending in Secret cannot be labelled setting.
+    webhookSecret: "setting",
+    // @ts-expect-error A name ending in Password cannot be labelled setting.
+    proxyPassword: "setting",
+    timeout: "setting",
+  };
+  assert.equal(labels.timeout, "setting");
 });

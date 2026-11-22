@@ -1,7 +1,7 @@
 import { convertToModelMessages, createUIMessageStreamResponse, stepCountIs, streamText, toUIMessageStream, type UIMessage } from "ai";
 import { z } from "zod";
 import { ARTIFACT_INSTRUCTIONS } from "@/lib/artifacts/detect";
-import { Redactor, streamErrorMessage } from "@/lib/chat-errors";
+import { logProviderError, Redactor, streamErrorMessage } from "@/lib/chat-errors";
 import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
 import { assistantHasVisiblePart, settleInterruptedParts } from "@/lib/genui/spec";
 import { embedPending } from "@/lib/memory/embed";
@@ -135,8 +135,7 @@ export async function POST(request: Request) {
       prepareStep: tools.web_search ? searchAnswerStep : undefined,
       abortSignal: request.signal,
       ...(allowReasoning ? reasoningOptions(settings.reasoningEffort) : {}),
-      // The default logs the raw provider error. The UI stream's onError below logs it redacted.
-      onError: () => {},
+      onError: ({ error }) => logProviderError(error, redact),
     });
 
     // Send the response id so the client reuses it. Without it the client mints
@@ -168,10 +167,11 @@ export async function POST(request: Request) {
             {
               id: responseMessage.id || write.responseId,
               role: "assistant",
-              parts: redact.value(parts),
+              parts,
             },
             lastUser?.id,
             expected,
+            redact,
           );
           touchChat(chat.id);
         } finally {

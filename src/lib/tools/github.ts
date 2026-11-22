@@ -1,6 +1,6 @@
 import { createMCPClient, type MCPClient } from "@ai-sdk/mcp";
 import type { Tool } from "ai";
-import { Redactor, type StoredCredentials } from "../chat-errors";
+import { REDACTED, Redactor, type StoredCredentials } from "../chat-errors";
 import { githubLogin } from "./github-links";
 
 export const DEFAULT_GITHUB_MCP_URL = "https://api.githubcopilot.com/mcp/";
@@ -135,12 +135,15 @@ async function listedTools(client: MCPClient, signal: AbortSignal | undefined, t
   return { ...page, tools, nextCursor: undefined };
 }
 
-export async function githubTools(settings: GithubSettings, input?: { signal?: AbortSignal; now?: number; tools?: string; setupMs?: number }): Promise<McpToolSet> {
+export async function githubTools(
+  settings: GithubSettings,
+  input?: { signal?: AbortSignal; now?: number; tools?: string; setupMs?: number; redact?: Redactor },
+): Promise<McpToolSet> {
   const target = githubMcpTarget(settings.githubMcpUrl);
   if (!target.ok) throw new GithubMcpUrlError();
   const mcpUrl = target.url;
   const token = settings.githubToken;
-  const redact = new Redactor(settings);
+  const redact = input?.redact ?? new Redactor(settings);
   const extraTools = input?.tools ?? "";
   const setupMs = input?.setupMs ?? GITHUB_SETUP_MS;
   const started = Date.now();
@@ -196,15 +199,27 @@ export async function openGithubTurn(settings: GithubSettings, signal?: AbortSig
   }
 }
 
-export async function checkGithub(settings: GithubSettings, signal?: AbortSignal): Promise<{ ok: true; login: string } | { ok: false; error: string }> {
+// A token submitted with the check replaces the stored one for this request, and the redactor covers both.
+export async function checkGithub(
+  stored: GithubSettings,
+  submitted: { token?: string; mcpUrl?: string } = {},
+  signal?: AbortSignal,
+): Promise<{ ok: true; login: string } | { ok: false; error: string }> {
+  const settings = {
+    ...stored,
+    githubToken: submitted.token?.trim() || stored.githubToken,
+    githubMcpUrl: submitted.mcpUrl ?? stored.githubMcpUrl,
+  };
+  const redact = new Redactor(stored, settings);
   if (!settings.githubToken.trim()) return { ok: false, error: "Add a GitHub token." };
   try {
-    const opened = await githubTools(settings, { signal, tools: GITHUB_CHECK_TOOLS });
+    const opened = await githubTools(settings, { signal, tools: GITHUB_CHECK_TOOLS, redact });
     try {
       const tool = opened.tools.github_get_me;
       if (!tool?.execute) return { ok: false, error: "GitHub is unavailable." };
+      // githubLogin decodes JSON inside the masked result, which can spell a credential again.
       const login = githubLogin(await tool.execute({}, { toolCallId: "github-check", messages: [], abortSignal: signal, context: undefined }));
-      if (!login || login.includes("[redacted]")) return { ok: false, error: "GitHub did not return a login." };
+      if (!login || redact.text(login).includes(REDACTED)) return { ok: false, error: "GitHub did not return a login." };
       return { ok: true, login };
     } finally {
       await opened.close();
@@ -212,6 +227,6 @@ export async function checkGithub(settings: GithubSettings, signal?: AbortSignal
   } catch (error) {
     if (signal?.aborted) throw error;
     if (error instanceof GithubMcpUrlError) return { ok: false, error: error.message };
-    return { ok: false, error: githubFailureText(error, new Redactor(settings)) };
+    return { ok: false, error: githubFailureText(error, redact) };
   }
 }

@@ -258,11 +258,11 @@ test("a wrong token leaves the turn with no GitHub tools", { timeout: 20_000 }, 
       logs.push(args.map(String).join(" "));
     };
     try {
-      const opened = await openGithubTurn(githubSettings("wrong-token", mock.url));
+      const opened = await openGithubTurn(githubSettings("wrong-github-token-0004", mock.url));
       assert.deepEqual(opened.tools, {});
       await opened.close();
       assert.equal(logs.length, 1);
-      assert.doesNotMatch(logs[0], /wrong-token/);
+      assert.doesNotMatch(logs[0], /wrong-github-token-0004/);
       assert.doesNotMatch(logs[0], /Authorization/i);
       assert.equal(mock.listCount(), 0);
     } finally {
@@ -291,6 +291,22 @@ test("check does not return the GitHub token when the server echoes it", { timeo
   await withMock(async (mock) => {
     const checked = await checkGithub(githubSettings(mock.token, `${mock.url}?mode=echo-token`));
     assert.equal(JSON.stringify(checked).includes(mock.token), false);
+  });
+});
+
+test("check rejects a login that decodes to the token from JSON escapes", { timeout: 20_000 }, async () => {
+  await withMock(async (mock) => {
+    const checked = await checkGithub(githubSettings(mock.token, `${mock.url}?escaped-login=${encodeURIComponent(mock.token)}`));
+    assert.deepEqual(checked, { ok: false, error: "GitHub did not return a login." });
+  });
+});
+
+test("check with a submitted token also rejects a login that decodes to the stored token", { timeout: 20_000 }, async () => {
+  await withMock(async (mock) => {
+    const stored = "made-up-stored-github-token-0005";
+    const url = `${mock.url}?escaped-login=${encodeURIComponent(stored)}`;
+    const checked = await checkGithub(githubSettings(stored, url), { token: mock.token });
+    assert.deepEqual(checked, { ok: false, error: "GitHub did not return a login." });
   });
 });
 
@@ -390,9 +406,9 @@ test("check reports the GitHub login and a rejected token", { timeout: 20_000 },
     assert.deepEqual(ok, { ok: true, login: "octocat" });
     assert.equal(JSON.stringify(ok).includes(mock.token), false);
     await assertNoOpenSessions(mock.openSessions);
-    const bad = await checkGithub(githubSettings("wrong-token", mock.url));
+    const bad = await checkGithub(githubSettings("wrong-github-token-0004", mock.url));
     assert.deepEqual(bad, { ok: false, error: "GitHub rejected the token." });
-    assert.equal(JSON.stringify(bad).includes("wrong-token"), false);
+    assert.equal(JSON.stringify(bad).includes("wrong-github-token-0004"), false);
   });
 });
 

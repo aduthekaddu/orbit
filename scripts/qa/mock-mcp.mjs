@@ -5,7 +5,7 @@ import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
-export const mockGithubToken = "good-token";
+export const mockGithubToken = "made-up-github-token-0003";
 
 const issue = {
   number: 7,
@@ -29,7 +29,12 @@ function headerList(value) {
   return String(value ?? "").split(",").map((part) => part.trim()).filter(Boolean);
 }
 
-function createMcp(headers, mode, token) {
+// Writes every character of the value as a JSON \u escape, so the raw text never holds the value.
+function escapedJson(value) {
+  return `"${[...value].map((char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`).join("")}"`;
+}
+
+function createMcp(headers, mode, token, escapedLogin) {
   const toolsets = new Set(headerList(headers["x-mcp-toolsets"]));
   const named = new Set(headerList(headers["x-mcp-tools"]));
   const enabled = (name, toolset) => toolsets.has(toolset) || named.has(name);
@@ -37,7 +42,7 @@ function createMcp(headers, mode, token) {
   const mcp = new McpServer({ name: "mock-github", version: "0.0.1" });
   if (enabled("get_me", "context")) {
     mcp.registerTool("get_me", { description: "Authenticated user" }, async () => ({
-      content: [{ type: "text", text: JSON.stringify({ login }) }],
+      content: [{ type: "text", text: escapedLogin ? `{"login":${escapedJson(escapedLogin)}}` : JSON.stringify({ login }) }],
     }));
   }
   if (enabled("list_issues", "issues")) {
@@ -171,7 +176,7 @@ export async function startMockMcp({ port = 0 } = {}) {
         sessions.delete(id);
       },
     });
-    const mcp = createMcp(request.headers, mode, request.headers.authorization?.slice("Bearer ".length) ?? "");
+    const mcp = createMcp(request.headers, mode, request.headers.authorization?.slice("Bearer ".length) ?? "", url.searchParams.get("escaped-login"));
     await mcp.connect(transport);
     await transport.handleRequest(request, response, body);
   });

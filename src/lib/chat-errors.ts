@@ -11,6 +11,12 @@ const REASON_LIMIT = 240;
 
 type StoredColumn = Exclude<keyof typeof settings.$inferSelect, "id" | "updatedAt">;
 
+// A field whose name ends like a credential's must be labelled one. The rest may take either label.
+type CredentialName = `${string}${"key" | "token" | "secret" | "password"}`;
+export type SettingsLabels<Field extends string> = {
+  [Name in Field]: Lowercase<Name> extends CredentialName ? "credential" : "credential" | "setting";
+};
+
 // Every stored setting and every settings column must be listed here, so a new
 // credential cannot be added without the Redactor covering it.
 const SETTINGS_FIELDS = {
@@ -22,7 +28,7 @@ const SETTINGS_FIELDS = {
   githubMcpUrl: "setting",
   model: "setting",
   reasoningEffort: "setting",
-} as const satisfies Record<keyof SettingsRecord | StoredColumn, "credential" | "setting">;
+} as const satisfies SettingsLabels<keyof SettingsRecord | StoredColumn>;
 
 type SettingsField = keyof typeof SETTINGS_FIELDS;
 type CredentialField = { [Field in SettingsField]: (typeof SETTINGS_FIELDS)[Field] extends "credential" ? Field : never }[SettingsField];
@@ -32,36 +38,41 @@ const CREDENTIAL_FIELDS = (Object.keys(SETTINGS_FIELDS) as SettingsField[]).filt
   (field): field is CredentialField => SETTINGS_FIELDS[field] === "credential",
 );
 
-function sanitize(message: string, secrets: readonly string[]) {
-  let text = message;
-  for (const value of secrets) text = text.split(value).join("[redacted]");
-  return text;
-}
+export const REDACTED = "[redacted]";
+// A shorter value, such as "ollama" or "type", also occurs in ordinary reply text and
+// field names, and masking it would rewrite saved replies. The minimum is longer than
+// REDACTED, so each replacement shortens the text and no credential equals the marker.
+export const MIN_CREDENTIAL_LENGTH = 12;
 
-function redactValue(value: unknown, secrets: readonly string[]): unknown {
-  if (typeof value === "string") return sanitize(value, secrets);
-  if (Array.isArray(value)) return value.map((item) => redactValue(item, secrets));
-  if (!value || typeof value !== "object") return value;
-  const copy: Record<string, unknown> = {};
-  for (const [key, child] of Object.entries(value)) copy[sanitize(key, secrets)] = redactValue(child, secrets);
-  return copy;
+function escapeRegExp(text: string) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export class Redactor {
-  readonly #secrets: readonly string[];
+  readonly #pattern: RegExp | null;
 
-  constructor(credentials: StoredCredentials) {
-    this.#secrets = CREDENTIAL_FIELDS.map((field) => credentials[field])
-      .filter((value) => value.length > 0)
-      .sort((left, right) => right.length - left.length);
+  constructor(...sources: [StoredCredentials, ...StoredCredentials[]]) {
+    const secrets = new Set(sources.flatMap((credentials) => CREDENTIAL_FIELDS.map((field) => credentials[field])));
+    const matched = [...secrets].filter((value) => value.length >= MIN_CREDENTIAL_LENGTH).sort((left, right) => right.length - left.length);
+    this.#pattern = matched.length > 0 ? new RegExp(matched.map(escapeRegExp).join("|"), "g") : null;
   }
 
+  // Repeats until nothing matches, because a marker next to other text can spell another credential.
   text(message: string) {
-    return sanitize(message, this.#secrets);
+    if (!this.#pattern) return message;
+    let text = message;
+    for (let previous = ""; previous !== text; ) {
+      previous = text;
+      text = text.replace(this.#pattern, REDACTED);
+    }
+    return text;
   }
 
-  value(value: unknown) {
-    return redactValue(value, this.#secrets);
+  value(value: unknown): unknown {
+    if (typeof value === "string") return this.text(value);
+    if (Array.isArray(value)) return value.map((item) => this.value(item));
+    if (!value || typeof value !== "object") return value;
+    return Object.fromEntries(Object.entries(value).map(([key, child]) => [this.text(key), this.value(child)]));
   }
 
   logError(label: string, ...details: string[]) {
@@ -109,14 +120,29 @@ function shortToolInputError(text: string) {
   return match ? `Invalid input for tool ${match[1]}: ${inputProblem(match[2])}` : undefined;
 }
 
+// Masks before shortening, so a cut cannot leave part of a credential, and again after
+// joining the error path, which can spell one.
+function errorText(message: string, redact: Redactor) {
+  const masked = redact.text(message);
+  return redact.text(shortToolInputError(masked) ?? cleanErrorText(masked));
+}
+
 export function streamErrorMessage(error: unknown, redact: Redactor) {
-  if (typeof error === "string") return redact.text(shortToolInputError(error) ?? cleanErrorText(error));
+  if (typeof error === "string") return errorText(error, redact);
   const message = error instanceof Error ? error.message : "The model request failed";
   if (error instanceof Error && error.name === "AI_InvalidToolInputError") {
-    const text = redact.text(shortToolInputError(message) ?? cleanErrorText(message));
+    const text = errorText(message, redact);
     redact.logError("chat stream error", text);
     return text;
   }
   redact.logError("chat stream error", message);
   return "The model request failed";
+}
+
+// One line for the operator in place of the SDK's raw dump, which carries request and response bodies.
+export function logProviderError(error: unknown, redact: Redactor) {
+  const name = error instanceof Error ? error.name : typeof error;
+  const status = error && typeof error === "object" && "statusCode" in error && typeof error.statusCode === "number" ? String(error.statusCode) : "";
+  const message = error instanceof Error ? error.message : String(error);
+  redact.logError("chat provider error", ...[name, status, message].filter((part) => part !== ""));
 }
