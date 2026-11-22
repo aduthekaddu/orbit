@@ -108,7 +108,7 @@ statechart docs/architecture/ChatTurn.tla --config docs/architecture/ChatTurn.cf
 | `src/lib/provider.ts` | The model client, reasoning options, the model list, and provider quirks. |
 | `src/lib/settings.ts` | The settings row. `toPublicSettings` is the only shape that leaves the server. |
 | `src/lib/tools/` | The tool registry, SearXNG and Tavily search adapters, browser-safe card metadata, and tool status rules. |
-| `src/lib/sandbox/` | The fixed container policy, pinned language images, and per-run Docker lifecycle. |
+| `src/lib/sandbox/` | The fixed container policy, pinned language images, per-run Docker lifecycle, and the sweep of stale containers. |
 | `src/components/tools/` | Saved tool run cards, search result links, and the generic JSON disclosure. |
 | `src/lib/genui/` | The `render_ui` tool: the component catalog, the spec parser, and the system prompt. |
 | `src/components/chat/` | Thread, messages, composer, code blocks, inline editors, and the thread map. |
@@ -134,7 +134,7 @@ All state is in `data/orbit.db`. The directory is mode `0700`, and the database 
 
 Tool output, generated UI specs, and reasoning all live inside `parts`. A new tool needs no new table unless it stores something outside a message.
 
-`run_code` is available only with `ORBIT_SANDBOX=on`. The tool validates language and source, then `runCode` starts a fresh container using only `containerSpec` options. Source arrives on stdin. The runner bounds stdout and stderr, stops work after ten seconds or request cancellation, and removes the container. The saved tool part contains the source and final output, with the raw text. The card reads that part after reload and removes terminal escape sequences from the output when it renders. When you press Stop, the AI SDK drops the tool result, so `createStoppedRuns` in `src/lib/tools/stopped-runs.ts` keeps the output the runner had collected, and the chat route saves it as a cancelled result. The open chat then fetches the saved reply and puts that result on the live card (`StoppedRunSync`), so the card matches a reload without replacing the thread. Compose reaches the Docker API through a private socket proxy. See [Security](SECURITY.md#code-sandbox) for that boundary's limits.
+`run_code` is available only with `ORBIT_SANDBOX=on`. The tool validates language and source, then `runCode` starts a fresh container using only `containerSpec` options. Source arrives on stdin. The runner bounds stdout and stderr, stops work after ten seconds or request cancellation, and removes the container. The container runs the interpreter under `timeout`, so it also stops at ten seconds when Orbit dies mid-run. With the sandbox on, `src/instrumentation.ts` starts `startSandboxSweep`, which removes sandbox containers older than a minute at start and every minute after. The saved tool part contains the source and final output, with the raw text. The card reads that part after reload and removes terminal escape sequences from the output when it renders. When you press Stop, the AI SDK drops the tool result, so `createStoppedRuns` in `src/lib/tools/stopped-runs.ts` keeps the output the runner had collected, and the chat route saves it as a cancelled result. The open chat then fetches the saved reply and puts that result on the live card (`StoppedRunSync`), so the card matches a reload without replacing the thread. Compose reaches the Docker API through a private socket proxy. See [Security](SECURITY.md#code-sandbox) for that boundary's limits.
 
 ## Rules that hold across the code
 
