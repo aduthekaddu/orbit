@@ -3,6 +3,7 @@ import { globSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { run } from "node:test";
 import { tap } from "node:test/reporters";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 function parseWorkers(raw, source) {
@@ -54,7 +55,7 @@ if (seed !== undefined) {
 
 const tests = run({
   ...(files ? { files } : { globPatterns: globs }),
-  execArgv: ["--import", "tsx"],
+  execArgv: ["--import", "tsx", "--import", fileURLToPath(new URL("./test-data-dir.mjs", import.meta.url))],
   isolation: "process",
   concurrency: workers ?? true,
 });

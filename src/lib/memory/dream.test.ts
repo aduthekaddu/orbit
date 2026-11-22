@@ -1,15 +1,14 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import test, { before, after } from "node:test";
 import Database from "better-sqlite3";
+import { dataDirectory } from "../paths";
 import { startMockOllama } from "./ollama-harness";
 
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-dream-"));
+const dataDir = dataDirectory();
 const requestLog = path.join(dataDir, "mock-requests.jsonl");
-process.env.ORBIT_DATA_DIR = dataDir;
 process.env.MOCK_REQUEST_LOG = requestLog;
 delete process.env.ORBIT_OLLAMA_URL;
 delete process.env.ORBIT_BASE_URL;

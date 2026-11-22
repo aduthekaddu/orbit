@@ -285,9 +285,6 @@ test("the deploy proof signs in on the local origin", () => {
 test("the branch backfill proof allows a chat with no messages", async (t) => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-plan-"));
   const cwd = process.cwd();
-  const originalDataDir = process.env.ORBIT_DATA_DIR;
-  process.env.ORBIT_DATA_DIR = path.join(sandbox, "data");
-  fs.mkdirSync(process.env.ORBIT_DATA_DIR);
   fs.cpSync(path.join(repo, "drizzle"), path.join(sandbox, "drizzle"), { recursive: true });
   process.chdir(sandbox);
   try {
@@ -308,8 +305,6 @@ test("the branch backfill proof allows a chat with no messages", async (t) => {
     assert.equal(agrees, true, `roots ${roots}, chats ${chats}, nonempty ${nonempty}`);
   } finally {
     process.chdir(cwd);
-    if (originalDataDir === undefined) delete process.env.ORBIT_DATA_DIR;
-    else process.env.ORBIT_DATA_DIR = originalDataDir;
     t.after(() => fs.rmSync(sandbox, { recursive: true, force: true }));
   }
 });

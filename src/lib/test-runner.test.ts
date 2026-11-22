@@ -18,24 +18,30 @@ type RunOptions = {
   workers?: string | null;
 };
 
-function runSuite(source: string | Record<string, string>, args: string[] = [], options: RunOptions = {}) {
+function makeProject(files: Record<string, string>) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-test-runner-"));
   dirs.push(dir);
   fs.mkdirSync(path.join(dir, "src"));
   fs.symlinkSync(modules, path.join(dir, "node_modules"), "dir");
-  const files = typeof source === "string" ? { "fixture.test.ts": source } : source;
+  fs.symlinkSync(path.join(process.cwd(), "drizzle"), path.join(dir, "drizzle"), "dir");
   for (const [name, content] of Object.entries(files)) {
     fs.writeFileSync(path.join(dir, "src", name), `import { describe, test } from "node:test";\n${content}\n`);
   }
   const env = { ...process.env };
   delete env.NODE_TEST_CONTEXT;
+  delete env.ORBIT_DATA_DIR;
   delete env.ORBIT_TEST_SEED;
   delete env.ORBIT_TEST_WORKERS;
+  return { dir, env };
+}
+
+function runSuite(source: string | Record<string, string>, args: string[] = [], options: RunOptions = {}) {
+  const { dir, env } = makeProject(typeof source === "string" ? { "fixture.test.ts": source } : source);
   if (options.seed !== undefined) env.ORBIT_TEST_SEED = options.seed;
   const workers = options.workers === undefined ? "1" : options.workers;
   if (workers !== null) env.ORBIT_TEST_WORKERS = workers;
   const result = spawnSync(process.execPath, [runner, ...args], { cwd: dir, env, encoding: "utf8" });
-  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+  return { dir, status: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 
 test("a complete run passes the full-suite gate", () => {
@@ -131,4 +137,33 @@ test("worker count overrides are validated and logged alongside the seed", () =>
   const defaultRun = runSuite(fixture, ["--require-all", "--shuffle"], { seed: "419", workers: null });
   assert.equal(defaultRun.status, 0, defaultRun.stderr);
   assert.match(defaultRun.stderr, new RegExp(`Orbit test order seed: 419 \\(1 file, ${expectedDefault} ${expectedLabel}\\)`));
+});
+
+// The shape of PR #82: a static import of the database module with no data directory set first.
+const dbModule = path.join(process.cwd(), "src/lib/db/index.ts");
+const opensDatabase = `import fs from "node:fs";
+import { db } from ${JSON.stringify(dbModule)};
+test("opens the database", () => {
+  fs.appendFileSync("opened.log", db.$client.name + "\\n");
+});`;
+
+test("every test file gets its own temporary data directory, removed after the run", () => {
+  const result = runSuite({ "alpha.test.ts": opensDatabase, "beta.test.ts": opensDatabase }, ["--require-all"]);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(fs.existsSync(path.join(result.dir, "data")), false, "a test file opened ./data in the checkout");
+  const opened = fs.readFileSync(path.join(result.dir, "opened.log"), "utf8").trim().split("\n");
+  assert.equal(opened.length, 2);
+  assert.notEqual(opened[0], opened[1], "two test files shared one data directory");
+  for (const dbPath of opened) {
+    assert.ok(dbPath.startsWith(os.tmpdir() + path.sep), `${dbPath} is outside the OS temp directory`);
+    assert.equal(fs.existsSync(path.dirname(dbPath)), false, `${dbPath} was left behind`);
+  }
+});
+
+test("a test file run without the runner fails with the fix instead of opening ./data", () => {
+  const { dir, env } = makeProject({ "fixture.test.ts": opensDatabase });
+  const result = spawnSync(process.execPath, ["--import", "tsx", "--test", "src/fixture.test.ts"], { cwd: dir, env, encoding: "utf8" });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout + result.stderr, /--import \.\/scripts\/test-data-dir\.mjs/);
+  assert.equal(fs.existsSync(path.join(dir, "data")), false);
 });

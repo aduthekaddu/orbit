@@ -1,4 +1,4 @@
-import { testDataDir } from "../test-data-dir";
+import { dataDirectory } from "../paths";
 import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
@@ -421,7 +421,7 @@ test("a turn without a GitHub token does not open GitHub", async () => {
 
 test("the tool registry opens its database in the test data directory", async () => {
   const { db } = await import("../db");
-  assert.equal(db.$client.name, path.join(testDataDir, "orbit.db"));
+  assert.equal(db.$client.name, path.join(dataDirectory(), "orbit.db"));
 });
 
 test("issue, pull request, and file results become GitHub links", () => {

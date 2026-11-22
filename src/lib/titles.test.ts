@@ -1,11 +1,5 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import test, { before } from "node:test";
-
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-titles-"));
-process.env.ORBIT_DATA_DIR = dataDir;
 
 let cleanTitle: (raw: string) => string;
 let chatTitle: (text: string) => string;
