@@ -28,7 +28,9 @@ Done when the command prints `ready` and `signupOpen=yes` on an empty sandbox.
 3. The command symlinks the build into `.verify/sandbox`, creates an empty `.verify/sandbox/data`, and starts `npm start -- -p <port> -H 127.0.0.1` with that cwd and the selected port.
 4. Ready means `GET /api/setup` returns JSON with a boolean `signupOpen`. A live port alone is not ready.
 
-A second launch reuses a healthy sandbox server when the requested port and sandbox mode match its recorded ones. A mismatch or unknown recorded mode exits with a cleanup instruction and leaves the server and data in place. Run `cleanup`, then launch with the intended `ORBIT_VERIFY_PORT` and `ORBIT_SANDBOX` values.
+The server labels its sandbox containers with an owner: `ORBIT_SANDBOX_OWNER` if set, else a new `verify-<uuid>`. Launch records it as `sandboxOwner` in `.verify/server.json`, and `browse` hands it to the scenario and its fixture processes, so a scenario watches only this server's containers. Another Orbit process on the same Docker host cannot fail it.
+
+A second launch reuses a healthy sandbox server when the requested port, sandbox mode and any `ORBIT_SANDBOX_OWNER` match its recorded ones. A mismatch or unknown recorded mode exits with a cleanup instruction and leaves the server and data in place. Run `cleanup`, then launch with the intended `ORBIT_VERIFY_PORT` and `ORBIT_SANDBOX` values.
 
 `launch --mock` also starts `scripts/qa/mock-provider.mjs` on `127.0.0.1:3299` and saves settings for it as `verify@orbit.local`. Done when it also prints `mock ready` and `settings baseUrl=http://127.0.0.1:3299/v1 model=mock-genui keySet=yes`. That account blocks `drive signup` and `drive chat` on the same sandbox.
 

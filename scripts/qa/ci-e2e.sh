@@ -14,6 +14,9 @@ set -uo pipefail
 cd "$(dirname "$0")/../.." || exit 1
 
 export ORBIT_VERIFY_PORT="${ORBIT_VERIFY_PORT:-3210}"
+# Every server and fixture this suite starts labels its sandbox containers with this owner, so the
+# leftover check at the end sees only this suite's containers.
+export ORBIT_SANDBOX_OWNER="${ORBIT_SANDBOX_OWNER:-ci-e2e-$(node -p 'crypto.randomUUID()')}"
 
 suite=${1:-}
 scenarios_dir=.agents/skills/verify-orbit/scenarios
@@ -160,9 +163,6 @@ case $suite in
     ORBIT_SANDBOX=on DOCKER_HOST=tcp://not-the-local-proxy:2375 verify launch --mock || die "launch with an invalid Docker endpoint"
     check verify browse sandbox-failure
     cleanup_server
-    if [ -n "$(docker ps -aq --filter label=orbit.sandbox)" ]; then
-      echo "::error title=verify-orbit::sandbox containers remain after the suite"
-      failures+=("sandbox containers remain")
-    fi
+    check node scripts/qa/sandbox-leftovers.mjs
     ;;
 esac

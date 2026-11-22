@@ -220,4 +220,4 @@ Run `node --import tsx --test src/lib/sandbox/run.test.ts`. It skips with a reas
 
 Run `npx tsx scripts/qa/sandbox-timing.ts` with both images already pulled. It runs ten Python containers, validates each result, and reports p50 and p95 for start through result. The p95 budget is under 1,500 ms.
 
-Finally, run `docker ps -a --filter label=orbit.sandbox`. It must list no containers.
+Both commands fail if a container they made remains. They look only at their own containers, so another Orbit process's containers on the same Docker host do not fail them. `scripts/qa/ci-e2e.sh sandbox` makes the same check for the verify server with `node scripts/qa/sandbox-leftovers.mjs`.

@@ -1,6 +1,7 @@
 import type Docker from "dockerode";
 import { z } from "zod";
 import { sandboxImages } from "./images";
+import { sandboxLabels, type SandboxOwner } from "./owner.mjs";
 
 export const runCodeInputSchema = z.object({
   language: z.enum(["python", "javascript"]),
@@ -31,7 +32,7 @@ export function hasFailedCodeOutput(output: unknown): boolean {
   return parsed.success && !parsed.data.cancelled && (parsed.data.timedOut || parsed.data.exitCode !== 0);
 }
 
-export function containerSpec(input: RunCodeInput): Docker.ContainerCreateOptions {
+export function containerSpec(input: RunCodeInput, owner: SandboxOwner): Docker.ContainerCreateOptions {
   const runtime = sandboxImages[input.language];
   return {
     Image: runtime.image,
@@ -44,7 +45,7 @@ export function containerSpec(input: RunCodeInput): Docker.ContainerCreateOption
     OpenStdin: true,
     StdinOnce: true,
     Tty: false,
-    Labels: { "orbit.sandbox": "true" },
+    Labels: sandboxLabels(owner),
     HostConfig: {
       NetworkMode: "none",
       ReadonlyRootfs: true,

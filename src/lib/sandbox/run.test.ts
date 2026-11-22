@@ -7,14 +7,18 @@ import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } fr
 import { MockLanguageModelV4 } from "ai/test";
 import { createRunCodeTool } from "../tools/run-code";
 import { createStoppedRuns } from "../tools/stopped-runs";
+import { sandboxImages } from "./images";
+import { ownedSandboxFilter, parseSandboxOwner, sandboxLabels, sandboxOwner, type SandboxOwner } from "./owner.mjs";
 import { runCode } from "./run";
 import { waitForRunningSandbox } from "./wait-for-running";
 import type { RunCodeOutput } from "./spec";
 
-async function waitForNoContainers(docker: Docker) {
-  const deadline = performance.now() + 2000;
+const owner = sandboxOwner();
+
+async function waitForNoContainers(docker: Docker, timeoutMs = 2000) {
+  const deadline = performance.now() + timeoutMs;
   while (true) {
-    const containers = await docker.listContainers({ all: true, filters: JSON.stringify({ label: ["orbit.sandbox"] }) });
+    const containers = await docker.listContainers({ all: true, filters: ownedSandboxFilter(owner) });
     if (containers.length === 0 || performance.now() >= deadline) {
       assert.deepEqual(containers, []);
       return;
@@ -33,6 +37,31 @@ test("sandbox programs run inside real isolated containers", { timeout: 90_000 }
     return;
   }
   const runPython = (code: string) => runCode(docker, { language: "python", code });
+  // Code without owner filters sees a planted container, so each one lives only inside its own subtest.
+  const withPlantedContainer = async (planted: SandboxOwner, check: () => Promise<void>) => {
+    const container = await docker.createContainer({
+      Image: sandboxImages.python.image,
+      Cmd: ["sleep", "30"],
+      Labels: { ...sandboxLabels(planted), "orbit.proof": "step-17" },
+      HostConfig: { AutoRemove: true, NetworkMode: "none" },
+    });
+    try {
+      await container.start();
+      await check();
+    } finally {
+      await container.remove({ force: true });
+    }
+  };
+  const foreign = parseSandboxOwner(`foreign-${owner}`);
+  await t.test("another run's running container is not taken for this run's start", () => withPlantedContainer(foreign, async () => {
+    await assert.rejects(waitForRunningSandbox(docker, owner, 500), /no sandbox container started/);
+  }));
+  await t.test("another run's container does not fail this run's leftover check", () => withPlantedContainer(foreign, async () => {
+    await waitForNoContainers(docker);
+  }));
+  await t.test("a container this run left behind fails the leftover check", () => withPlantedContainer(owner, async () => {
+    await assert.rejects(waitForNoContainers(docker, 0), { code: "ERR_ASSERTION" });
+  }));
   await t.test("Python print(1+1) prints 2 and exits 0", async () => {
     const result = await runPython("print(1+1)");
     assert.equal(result.stdout, "2\n");
@@ -161,7 +190,7 @@ finally:
     await t.test(name, async () => {
       const controller = new AbortController();
       const running = runCode(docker, { language: "python", code }, controller.signal);
-      const stopped = waitForRunningSandbox(docker).then(() => delay(1000)).then(() => controller.abort());
+      const stopped = waitForRunningSandbox(docker, owner).then(() => delay(1000)).then(() => controller.abort());
       try {
         await assert.rejects(running, (error: unknown) => {
           assert.ok(error instanceof Error && error.name === "AbortError");
@@ -213,7 +242,7 @@ finally:
         saved = await stopped.apply(responseMessage.parts);
       },
     });
-    const stopAfterStart = waitForRunningSandbox(docker).then(() => delay(1000)).then(() => controller.abort());
+    const stopAfterStart = waitForRunningSandbox(docker, owner).then(() => delay(1000)).then(() => controller.abort());
     try {
       for await (const chunk of stream as unknown as AsyncIterable<unknown>) void chunk;
     } finally {
