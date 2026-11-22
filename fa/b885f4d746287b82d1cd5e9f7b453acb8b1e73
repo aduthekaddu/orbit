@@ -1,0 +1,23 @@
+src/components/shell/command-palette.tsx
+  s_eaca87816d3664::t_4eba8d6346a614 165
+  s_eaca87816d3664::t_20737c7b3052e8 21-23,39-40,45,50,53,57-58,60-61,64-66,79,81,83,112-114
+  s_eaca87816d3664::t_68c18e5bc3ec5b 82
+CHANGELOG.md
+  s_eaca87816d3664::t_41cad16f9bd312 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fab885f4d746287b82d1cd5e9f7b453acb8b1e73",
+  "prompts": {},
+  "sessions": {
+    "s_eaca87816d3664": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1969fc54-b55b-477a-b35a-64447e18495f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
