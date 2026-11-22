@@ -1,0 +1,20 @@
+src/lib/memory/dream.test.ts
+  s_7f07075ee7ad59::t_81c808ecd25e54 334-336
+  s_7f07075ee7ad59::t_bebeb622b97134 313,316,318,321-333,337-347,351-380
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7bbde8827e675ea0adff752d13f7cf6a0469e55f",
+  "prompts": {},
+  "sessions": {
+    "s_7f07075ee7ad59": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a202ae-f5e7-7a22-ae49-1396f6e7d0d0",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
