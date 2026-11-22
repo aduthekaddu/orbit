@@ -1,0 +1,86 @@
+src/lib/sandbox-verification.test.ts
+  s_99e6b4fa97078c::t_1d8710ec67772d 7,49
+.agents/skills/verify-orbit/features/README.md
+  s_99e6b4fa97078c::t_71dae2b2773ba8 8
+.agents/skills/verify-orbit/scenarios/search-final-ui.mjs
+  s_99e6b4fa97078c::t_0a49d382d8ed84 4,8
+.agents/skills/verify-orbit/scenarios/search-tool.mjs
+  s_99e6b4fa97078c::t_0a49d382d8ed84 3,7
+.agents/skills/verify-orbit/scenarios/sandbox-failure.mjs
+  s_99e6b4fa97078c::t_0a49d382d8ed84 1-2
+.agents/skills/verify-orbit/scenarios/sandbox-output.mjs
+  s_99e6b4fa97078c::t_0a49d382d8ed84 1-2
+.agents/skills/verify-orbit/scenarios/sandbox-search.mjs
+  s_99e6b4fa97078c::t_0a49d382d8ed84 18-19
+CHANGELOG.md
+  s_99e6b4fa97078c::t_71dae2b2773ba8 9
+.agents/skills/verify-orbit/scenarios/sandbox.mjs
+  s_99e6b4fa97078c::t_e6560d2608b285 1,3
+.agents/skills/verify-orbit/scenarios/settings-search-route.mjs
+  s_99e6b4fa97078c::t_0a49d382d8ed84 3-4
+.agents/skills/verify-orbit/scenarios/sandbox-copy-overlap.mjs
+  s_99e6b4fa97078c::t_0a49d382d8ed84 1-2
+.agents/skills/verify-orbit/scenarios/sandbox-unicode.mjs
+  s_99e6b4fa97078c::t_0a49d382d8ed84 1-2
+.agents/skills/verify-orbit/scenarios/sandbox-stop-output.mjs
+  s_99e6b4fa97078c::t_0a49d382d8ed84 115-116
+src/lib/qa-mock-ports.test.ts
+  s_99e6b4fa97078c::t_041ccf7f84afe4 29
+  s_99e6b4fa97078c::t_529dcf0c95d5ee 31
+  s_99e6b4fa97078c::t_1d8b14688820e9 1-28,30,32-74
+src/lib/tools/github.test.ts
+  s_99e6b4fa97078c::t_1d8710ec67772d 383,408
+scripts/qa/genui-qa.cjs
+  s_99e6b4fa97078c::t_4025fc51e9b967 50-56,58
+.agents/skills/verify-orbit/scenarios/sandbox-escapes.mjs
+  s_99e6b4fa97078c::t_0a49d382d8ed84 32,34
+.agents/skills/verify-orbit/features/github.md
+  s_99e6b4fa97078c::t_305ac3aa8dc860 16
+.agents/skills/verify-orbit/scenarios/sandbox-validation.mjs
+  s_99e6b4fa97078c::t_0a49d382d8ed84 7-8
+.agents/skills/verify-orbit/SKILL.md
+  s_99e6b4fa97078c::t_a74cac5be95e1f 33
+.agents/skills/verify-orbit/verify.mjs
+  s_99e6b4fa97078c::t_d2eb9d6a02ba4c 272-293,296,299,302,308-311,317,712
+.agents/skills/verify-orbit/scenarios/sandbox-copy.mjs
+  s_99e6b4fa97078c::t_0a49d382d8ed84 7,10
+.agents/skills/verify-orbit/scenarios/settings-sandbox.mjs
+  s_99e6b4fa97078c::t_0a49d382d8ed84 5-6
+scripts/qa/mock-provider.mjs
+  s_99e6b4fa97078c::t_cde6c716f14f13 668
+  s_99e6b4fa97078c::t_324bedc4621237 669
+.agents/skills/verify-orbit/scenarios/github.mjs
+  s_99e6b4fa97078c::t_0a49d382d8ed84 4,9
+scripts/qa/mock-ollama.mjs
+  s_99e6b4fa97078c::t_324bedc4621237 90-91
+.agents/skills/verify-orbit/scenarios/sandbox-empty-output.mjs
+  s_99e6b4fa97078c::t_0a49d382d8ed84 43-44
+.agents/skills/verify-orbit/scenarios/sandbox-language.mjs
+  s_99e6b4fa97078c::t_0a49d382d8ed84 46-47
+scripts/qa/ci-e2e.sh
+  s_99e6b4fa97078c::t_d903c67db32977 10-11
+  s_99e6b4fa97078c::t_d76b2c882bd73c 46,49,53,56,62
+  s_99e6b4fa97078c::t_8d192fbff35fca 9,51-52,54-55,59
+.agents/skills/verify-orbit/scenarios/sandbox-outcome.mjs
+  s_99e6b4fa97078c::t_0a49d382d8ed84 41-42
+.agents/skills/verify-orbit/features/browse.md
+  s_99e6b4fa97078c::t_a74cac5be95e1f 17
+CONTRIBUTING.md
+  s_99e6b4fa97078c::t_4025fc51e9b967 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d56ec6e150a7ede1361c3fafc740c653ea239d95",
+  "prompts": {},
+  "sessions": {
+    "s_99e6b4fa97078c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "30fc78cc-c8d5-5e67-be6f-766ace7f4ede",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
