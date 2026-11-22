@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test, { after } from "node:test";
+import { setTimeout as sleep } from "node:timers/promises";
 
 const runner = path.join(process.cwd(), "scripts/test.mjs");
 const modules = path.join(process.cwd(), "node_modules");
@@ -27,21 +28,24 @@ function makeProject(files: Record<string, string>) {
   for (const [name, content] of Object.entries(files)) {
     fs.writeFileSync(path.join(dir, "src", name), `import { describe, test } from "node:test";\n${content}\n`);
   }
-  const env = { ...process.env };
+  const tmp = path.join(dir, "tmp");
+  fs.mkdirSync(tmp);
+  const env: NodeJS.ProcessEnv = { ...process.env, TMPDIR: tmp };
   delete env.NODE_TEST_CONTEXT;
   delete env.ORBIT_DATA_DIR;
+  delete env.ORBIT_TEST_ROOT;
   delete env.ORBIT_TEST_SEED;
   delete env.ORBIT_TEST_WORKERS;
-  return { dir, env };
+  return { dir, env, tmp };
 }
 
 function runSuite(source: string | Record<string, string>, args: string[] = [], options: RunOptions = {}) {
-  const { dir, env } = makeProject(typeof source === "string" ? { "fixture.test.ts": source } : source);
+  const { dir, env, tmp } = makeProject(typeof source === "string" ? { "fixture.test.ts": source } : source);
   if (options.seed !== undefined) env.ORBIT_TEST_SEED = options.seed;
   const workers = options.workers === undefined ? "1" : options.workers;
   if (workers !== null) env.ORBIT_TEST_WORKERS = workers;
   const result = spawnSync(process.execPath, [runner, ...args], { cwd: dir, env, encoding: "utf8" });
-  return { dir, status: result.status, stdout: result.stdout, stderr: result.stderr };
+  return { dir, tmp, status: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 
 test("a complete run passes the full-suite gate", () => {
@@ -155,15 +159,77 @@ test("every test file gets its own temporary data directory, removed after the r
   assert.equal(opened.length, 2);
   assert.notEqual(opened[0], opened[1], "two test files shared one data directory");
   for (const dbPath of opened) {
-    assert.ok(dbPath.startsWith(os.tmpdir() + path.sep), `${dbPath} is outside the OS temp directory`);
+    assert.ok(dbPath.startsWith(result.tmp + path.sep), `${dbPath} is outside the temp directory`);
     assert.equal(fs.existsSync(path.dirname(dbPath)), false, `${dbPath} was left behind`);
   }
 });
 
-test("a test file run without the runner fails with the fix instead of opening ./data", () => {
-  const { dir, env } = makeProject({ "fixture.test.ts": opensDatabase });
-  const result = spawnSync(process.execPath, ["--import", "tsx", "--test", "src/fixture.test.ts"], { cwd: dir, env, encoding: "utf8" });
-  assert.notEqual(result.status, 0);
-  assert.match(result.stdout + result.stderr, /--import \.\/scripts\/test-data-dir\.mjs/);
-  assert.equal(fs.existsSync(path.join(dir, "data")), false);
+// Each form runs a test file with no NODE_TEST_CONTEXT, so the guard has to recognise the file itself.
+const launchForms: Record<string, { file: string; args: string[] }> = {
+  "node --test": { file: "fixture.test.ts", args: ["--import", "tsx", "--test"] },
+  "node --test with isolation off": { file: "fixture.test.ts", args: ["--import", "tsx", "--test", "--experimental-test-isolation=none"] },
+  "node --test on a file not named *.test.ts": { file: "fixture.check.ts", args: ["--import", "tsx", "--test", "--experimental-test-isolation=none"] },
+  "node as a plain program": { file: "fixture.test.ts", args: ["--import", "tsx"] },
+  "the tsx command": { file: "fixture.test.ts", args: [path.join(modules, "tsx/dist/cli.mjs")] },
+};
+
+for (const [name, { file, args }] of Object.entries(launchForms)) {
+  test(`a test file run by ${name} without the runner fails with the fix instead of opening ./data`, () => {
+    const { dir, env } = makeProject({ [file]: opensDatabase });
+    const result = spawnSync(process.execPath, [...args, `src/${file}`], { cwd: dir, env, encoding: "utf8" });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout + result.stderr, /--import \.\/scripts\/test-data-dir\.mjs/);
+    assert.equal(fs.existsSync(path.join(dir, "data")), false);
+  });
+}
+
+test("a program that is not a test file still opens ./data without a data directory", () => {
+  const { dir, env } = makeProject({ "tool.ts": `import { db } from ${JSON.stringify(dbModule)};\nconsole.log(db.$client.name);` });
+  const result = spawnSync(process.execPath, ["--import", "tsx", "src/tool.ts"], { cwd: dir, env, encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(fs.existsSync(path.join(dir, "data", "orbit.db")));
+});
+
+const killsItself = `import fs from "node:fs";
+import { db } from ${JSON.stringify(dbModule)};
+test("kills itself after opening the database", () => {
+  fs.appendFileSync("opened.log", db.$client.name + "\\n");
+  process.kill(process.pid, "SIGKILL");
+});`;
+
+test("a killed test file leaves nothing in the temp directory after the run", () => {
+  const result = runSuite({ "killed.test.ts": killsItself });
+  assert.equal(result.status, 1, "the killed file should fail the run");
+  assert.ok(fs.existsSync(path.join(result.dir, "opened.log")), "the fixture never opened its database");
+  assert.deepEqual(fs.readdirSync(result.tmp).filter((name) => name.startsWith("orbit-test-")), []);
+});
+
+const hangs = `import fs from "node:fs";
+import { db } from ${JSON.stringify(dbModule)};
+test("hangs after opening the database", async () => {
+  fs.writeFileSync("ready.log", db.$client.name + "\\n" + process.pid);
+  await new Promise((resolve) => setTimeout(resolve, 60_000));
+});`;
+
+test("a runner stopped by SIGTERM removes the data directories of the files still running", async () => {
+  const { dir, env, tmp } = makeProject({ "hangs.test.ts": hangs });
+  env.ORBIT_TEST_WORKERS = "1";
+  const child = spawn(process.execPath, [runner], { cwd: dir, env, stdio: "ignore" });
+  const exited = new Promise<number | null>((resolve) => child.on("exit", (code) => resolve(code)));
+  const ready = path.join(dir, "ready.log");
+  let filePid: number | undefined;
+  try {
+    for (let waited = 0; !fs.existsSync(ready) || !fs.readFileSync(ready, "utf8").includes("\n"); waited += 50) {
+      assert.ok(waited < 20_000, "the fixture never opened its database");
+      await sleep(50);
+    }
+    filePid = Number(fs.readFileSync(ready, "utf8").split("\n")[1]);
+    assert.ok(fs.readdirSync(tmp).some((name) => name.startsWith("orbit-test-")));
+    child.kill("SIGTERM");
+    assert.equal(await exited, 143);
+    assert.deepEqual(fs.readdirSync(tmp).filter((name) => name.startsWith("orbit-test-")), []);
+  } finally {
+    child.kill("SIGKILL");
+    if (filePid) try { process.kill(filePid, "SIGKILL"); } catch { /* already gone */ }
+  }
 });

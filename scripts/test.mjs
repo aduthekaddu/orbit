@@ -1,6 +1,7 @@
 import { createHash, randomInt } from "node:crypto";
-import { globSync } from "node:fs";
-import { availableParallelism } from "node:os";
+import { globSync, mkdtempSync, rmSync } from "node:fs";
+import { availableParallelism, tmpdir } from "node:os";
+import { join } from "node:path";
 import { run } from "node:test";
 import { tap } from "node:test/reporters";
 import { fileURLToPath } from "node:url";
@@ -51,6 +52,16 @@ if (seed !== undefined) {
   const fileLabel = files.length === 1 ? "file" : "files";
   const workerLabel = effectiveWorkers === 1 ? "worker" : "workers";
   console.error(`Orbit test order seed: ${seed} (${files.length} ${fileLabel}, ${effectiveWorkers} ${workerLabel})`);
+}
+
+// One root for every file's data directory (see test-data-dir.mjs). A file killed by a signal
+// cannot clean up after itself, so the runner removes the whole root when the run ends,
+// on an error exit and on SIGINT or SIGTERM too. Only a SIGKILL of this runner leaves it behind.
+const root = mkdtempSync(join(tmpdir(), "orbit-test-run-"));
+process.env.ORBIT_TEST_ROOT = root;
+process.on("exit", () => rmSync(root, { recursive: true, force: true }));
+for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
+  process.on(signal, () => process.exit(code));
 }
 
 const tests = run({
