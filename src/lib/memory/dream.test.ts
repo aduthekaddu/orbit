@@ -346,3 +346,31 @@ test("a worker that lost the lease writes nothing", async () => {
   assert.equal(row?.owner, "worker-b");
   assert.deepEqual(row?.doneChatIds, []);
 });
+
+test("a done or failed night is not claimed by another worker hours later", async () => {
+  const api = requireDream();
+  await resetChats();
+  const { db } = await import("../db");
+  for (const [date, state] of [["2099-03-04", "done"], ["2099-03-05", "failed"]] as const) {
+    const started = new Date(at(date, 1));
+    assert.equal(api.tryClaim(db.$client, { date, owner: "worker-a", now: started, chatIds: [] }), true);
+    db.$client.prepare("UPDATE memory_runs SET state = ?, finished_at = ? WHERE date = ?").run(state, started.getTime() + 60_000, date);
+    const before = api.getRun(date);
+    assert.equal(before?.state, state);
+    assert.equal(api.tryClaim(db.$client, { date, owner: "worker-b", now: new Date(at(date, 4)), chatIds: [] }), false, state);
+    assert.deepEqual(api.getRun(date), before, state);
+  }
+});
+
+test("a live lease keeps the night after its start time is three hours old", async () => {
+  const api = requireDream();
+  await resetChats();
+  const { db } = await import("../db");
+  const date = "2099-03-06";
+  const now = new Date(at(date, 4));
+  assert.equal(api.tryClaim(db.$client, { date, owner: "worker-a", now: new Date(at(date, 1)), chatIds: [] }), true);
+  db.$client.prepare("UPDATE memory_runs SET lease_until = ? WHERE date = ?").run(now.getTime() + 60_000, date);
+  const before = api.getRun(date);
+  assert.equal(api.tryClaim(db.$client, { date, owner: "worker-b", now, chatIds: [] }), false);
+  assert.deepEqual(api.getRun(date), before);
+});
