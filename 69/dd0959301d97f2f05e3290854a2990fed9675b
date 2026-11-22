@@ -1,0 +1,19 @@
+src/lib/lint.test.ts
+  s_6aa63495103a72::t_97cffb301e3e4b 1-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "69dd0959301d97f2f05e3290854a2990fed9675b",
+  "prompts": {},
+  "sessions": {
+    "s_6aa63495103a72": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9ad7ba54-6aaa-44fb-a347-ef873a057c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
