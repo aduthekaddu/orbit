@@ -1,0 +1,28 @@
+src/lib/search.test.ts
+  s_b527c20f3b5530::t_6e40a78c871329 44-68
+  s_8b5747a361c9d7::t_662e0ea90a4ffc 69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b515f2996cd2452ebbfdebe380385e95ba6174f3",
+  "prompts": {},
+  "sessions": {
+    "s_8b5747a361c9d7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e409ae48-4eb4-4590-8654-888ae3c2c5d6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    },
+    "s_b527c20f3b5530": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a202ac-a461-7af0-bb41-4a9e1cbe0cd6",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
