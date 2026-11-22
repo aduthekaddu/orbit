@@ -1,0 +1,49 @@
+CONTRIBUTING.md
+  s_99e6b4fa97078c::t_d8141e67208169 24
+src/lib/memory/dream.test.ts
+  s_99e6b4fa97078c::t_19e2b4e41f629e 7,10
+scripts/test.mjs
+  s_99e6b4fa97078c::t_5b1bfbc2a069e4 58
+  s_99e6b4fa97078c::t_a95a3080fcd473 6
+src/lib/auth-secret.test.ts
+  s_99e6b4fa97078c::t_3c7cd334b6aee1 5,8
+src/lib/paths.ts
+  s_99e6b4fa97078c::t_ead51886ea8d91 5-11
+src/lib/settings.test.ts
+  s_99e6b4fa97078c::t_3c7cd334b6aee1 8
+src/lib/test-runner.test.ts
+  s_99e6b4fa97078c::t_08d74f58e3e9d8 32,44,141-150,152,155-163,165-166,168-169
+  s_99e6b4fa97078c::t_0339569eb082b5 167
+  s_99e6b4fa97078c::t_9e5cabd0b5fb46 21,26,35-39,151,153-154,164
+src/lib/db/migration-lock.test.ts
+  s_99e6b4fa97078c::t_6d9fbede85abe8 7,12-17,19-21
+.agents/skills/verify-orbit/features/sandbox.md
+  s_99e6b4fa97078c::t_d8141e67208169 219
+scripts/test-data-dir.mjs
+  s_99e6b4fa97078c::t_98e972dd5f3c7e 1-10
+src/lib/memory/store.test.ts
+  s_99e6b4fa97078c::t_59652bd17d8e04 7
+  s_99e6b4fa97078c::t_f2489ba2014659 54,84,125
+AGENTS.md
+  s_99e6b4fa97078c::t_d8141e67208169 23
+src/lib/tools/github.test.ts
+  s_99e6b4fa97078c::t_c77a9a42f1f4b9 1,424
+src/lib/tools/run-code.test.ts
+  s_99e6b4fa97078c::t_3b38946318f841 1,28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eb0f590e882c547758b31b59e13bc1226984f7dc",
+  "prompts": {},
+  "sessions": {
+    "s_99e6b4fa97078c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "30fc78cc-c8d5-5e67-be6f-766ace7f4ede",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
