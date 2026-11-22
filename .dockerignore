@@ -1,10 +1,12 @@
-node_modules
-.next
-data/
-.verify/
-.git
-npm-debug.log*
-.env*
-!.env.example
 *.md
 !docs/**
+# Docker applies the last rule that matches, so these come after !docs/** and match at any depth.
+**/node_modules
+**/.next
+**/data/
+**/.verify/
+**/.git
+**/npm-debug.log*
+**/.env*
+!.env.example
+.claude/

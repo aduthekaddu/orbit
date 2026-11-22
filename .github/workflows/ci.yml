@@ -104,6 +104,8 @@ jobs:
         run: |
           docker compose --file docker-compose.yml config --quiet
           docker compose --file docker-compose.yml --file docker-compose.sandbox.yml config --quiet
+      - name: Keep nested secrets and worktrees out of the build context
+        run: scripts/qa/assert-docker-context.sh
       - name: Build the image
         run: docker build --tag orbit:ci .
       - name: Start the image
