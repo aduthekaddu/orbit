@@ -1,6 +1,6 @@
 // With a mouse resting away from the thread, Tab must still reach the actions of earlier
-// messages, and a focused action must be fully visible. A failed reply keeps Retry visible, and a
-// touch screen shows every action at rest.
+// messages, and a focused action must be fully visible. Retry stays visible when the last reply
+// fails, and a touch screen shows every action at rest.
 
 const ACTIONS = ["Copy", "Edit", "Edit reply", "Regenerate", "Retry"];
 
@@ -110,7 +110,10 @@ export default async function messageActions({ page, origin, step, shot }) {
 
   const failedChat = (await (await page.request.post(`${origin}/api/chats`)).json()).id;
   await page.goto(`${origin}/c/${failedChat}`);
-  await sendAndWait(page, `[qa:fail-first] keyboard ${Date.now()}`, page.getByRole("button", { name: "Retry", exact: true }));
+  const firstReply = replies.first();
+  const retry = firstReply.getByRole("button", { name: "Retry", exact: true });
+  await sendAndWait(page, `[qa:fail-first] keyboard ${Date.now()}`, retry);
+  const failedReplyId = await firstReply.getAttribute("data-message-id");
   await page.mouse.move(5, 795);
   await page.waitForTimeout(500);
   const failedRest = (await actionsAtRest(page)).flat();
@@ -118,6 +121,11 @@ export default async function messageActions({ page, origin, step, shot }) {
   const failedStops = await tabStops(page);
   step("Tab reaches a visible Retry on a failed reply", failedStops.some(({ label, opacity }) => label === "Retry" && opacity === 1), describeStops(failedStops));
   await shot("failed");
+
+  await sendAndWait(page, "[qa:plain] after the failed reply", replies.nth(1).getByText("pong", { exact: true }));
+  step("the failed reply stays before the follow-up reply", await firstReply.getAttribute("data-message-id") === failedReplyId);
+  const earlierFailedStops = await tabStops(page);
+  step("Tab reaches visible Regenerate on the earlier failed reply", earlierFailedStops.some(({ message, label, opacity }) => message === 1 && label === "Regenerate" && opacity === 1), describeStops(earlierFailedStops));
 
   const touch = await page.context().browser().newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   try {
