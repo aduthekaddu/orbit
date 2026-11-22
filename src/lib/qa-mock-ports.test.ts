@@ -1,53 +1,83 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
+import http from "node:http";
 import net from "node:net";
 import path from "node:path";
 import test, { after } from "node:test";
 
 const mocks = [
-  { name: "mock provider", script: "scripts/qa/mock-provider.mjs", portLine: /mock provider on http:\/\/127\.0\.0\.1:(\d+)\/v1/, portEnv: "MOCK_PORT" },
-  { name: "mock ollama", script: "scripts/qa/mock-ollama.mjs", portLine: /mock-ollama port=(\d+)/, portEnv: "MOCK_OLLAMA_PORT" },
+  {
+    name: "mock provider",
+    script: "scripts/qa/mock-provider.mjs",
+    readyLine: /^mock provider on http:\/\/127\.0\.0\.1:(\d+)\/v1 model=\S+$/,
+    probePath: "/v1/models",
+    portEnv: "MOCK_PORT",
+  },
+  {
+    name: "mock ollama",
+    script: "scripts/qa/mock-ollama.mjs",
+    readyLine: /^mock-ollama port=(\d+)$/,
+    probePath: "/qa/received",
+    portEnv: "MOCK_OLLAMA_PORT",
+  },
 ] as const;
+
+type Mock = (typeof mocks)[number];
 
 const children: ChildProcess[] = [];
 const holders: net.Server[] = [];
 
+function stop(child: ChildProcess): Promise<void> {
+  return new Promise((resolve) => {
+    if (child.exitCode !== null || child.signalCode) return resolve();
+    child.once("exit", () => resolve());
+    child.kill("SIGTERM");
+  });
+}
+
 after(async () => {
   for (const holder of holders) await new Promise((resolve) => holder.close(resolve));
-  await Promise.all(
-    children.map(
-      (child) =>
-        new Promise<void>((resolve) => {
-          if (child.exitCode !== null || child.signalCode) return resolve();
-          child.once("exit", () => resolve());
-          child.kill("SIGTERM");
-        }),
-    ),
-  );
+  await Promise.all(children.map(stop));
 });
 
-function start(script: string, portLine: RegExp, env: Record<string, string> = {}): Promise<number> {
-  const child = spawn(process.execPath, [path.resolve(script)], {
+// The port comes from the first full line on stdout, never from a partial chunk.
+function start(mock: Mock, env: Record<string, string> = {}): Promise<{ child: ChildProcess; port: number }> {
+  const child = spawn(process.execPath, [path.resolve(mock.script)], {
     env: { ...process.env, ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
   children.push(child);
   return new Promise((resolve, reject) => {
-    let output = "";
-    const timer = setTimeout(() => reject(new Error(`${script} printed no port. Output: ${output}`)), 5_000);
-    const onData = (chunk: Buffer) => {
-      output += chunk.toString();
-      const match = portLine.exec(output);
-      if (!match) return;
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => reject(new Error(`${mock.script} printed no full line. stdout: ${stdout} stderr: ${stderr}`)), 5_000);
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.stdout?.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+      const end = stdout.indexOf("\n");
+      if (end === -1) return;
       clearTimeout(timer);
-      resolve(Number(match[1]));
-    };
-    child.stdout?.on("data", onData);
-    child.stderr?.on("data", onData);
+      const line = stdout.slice(0, end);
+      const match = mock.readyLine.exec(line);
+      if (match) resolve({ child, port: Number(match[1]) });
+      else reject(new Error(`${mock.script} printed "${line}" as its first line`));
+    });
     child.once("exit", (code) => {
       clearTimeout(timer);
-      reject(new Error(`${script} exited ${code ?? "null"}. Output: ${output.split("\n").slice(0, 6).join(" | ")}`));
+      reject(new Error(`${mock.script} exited ${code ?? "null"}. stderr: ${stderr.split("\n").slice(0, 6).join(" | ")}`));
     });
+  });
+}
+
+function status(port: number, urlPath: string): Promise<number | string> {
+  return new Promise((resolve) => {
+    const request = http.get({ host: "127.0.0.1", port, path: urlPath, agent: false }, (response) => {
+      response.resume();
+      resolve(response.statusCode ?? 0);
+    });
+    request.on("error", (error: NodeJS.ErrnoException) => resolve(error.code ?? error.message));
   });
 }
 
@@ -61,14 +91,25 @@ function holdPort(): Promise<number> {
 }
 
 for (const mock of mocks) {
-  test(`two ${mock.name}s started at the same moment listen on different ports`, async () => {
-    const [first, second] = await Promise.all([start(mock.script, mock.portLine), start(mock.script, mock.portLine)]);
-    assert.notEqual(first, second);
+  test(`${mock.name} answers on the port it printed`, async () => {
+    const { port } = await start(mock);
+    assert.equal(await status(port, mock.probePath), 200);
   });
 
-  test(`${mock.name} does not take a port that another process holds, whatever the environment asks for`, async () => {
+  test(`two ${mock.name}s started at the same moment each answer on their own port`, async () => {
+    const [first, second] = await Promise.all([start(mock), start(mock)]);
+    assert.notEqual(first.port, second.port);
+    assert.equal(await status(first.port, mock.probePath), 200);
+    assert.equal(await status(second.port, mock.probePath), 200);
+    await stop(first.child);
+    assert.equal(await status(first.port, mock.probePath), "ECONNREFUSED");
+    assert.equal(await status(second.port, mock.probePath), 200);
+  });
+
+  test(`${mock.name} answers on a free port when the environment names a port another process holds`, async () => {
     const busy = await holdPort();
-    const port = await start(mock.script, mock.portLine, { [mock.portEnv]: String(busy) });
+    const { port } = await start(mock, { [mock.portEnv]: String(busy) });
     assert.notEqual(port, busy);
+    assert.equal(await status(port, mock.probePath), 200);
   });
 }
