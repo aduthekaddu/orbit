@@ -55,3 +55,8 @@ test("shift, meta, ctrl, and plain arrows stay with the page", () => {
   assert.equal(shortcutTarget(shortcut({ ctrlKey: true }), 1, 3), null);
   assert.equal(shortcutTarget(shortcut({ altKey: false }), 1, 3), null);
 });
+
+test("alt arrow stays with the field while an input method is composing", () => {
+  const composing = { ...shortcut({}), isComposing: true };
+  assert.equal(shortcutTarget(composing, 1, 3), null);
+});
