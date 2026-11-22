@@ -1,0 +1,23 @@
+.agents/skills/verify-chat-turn/SKILL.md
+  s_99e6b4fa97078c::t_53a4549adc156e 43
+docs/architecture/model-sync.json
+  s_99e6b4fa97078c::t_bae570362c2d2d 2,9,13
+src/lib/model-sync.test.ts
+  s_99e6b4fa97078c::t_95551996fdbf25 19-22,48,69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "42b2a4a009c613ed26baa7fdf69f65b53dfd0e4f",
+  "prompts": {},
+  "sessions": {
+    "s_99e6b4fa97078c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "30fc78cc-c8d5-5e67-be6f-766ace7f4ede",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
