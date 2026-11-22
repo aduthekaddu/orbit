@@ -7,10 +7,11 @@
 set -euo pipefail
 
 name=context-check
-roots=(".claude/worktrees/$name" "$name" "docs/$name")
+roots=(".claude/worktrees/$name" ".worktrees/$name" "$name" "docs/$name")
 markers=(
   ".claude/worktrees/$name/package.json"
   ".claude/worktrees/$name/data/orbit.db"
+  ".worktrees/$name/package.json"
   "$name/data/orbit.db"
   "$name/data/auth-secret"
   "$name/.env"
