@@ -1,0 +1,22 @@
+src/components/memory/memory-list.tsx
+  s_576d751a80529c::t_299d51b594957f 104-106
+  s_576d751a80529c::t_fae9b67248865f 120-121,128
+CHANGELOG.md
+  s_576d751a80529c::t_fdba56700e5561 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a172a6987edf9085e416141b1eeac72605a38585",
+  "prompts": {},
+  "sessions": {
+    "s_576d751a80529c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8dba12cb-1c2f-4e73-9063-eff0103a63c7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
