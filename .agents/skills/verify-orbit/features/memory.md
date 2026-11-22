@@ -8,4 +8,4 @@ The scenario saves `page.png`, `edited.png`, `ollama-down.png`, `long-card.png`,
 
 `scripts/qa/mock-provider.mjs` appends each request body to `.verify/mock-requests.jsonl`.
 
-`browse no-search-final-answer` turns search off and sends `[qa:remember-loop] keep notes`. The mock calls `remember` while the step offers it and answers `Answered after four notes.` when it does not. Require four remember cards, five model steps, and the answer text, before and after a reload. The scenario deletes the `Loop note` memories it made. It saves `final-answer.png` and `reloaded.png`.
+`browse no-search-final-answer` turns search off and sends `[qa:remember-loop] keep notes`. The mock calls `remember` while the step offers it and answers `Answered after four notes.` when it does not. If that last request still holds a `tool` message, the mock writes DSML tool-call markup instead, as some models do. Require four remember cards, five model steps, and the answer text, before and after a reload. The scenario deletes the `Loop note` memories it made. It saves `final-answer.png` and `reloaded.png`.
