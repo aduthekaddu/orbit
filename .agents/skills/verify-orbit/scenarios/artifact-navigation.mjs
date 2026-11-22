@@ -22,9 +22,19 @@ export default async function artifactNavigation({ page, origin, step, shot }) {
     await control.close();
     step("the probe logs a page visit from the browser", requests.includes("/control"), JSON.stringify(requests));
 
+    const setup = await page.request.get(`${origin}/api/setup`);
+    step("the setup API response has no page CSP", setup.ok() && setup.headers()["content-security-policy"] === undefined);
+
     await page.setViewportSize({ width: 1440, height: 900 });
     const { id } = await (await page.request.post(`${origin}/api/chats`)).json();
-    await page.goto(`${origin}/c/${id}`);
+    await page.goto(`${origin}/missing-artifact-navigation-page`);
+    const [chatDocument] = await Promise.all([
+      page.waitForResponse((response) =>
+        response.url() === `${origin}/c/${id}` && response.request().resourceType() === "document"
+      ),
+      page.getByRole("link", { name: "Back to chats" }).click(),
+    ]);
+    step("Back to chats loads a document with the page CSP", chatDocument.ok() && chatDocument.headers()["content-security-policy"] === "frame-src 'none'");
     const composer = page.getByPlaceholder("Ask anything");
     const reply = page.locator('[data-message-role="assistant"]').last();
     const panel = page.getByRole("complementary", { name: "Artifact", exact: true });

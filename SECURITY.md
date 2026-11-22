@@ -56,6 +56,8 @@ This policy blocks fetch requests, including requests to Orbit's API. It allows 
 
 Orbit's pages also send `Content-Security-Policy: frame-src 'none'`. The browser checks this policy each time a frame on the page loads a URL, including a load the frame starts itself. When preview code sets `location.href`, follows a link or uses a meta refresh, the browser blocks the load before the request leaves, so the code cannot send data out in a URL. Chrome 155 and Firefox 157 block these loads. Safari is untested. The browser may show its own blocked page in the frame, and Reload brings the preview back. Orbit passes the preview document as `srcdoc`, not as a URL, so this policy does not block it.
 
+`next.config.ts` sets this header on the named app pages. Route handlers outside those paths can set their own CSP. A matching Next.js header rule can replace a handler's CSP, so keep the rule limited to pages. Client-side links keep the current document's CSP. Give new pages that link into chat the same policy or use a link that loads a new document, as the 404 page does.
+
 The app accepts an error report only from the preview frame's own window and shows the message as text. The frame does not limit CPU or memory use. Preview only code you are willing to run under these limits.
 
 The [code sandbox](docs/slices/08.md) runs server-side code in a separate container. It is separate from artifact previews.
