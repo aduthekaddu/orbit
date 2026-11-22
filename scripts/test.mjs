@@ -1,7 +1,8 @@
 import { createHash, randomInt } from "node:crypto";
-import { globSync, mkdtempSync, rmSync } from "node:fs";
+import { globSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { run } from "node:test";
 import { tap } from "node:test/reporters";
 import { fileURLToPath } from "node:url";
@@ -55,13 +56,48 @@ if (seed !== undefined) {
 }
 
 // One root for every file's data directory (see test-data-dir.mjs). A file killed by a signal
-// cannot clean up after itself, so the runner removes the whole root when the run ends,
-// on an error exit and on SIGINT or SIGTERM too. Only a SIGKILL of this runner leaves it behind.
+// cannot clean up after itself, so the runner removes the whole root when the run ends.
+// On SIGINT or SIGTERM it first stops the files still running and waits for them to exit,
+// so none recreates the root afterwards. Only a SIGKILL of this runner leaves the root behind.
 const root = mkdtempSync(join(tmpdir(), "orbit-test-run-"));
 process.env.ORBIT_TEST_ROOT = root;
 process.on("exit", () => rmSync(root, { recursive: true, force: true }));
+
+function runningFiles() {
+  const pids = [];
+  for (const entry of readdirSync(root)) {
+    try {
+      const pid = Number(readFileSync(join(root, entry, "pid"), "utf8"));
+      process.kill(pid, 0);
+      pids.push(pid);
+    } catch {
+      // No pid yet, or the file already exited.
+    }
+  }
+  return pids;
+}
+
+async function stopFiles(graceMs) {
+  for (let waited = 0, pids = runningFiles(); pids.length > 0; waited += 50, pids = runningFiles()) {
+    for (const pid of pids) {
+      try {
+        process.kill(pid, waited < graceMs ? "SIGTERM" : "SIGKILL");
+      } catch {
+        // Exited since the check.
+      }
+    }
+    await sleep(50);
+  }
+}
+
+let stopping = false;
 for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
-  process.on(signal, () => process.exit(code));
+  process.on(signal, async () => {
+    if (stopping) return;
+    stopping = true;
+    await stopFiles(5000);
+    process.exit(code);
+  });
 }
 
 const tests = run({

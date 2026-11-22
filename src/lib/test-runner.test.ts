@@ -211,25 +211,37 @@ test("hangs after opening the database", async () => {
   await new Promise((resolve) => setTimeout(resolve, 60_000));
 });`;
 
-test("a runner stopped by SIGTERM removes the data directories of the files still running", async () => {
-  const { dir, env, tmp } = makeProject({ "hangs.test.ts": hangs });
-  env.ORBIT_TEST_WORKERS = "1";
-  const child = spawn(process.execPath, [runner], { cwd: dir, env, stdio: "ignore" });
-  const exited = new Promise<number | null>((resolve) => child.on("exit", (code) => resolve(code)));
-  const ready = path.join(dir, "ready.log");
-  let filePid: number | undefined;
+function isAlive(pid: number) {
   try {
-    for (let waited = 0; !fs.existsSync(ready) || !fs.readFileSync(ready, "utf8").includes("\n"); waited += 50) {
-      assert.ok(waited < 20_000, "the fixture never opened its database");
-      await sleep(50);
-    }
-    filePid = Number(fs.readFileSync(ready, "utf8").split("\n")[1]);
-    assert.ok(fs.readdirSync(tmp).some((name) => name.startsWith("orbit-test-")));
-    child.kill("SIGTERM");
-    assert.equal(await exited, 143);
-    assert.deepEqual(fs.readdirSync(tmp).filter((name) => name.startsWith("orbit-test-")), []);
-  } finally {
-    child.kill("SIGKILL");
-    if (filePid) try { process.kill(filePid, "SIGKILL"); } catch { /* already gone */ }
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
   }
-});
+}
+
+for (const [signal, code] of [["SIGTERM", 143], ["SIGINT", 130]] as const) {
+  test(`a runner stopped by ${signal} stops its test files, then removes their data directories`, async () => {
+    const { dir, env, tmp } = makeProject({ "hangs.test.ts": hangs });
+    env.ORBIT_TEST_WORKERS = "1";
+    const child = spawn(process.execPath, [runner], { cwd: dir, env, stdio: "ignore" });
+    const exited = new Promise<number | null>((resolve) => child.on("exit", (status) => resolve(status)));
+    const ready = path.join(dir, "ready.log");
+    let filePid: number | undefined;
+    try {
+      for (let waited = 0; !fs.existsSync(ready) || !fs.readFileSync(ready, "utf8").includes("\n"); waited += 50) {
+        assert.ok(waited < 20_000, "the fixture never opened its database");
+        await sleep(50);
+      }
+      filePid = Number(fs.readFileSync(ready, "utf8").split("\n")[1]);
+      assert.ok(fs.readdirSync(tmp).some((name) => name.startsWith("orbit-test-")));
+      child.kill(signal);
+      assert.equal(await exited, code);
+      assert.equal(isAlive(filePid), false, "the test file outlived the runner");
+      assert.deepEqual(fs.readdirSync(tmp).filter((name) => name.startsWith("orbit-test-")), []);
+    } finally {
+      child.kill("SIGKILL");
+      if (filePid && isAlive(filePid)) process.kill(filePid, "SIGKILL");
+    }
+  });
+}
