@@ -28,4 +28,60 @@ export default async function palette({ page, origin, step, shot }) {
   step("Esc closes the palette", !(await dialog.isVisible()), "dialog still visible");
   const focused = await page.evaluate(() => document.activeElement?.tagName ?? "none");
   step("focus returns to the composer", focused === "TEXTAREA", `focus is on ${focused}`);
+
+  const composer = page.getByRole("textbox");
+  await composer.fill("[qa:plain] quokkanest");
+  await composer.press("Enter");
+  const replied = await page
+    .locator('[data-message-role="assistant"]')
+    .getByText("pong", { exact: true })
+    .waitFor({ timeout: 30_000 })
+    .then(() => true, () => false);
+  step("the chat has a message to search", replied);
+
+  const input = dialog.locator("input");
+  const noResults = dialog.getByText("No results", { exact: true });
+  const searchFailed = dialog.getByText("Could not search", { exact: true });
+  const messages = dialog.getByText("Messages", { exact: true });
+  const shows = (locator, timeout) => locator.waitFor({ timeout }).then(() => true, () => false);
+
+  await page.route("**/api/search*", (route) => route.abort());
+  await composer.click();
+  await page.keyboard.press("Control+K");
+  await dialog.waitFor({ timeout: 5_000 });
+  await input.fill("wombatless");
+  const failed = await shows(searchFailed, 5_000);
+  await shot("search-failed");
+  step("a failed search does not say No results", failed && !(await noResults.isVisible()), failed ? "No results is visible" : "Could not search is not visible");
+
+  await page.unroute("**/api/search*");
+  await input.fill("quokkanest");
+  const recovered = await shows(messages, 5_000);
+  await shot("search-recovered");
+  step(
+    "a search after a failed one shows the hit and no error",
+    failed && recovered && !(await searchFailed.isVisible()),
+    !failed ? "the failed search showed no error" : recovered ? "Could not search is still visible" : "no Messages group",
+  );
+
+  await page.route("**/api/search*", (route) => route.fulfill({ status: 500, contentType: "application/json", body: "{}" }));
+  await input.fill("wombatless");
+  const serverError = await shows(searchFailed, 5_000);
+  step("a server error says Could not search", serverError && !(await noResults.isVisible()), serverError ? "No results is visible" : "Could not search is not visible");
+
+  await page.unroute("**/api/search*");
+  await page.route("**/api/search*", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    await route.continue().catch(() => {});
+  });
+  await input.fill("wombatness");
+  await page.waitForTimeout(1_000);
+  await shot("search-pending");
+  step("a pending search does not say No results", !(await noResults.isVisible()) && !(await searchFailed.isVisible()), "No results or Could not search is visible");
+  await input.fill("wombatnes");
+  await page.waitForTimeout(500);
+  step("a canceled search does not say Could not search", !(await searchFailed.isVisible()) && !(await noResults.isVisible()), "Could not search or No results is visible");
+  const empty = await shows(noResults, 6_000);
+  step("a finished search with no match says No results", empty && !(await searchFailed.isVisible()), empty ? "Could not search is visible" : "No results is not visible");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 }
