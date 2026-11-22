@@ -1,0 +1,27 @@
+src/lib/test-runner.test.ts
+  s_99e6b4fa97078c::t_10d9eff96e85e3 2,7,31-33,36,39,43,48,162,167-234
+scripts/test.mjs
+  s_99e6b4fa97078c::t_2ccb922db20f71 2-4,57-66
+AGENTS.md
+  s_99e6b4fa97078c::t_df8d6cfb74da9e 23
+src/lib/paths.ts
+  s_99e6b4fa97078c::t_aa3cdbebe6570c 4-10,14
+scripts/test-data-dir.mjs
+  s_99e6b4fa97078c::t_22a06f0c816971 4-5,10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f508d79d64c18d6e1d252ce18f8bfd9e55187b06",
+  "prompts": {},
+  "sessions": {
+    "s_99e6b4fa97078c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "30fc78cc-c8d5-5e67-be6f-766ace7f4ede",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
