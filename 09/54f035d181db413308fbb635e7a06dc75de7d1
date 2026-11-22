@@ -1,0 +1,21 @@
+src/lib/provider.test.ts
+  s_6c06073f90f70d::t_1ee6560d69dfcd 134-135,138-139,143-146,167,169
+docs/slices/17.md
+  s_6c06073f90f70d::t_1ee6560d69dfcd 200,248,250
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0954f035d181db413308fbb635e7a06dc75de7d1",
+  "prompts": {},
+  "sessions": {
+    "s_6c06073f90f70d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a203dd-ed4b-7883-8e3e-a12be3e8da33",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
