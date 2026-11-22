@@ -1,0 +1,22 @@
+.agents/skills/verify-orbit/scenarios/artifact-navigation.mjs
+  s_ca33bbf2e870c4::t_d4845822bb81b9 1-43,48,50,54-56,62,64-68
+  s_ca33bbf2e870c4::t_a8d0af37979ee2 44-47,49,51-53,57-61,63
+.agents/skills/verify-orbit/features/artifacts.md
+  s_ca33bbf2e870c4::t_b0d1f36aaab76b 34-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7285f9e7dc3e17813e153e94e253423918af529a",
+  "prompts": {},
+  "sessions": {
+    "s_ca33bbf2e870c4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "801463ea-9399-49a7-8a73-d239071e5ef0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
