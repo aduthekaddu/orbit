@@ -1,0 +1,19 @@
+docs/slices/16.md
+  s_db1c3c73d60aa4::t_01f2f81ea21a85 13,178,240-241
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9d145fed93f1855b201ec55c3c4fce27b5cf773e",
+  "prompts": {},
+  "sessions": {
+    "s_db1c3c73d60aa4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44375d24-a2a3-4b3c-ad8e-e410874c946b",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
