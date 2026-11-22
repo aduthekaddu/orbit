@@ -1,0 +1,23 @@
+SECURITY.md
+  s_ae622a382342aa::t_9c7098cab07baa 29
+docs/adr/0002-several-users.md
+  s_ae622a382342aa::t_e154ce86514c5a 43
+docs/slices/18.md
+  s_ae622a382342aa::t_ac9293c3b7cb5b 441
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2e85c52b086682baffcee5b99369fa575a286be2",
+  "prompts": {},
+  "sessions": {
+    "s_ae622a382342aa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4bacd0ee-c1b5-4899-8c31-cba4bffce3a6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
