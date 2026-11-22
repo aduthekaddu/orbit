@@ -20,6 +20,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - A saved memory sent with a later chat is quoted notes on the user message. It is not a system instruction. The remember card shows the saved text. A vector that is far from the question is left out. Forget runs only when it is given an id.
 - A full question can find a memory from one shared word when Ollama is down. Common words such as "is", "the", and "and" do not count, so an unrelated question no longer brings back unrelated memories.
 - A hung Ollama no longer holds a chat turn or a memory search for 5 seconds. The last Ollama result is reused for 15 seconds, and a chat asks for a vector for at most 1 second. Search still reads SQLite.
+- A memory search no longer waits for an Ollama check. It answers from SQLite alone. The embeddings line on the Memory page updates when the page loads and after a save or delete. (#141)
 - Each memory has a stable row number, so its vector stays attached after vacuum.
 - Editing a memory shows the server's reason when the save is refused.
 - A remember or forget call that fails shows Failed on its card. The card no longer shows the text as saved.
