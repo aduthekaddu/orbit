@@ -1,0 +1,25 @@
+CHANGELOG.md
+  s_8cd0abd38710c0::t_fc330e17b9d9a6 76
+src/components/chat/sidebar.tsx
+  s_8cd0abd38710c0::t_0326fb5525096b 54,56-60
+  s_8cd0abd38710c0::t_9b705b65bf8b20 55
+  s_8cd0abd38710c0::t_7ab6a4a1210686 50
+  s_8cd0abd38710c0::t_873b8ab3bc9339 3
+  s_8cd0abd38710c0::t_a0877dc1a38980 134-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "404c0d0cfc77da584aa4c83deb6787f86fb8f16c",
+  "prompts": {},
+  "sessions": {
+    "s_8cd0abd38710c0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a31ad58b-9edf-4a7f-9895-648a7eed2ade",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
