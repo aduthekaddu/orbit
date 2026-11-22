@@ -1,0 +1,26 @@
+ARCHITECTURE.md
+  s_ca33bbf2e870c4::t_608fa66f3505cd 152
+SECURITY.md
+  s_ca33bbf2e870c4::t_a5d09ad71922ef 58
+  s_ca33bbf2e870c4::t_cf1ecb12a46f8a 57
+next.config.ts
+  s_ca33bbf2e870c4::t_9a0e34d31a4d51 5-8
+CHANGELOG.md
+  s_ca33bbf2e870c4::t_7dc40f838c3f87 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8ffa779c92cc052837bda138d04e01a371705566",
+  "prompts": {},
+  "sessions": {
+    "s_ca33bbf2e870c4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "801463ea-9399-49a7-8a73-d239071e5ef0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
