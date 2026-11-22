@@ -1,0 +1,23 @@
+.agents/skills/verify-orbit/features/search.md
+  s_b5db481d1726e6::t_92f02a286c7ae9 11-12
+src/lib/titles.test.ts
+  s_b5db481d1726e6::t_8d1cae9f86a04b 12,18,35-53
+.agents/skills/verify-orbit/scenarios/title-prompt.mjs
+  s_b5db481d1726e6::t_ac09bb7b854c37 1-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2c19f5d9838b1943d9de118bc9f4bbdba61da6e7",
+  "prompts": {},
+  "sessions": {
+    "s_b5db481d1726e6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "20bee539-1784-449a-ada5-53e2cdf345ce",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
