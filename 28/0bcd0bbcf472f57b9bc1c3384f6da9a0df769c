@@ -1,0 +1,23 @@
+.agents/skills/verify-orbit/scenarios/sandbox-scroll.mjs
+  s_99e6b4fa97078c::t_c8d53483dad08b 16-18
+docs/slices/19.md
+  s_99e6b4fa97078c::t_c8d53483dad08b 111
+docs/slices/08.md
+  s_99e6b4fa97078c::t_c8d53483dad08b 68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "280bcd0bbcf472f57b9bc1c3384f6da9a0df769c",
+  "prompts": {},
+  "sessions": {
+    "s_99e6b4fa97078c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "30fc78cc-c8d5-5e67-be6f-766ace7f4ede",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
