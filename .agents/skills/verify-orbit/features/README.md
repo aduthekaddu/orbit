@@ -34,7 +34,7 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 - [Sign in](./signin.md) returns that account to a chat.
 - [Settings](./settings.md) stores a provider without returning the key.
 - [Chat](./chat.md) streams one turn and reads it back from SQLite.
-- [Browse](./browse.md) drives Chrome for retry and stop, the palette, short-screen settings, and the empty chat.
+- [Browse](./browse.md) drives Chrome for retry and stop, the palette, short-screen settings, the empty chat, and the thread map shortcut.
 
 - [Branching](./branching.md) keeps edited prompts and regenerated answers, switches versions, and restores the last written branch.
 - [History search](./search.md) finds a message from the command palette and titles a new chat.

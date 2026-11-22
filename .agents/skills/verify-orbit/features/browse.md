@@ -90,6 +90,19 @@ PASS starters are at least 44px tall on a phone
 
 Screenshots: `starters.png`, `filled.png`, `phone-390x844.png`.
 
+### thread-map
+
+Sends three `[qa:plain]` prompts. Types two lines in the composer and presses `Alt+ArrowUp`. Then clicks a reply outside any field and presses `Alt+ArrowUp` again.
+
+Pass lines:
+
+```
+PASS Alt+Up in the composer keeps focus in the composer
+PASS Alt+Up on the page moves focus to the previous prompt
+```
+
+Screenshots: `composer.png`, `page.png`.
+
 ## Gotchas
 
 - The mock counts `fail-first` failures for each prompt text. `retry-stop` adds the time to the prompt, so a second run fails three times again.
