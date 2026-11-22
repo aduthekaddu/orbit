@@ -12,19 +12,25 @@ import { createStoppedRuns } from "../tools/stopped-runs";
 import { runCode } from "./run";
 import type { RunCodeOutput } from "./spec";
 
-type Step = "create" | "attach" | "start" | "kill" | "remove";
+type Step = "create" | "attach" | "start" | "inspect" | "kill" | "remove";
 
 // Docker as runCode sees it. A step in `held` waits until the test calls `release`; the others answer at once.
 // The program runs until the test calls `exit`, or until `kill` (exit 137, as real Docker reports SIGKILL).
+// Like real Docker, kill answers 409 unless the program runs, and remove answers 409 for a running program without force.
 function fakeDocker(held: Step[] = []) {
   const events: string[] = [];
   const reached = new Map<Step, PromiseWithResolvers<void>>();
   const gates = new Map<Step, PromiseWithResolvers<void>>();
   const exited = Promise.withResolvers<number>();
   const connection = new Duplex({ read() {}, write(_chunk, _encoding, done) { done(); } });
+  let state: "created" | "running" | "exited" | "removed" | undefined;
+  let oomKilled = false;
   const once = <T>(map: Map<Step, PromiseWithResolvers<T>>, step: Step) => {
-    if (!map.has(step)) map.set(step, Promise.withResolvers<T>());
-    return map.get(step)!;
+    const existing = map.get(step);
+    if (existing) return existing;
+    const created = Promise.withResolvers<T>();
+    map.set(step, created);
+    return created;
   };
   const call = async (step: Step) => {
     events.push(step);
@@ -32,34 +38,55 @@ function fakeDocker(held: Step[] = []) {
     if (held.includes(step)) await once(gates, step).promise;
     events.push(`${step} settled`);
   };
+  const conflict = () => Object.assign(new Error("conflict"), { statusCode: 409 });
+  const end = (code: number, outputEnds: boolean) => {
+    state = "exited";
+    exited.resolve(code);
+    if (outputEnds) connection.push(null);
+  };
   const container = {
     attach: async () => { await call("attach"); return connection; },
-    start: async () => { await call("start"); },
+    start: async () => {
+      await call("start");
+      if (state === "created") state = "running";
+    },
     wait: async () => ({ StatusCode: await exited.promise }),
     kill: async () => {
       await call("kill");
-      exited.resolve(137);
-      connection.push(null);
+      if (state !== "running") throw conflict();
+      end(137, true);
     },
-    remove: async () => { await call("remove"); },
-    inspect: async () => ({ State: { OOMKilled: false } }),
+    remove: async (options?: { force?: boolean }) => {
+      await call("remove");
+      if (state === "running" && !options?.force) throw conflict();
+      state = "removed";
+    },
+    inspect: async () => {
+      await call("inspect");
+      return { State: { OOMKilled: oomKilled } };
+    },
   };
   const docker = {
-    createContainer: async () => { await call("create"); return container; },
+    createContainer: async () => {
+      await call("create");
+      state = "created";
+      return container;
+    },
     modem: { demuxStream: (stream: Duplex, out: Writable) => stream.on("data", (chunk: Buffer) => out.write(chunk)) },
   };
   return {
     docker: docker as unknown as Docker,
     events,
+    containerLeft: () => state !== undefined && state !== "removed",
     reached: (step: Step) => once(reached, step).promise,
     release(step: Step, error?: Error) {
       if (error) once(gates, step).reject(error);
       else once(gates, step).resolve();
     },
     print: (text: string) => connection.push(text),
-    exit(code: number, { outputEnds = true } = {}) {
-      exited.resolve(code);
-      if (outputEnds) connection.push(null);
+    exit(code: number, { outputEnds = true, memoryKill = false } = {}) {
+      oomKilled = memoryKill;
+      end(code, outputEnds);
     },
     endOutput: () => connection.push(null),
     dropOutput: () => connection.destroy(),
@@ -85,6 +112,11 @@ async function stoppedOutput(result: Promise<RunCodeOutput>) {
   return (error as Error & { output: RunCodeOutput }).output;
 }
 
+async function cleanedUp(fake: ReturnType<typeof fakeDocker>, run: { cleanup: Promise<"removed" | "failed"> }) {
+  assert.equal(await run.cleanup, "removed");
+  assert.equal(fake.containerLeft(), false, "cleanup reported removed, so no container may be left");
+}
+
 function useDeadlineClock(t: TestContext) {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   return () => t.mock.timers.tick(10_000);
@@ -92,7 +124,9 @@ function useDeadlineClock(t: TestContext) {
 
 for (const pending of ["create", "attach", "start"] as const) {
   // 3c20dc5: Stop while Docker was still creating the container waited for Docker and left the container behind.
-  test(`Stop while Docker ${pending} is pending returns at once and the late container is removed`, async () => {
+  test(`Stop while Docker ${pending} is pending returns at once and the late container is removed`, async (t) => {
+    const logs: unknown[][] = [];
+    t.mock.method(console, "error", (...args: unknown[]) => { logs.push(args); });
     const fake = fakeDocker([pending]);
     const controller = new AbortController();
     const run = runCode(fake.docker, spin, controller.signal);
@@ -102,9 +136,10 @@ for (const pending of ["create", "attach", "start"] as const) {
     assert.equal((await stoppedOutput(run.result)).cancelled, true);
     assert.equal(fake.events.includes("remove"), false, `the container is removed only after ${pending} settles`);
     fake.release(pending);
-    assert.equal(await run.cleanup, "removed");
+    await cleanedUp(fake, run);
     assert.equal(fake.events.at(-1), "remove settled");
     assert.ok(fake.events.indexOf(`${pending} settled`) < fake.events.indexOf("remove"));
+    assert.deepEqual(logs, [], "Docker's 409 for killing a container that never started is not a cleanup failure");
   });
 }
 
@@ -117,7 +152,7 @@ test("the deadline counts time spent waiting for Docker create", async (t) => {
   assert.equal(await isSettled(run.result), true, "creation must count against the ten second deadline");
   assert.equal((await run.result).timedOut, true);
   fake.release("create");
-  assert.equal(await run.cleanup, "removed");
+  await cleanedUp(fake, run);
 });
 
 // b7bf7d5: the deadline stayed armed while a slow removal ran, so a program that had exited was reported timed out.
@@ -136,7 +171,7 @@ test("a program that exits before its deadline is not reported timed out while r
   assert.equal(result.timedOut, false, "cleanup must not turn a finished program into a timeout");
   assert.equal(result.exitCode, 0);
   assert.equal(result.stdout, "1\n");
-  assert.equal(await run.cleanup, "removed");
+  await cleanedUp(fake, run);
 });
 
 // Reviewer claim (a): a Stop that arrives while removal runs after a normal exit changed the reported outcome.
@@ -152,10 +187,10 @@ test("Stop during removal after the program exited keeps the exit result", async
   fake.release("remove");
   const result = await run.result;
   assert.equal(result.exitCode, 0);
-  assert.equal(result.cancelled, undefined);
+  assert.equal("cancelled" in result, false);
   assert.equal(result.stdout, "done\n");
   assert.equal(fake.events.includes("kill"), false, "an exited program needs no kill");
-  assert.equal(await run.cleanup, "removed");
+  await cleanedUp(fake, run);
 });
 
 // Reviewer claim (c): the deadline fired after container.wait returned but before the output ended.
@@ -173,7 +208,77 @@ test("the deadline after the program exited but before its output ended keeps th
   assert.equal(result.timedOut, false, "a program that exited before the deadline did not time out");
   assert.equal(result.exitCode, 0);
   assert.equal(result.stdout, "late\n");
-  assert.equal(await run.cleanup, "removed");
+  await cleanedUp(fake, run);
+});
+
+// Review of #187, finding 1: a deadline after a memory kill dropped the memory flag.
+test("a memory kill keeps its flag when the deadline passes before the output ends", async (t) => {
+  const passDeadline = useDeadlineClock(t);
+  const fake = fakeDocker();
+  const run = runCode(fake.docker, spin);
+  await fake.reached("start");
+  fake.exit(137, { outputEnds: false, memoryKill: true });
+  await drain();
+  passDeadline();
+  const result = await run.result;
+  assert.deepEqual([result.exitCode, result.oomKilled, result.timedOut], [137, true, false]);
+  await cleanedUp(fake, run);
+});
+
+test("a memory kill keeps its flag when the deadline passes while Docker inspects the container", async (t) => {
+  const passDeadline = useDeadlineClock(t);
+  const fake = fakeDocker(["inspect"]);
+  const run = runCode(fake.docker, spin);
+  await fake.reached("start");
+  fake.exit(137, { memoryKill: true });
+  await fake.reached("inspect");
+  passDeadline();
+  await drain();
+  fake.release("inspect");
+  const result = await run.result;
+  assert.deepEqual([result.exitCode, result.oomKilled, result.timedOut], [137, true, false]);
+  await cleanedUp(fake, run);
+});
+
+// Review of #187, finding 2: Stop after the program exited, before its output ended, dropped the exit code.
+test("Stop after the program exited but before its output ended keeps the exit code", async () => {
+  const fake = fakeDocker();
+  const controller = new AbortController();
+  const run = runCode(fake.docker, spin, controller.signal);
+  await fake.reached("start");
+  fake.print("partial\n");
+  fake.exit(3, { outputEnds: false });
+  await drain();
+  controller.abort();
+  const output = await stoppedOutput(run.result);
+  assert.deepEqual([output.exitCode, output.cancelled, output.stdout], [3, true, "partial\n"]);
+  await cleanedUp(fake, run);
+  assert.equal(fake.events.includes("kill"), false, "an exited program needs no kill");
+});
+
+// Review of #187, finding 4: a signal that was already aborted threw from runCode instead of settling result.
+test("a signal that is already aborted reports a stop and creates no container", async () => {
+  const fake = fakeDocker();
+  const run = runCode(fake.docker, spin, AbortSignal.abort());
+  assert.deepEqual({ ...await stoppedOutput(run.result), durationMs: 0 }, { stdout: "", stderr: "", exitCode: null, durationMs: 0, timedOut: false, truncated: false, cancelled: true });
+  await cleanedUp(fake, run);
+  assert.deepEqual(fake.events, []);
+});
+
+// Review of #187, finding 5: a denied kill reported a failed cleanup though the forced removal succeeded.
+test("a denied kill still removes the container and reports it removed", async (t) => {
+  const logs: unknown[][] = [];
+  t.mock.method(console, "error", (...args: unknown[]) => { logs.push(args); });
+  const fake = fakeDocker(["kill"]);
+  const controller = new AbortController();
+  const run = runCode(fake.docker, spin, controller.signal);
+  await fake.reached("start");
+  controller.abort();
+  await stoppedOutput(run.result);
+  await fake.reached("kill");
+  fake.release("kill", Object.assign(new Error("private details"), { statusCode: 403 }));
+  await cleanedUp(fake, run);
+  assert.deepEqual(logs, [["Sandbox cleanup failed", { statusCode: 403 }]]);
 });
 
 // Reviewer claim (b): after a stop won the race, a later Docker failure rejected with nobody listening.
@@ -186,7 +291,7 @@ for (const { name, held, fail } of [
     const record = (reason: unknown) => unhandled.push(reason);
     process.on("unhandledRejection", record);
     t.after(() => process.off("unhandledRejection", record));
-    t.mock.method(console, "error", () => {});
+    t.mock.method(console, "error", () => undefined);
     const fake = fakeDocker(held);
     const controller = new AbortController();
     const run = runCode(fake.docker, spin, controller.signal);
@@ -231,7 +336,7 @@ for (const printed of ["before-stop\n", ""]) {
     controller.abort();
     const output = await stoppedOutput(run.result);
     assert.deepEqual({ ...output, durationMs: 0 }, { stdout: printed, stderr: "", exitCode: null, durationMs: 0, timedOut: false, truncated: false, cancelled: true });
-    assert.equal(await run.cleanup, "removed");
+    await cleanedUp(fake, run);
     assert.deepEqual(fake.events.filter((event) => event === "kill" || event === "remove"), ["kill", "remove"]);
   });
 }
@@ -248,7 +353,7 @@ test("the deadline stops a running program, keeps its output, and kills it befor
   assert.equal(result.timedOut, true);
   assert.equal(result.exitCode, null);
   assert.equal(result.stdout, "before-timeout\n");
-  assert.equal(await run.cleanup, "removed");
+  await cleanedUp(fake, run);
   assert.deepEqual(fake.events.filter((event) => event === "kill" || event === "remove"), ["kill", "remove"]);
 });
 
@@ -261,7 +366,7 @@ test("Stop after the Docker output connection closed still removes the container
   await drain();
   controller.abort();
   await stoppedOutput(run.result);
-  assert.equal(await run.cleanup, "removed");
+  await cleanedUp(fake, run);
 });
 
 test("a finished run leaves no deadline timer and no abort listener behind", async () => {
@@ -275,7 +380,7 @@ test("a finished run leaves no deadline timer and no abort listener behind", asy
   assert.equal((await run.result).exitCode, 0);
   assert.equal(timers(), before, "the ten second deadline must be cleared when the run settles");
   assert.equal(getEventListeners(controller.signal, "abort").length, 0);
-  assert.equal(await run.cleanup, "removed");
+  await cleanedUp(fake, run);
 });
 
 test("Stop through the AI SDK saves what the program printed", async () => {
@@ -319,7 +424,10 @@ test("Stop through the AI SDK saves what the program printed", async () => {
   }).then(() => controller.abort());
   for await (const chunk of stream as unknown as AsyncIterable<unknown>) void chunk;
   await stopAfterPrint;
+  await drain();
   assert.equal(aborted, true);
+  assert.deepEqual(fake.events.filter((event) => event === "kill settled" || event === "remove settled"), ["kill settled", "remove settled"]);
+  assert.equal(fake.containerLeft(), false, "a stop through the AI SDK must remove the container");
   const part = (saved as Array<Record<string, unknown>>).find((entry) => entry.type === "tool-run_code");
   assert.equal(part?.state, "output-available");
   assert.deepEqual({ ...(part?.output as RunCodeOutput), durationMs: 0 }, { stdout: "before-stop\n", stderr: "", exitCode: null, durationMs: 0, timedOut: false, truncated: false, cancelled: true });

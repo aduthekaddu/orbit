@@ -187,15 +187,17 @@ finally:
     const demux = docker.modem.demuxStream.bind(docker.modem);
     t.mock.method(docker.modem, "demuxStream", (stream: Duplex, out: Writable, err: Writable) => {
       const write = out.write.bind(out);
+      let seen = "";
       out.write = ((...args: Parameters<Writable["write"]>) => {
-        printed.resolve();
+        seen += String(args[0]);
+        if (seen.includes("before-stop\n")) printed.resolve();
         return write(...args);
       }) as Writable["write"];
       return demux(stream, out, err);
     });
     const controller = new AbortController();
     const run = runCode(docker, { language: "python", code: 'print("before-stop")\nwhile True: pass' }, controller.signal);
-    await printed.promise;
+    await Promise.race([printed.promise, run.result.then(() => assert.fail("the program ended before it was stopped"))]);
     controller.abort();
     await assert.rejects(run.result, (error: unknown) => {
       assert.ok(error instanceof Error && error.name === "AbortError");
@@ -205,6 +207,58 @@ finally:
     });
     assert.equal(await run.cleanup, "removed");
     assert.deepEqual(await ownedContainers(), []);
+  });
+  // Real Docker answers 409 when asked to kill a container that never started; cleanup must still remove it.
+  await t.test("Stop while Docker attach is pending removes the container that never started", async (t) => {
+    const attached = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const create = docker.createContainer.bind(docker);
+    t.mock.method(docker, "createContainer", async (options: Docker.ContainerCreateOptions) => {
+      const container = await create(options);
+      const attach = container.attach.bind(container);
+      t.mock.method(container, "attach", async (attachOptions: Docker.ContainerAttachOptions) => {
+        const connection = await attach(attachOptions);
+        attached.resolve();
+        await release.promise;
+        return connection;
+      });
+      return container;
+    });
+    const controller = new AbortController();
+    const run = runCode(docker, { language: "python", code: "while True: pass" }, controller.signal);
+    await Promise.race([attached.promise, run.result]);
+    controller.abort();
+    await assert.rejects(run.result, { name: "AbortError" });
+    release.resolve();
+    assert.equal(await run.cleanup, "removed");
+    assert.deepEqual(await ownedContainers(), []);
+  });
+  // f43282e: a denied removal must not leave untrusted code running.
+  await t.test("Stop whose removal is denied leaves the program stopped", async (t) => {
+    const waiting = Promise.withResolvers<Docker.Container>();
+    const create = docker.createContainer.bind(docker);
+    t.mock.method(console, "error", () => undefined);
+    t.mock.method(docker, "createContainer", async (options: Docker.ContainerCreateOptions) => {
+      const container = await create(options);
+      const wait = container.wait.bind(container);
+      t.mock.method(container, "remove", async () => { throw Object.assign(new Error("denied"), { statusCode: 403 }); });
+      t.mock.method(container, "wait", () => {
+        waiting.resolve(container);
+        return wait();
+      });
+      return container;
+    });
+    const controller = new AbortController();
+    const run = runCode(docker, { language: "python", code: "while True: pass" }, controller.signal);
+    const container = await Promise.race([waiting.promise, run.result.then(() => assert.fail("the program ended on its own"))]);
+    try {
+      controller.abort();
+      await assert.rejects(run.result, { name: "AbortError" });
+      assert.equal(await run.cleanup, "failed");
+      assert.equal((await container.inspect()).State.Running, false, "a denied removal must not leave untrusted code running");
+    } finally {
+      await new Docker().getContainer(container.id).remove({ force: true });
+    }
   });
   await t.test("no sandbox containers remain after success, errors, timeout, or cancellation", async () => {
     assert.deepEqual(await ownedContainers(), []);
