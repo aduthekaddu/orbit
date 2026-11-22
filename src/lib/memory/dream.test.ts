@@ -356,6 +356,28 @@ test("an Ollama outage skips model calls and recovery reads the newest 100 messa
   assert.deepEqual(memoryTexts(), ["I live in Porto"]);
 });
 
+test("a cached query embed failure does not fail a night with Ollama back", async () => {
+  const api = requireDream();
+  await resetChats();
+  assert.ok(ollama);
+  const embed = await import("./embed");
+  const date = "2099-07-05";
+  const { chatId } = await seedChat("I keep bees on the roof", at(date, 12));
+  await fetch(`${ollama.url}/qa/fail`, { method: "POST" });
+  try {
+    assert.deepEqual(await embed.embedQuery("bees"), { ok: false, error: "Ollama returned HTTP 503" });
+  } finally {
+    await fetch(`${ollama.url}/qa/ok`, { method: "POST" });
+  }
+
+  const row = await api.runDream({ date, now: new Date(at(date, 16)) });
+  assert.ok(row);
+  assert.equal(row.state, "done");
+  assert.equal(row.error, null);
+  assert.deepEqual(row.doneChatIds, [chatId]);
+  assert.deepEqual(memoryTexts(), ["I keep bees on the roof"]);
+});
+
 test("a failed final embed pass marks the run failed", async (t) => {
   const api = requireDream();
   await resetChats();

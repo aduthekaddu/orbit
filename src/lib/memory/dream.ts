@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "../db";
 import { orbitModel } from "../provider";
 import { getSettings } from "../settings";
-import { embed, embedPending, ollamaStatus } from "./embed";
+import { embed, embedPending } from "./embed";
 import { DREAM_LEASE_MS, localMidnight, localStamp, systemTimeZone, type RunState } from "./schedule";
 import { cleanMemoryText, getMemory, saveMemory, updateMemory, writeVectors, MemoryRejected } from "./store";
 
@@ -433,7 +433,7 @@ export async function runDream(input: { now?: Date; date?: string; manual?: bool
     if (!claimed) return null;
     const pending = claimed.chatIds.filter((id) => !claimed.doneChatIds.includes(id) && !claimed.retryChatIds.includes(id));
     if (pending.length > 0) {
-      const status = await ollamaStatus(5_000);
+      const status = await embed(["orbit"], "query");
       if (!status.ok) {
         failOwned(date, owner, status.error);
         return readRun(date);
