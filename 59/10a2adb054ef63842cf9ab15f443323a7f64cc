@@ -1,0 +1,41 @@
+.github/workflows/codeql.yml
+  s_99e6b4fa97078c::t_ca6d2847c8940d 20
+.github/workflows/ci.yml
+  s_99e6b4fa97078c::t_ca6d2847c8940d 23,52,90,129,156
+  s_99e6b4fa97078c::t_67a275168adcc8 137-138
+.github/workflows/pr-checks.yml
+  s_99e6b4fa97078c::t_ca6d2847c8940d 16
+src/lib/fixed-runners.test.ts
+  s_99e6b4fa97078c::t_67a275168adcc8 1-41
+.github/workflows/claude.yml
+  s_99e6b4fa97078c::t_ca6d2847c8940d 25
+scripts/ci/fixed-runners.sh
+  s_99e6b4fa97078c::t_e6e94a636e82df 7
+  s_99e6b4fa97078c::t_ca6d2847c8940d 1-6,8-14
+docs/adr/0001-ci-on-romper.md
+  s_99e6b4fa97078c::t_67a275168adcc8 5,13,32
+CONTRIBUTING.md
+  s_99e6b4fa97078c::t_04063f194efd36 30
+docs/adr/0003-ci-on-github-hosted-runners.md
+  s_99e6b4fa97078c::t_67a275168adcc8 1-35
+.github/workflows/security.yml
+  s_99e6b4fa97078c::t_ca6d2847c8940d 20,37,60,84
+.github/workflows/claude-code-review.yml
+  s_99e6b4fa97078c::t_ca6d2847c8940d 16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5910a2adb054ef63842cf9ab15f443323a7f64cc",
+  "prompts": {},
+  "sessions": {
+    "s_99e6b4fa97078c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "30fc78cc-c8d5-5e67-be6f-766ace7f4ede",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
