@@ -258,6 +258,21 @@ test("a warm turn that calls a GitHub tool closes its session when the turn clos
   });
 });
 
+test("a warm turn whose first GitHub tool call comes after the setup time still reaches GitHub", { timeout: 20_000 }, async () => {
+  await withMock(async (mock) => {
+    const first = await githubTools({ token: mock.token, mcpUrl: mock.url });
+    await first.close();
+    const warm = await githubTools({ token: mock.token, mcpUrl: mock.url }, { setupMs: 300 });
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      const result = await warm.tools.github_list_issues?.execute?.({ owner: "aduthekaddu", repo: "orbit" }, toolOptions);
+      assert.equal(githubLinks(result)[0]?.href, "https://github.com/aduthekaddu/orbit/issues/7");
+    } finally {
+      await warm.close();
+    }
+  });
+});
+
 test("a warm turn whose client fails to start fails the tool call and logs one line", { timeout: 20_000 }, async () => {
   const logs: string[] = [];
   const original = console.error;
