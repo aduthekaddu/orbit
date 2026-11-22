@@ -20,6 +20,11 @@ export function searchAnswerStep({ stepNumber, messages, initialInstructions }: 
   } satisfies PrepareStepResult<ToolSet>;
 }
 
+function finalAnswerStep({ stepNumber }: Pick<StepInput, "stepNumber">) {
+  if (stepNumber !== CHAT_STEP_LIMIT - 1) return undefined;
+  return { toolChoice: "auto", activeTools: ["render_ui"] as const } satisfies PrepareStepResult<ToolSet>;
+}
+
 export function answerStepFor(tools: ToolSet) {
-  return tools.web_search ? searchAnswerStep : undefined;
+  return tools.web_search ? searchAnswerStep : finalAnswerStep;
 }

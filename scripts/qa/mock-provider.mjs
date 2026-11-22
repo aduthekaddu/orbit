@@ -552,7 +552,8 @@ const server = http.createServer((req, res) => {
       return;
     }
     if (invalidSandboxCalls.has(scenario)) {
-      toolResponse(res, scenario, invalidSandboxCalls.get(scenario), "run_code");
+      if (body.tools?.some((entry) => entry.function?.name === "run_code")) toolResponse(res, scenario, invalidSandboxCalls.get(scenario), "run_code");
+      else textResponse(res, "The sandbox rejected the code.");
       return;
     }
     if (scenario === "run-token-echo" && body.messages?.at(-1)?.role === "tool") {
