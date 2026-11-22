@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useReducer, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { WarningCircleIcon } from "@phosphor-icons/react";
 import { authClient } from "@/lib/auth-client";
+import { idleSubmit, submitTransition } from "@/lib/submit-state";
 import { OrbitMark } from "@/components/orbit-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,25 +15,22 @@ export function LoginForm({ signupOpen }: { signupOpen: boolean }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [pending, setPending] = useState(false);
+  const [submit, dispatch] = useReducer(submitTransition, idleSubmit);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setPending(true);
-    setError("");
+    dispatch({ type: "submit" });
     try {
       const result = await authClient.signIn.email({ email, password });
       if (result.error) {
-        setError(result.error.message ?? "Could not sign in");
+        dispatch({ type: "fail", error: result.error.message ?? "Could not sign in" });
         return;
       }
+      dispatch({ type: "succeed" });
       router.push("/");
       router.refresh();
     } catch {
-      setError("Network error");
-    } finally {
-      setPending(false);
+      dispatch({ type: "fail", error: "Network error" });
     }
   }
 
@@ -51,8 +49,8 @@ export function LoginForm({ signupOpen }: { signupOpen: boolean }) {
           required
         />
       </Field>
-      <FormError message={error} />
-      <SubmitButton pending={pending}>Sign in</SubmitButton>
+      <FormError message={submit.status === "failed" ? submit.error : ""} />
+      <SubmitButton pending={submit.status === "pending" || submit.status === "succeeded"}>Sign in</SubmitButton>
       {signupOpen ? <QuietLink href="/signup">Create account</QuietLink> : null}
     </form>
   );
@@ -63,25 +61,22 @@ export function SignupForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [pending, setPending] = useState(false);
+  const [submit, dispatch] = useReducer(submitTransition, idleSubmit);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setPending(true);
-    setError("");
+    dispatch({ type: "submit" });
     try {
       const result = await authClient.signUp.email({ name, email, password });
       if (result.error) {
-        setError(result.error.message ?? "Could not create account");
+        dispatch({ type: "fail", error: result.error.message ?? "Could not create account" });
         return;
       }
+      dispatch({ type: "succeed" });
       router.push("/");
       router.refresh();
     } catch {
-      setError("Network error");
-    } finally {
-      setPending(false);
+      dispatch({ type: "fail", error: "Network error" });
     }
   }
 
@@ -103,8 +98,8 @@ export function SignupForm() {
           required
         />
       </Field>
-      <FormError message={error} />
-      <SubmitButton pending={pending}>Create account</SubmitButton>
+      <FormError message={submit.status === "failed" ? submit.error : ""} />
+      <SubmitButton pending={submit.status === "pending" || submit.status === "succeeded"}>Create account</SubmitButton>
       <QuietLink href="/login">Sign in</QuietLink>
     </form>
   );

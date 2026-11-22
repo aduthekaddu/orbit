@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import { CUSTOM_OPTION, NO_OPTION, selectedOptionIndex, showsModelInput, type ModelOption } from "@/lib/model-picker";
 import { appliedSave, connectionFromResponse, type Connection, type SettingsSnapshot } from "@/lib/settings-form";
+import { idleSubmit, submitTransition } from "@/lib/submit-state";
 import type { PublicSettings, ReasoningEffort } from "@/lib/settings";
 
 const EFFORTS: { value: ReasoningEffort; label: string }[] = [
@@ -42,9 +43,8 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
   const hasKey = keySet || apiKey.trim().length > 0;
   const [connection, setConnection] = useState<Connection>(() => canLoadStored(initial) ? { status: "checking" } : { status: "idle" });
   const [customMode, setCustomMode] = useState(false);
-  const [error, setError] = useState("");
-  const [saved, setSaved] = useState(false);
-  const [pending, setPending] = useState(false);
+  const [save, dispatchSave] = useReducer(submitTransition, idleSubmit);
+  const pending = save.status === "pending";
   const modelLoad = useRef<{ id: number; controller: AbortController | null }>({ id: 0, controller: null });
   const formValues: SettingsSnapshot = { baseUrl, apiKey, model, effort, searxngUrl, tavilyApiKey, githubToken, githubMcpUrl };
   const latestValues = useRef(formValues);
@@ -87,16 +87,14 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
   }, [initial.baseUrl, initial.keySet, loadModels]);
 
   useEffect(() => {
-    if (!saved) return;
-    const timer = setTimeout(() => setSaved(false), 2000);
+    if (save.status !== "succeeded") return;
+    const timer = setTimeout(() => dispatchSave({ type: "edit" }), 2000);
     return () => clearTimeout(timer);
-  }, [saved]);
+  }, [save.status]);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setPending(true);
-    setError("");
-    setSaved(false);
+    dispatchSave({ type: "submit" });
     try {
       const response = await fetch("/api/settings", {
         method: "PUT",
@@ -114,7 +112,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
       });
       const body = (await response.json()) as PublicSettings & { error?: string };
       if (!response.ok) {
-        setError(body.error ?? "Could not save");
+        dispatchSave({ type: "fail", error: body.error ?? "Could not save" });
         return;
       }
       // Pages that read settings on the server stay in the router cache, so Back would show them stale.
@@ -126,11 +124,10 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
       if (applied.clearTavilyKey) setTavilyApiKey("");
       setGithubTokenSet(body.githubTokenSet);
       if (applied.clearGithubToken) setGithubToken("");
-      if (applied.saved) setSaved(true);
+      dispatchSave({ type: "succeed" });
+      if (!applied.saved) dispatchSave({ type: "edit" });
     } catch {
-      setError("Could not save");
-    } finally {
-      setPending(false);
+      dispatchSave({ type: "fail", error: "Could not save" });
     }
   }
 
@@ -176,7 +173,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
               id="baseUrl"
               value={baseUrl}
               onChange={(event) => {
-                setError("");
+                dispatchSave({ type: "edit" });
                 setBaseUrl(event.target.value);
               }}
               onBlur={() => void loadModels(baseUrl, apiKey, hasKey)}
@@ -191,7 +188,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
               value={apiKey}
               placeholder={keySet ? "Key set" : ""}
               onChange={(event) => {
-                setError("");
+                dispatchSave({ type: "edit" });
                 setApiKey(event.target.value);
               }}
               onBlur={() => void loadModels(baseUrl, apiKey, hasKey)}
@@ -205,7 +202,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
                   required
                   value={selectedIndex === NO_OPTION ? "" : String(selectedIndex)}
                   onValueChange={(value) => {
-                    setError("");
+                    dispatchSave({ type: "edit" });
                     const option = models[Number(value)];
                     if (!option) {
                       setCustomMode(true);
@@ -235,7 +232,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
                   aria-label={models.length === 0 ? undefined : "Custom model"}
                   value={model}
                   onChange={(event) => {
-                    setError("");
+                    dispatchSave({ type: "edit" });
                     setCustomMode(true);
                     setModel(event.target.value);
                   }}
@@ -253,7 +250,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
                 size="sm"
                 value={effort}
                 onValueChange={(value) => {
-                  setError("");
+                  dispatchSave({ type: "edit" });
                   const next = EFFORTS.find((item) => item.value === value);
                   if (next) setEffort(next.value);
                 }}
@@ -274,13 +271,13 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
         </div>
         <div className="divide-y">
           <Row id="searxngUrl" label="SearXNG URL">
-            <Input id="searxngUrl" value={searxngUrl} autoComplete="off" onChange={(event) => { setError(""); setSearxngUrl(event.target.value); }} />
+            <Input id="searxngUrl" value={searxngUrl} autoComplete="off" onChange={(event) => { dispatchSave({ type: "edit" }); setSearxngUrl(event.target.value); }} />
           </Row>
           <Row id="tavilyApiKey" label="Tavily key">
             <div className="flex min-w-0 items-center gap-2">
-              <Input id="tavilyApiKey" type="password" value={tavilyApiKey ?? ""} placeholder={tavilyKeySet && tavilyApiKey !== null ? "Key set" : ""} autoComplete="off" onChange={(event) => { setError(""); setTavilyApiKey(event.target.value); }} />
+              <Input id="tavilyApiKey" type="password" value={tavilyApiKey ?? ""} placeholder={tavilyKeySet && tavilyApiKey !== null ? "Key set" : ""} autoComplete="off" onChange={(event) => { dispatchSave({ type: "edit" }); setTavilyApiKey(event.target.value); }} />
               {tavilyKeySet && tavilyApiKey !== null ? (
-                <Button type="button" variant="ghost" size="sm" aria-label="Remove Tavily key" disabled={pending} onClick={() => { setError(""); setSaved(false); setTavilyApiKey(null); }}>
+                <Button type="button" variant="ghost" size="sm" aria-label="Remove Tavily key" disabled={pending} onClick={() => { dispatchSave({ type: "edit" }); setTavilyApiKey(null); }}>
                   Remove
                 </Button>
               ) : null}
@@ -294,9 +291,9 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
         <div className="divide-y">
           <Row id="githubToken" label="Token">
             <div className="flex min-w-0 items-center gap-2">
-              <Input id="githubToken" type="password" value={githubToken ?? ""} placeholder={githubTokenSet && githubToken !== null ? "Key set" : ""} autoComplete="off" onChange={(event) => { setError(""); setGithubToken(event.target.value); }} />
+              <Input id="githubToken" type="password" value={githubToken ?? ""} placeholder={githubTokenSet && githubToken !== null ? "Key set" : ""} autoComplete="off" onChange={(event) => { dispatchSave({ type: "edit" }); setGithubToken(event.target.value); }} />
               {githubTokenSet && githubToken !== null ? (
-                <Button type="button" variant="ghost" size="sm" aria-label="Remove GitHub token" disabled={pending} onClick={() => { setError(""); setSaved(false); setGithubToken(null); }}>
+                <Button type="button" variant="ghost" size="sm" aria-label="Remove GitHub token" disabled={pending} onClick={() => { dispatchSave({ type: "edit" }); setGithubToken(null); }}>
                   Remove
                 </Button>
               ) : null}
@@ -306,7 +303,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
             </div>
           </Row>
           <Row id="githubMcpUrl" label="MCP URL">
-            <Input id="githubMcpUrl" value={githubMcpUrl} autoComplete="off" onChange={(event) => { setError(""); setGithubMcpUrl(event.target.value); }} />
+            <Input id="githubMcpUrl" value={githubMcpUrl} autoComplete="off" onChange={(event) => { dispatchSave({ type: "edit" }); setGithubMcpUrl(event.target.value); }} />
           </Row>
         </div>
         <div className="flex items-center justify-between gap-3 border-t px-5 py-3.5">
@@ -317,20 +314,20 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
           </span>
         </div>
         <div className="flex items-center justify-end gap-3 border-t px-5 py-3">
-          {error ? (
+          {save.status === "failed" ? (
             <p role="alert" className="mr-auto flex min-w-0 items-center gap-2 text-xs text-destructive">
               <WarningCircleIcon weight="regular" className="size-3.5 shrink-0" />
-              <span className="truncate">{error}</span>
+              <span className="truncate">{save.error}</span>
             </p>
           ) : null}
           <span
             aria-live="polite"
             className={cn(
               "flex items-center gap-1.5 text-xs text-muted-foreground transition-opacity duration-200 ease-orbit",
-              saved ? "opacity-100" : "opacity-0",
+              save.status === "succeeded" ? "opacity-100" : "opacity-0",
             )}
           >
-            {saved ? (
+            {save.status === "succeeded" ? (
               <>
                 <CheckIcon weight="regular" className="size-3.5 text-positive" />
                 Saved
