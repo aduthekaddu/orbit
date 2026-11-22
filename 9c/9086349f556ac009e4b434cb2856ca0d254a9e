@@ -1,0 +1,27 @@
+.agents/skills/verify-orbit/SKILL.md
+  s_99e6b4fa97078c::t_13265d23dbf63a 31
+ARCHITECTURE.md
+  s_99e6b4fa97078c::t_c293729f5c1ea9 139
+src/lib/sandbox/owner.mjs
+  s_99e6b4fa97078c::t_5cee9f71dd115a 24-25,27-31
+src/lib/sandbox/owner.test.ts
+  s_99e6b4fa97078c::t_2a154ed51faa70 2-3,5,10,12,15,17-50,61-75,77-79,83-84,87-104
+src/lib/sandbox/run.test.ts
+  s_99e6b4fa97078c::t_7f38b494adb3e7 4,19-22,38,46,55,57-60,63-76,149
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9c9086349f556ac009e4b434cb2856ca0d254a9e",
+  "prompts": {},
+  "sessions": {
+    "s_99e6b4fa97078c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "30fc78cc-c8d5-5e67-be6f-766ace7f4ede",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
