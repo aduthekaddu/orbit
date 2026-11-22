@@ -81,13 +81,16 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         env:
           PR_URL: ${{ github.event.inputs.pr_url }}
+          GITHUB__USER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LITELLM__EXTRA_HEADERS: '{"User-Agent":"orbit-pr-agent/1.0","x-opencode-session":"${{ steps.session.outputs.id }}"}'
         run: |
+          set -euo pipefail
           docker run --rm \
             --env OPENAI_KEY \
             --env OPENAI__KEY \
             --env OPENAI__API_BASE \
             --env GITHUB_TOKEN \
+            --env GITHUB__USER_TOKEN \
             --env CONFIG__GIT_PROVIDER \
             --env CONFIG__MODEL \
             --env CONFIG__FALLBACK_MODELS \
