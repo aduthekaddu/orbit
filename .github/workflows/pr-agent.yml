@@ -1,0 +1,97 @@
+name: PR Agent
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened]
+  issue_comment: # zizmor: ignore[dangerous-triggers] needed for /review, /describe, /improve, and /ask on pull requests; the job is gated to write-access commenters, and the action does not check out pull request code
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_url:
+        description: Pull request URL to review
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  pr-agent:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'pull_request' &&
+        github.event.pull_request.draft == false &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        github.event.pull_request.user.type != 'Bot'
+      ) ||
+      (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        github.event.sender.type != 'Bot' &&
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
+        (
+          startsWith(github.event.comment.body, '/review') ||
+          startsWith(github.event.comment.body, '/describe') ||
+          startsWith(github.event.comment.body, '/improve') ||
+          startsWith(github.event.comment.body, '/ask')
+        )
+      )
+    concurrency:
+      group: pr-agent-${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr_url }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 20
+    permissions:
+      pull-requests: write
+      issues: write
+      contents: read
+    env:
+      OPENAI_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      OPENAI__KEY: ${{ secrets.OPENCODE_API_KEY }}
+      OPENAI__API_BASE: https://opencode.ai/inference/go/openai/v1
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CONFIG__GIT_PROVIDER: github
+      CONFIG__MODEL: openai/glm-5.3
+      CONFIG__FALLBACK_MODELS: '["openai/glm-5.3-flash"]'
+      CONFIG__CUSTOM_MODEL_MAX_TOKENS: "1000000"
+      github_action_config.auto_review: "true"
+      github_action_config.auto_describe: "true"
+      github_action_config.auto_improve: "false"
+    steps:
+      - name: Resolve the OpenCode session id
+        id: session
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          PR_URL: ${{ github.event.inputs.pr_url }}
+        run: |
+          n="${PR_NUMBER:-$ISSUE_NUMBER}"
+          if [ -z "$n" ]; then
+            n=$(printf '%s' "$PR_URL" | grep -oE '[0-9]+$' || true)
+          fi
+          echo "id=pr-${n:-unknown}" >> "$GITHUB_OUTPUT"
+
+      - name: Run PR-Agent
+        if: github.event_name != 'workflow_dispatch'
+        uses: the-pr-agent/pr-agent@e673a02076ce09a4726c3d0c3cc85780e59ca52b # v0.50.0
+        env:
+          LITELLM__EXTRA_HEADERS: '{"User-Agent":"orbit-pr-agent/1.0","x-opencode-session":"${{ steps.session.outputs.id }}"}'
+
+      - name: Review a pull request
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          PR_URL: ${{ github.event.inputs.pr_url }}
+          LITELLM__EXTRA_HEADERS: '{"User-Agent":"orbit-pr-agent/1.0","x-opencode-session":"${{ steps.session.outputs.id }}"}'
+        run: |
+          docker run --rm \
+            --env OPENAI_KEY \
+            --env OPENAI__KEY \
+            --env OPENAI__API_BASE \
+            --env GITHUB_TOKEN \
+            --env CONFIG__GIT_PROVIDER \
+            --env CONFIG__MODEL \
+            --env CONFIG__FALLBACK_MODELS \
+            --env CONFIG__CUSTOM_MODEL_MAX_TOKENS \
+            --env LITELLM__EXTRA_HEADERS \
+            pragent/pr-agent@sha256:8978ae8f025883159ccc6f5bec51e6553347c77d14dbc5ca4bf3bb4a8726eb43 \
+            --pr_url "$PR_URL" review
