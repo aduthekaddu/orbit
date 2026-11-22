@@ -1,0 +1,25 @@
+scripts/ci/pr-checks.sh
+  s_99e6b4fa97078c::t_dde39095cc6de7 48-54,59
+.github/PULL_REQUEST_TEMPLATE.md
+  s_99e6b4fa97078c::t_dde39095cc6de7 9,11
+src/lib/pr-checks.test.ts
+  s_99e6b4fa97078c::t_e83a05c16fd161 120-121,134
+  s_99e6b4fa97078c::t_dde39095cc6de7 10,105-108
+  s_99e6b4fa97078c::t_5d1bdf75869871 90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cb6f8f6aa14ea4c1f9e0b5e5c9f62e9536a25078",
+  "prompts": {},
+  "sessions": {
+    "s_99e6b4fa97078c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "30fc78cc-c8d5-5e67-be6f-766ace7f4ede",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
