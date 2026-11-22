@@ -1,0 +1,14 @@
+{
+  "syncCommit": "58d3c109d984b81824e4a857ccb0b716be74120f",
+  "functions": {
+    "src/app/api/chat/route.ts POST": "1f42245cfe9677a641bc068c47334ff0f6e0c74ccf3777005b4be5688d812401",
+    "src/lib/genui/spec.ts assistantHasVisiblePart": "200229a216241e29622cb4bb6b86a673fae54d5297a4d5dd513e8470d7fbafd9",
+    "src/lib/messages.ts messageRepository": "b21b611811f06bf40c5fb812304a58fe1a057316074317730c5010a508e34032",
+    "src/lib/messages.ts persistIncoming": "d0b2c767447c9b285daafc7b6d8aa838a5e4a30210b55a25984a103054f820fe",
+    "src/lib/messages.ts planChatWrite": "98e6a797b0f725c0c9d633c731c3e3b8c2147b4f0888d5b9d6ba607806c02b98",
+    "src/lib/messages.ts replyGuard": "eb396fe2b824bd76c535e62344a901bc055073c78c62d8e685cbeb81524f891f",
+    "src/lib/messages.ts shouldSaveReply": "de92759b87cf38c33613c17e30c8f156486191b8addc2a54be9ace55a12ac827",
+    "src/lib/messages.ts updateMessageText": "081773ac7e7aaaeb966d578383b660163d22c01868db33df0c59493d9f00e4a9",
+    "src/lib/messages.ts upsertMessage": "e61a2450553daa393713bb11089bda23b74f6fb9cfdec2786c56e2a50418af3e"
+  }
+}

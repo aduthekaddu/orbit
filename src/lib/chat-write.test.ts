@@ -69,6 +69,7 @@ before(async () => {
     "c-invisible",
     "c-invisible-retry",
     "c-retry-edit",
+    "c-prompt-changed",
   ]) {
     mods.db.insert(mods.schema.chats).values({ id, userId: "u1", title: id, createdAt: now, updatedAt: now }).run();
   }
@@ -133,21 +134,40 @@ test("a regenerate that stores nothing keeps the previous answer", () => {
   assert.deepEqual(ids("c-regen"), ["g1", "g2"]);
 });
 
-test("a stale tab cannot overwrite a regenerated answer", () => {
+test("a stale tab cannot overwrite an answer changed after it loaded", () => {
   write("c-echo", [message("e1", "user", "explain the bug")]);
-  answer("c-echo", "e2", "regenerated answer", "e1");
+  answer("c-echo", "e2", "old answer", "e1");
 
-  // Tab B loaded before the regeneration and still holds the old text under the same id.
+  assert.equal(mods.updateMessageText("c-echo", "e2", "edited answer"), true);
   write("c-echo", [
     message("e1", "user", "explain the bug"),
     message("e2", "assistant", "old answer"),
     message("e3", "user", "next question"),
   ]);
 
+  assert.deepEqual(ids("c-echo"), ["e1", "e2", "e3"]);
   assert.deepEqual(
     mods.listMessages("c-echo").find((entry) => entry.id === "e2")?.parts,
-    [{ type: "text", text: "regenerated answer" }],
+    [{ type: "text", text: "edited answer" }],
   );
+});
+
+test("a regenerated reply is refused when its prompt changed while it streamed", () => {
+  write("c-prompt-changed", [message("pc1", "user", "before")]);
+  const responseId = write("c-prompt-changed", [message("pc1", "user", "before")], "regenerate-message");
+  const { expected } = mods.replyGuard("c-prompt-changed", true, responseId, "pc1");
+
+  assert.deepEqual(
+    mods.planChatWrite("c-prompt-changed", [message("pc1", "user", "after")], "submit-message", undefined, "pc1"),
+    { error: "invalid-edit" },
+  );
+  assert.deepEqual(mods.planChatWrite("c-prompt-changed", [message("pc1", "user", "after")]), { error: "stale" });
+  mods.db.$client
+    .prepare("update messages set content = ?, parts = ? where id = ?")
+    .run("after", JSON.stringify([{ type: "text", text: "after" }]), "pc1");
+
+  assert.equal(mods.upsertMessage("c-prompt-changed", message(responseId, "assistant", "answer to before"), "pc1", expected), false);
+  assert.deepEqual(ids("c-prompt-changed"), ["pc1"]);
 });
 
 test("a successful regenerate keeps the old answer as a sibling", () => {

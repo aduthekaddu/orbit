@@ -25,7 +25,7 @@ The diagram predates slices 7 and 8. SearXNG, Tavily, and the code sandbox now c
 
 ## The rules of a turn
 
-The chart below is generated from a TLA+ model of steps 3 to 6. TLC, the TLA+ model checker, checks each rule in every reachable state. Each rule is something you can see as a user.
+The chart below is generated from a TLA+ model of steps 3 to 6. TLC, the TLA+ model checker, checks each rule in every reachable state. `scripts/ci/tlc.sh` runs TLC on every model in `docs/architecture/`, locally and in CI. Each rule is something you can see as a user.
 
 ```mermaid
 ---
@@ -82,9 +82,14 @@ These rules hold in every state the model reaches:
 
 `shouldSaveReply` saves every reply with visible content. [Slice 4](docs/slices/04.md) gives a regenerate a new id, so saving a partial reply preserves the earlier version. A stop before visible content leaves the head on the saved prompt.
 
-The model tracks up to three reply attempts per prompt with separate ids. A regenerate must keep every earlier reply id. `ChatTurnRegression.tla` checks that a finished reply followed by a finished regenerate leaves two versions. Run it with the same TLC command and `ChatTurnRegression.cfg`.
+The model tracks up to three reply attempts per prompt with separate ids. A regenerate must keep every earlier reply id. `ChatTurnRegression.tla` checks that a finished reply followed by a finished regenerate leaves two versions.
 
-The model leaves out edits, tool calls, and concurrent tabs. The stale-write guard in step 3 covers concurrent tabs, and `src/lib/chat-write.test.ts` tests it.
+`ChatTurn.tla` leaves out edits, tool calls, and concurrent tabs. `ChatWrite.tla` models two tabs on one prompt and its reply, with these rules:
+
+- **A saved reply keeps its newest text (ReplyKeepsNewestText).** A tab that loaded the reply before an edit cannot undo the edit when it sends.
+- **A saved reply answers its prompt's current text (ReplyAnswersItsPrompt).** A regenerate that streamed while the prompt changed is not saved under the changed prompt.
+
+Each of its mutant configs switches off one guard to replay a past bug, and CI fails if TLC stops finding that bug. `.agents/skills/verify-chat-turn/SKILL.md` says how to run the models, read a result, and update a model when the code changes. `src/lib/model-sync.test.ts` fails when a function a model names changes after the model was last checked.
 
 To rebuild the chart, run the [statechart skill](https://github.com/cursor/plugins/blob/main/pstack/skills/statechart/SKILL.md) on [`docs/architecture/ChatTurn.tla`](docs/architecture/ChatTurn.tla):
 
@@ -120,6 +125,7 @@ statechart docs/architecture/ChatTurn.tla --config docs/architecture/ChatTurn.cf
 | `drizzle/` | SQL migrations. `npm run db:generate` writes new ones from `src/lib/db/schema.ts`. |
 | `scripts/` | Smoke tests against a running server, the provider check, and the browser QA script with its mock provider. |
 | `.agents/skills/verify-orbit/` | The verification skill. It launches a sandboxed server and drives each feature. |
+| `.agents/skills/verify-chat-turn/` | Model-checks the chat write path with TLC, and records which functions each model describes. |
 
 ## Data model
 

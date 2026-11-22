@@ -37,6 +37,9 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Typecheck
         run: npm run typecheck
+      - name: Check the TLA+ models
+        if: matrix.node == '22'
+        run: scripts/ci/tlc.sh
       - name: Pull the pinned sandbox images
         run: |
           grep -oE '[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[a-f0-9]{64}' src/lib/sandbox/images.ts | sort -u | xargs -n1 docker pull
