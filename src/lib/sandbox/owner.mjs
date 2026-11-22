@@ -21,11 +21,14 @@ export function ownerFromEnv(env = process.env) {
   return value === undefined || value === "" ? undefined : parseSandboxOwner(value);
 }
 
-let processOwner;
-
+// The owner lives in the environment, not in a module variable. A bundler can load this file twice in one
+// process, and every copy, and every child process, must name the same owner.
 export function sandboxOwner() {
-  processOwner ??= ownerFromEnv() ?? parseSandboxOwner(randomUUID());
-  return processOwner;
+  const existing = ownerFromEnv();
+  if (existing) return existing;
+  const generated = parseSandboxOwner(randomUUID());
+  process.env.ORBIT_SANDBOX_OWNER = generated;
+  return generated;
 }
 
 export function sandboxLabels(owner) {
