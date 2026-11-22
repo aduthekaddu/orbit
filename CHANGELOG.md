@@ -4,7 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
-- A memory save or delete that fails on the network shows "Could not save" or "Could not delete". A failed delete closes its dialog so the error line is visible. (#124)
+- A memory save or delete that fails on the network shows "Could not save" or "Could not delete" inside that memory's row, so the line stays in view when the list is scrolled. A failed delete closes its dialog so the line is visible. (#124)
 - An interrupted generated view shows Stopped instead of an empty cancelled tool card.
 - Set `ORBIT_VERIFY_PORT` to run verify-orbit on another port when the deployment owns `3210`. The default stays `3210`.
 - Override Drizzle tooling's `@esbuild-kit/core-utils` dependency to use patched `esbuild` 0.25.12, removing GHSA-67mh-4wv8-2f99. (#71)
