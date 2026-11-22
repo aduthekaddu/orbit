@@ -1,0 +1,34 @@
+src/lib/sandbox/run.ts
+  s_99e6b4fa97078c::t_5196951afdb316 143-145,147
+  s_99e6b4fa97078c::t_8c627e0ef0578e 68-76,78-89,94-102,104-110,116,118,120,122,124-142,146,148-185
+  s_99e6b4fa97078c::t_4f14fca0e749d2 77
+scripts/qa/sandbox-timing.ts
+  s_99e6b4fa97078c::t_73ff055e50a63f 14-15,17
+src/lib/sandbox/run.test.ts
+  s_99e6b4fa97078c::t_4a2d2836eb8844 4,8,21-29,46-47,49-50,62,163-172,175-182,184-185,188
+src/lib/tools/run-code.ts
+  s_99e6b4fa97078c::t_b3aa420a05b72a 2,8,10,26,30
+src/lib/sandbox/run-lifecycle.test.ts
+  s_99e6b4fa97078c::t_a6e78a982c6aeb 1-64,66-259,261-326
+  s_99e6b4fa97078c::t_f6e8fb71c8fb02 65,260
+ARCHITECTURE.md
+  s_99e6b4fa97078c::t_43d72165dfed31 137
+CHANGELOG.md
+  s_99e6b4fa97078c::t_43d72165dfed31 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "81197b7556b1a0193cd40f8be796d0af6f5de0c6",
+  "prompts": {},
+  "sessions": {
+    "s_99e6b4fa97078c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "30fc78cc-c8d5-5e67-be6f-766ace7f4ede",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
