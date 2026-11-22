@@ -4,13 +4,15 @@ on:
   pull_request:
     types: [opened, ready_for_review, reopened]
 
+permissions: {}
+
 concurrency:
   group: claude-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   claude-review:
-    if: github.event.pull_request.draft == false
+    if: github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.type != 'Bot'
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 20
     permissions:
@@ -25,6 +27,9 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Install GitHub CLI
+        run: scripts/ci/install-gh.sh
 
       - name: Run Claude Code Review
         id: claude-review
