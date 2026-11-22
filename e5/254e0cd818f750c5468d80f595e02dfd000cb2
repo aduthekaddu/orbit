@@ -1,0 +1,19 @@
+src/components/settings/settings-form.tsx
+  s_a38ec6b76665cc::t_fb009ff2309bb1 23,81,84,86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e5254e0cd818f750c5468d80f595e02dfd000cb2",
+  "prompts": {},
+  "sessions": {
+    "s_a38ec6b76665cc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5d1b7ffc-1d73-4192-91f0-06c6f5b2dd99",
+        "model": "unknown"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
