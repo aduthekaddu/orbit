@@ -73,6 +73,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Fixed
 
+- When the sign-out request fails, Sign out stays on the page and shows "Could not sign out". It no longer leaves the chat while the session may still be valid, or fails with no message. (#139)
 - GitHub Check asks for `get_me` on its own, so a valid token still shows the login when the chat tools are limited to repositories, issues, and pull requests.
 - The saved GitHub token is sent only to `api.githubcopilot.com`, `github.com`, and `api.github.com` over HTTPS. Any other MCP URL, including plain HTTP, is refused before the request. Tests can set `ORBIT_GITHUB_MCP_FIXTURE=1` to allow the local fixture.
 - A GitHub server that repeats the token does not get that token back out through Check, a tool result, or a chat stream error. The text says `[redacted]` instead.
