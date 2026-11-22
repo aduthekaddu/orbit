@@ -1,0 +1,23 @@
+.agents/skills/verify-orbit/features/browse.md
+  s_eaca87816d3664::t_32d776c9ebed81 44,54-60,63
+.agents/skills/verify-orbit/scenarios/palette.mjs
+  s_eaca87816d3664::t_b0ebdd798b944c 77,81
+  s_eaca87816d3664::t_2a8da3d04c34e8 86
+  s_eaca87816d3664::t_399eea1037a249 31-76,78-80,82-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e01ccbd83dfd931b23113159702aa1c3522cfc13",
+  "prompts": {},
+  "sessions": {
+    "s_eaca87816d3664": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1969fc54-b55b-477a-b35a-64447e18495f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
