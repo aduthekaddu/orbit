@@ -81,7 +81,7 @@ export function MarkdownText({ className, editable = false }: { className?: stri
   const partText = useAuiState((s) => (s.part.type === "text" ? s.part.text : ""));
   const textOrdinal = useAuiState((s) => {
     const query = aui.part.query;
-    if (!query || !("index" in query) || typeof query.index !== "number") return undefined;
+    if (s.part.type !== "text" || !query || !("index" in query) || typeof query.index !== "number") return undefined;
     return s.message.parts.slice(0, query.index).filter((part) => part.type === "text").length;
   });
   const messageId = useAuiState((s) => s.message.id);
