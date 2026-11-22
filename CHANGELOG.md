@@ -13,6 +13,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - Settings can remove a saved GitHub token. The stored token is cleared and GitHub tools stop.
 - Check says "GitHub rejected the token (bad request)." when GitHub answers HTTP 400.
 - Keep earlier prompts and replies when editing or regenerating. Switch versions with the message arrows. Reload opens the last written branch.
+- A forged `X-Forwarded-For` header no longer gets around the sign-in rate limit. Every client now shares one limit per auth path, such as 3 sign-in attempts per 10 seconds. (#117)
 
 ### Changed
 
