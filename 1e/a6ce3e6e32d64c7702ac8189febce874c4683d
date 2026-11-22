@@ -1,0 +1,21 @@
+src/lib/thread-map.test.ts
+  s_804e13dae486fa::t_80f416fbb5fcb2 58-62
+.agents/skills/verify-orbit/scenarios/thread-map.mjs
+  s_804e13dae486fa::t_861a1495370e01 1-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1ea6ce3e6e32d64c7702ac8189febce874c4683d",
+  "prompts": {},
+  "sessions": {
+    "s_804e13dae486fa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fbbbe4fb-d185-413c-aab2-45a22f3a6233",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
