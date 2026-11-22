@@ -1,0 +1,32 @@
+.agents/skills/verify-orbit/features/browse.md
+  s_804e13dae486fa::t_5c6e38c88f59c8 93-105
+src/lib/thread-map.ts
+  s_804e13dae486fa::t_779f095870d7c9 24,28
+src/lib/thread-map.test.ts
+  s_804e13dae486fa::t_841d7ead8cfdaf 11
+  s_804e13dae486fa::t_cc0699cee36234 61
+docs/design.md
+  s_804e13dae486fa::t_300ddadd418c6f 74
+src/components/chat/thread-map.tsx
+  s_804e13dae486fa::t_7e1e54133d8226 93
+.agents/skills/verify-orbit/features/README.md
+  s_804e13dae486fa::t_300ddadd418c6f 37
+CHANGELOG.md
+  s_804e13dae486fa::t_fc897704c389d4 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "65cc2f2b7337d435925f7c850338d2466f5a08bc",
+  "prompts": {},
+  "sessions": {
+    "s_804e13dae486fa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fbbbe4fb-d185-413c-aab2-45a22f3a6233",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
