@@ -1,0 +1,21 @@
+CHANGELOG.md
+  s_b5db481d1726e6::t_92f02a286c7ae9 7
+src/lib/titles.ts
+  s_b5db481d1726e6::t_8e4453b05b447e 7-8,12-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4782eb8f3dbb5acccb2afb8e8fde1e7d016e41d9",
+  "prompts": {},
+  "sessions": {
+    "s_b5db481d1726e6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "20bee539-1784-449a-ada5-53e2cdf345ce",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
