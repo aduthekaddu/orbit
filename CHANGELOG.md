@@ -5,6 +5,9 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 ## [Unreleased]
 
 - A new chat's title request sends only the first 2,000 characters of the first message, not the whole message. A long paste is no longer sent to the model a second time. (#135)
+- A turn that calls no GitHub tool no longer connects to GitHub, so that reply no longer waits up to 10 seconds for a connection when GitHub is slow or down. A turn that already opened a client still waits for the close. The close request itself still has no deadline. (#136)
+- When Ollama is down, the nightly dream no longer sends chats to the model. The night fails with the Ollama error on `/memory`, and the next night retries those chats. (#121)
+- Markdown images in chat replies and reasoning appear as links that open on click. (#114)
 - An interrupted generated view shows Stopped instead of an empty cancelled tool card.
 - Set `ORBIT_VERIFY_PORT` to run verify-orbit on another port when the deployment owns `3210`. The default stays `3210`.
 - Override Drizzle tooling's `@esbuild-kit/core-utils` dependency to use patched `esbuild` 0.25.12, removing GHSA-67mh-4wv8-2f99. (#71)
@@ -14,6 +17,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - Settings can remove a saved GitHub token. The stored token is cleared and GitHub tools stop.
 - Check says "GitHub rejected the token (bad request)." when GitHub answers HTTP 400.
 - Keep earlier prompts and replies when editing or regenerating. Switch versions with the message arrows. Reload opens the last written branch.
+- A forged `X-Forwarded-For` header no longer gets around the sign-in rate limit. Every client now shares one limit per auth path, such as 3 sign-in attempts per 10 seconds. (#117)
 
 ### Changed
 
