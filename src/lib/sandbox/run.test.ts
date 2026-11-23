@@ -6,7 +6,7 @@ import type { Duplex, Writable } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
 import { sandboxImages } from "./images";
 import { ownedSandboxFilter, parseSandboxOwner, sandboxLabels, sandboxOwner, type SandboxOwner } from "./owner.mjs";
-import { runCode } from "./run";
+import { runCode, runCodeToEnd } from "./run";
 import type { RunCodeInput, RunCodeOutput } from "./spec";
 
 const owner = sandboxOwner();
@@ -27,10 +27,9 @@ test("sandbox programs run inside real isolated containers", { timeout: 90_000 }
   const ownedContainers = () => docker.listContainers({ all: true, filters: ownedSandboxFilter(owner) });
   // Every run here awaits its cleanup, so a single listing after the runs sees what they left.
   const run = async (language: RunCodeInput["language"], code: string) => {
-    const started = runCode(docker, { language, code });
-    const [result, cleanup] = await Promise.all([started.result, started.cleanup]);
+    const { output, cleanup } = await runCodeToEnd(docker, { language, code });
     assert.equal(cleanup, "removed");
-    return result;
+    return output;
   };
   const runPython = (code: string) => run("python", code);
   // Code without owner filters sees a planted container, so each one lives only inside its own subtest.

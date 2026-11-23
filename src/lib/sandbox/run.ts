@@ -7,14 +7,20 @@ import { containerSpec, type RunCodeInput, type RunCodeOutput } from "./spec";
 
 const OUTPUT_LIMIT = 65_536;
 const RUN_TIMEOUT_MS = 10_000;
-const waitResultSchema = z.object({ StatusCode: z.number().int() });
+const MEMORY_CHECK_TIMEOUT_MS = 5_000;
+const waitResultSchema = z.object({ StatusCode: z.number().int(), Error: z.object({ Message: z.string() }).nullish() });
 const SIGKILL_EXIT = 137;
 
+// False when Docker does not confirm a memory kill within five seconds, so a stalled inspect reply cannot hold the run.
 async function killedForMemory(container: Docker.Container): Promise<boolean> {
+  let timer: NodeJS.Timeout | undefined;
+  const gaveUp = new Promise<false>((resolve) => { timer = setTimeout(() => resolve(false), MEMORY_CHECK_TIMEOUT_MS); });
   try {
-    return (await container.inspect()).State?.OOMKilled === true;
+    return await Promise.race([container.inspect().then((info) => info.State?.OOMKilled === true), gaveUp]);
   } catch {
     return false;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -65,15 +71,18 @@ export function sandboxDocker(): Docker {
   return new Docker({ protocol: "http", host: url.hostname, port: url.port || "2375", timeout: 12_000 });
 }
 
+type Exit = { exitCode: number; oomKilled: boolean };
+
 type Outcome =
-  | { kind: "exited"; exitCode: number; oomKilled: boolean }
+  | { kind: "exited"; exit: Exit; outputEnded: boolean }
   | { kind: "timed-out" }
-  | { kind: "cancelled"; exitCode: number | null }
+  | { kind: "cancelled"; exit: Exit | undefined }
   | { kind: "failed"; error: unknown };
 
 export type CodeRun = {
   // Settles once, with the first of: the program exits, the deadline passes, the signal aborts, Docker fails.
-  // After the program exits, an abort keeps its exit code and the deadline only stops waiting for its last output.
+  // After the program exits, an abort keeps what Docker reported about the exit, and the deadline only stops waiting
+  // for the last output, which then counts as truncated.
   result: Promise<RunCodeOutput>;
   // Settles once the container is removed or was never made, or once removing it failed. Never rejects.
   cleanup: Promise<"removed" | "failed">;
@@ -93,8 +102,8 @@ export function runCode(docker: Docker, input: RunCodeInput, signal?: AbortSigna
   const stderr = outputCollector();
   const settled = Promise.withResolvers<Outcome>();
   let outcome: Outcome | undefined;
-  let exitCode: number | undefined;
-  const outputCutOff = Promise.withResolvers<{ kind: "ended" }>();
+  let exit: Exit | undefined;
+  const outputCutOff = Promise.withResolvers<{ kind: "cut-off" }>();
   const settle = (next: Outcome) => {
     if (outcome) return;
     outcome = next;
@@ -102,8 +111,8 @@ export function runCode(docker: Docker, input: RunCodeInput, signal?: AbortSigna
     signal?.removeEventListener("abort", cancel);
     settled.resolve(next);
   };
-  const cancel = () => settle({ kind: "cancelled", exitCode: exitCode ?? null });
-  const deadline = setTimeout(() => exitCode === undefined ? settle({ kind: "timed-out" }) : outputCutOff.resolve({ kind: "ended" }), RUN_TIMEOUT_MS);
+  const cancel = () => settle({ kind: "cancelled", exit });
+  const deadline = setTimeout(() => exit === undefined ? settle({ kind: "timed-out" }) : outputCutOff.resolve({ kind: "cut-off" }), RUN_TIMEOUT_MS);
   signal?.addEventListener("abort", cancel, { once: true });
   if (signal?.aborted) cancel();
 
@@ -111,14 +120,15 @@ export function runCode(docker: Docker, input: RunCodeInput, signal?: AbortSigna
     if (done.kind === "failed") throw done.error;
     const out = stdout.result();
     const err = stderr.result();
+    const exited = done.kind === "timed-out" ? undefined : done.exit;
     const output: RunCodeOutput = {
       stdout: out.text,
       stderr: err.text,
-      exitCode: "exitCode" in done ? done.exitCode : null,
+      exitCode: exited?.exitCode ?? null,
       durationMs: Math.round(performance.now() - started),
       timedOut: done.kind === "timed-out",
-      truncated: out.truncated || err.truncated,
-      ...(done.kind === "exited" && done.oomKilled ? { oomKilled: true } : {}),
+      truncated: out.truncated || err.truncated || done.kind === "exited" && !done.outputEnded,
+      ...(exited?.oomKilled ? { oomKilled: true } : {}),
     };
     if (done.kind === "cancelled") throw new RunStopped({ ...output, cancelled: true });
     return output;
@@ -141,14 +151,16 @@ export function runCode(docker: Docker, input: RunCodeInput, signal?: AbortSigna
     if (outcome) return;
     const program = async () => {
       connection.end(input.code);
-      const { StatusCode } = waitResultSchema.parse(await container.wait());
+      const reply = waitResultSchema.parse(await container.wait());
       if (outcome) return;
-      exitCode = StatusCode;
-      const oomKilled = StatusCode === SIGKILL_EXIT ? killedForMemory(container) : Promise.resolve(false);
-      const output = await Promise.race([outputFinished, outputCutOff.promise]);
+      if (reply.Error) throw new Error(`Docker could not wait for the program: ${reply.Error.Message}`);
+      exit = { exitCode: reply.StatusCode, oomKilled: false };
+      const output = Promise.race([outputFinished, outputCutOff.promise]);
+      if (reply.StatusCode === SIGKILL_EXIT && await killedForMemory(container)) exit = { exitCode: reply.StatusCode, oomKilled: true };
+      const ended = await output;
       if (outcome) return;
-      if (output.kind === "failed") throw output.error;
-      settle({ kind: "exited", exitCode: StatusCode, oomKilled: await oomKilled });
+      if (ended.kind === "failed") throw ended.error;
+      settle({ kind: "exited", exit, outputEnded: ended.kind === "ended" });
     };
     await Promise.race([program(), settled.promise]);
   };
@@ -170,9 +182,9 @@ export function runCode(docker: Docker, input: RunCodeInput, signal?: AbortSigna
     attached?.destroy();
     stdout.stream.destroy();
     stderr.stream.destroy();
-    const logFailure = (error: unknown) => console.error("Sandbox cleanup failed", { statusCode: statusCodeOf(error) });
+    const logFailure = (error: unknown) => console.error("Sandbox cleanup failed", { containerId: container.id, statusCode: statusCodeOf(error) });
     // Kill before removing, so a denied removal cannot leave the program running. 409: it never started or already exited.
-    if (exitCode === undefined) {
+    if (exit === undefined) {
       await container.kill({ signal: "SIGKILL" }).catch((error: unknown) => {
         if (statusCodeOf(error) !== 409) logFailure(error);
       });
@@ -184,4 +196,11 @@ export function runCode(docker: Docker, input: RunCodeInput, signal?: AbortSigna
   })();
 
   return { result, cleanup };
+}
+
+// For a script that exits when it has the result: settles only after cleanup, even when the run failed.
+export async function runCodeToEnd(docker: Docker, input: RunCodeInput) {
+  const run = runCode(docker, input);
+  const output = await run.result.finally(() => run.cleanup);
+  return { output, cleanup: await run.cleanup };
 }

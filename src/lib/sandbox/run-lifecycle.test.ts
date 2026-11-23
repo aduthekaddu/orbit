@@ -9,7 +9,7 @@ import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } fr
 import { MockLanguageModelV4 } from "ai/test";
 import { createRunCodeTool } from "../tools/run-code";
 import { createStoppedRuns } from "../tools/stopped-runs";
-import { runCode } from "./run";
+import { runCode, runCodeToEnd } from "./run";
 import type { RunCodeOutput } from "./spec";
 
 type Step = "create" | "attach" | "start" | "inspect" | "kill" | "remove";
@@ -21,7 +21,7 @@ function fakeDocker(held: Step[] = []) {
   const events: string[] = [];
   const reached = new Map<Step, PromiseWithResolvers<void>>();
   const gates = new Map<Step, PromiseWithResolvers<void>>();
-  const exited = Promise.withResolvers<number>();
+  const exited = Promise.withResolvers<{ StatusCode: number; Error?: { Message: string } }>();
   const connection = new Duplex({ read() {}, write(_chunk, _encoding, done) { done(); } });
   let state: "created" | "running" | "exited" | "removed" | undefined;
   let oomKilled = false;
@@ -39,18 +39,19 @@ function fakeDocker(held: Step[] = []) {
     events.push(`${step} settled`);
   };
   const conflict = () => Object.assign(new Error("conflict"), { statusCode: 409 });
-  const end = (code: number, outputEnds: boolean) => {
+  const end = (code: number, outputEnds: boolean, waitError?: string) => {
     state = "exited";
-    exited.resolve(code);
+    exited.resolve({ StatusCode: code, ...(waitError ? { Error: { Message: waitError } } : {}) });
     if (outputEnds) connection.push(null);
   };
   const container = {
+    id: "fake-container",
     attach: async () => { await call("attach"); return connection; },
     start: async () => {
       await call("start");
       if (state === "created") state = "running";
     },
-    wait: async () => ({ StatusCode: await exited.promise }),
+    wait: () => exited.promise,
     kill: async () => {
       await call("kill");
       if (state !== "running") throw conflict();
@@ -84,9 +85,9 @@ function fakeDocker(held: Step[] = []) {
       else once(gates, step).resolve();
     },
     print: (text: string) => connection.push(text),
-    exit(code: number, { outputEnds = true, memoryKill = false } = {}) {
+    exit(code: number, { outputEnds = true, memoryKill = false, waitError = "" } = {}) {
       oomKilled = memoryKill;
-      end(code, outputEnds);
+      end(code, outputEnds, waitError);
     },
     endOutput: () => connection.push(null),
     dropOutput: () => connection.destroy(),
@@ -208,6 +209,8 @@ test("the deadline after the program exited but before its output ended keeps th
   assert.equal(result.timedOut, false, "a program that exited before the deadline did not time out");
   assert.equal(result.exitCode, 0);
   assert.equal(result.stdout, "late\n");
+  // Codex review of #187: the deadline cut off output that had not ended, so the run may miss some of it.
+  assert.equal(result.truncated, true, "output cut off by the deadline is truncated");
   await cleanedUp(fake, run);
 });
 
@@ -226,18 +229,74 @@ test("a memory kill keeps its flag when the deadline passes before the output en
 });
 
 test("a memory kill keeps its flag when the deadline passes while Docker inspects the container", async (t) => {
-  const passDeadline = useDeadlineClock(t);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const fake = fakeDocker(["inspect"]);
   const run = runCode(fake.docker, spin);
   await fake.reached("start");
+  t.mock.timers.tick(9_500);
   fake.exit(137, { memoryKill: true });
   await fake.reached("inspect");
-  passDeadline();
+  t.mock.timers.tick(500);
   await drain();
   fake.release("inspect");
   const result = await run.result;
   assert.deepEqual([result.exitCode, result.oomKilled, result.timedOut], [137, true, false]);
   await cleanedUp(fake, run);
+});
+
+// Codex review of #187: a 137 exit whose inspect reply never came left both the result and the removal pending.
+test("a memory check Docker never answers holds neither the result nor the removal", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const fake = fakeDocker(["inspect"]);
+  const run = runCode(fake.docker, spin);
+  await fake.reached("start");
+  fake.exit(137, { memoryKill: true });
+  await fake.reached("inspect");
+  t.mock.timers.tick(10_000);
+  assert.equal(await isSettled(run.result), true, "the memory check must not wait for Docker without a bound");
+  const result = await run.result;
+  assert.deepEqual([result.exitCode, result.oomKilled, result.timedOut], [137, undefined, false]);
+  await cleanedUp(fake, run);
+});
+
+// Codex review of #187: Stop after Docker confirmed a memory kill, while output was open, dropped the memory flag.
+test("Stop after Docker confirmed a memory kill keeps the memory flag", async () => {
+  const fake = fakeDocker();
+  const controller = new AbortController();
+  const run = runCode(fake.docker, spin, controller.signal);
+  await fake.reached("start");
+  fake.exit(137, { outputEnds: false, memoryKill: true });
+  await fake.reached("inspect");
+  await drain();
+  controller.abort();
+  const output = await stoppedOutput(run.result);
+  assert.deepEqual([output.exitCode, output.oomKilled, output.cancelled], [137, true, true]);
+  await cleanedUp(fake, run);
+});
+
+// Codex review of #187: Docker's wait reply can carry an Error next to StatusCode; that is not a program exit.
+test("a wait reply that carries a Docker error fails the run and still removes the container", async () => {
+  const fake = fakeDocker();
+  const run = runCode(fake.docker, spin);
+  await fake.reached("start");
+  fake.exit(0, { waitError: "wait failed in the daemon" });
+  await assert.rejects(run.result, /wait failed in the daemon/);
+  await cleanedUp(fake, run);
+});
+
+// Codex review of #187: the sandbox-scroll fixture awaited result and cleanup with Promise.all, so a failed run let
+// the script exit while removal was still pending.
+test("runCodeToEnd settles only after removal when the run fails", async () => {
+  const fake = fakeDocker(["attach", "remove"]);
+  const ended = runCodeToEnd(fake.docker, spin);
+  ended.catch(() => undefined);
+  await fake.reached("attach");
+  fake.release("attach", new Error("attach failed"));
+  await fake.reached("remove");
+  assert.equal(await isSettled(ended), false, "a script that exits when this settles would leave the container");
+  fake.release("remove");
+  await assert.rejects(ended, /attach failed/);
+  assert.equal(fake.containerLeft(), false);
 });
 
 // Review of #187, finding 2: Stop after the program exited, before its output ended, dropped the exit code.
@@ -278,7 +337,7 @@ test("a denied kill still removes the container and reports it removed", async (
   await fake.reached("kill");
   fake.release("kill", Object.assign(new Error("private details"), { statusCode: 403 }));
   await cleanedUp(fake, run);
-  assert.deepEqual(logs, [["Sandbox cleanup failed", { statusCode: 403 }]]);
+  assert.deepEqual(logs, [["Sandbox cleanup failed", { containerId: "fake-container", statusCode: 403 }]]);
 });
 
 // Reviewer claim (b): after a stop won the race, a later Docker failure rejected with nobody listening.
@@ -308,7 +367,7 @@ for (const { name, held, fail } of [
 }
 
 // f43282e: a removal error after Stop replaced the stop result and left the program running.
-test("Stop whose removal is denied still reports the stop, kills the program, and logs only the status code", async (t) => {
+test("Stop whose removal is denied still reports the stop, kills the program, and logs only the container id and status code", async (t) => {
   const logs: unknown[][] = [];
   t.mock.method(console, "error", (...args: unknown[]) => { logs.push(args); });
   const fake = fakeDocker(["remove"]);
@@ -321,7 +380,7 @@ test("Stop whose removal is denied still reports the stop, kills the program, an
   fake.release("remove", Object.assign(new Error("private program and connection details"), { statusCode: 403 }));
   assert.equal(await run.cleanup, "failed");
   assert.ok(fake.events.indexOf("kill settled") < fake.events.indexOf("remove"), "a denied removal must not leave untrusted code running");
-  assert.deepEqual(logs, [["Sandbox cleanup failed", { statusCode: 403 }]]);
+  assert.deepEqual(logs, [["Sandbox cleanup failed", { containerId: "fake-container", statusCode: 403 }]]);
 });
 
 // 246aebf: Stop threw before the collected output was read.
