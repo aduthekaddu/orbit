@@ -1,0 +1,54 @@
+.agents/skills/verify-orbit/features/README.md
+  h_9f68edf4527855 37
+.agents/skills/verify-orbit/features/browse.md
+  h_9f68edf4527855 93-110
+.agents/skills/verify-orbit/scenarios/sign-out.mjs
+  h_9f68edf4527855 1-53
+.github/dependabot.yml
+  h_9f68edf4527855 6,14-15,25,38,50
+CHANGELOG.md
+  h_9f68edf4527855 7-11,21
+CONTRIBUTING.md
+  h_9f68edf4527855 77
+SECURITY.md
+  h_9f68edf4527855 29
+docs/adr/0002-several-users.md
+  h_9f68edf4527855 43
+docs/slices/16.md
+  h_9f68edf4527855 13,178,240-241
+docs/slices/18.md
+  h_9f68edf4527855 441
+package-lock.json
+  h_9f68edf4527855 33,365-367,389-391,394,405-407,410,421-423,426,431-433,436,447-449,452,467-469,472,4819-4821,4824-4830
+package.json
+  h_9f68edf4527855 38
+src/components/chat/markdown-text.test.tsx
+  h_9f68edf4527855 1-37
+src/components/chat/markdown-text.tsx
+  h_9f68edf4527855 3,52-53,56-63,67-74,85
+src/components/chat/sidebar.tsx
+  h_9f68edf4527855 3,50,54-60,134-164
+src/lib/auth-rate-limit.test.ts
+  h_9f68edf4527855 1-51
+src/lib/auth.ts
+  h_9f68edf4527855 54-56
+src/lib/memory/dream.test.ts
+  h_9f68edf4527855 313,316,318,321-347,351-402
+src/lib/memory/dream.ts
+  h_9f68edf4527855 435-441
+src/lib/tools/github.test.ts
+  h_9f68edf4527855 225-275
+src/lib/tools/github.ts
+  h_9f68edf4527855 102-103,105-116,122,131,164,177,182,184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "91f3826f323940c6cbf2fd2b2de5dcc691d9128b",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
