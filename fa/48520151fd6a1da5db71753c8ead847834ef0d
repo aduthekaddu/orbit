@@ -1,0 +1,22 @@
+.github/dependabot.yml
+  h_9f68edf4527855 6,14-15,25,38,50
+CHANGELOG.md
+  h_9f68edf4527855 8
+CONTRIBUTING.md
+  h_9f68edf4527855 77
+src/components/chat/markdown-text.test.tsx
+  h_9f68edf4527855 1-37
+src/components/chat/markdown-text.tsx
+  h_9f68edf4527855 3,52-53,56-63,67-74,85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fa48520151fd6a1da5db71753c8ead847834ef0d",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
