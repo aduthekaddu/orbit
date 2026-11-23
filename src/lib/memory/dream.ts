@@ -1,27 +1,12 @@
-import Database from "better-sqlite3";
 import { generateObject } from "ai";
 import { z } from "zod";
 import { db } from "../db";
 import { orbitModel } from "../provider";
 import { getSettings } from "../settings";
 import { embed, embedPending } from "./embed";
-import { DREAM_LEASE_MS, localMidnight, localStamp, systemTimeZone, type RunState } from "./schedule";
+import { parseRun, storedRow, transition, unfinishedChatIds, type MemoryRun, type RunEvent } from "./run-state";
+import { localMidnight, localStamp, systemTimeZone } from "./schedule";
 import { cleanMemoryText, getMemory, saveMemory, updateMemory, writeVectors, MemoryRejected } from "./store";
-
-export type MemoryRun = {
-  date: string;
-  state: RunState;
-  startedAt: Date;
-  finishedAt: Date | null;
-  owner: string | null;
-  leaseUntil: Date | null;
-  chatIds: string[];
-  doneChatIds: string[];
-  retryChatIds: string[];
-  added: number;
-  merged: number;
-  error: string | null;
-};
 
 export type Candidate = { kind: "fact" | "preference"; text: string; sourceMessageId: string };
 
@@ -43,65 +28,36 @@ const RUN_COLUMNS = `date, state, started_at AS startedAt, finished_at AS finish
   lease_until AS leaseUntil, chat_ids AS chatIds, done_chat_ids AS doneChatIds,
   retry_chat_ids AS retryChatIds, added, merged, error`;
 
-type RunRow = {
-  date: string;
-  state: string;
-  startedAt: number;
-  finishedAt: number | null;
-  owner: string | null;
-  leaseUntil: number | null;
-  chatIds: string;
-  doneChatIds: string;
-  retryChatIds: string;
-  added: number;
-  merged: number;
-  error: string | null;
-};
-
-const CLAIM_SQL = `
+const WRITE_RUN = `
 INSERT INTO memory_runs (
   date, state, started_at, finished_at, owner, lease_until,
   chat_ids, done_chat_ids, retry_chat_ids, added, merged, error
 ) VALUES (
-  @date, 'running', @started, NULL, @owner, @lease,
-  @chatIds, '[]', '[]', 0, 0, NULL
+  @date, @state, @startedAt, @finishedAt, @owner, @leaseUntil,
+  @chatIds, @doneChatIds, @retryChatIds, @added, @merged, @error
 )
 ON CONFLICT(date) DO UPDATE SET
-  owner = @owner,
-  lease_until = @lease
-WHERE state = 'running' AND lease_until < @now
+  state = excluded.state, started_at = excluded.started_at, finished_at = excluded.finished_at,
+  owner = excluded.owner, lease_until = excluded.lease_until, chat_ids = excluded.chat_ids,
+  done_chat_ids = excluded.done_chat_ids, retry_chat_ids = excluded.retry_chat_ids,
+  added = excluded.added, merged = excluded.merged, error = excluded.error
 `;
 
-function idList(value: string): string[] {
-  try {
-    const parsed = z.array(z.string()).safeParse(JSON.parse(value));
-    return parsed.success ? parsed.data : [];
-  } catch {
-    return [];
-  }
-}
-
-function parseRun(row: RunRow): MemoryRun | null {
-  if (row.state !== "running" && row.state !== "done" && row.state !== "failed") return null;
-  return {
-    date: row.date,
-    state: row.state,
-    startedAt: new Date(row.startedAt),
-    finishedAt: row.finishedAt == null ? null : new Date(row.finishedAt),
-    owner: row.owner,
-    leaseUntil: row.leaseUntil == null ? null : new Date(row.leaseUntil),
-    chatIds: idList(row.chatIds),
-    doneChatIds: idList(row.doneChatIds),
-    retryChatIds: idList(row.retryChatIds),
-    added: row.added,
-    merged: row.merged,
-    error: row.error,
-  };
-}
-
 function readRun(date: string): MemoryRun | null {
-  const row = db.$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE date = ?`).get(date) as RunRow | undefined;
+  const row = db.$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE date = ?`).get(date);
   return row ? parseRun(row) : null;
+}
+
+// The only writer of memory_runs. The immediate transaction takes the write lock before the read,
+// so two processes cannot both apply an event to the same row.
+function advance(date: string, event: RunEvent): MemoryRun | null {
+  return db.$client
+    .transaction(() => {
+      const next = transition(readRun(date), event);
+      if (next) db.$client.prepare(WRITE_RUN).run(storedRow(next));
+      return next;
+    })
+    .immediate();
 }
 
 export function getRun(date: string): MemoryRun | null {
@@ -109,44 +65,31 @@ export function getRun(date: string): MemoryRun | null {
 }
 
 export function latestRun(): MemoryRun | null {
-  const row = db.$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs ORDER BY date DESC LIMIT 1`).get() as RunRow | undefined;
+  const row = db.$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs ORDER BY date DESC LIMIT 1`).get();
   return row ? parseRun(row) : null;
 }
 
 export function formatDreamStatus(run: MemoryRun): string {
   const [year, month, day] = run.date.split("-").map(Number);
   const when = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
-  if (run.state === "failed") return `${when}. ${run.error ?? "Dream failed"}`;
+  if (run.state === "failed") return `${when}. ${run.error}`;
   if (run.state === "running") return `${when}. Dreaming`;
   return `${when}. ${run.chatIds.length} chats, ${run.added} added, ${run.merged} merged`;
 }
 
-export function tryClaim(
-  database: Database.Database,
-  input: { date: string; owner: string; now: Date; chatIds: string[] },
-): boolean {
-  const result = database.prepare(CLAIM_SQL).run({
-    date: input.date,
-    owner: input.owner,
-    now: input.now.getTime(),
-    started: input.now.getTime(),
-    lease: input.now.getTime() + DREAM_LEASE_MS,
-    chatIds: JSON.stringify(input.chatIds),
-  });
-  return result.changes === 1;
+export function tryClaim(input: { date: string; owner: string; now: Date; chatIds: string[] }): boolean {
+  return advance(input.date, { type: "claim", date: input.date, owner: input.owner, at: input.now, chatIds: input.chatIds }) !== null;
 }
 
 function previousRun(date: string): MemoryRun | null {
-  const row = db.$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE date < ? ORDER BY date DESC LIMIT 1`).get(date) as
-    | RunRow
-    | undefined;
+  const row = db.$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE date < ? ORDER BY date DESC LIMIT 1`).get(date);
   return row ? parseRun(row) : null;
 }
 
 function latestDone(date: string): MemoryRun | null {
   const row = db.$client
     .prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE date < ? AND state = 'done' ORDER BY date DESC LIMIT 1`)
-    .get(date) as RunRow | undefined;
+    .get(date);
   return row ? parseRun(row) : null;
 }
 
@@ -166,23 +109,7 @@ function changedChatIds(date: string, end: number): string[] {
 }
 
 function renew(date: string, owner: string): boolean {
-  const run = readRun(date);
-  const floor = run?.startedAt.getTime() ?? Date.now();
-  const result = db.$client
-    .prepare("UPDATE memory_runs SET lease_until = ? WHERE date = ? AND owner = ?")
-    .run(Math.max(Date.now(), floor) + DREAM_LEASE_MS, date, owner);
-  return result.changes === 1;
-}
-
-function reopenFailed(date: string, owner: string, now: Date): boolean {
-  const result = db.$client
-    .prepare(
-      `UPDATE memory_runs
-       SET state = 'running', owner = ?, lease_until = ?, error = NULL, finished_at = NULL, retry_chat_ids = '[]'
-       WHERE date = ? AND state = 'failed'`,
-    )
-    .run(owner, now.getTime() + DREAM_LEASE_MS, date);
-  return result.changes === 1;
+  return advance(date, { type: "renew", owner, at: new Date() }) !== null;
 }
 
 function safeError(error: unknown): string {
@@ -191,16 +118,7 @@ function safeError(error: unknown): string {
 }
 
 function failOwned(date: string, owner: string, message: string) {
-  const run = readRun(date);
-  if (!run || run.owner !== owner) return;
-  const unfinished = run.chatIds.filter((id) => !run.doneChatIds.includes(id));
-  const retryChatIds = [...new Set([...run.retryChatIds, ...unfinished])];
-  db.$client
-    .prepare(
-      `UPDATE memory_runs SET state = 'failed', finished_at = ?, error = ?, retry_chat_ids = ?
-       WHERE date = ? AND owner = ? AND state = 'running'`,
-    )
-    .run(Date.now(), message, JSON.stringify(retryChatIds), date, owner);
+  advance(date, { type: "fail", owner, at: new Date(), error: message });
 }
 
 type ChatMessage = { id: string; role: string; parts: string; createdAt: number };
@@ -327,32 +245,15 @@ function finishChat(
   outcome: "done" | "retry",
   apply: () => { added: number; merged: number },
 ): "done" | "retry" | "lost" {
-  let result: "done" | "retry" | "lost" = "lost";
-  const work = db.$client.transaction(() => {
-    if (!renew(date, owner)) {
-      result = "lost";
-      return;
-    }
-    const counts = outcome === "done" ? apply() : { added: 0, merged: 0 };
-    const current = readRun(date);
-    if (!current || current.owner !== owner) {
-      result = "lost";
-      return;
-    }
-    const doneChatIds = outcome === "done" ? [...new Set([...current.doneChatIds, chatId])] : current.doneChatIds;
-    const retryChatIds = outcome === "retry" ? [...new Set([...current.retryChatIds, chatId])] : current.retryChatIds;
-    db.$client
-      .prepare(
-        `UPDATE memory_runs
-         SET done_chat_ids = ?, retry_chat_ids = ?, added = added + ?, merged = merged + ?
-         WHERE date = ? AND owner = ?`,
-      )
-      .run(JSON.stringify(doneChatIds), JSON.stringify(retryChatIds), counts.added, counts.merged, date, owner);
-    result = outcome;
-    console.log(JSON.stringify({ dream: date, chatId, outcome, added: counts.added, merged: counts.merged }));
-  });
-  work();
-  return result;
+  return db.$client
+    .transaction((): "done" | "retry" | "lost" => {
+      if (!renew(date, owner)) return "lost";
+      const counts = outcome === "done" ? apply() : { added: 0, merged: 0 };
+      if (!advance(date, { type: "chat", owner, chatId, outcome, ...counts })) return "lost";
+      console.log(JSON.stringify({ dream: date, chatId, outcome, ...counts }));
+      return outcome;
+    })
+    .immediate();
 }
 
 export async function dreamChat(chatId: string, input: { date: string; owner: string }): Promise<"done" | "retry" | "lost"> {
@@ -400,27 +301,16 @@ export async function dreamChat(chatId: string, input: { date: string; owner: st
   return finishChat(input.date, input.owner, chatId, "done", () => applyCandidatesWithSource(chatId, prepared));
 }
 
-function markDone(date: string, owner: string): boolean {
-  const run = readRun(date);
-  if (!run || run.owner !== owner) return false;
-  const settled = run.chatIds.every((id) => run.doneChatIds.includes(id) || run.retryChatIds.includes(id));
-  if (!settled) return false;
-  const result = db.$client
-    .prepare(`UPDATE memory_runs SET state = 'done', finished_at = ?, error = NULL WHERE date = ? AND owner = ? AND state = 'running'`)
-    .run(Date.now(), date, owner);
-  return result.changes === 1;
-}
-
 export async function runDream(input: { now?: Date; date?: string; manual?: boolean } = {}): Promise<MemoryRun | null> {
   const now = input.now ?? new Date();
   const date = input.date ?? localStamp(now, systemTimeZone()).date;
   const owner = crypto.randomUUID();
-  if (input.manual) reopenFailed(date, owner, now);
+  if (input.manual) advance(date, { type: "reopen", owner, at: now });
   const existing = readRun(date);
   let owned = existing?.state === "running" && existing.owner === owner;
   if (!owned) {
     const chatIds = existing?.state === "running" ? existing.chatIds : changedChatIds(date, now.getTime());
-    owned = tryClaim(db.$client, { date, owner, now, chatIds });
+    owned = tryClaim({ date, owner, now, chatIds });
   }
   if (!owned) return readRun(date);
   try {
@@ -431,18 +321,19 @@ export async function runDream(input: { now?: Date; date?: string; manual?: bool
     }
     const claimed = readRun(date);
     if (!claimed) return null;
-    const pending = claimed.chatIds.filter((id) => !claimed.doneChatIds.includes(id) && !claimed.retryChatIds.includes(id));
+    const pending = unfinishedChatIds(claimed);
     for (const chatId of pending) {
       const outcome = await dreamChat(chatId, { date, owner });
       if (outcome === "lost") return readRun(date);
     }
     const embedded = await embedPending();
-    if (!embedded.ok) failOwned(date, owner, embedded.error);
-    if (!markDone(date, owner)) return readRun(date);
-    const final = readRun(date);
-    if (final) {
-      console.log(JSON.stringify({ dream: final.date, state: final.state, chats: final.chatIds.length, added: final.added, merged: final.merged }));
+    if (!embedded.ok) {
+      failOwned(date, owner, embedded.error);
+      return readRun(date);
     }
+    const final = advance(date, { type: "done", owner, at: new Date(), embedded });
+    if (!final) return readRun(date);
+    console.log(JSON.stringify({ dream: final.date, state: final.state, chats: final.chatIds.length, added: final.added, merged: final.merged }));
     return final;
   } catch (error) {
     failOwned(date, owner, safeError(error));
