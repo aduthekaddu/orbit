@@ -432,6 +432,13 @@ export async function runDream(input: { now?: Date; date?: string; manual?: bool
     const claimed = readRun(date);
     if (!claimed) return null;
     const pending = claimed.chatIds.filter((id) => !claimed.doneChatIds.includes(id) && !claimed.retryChatIds.includes(id));
+    if (pending.length > 0) {
+      const status = await embed(["orbit"], "query");
+      if (!status.ok) {
+        failOwned(date, owner, status.error);
+        return readRun(date);
+      }
+    }
     for (const chatId of pending) {
       const outcome = await dreamChat(chatId, { date, owner });
       if (outcome === "lost") return readRun(date);
