@@ -57,6 +57,9 @@ export async function POST(request: Request) {
     if (write.error === "invalid-edit") {
       return Response.json({ error: "Invalid edit request" }, { status: 400 });
     }
+    if (write.error === "no-prompt") {
+      return Response.json({ error: "A chat request needs a user message." }, { status: 400 });
+    }
     if (write.error === "cross-chat") {
       return Response.json({ error: "A message id belongs to a different chat." }, { status: 409 });
     }

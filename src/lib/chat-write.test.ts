@@ -71,6 +71,7 @@ before(async () => {
     "c-continued",
     "c-continued-ok",
     "c-sdk-id",
+    "c-no-prompt",
   ]) {
     mods.db.insert(mods.schema.chats).values({ id, userId: "u1", title: id, createdAt: now, updatedAt: now }).run();
   }
@@ -113,6 +114,10 @@ async function streamedId(incoming: Incoming[], plan: ReturnType<typeof write>) 
 
 function ids(chatId: string) {
   return mods.listMessages(chatId).map((entry) => entry.id);
+}
+
+function head(chatId: string) {
+  return mods.messageRepository(chatId).headId;
 }
 
 test("a stale tab's prefix keeps newer stored turns", () => {
@@ -214,6 +219,7 @@ test("a request that continues a saved reply cannot undo an edit made in another
   // State 4, Finish: tab a's reply ends. It must not replace tab b's edit.
   mods.finishChatReply(plan, [{ type: "text", text: "first answer" }, { type: "text", text: " and more" }]);
   assert.deepEqual(mods.listMessages("c-continued").find((entry) => entry.id === "cr2")?.parts, [{ type: "text", text: "edited in tab b" }]);
+  assert.equal(head("c-continued"), "cr2");
 });
 
 test("a request that continues an unchanged saved reply saves the longer reply", () => {
@@ -227,6 +233,16 @@ test("a request that continues an unchanged saved reply saves the longer reply",
     { id: "co1", role: "user", parts: [{ type: "text", text: "explain the bug" }] },
     { id: "co2", role: "assistant", parts: [{ type: "text", text: "first answer" }, { type: "text", text: " and more" }] },
   ]);
+  assert.equal(head("c-continued-ok"), "co2");
+});
+
+test("a request with no user message is refused and writes nothing", () => {
+  write("c-no-prompt", [message("np1", "user", "ask")]);
+  answer("c-no-prompt", "np2", "answer", "np1");
+  const before = mods.messageRepository("c-no-prompt");
+
+  assert.deepEqual(mods.planChatWrite("c-no-prompt", [{ id: "np3", role: "assistant", parts: [] }]), { error: "no-prompt" });
+  assert.deepEqual(mods.messageRepository("c-no-prompt"), before);
 });
 
 test("a reply is saved under the id the AI SDK streams it under", async () => {

@@ -87,7 +87,8 @@ Send(t) ==
 \* replies in a row can. For it the AI SDK streams the reply under R's id and appends it to R's saved
 \* parts (node_modules/ai/src/ui-message-stream/get-response-ui-message-id.ts), which POST reads with
 \* listMessages. planChatWrite refuses a copy of P that differs from its row. In the same transaction
-\* it copies the rows the reply write will compare: P, and R when the reply continues R.
+\* it copies the rows the reply write will compare: P, and R when the reply continues R. A request
+\* with no user message has no P, and planChatWrite refuses it before it writes a row.
 \* Before f075e72 a regenerate reused R's id and compared R's row, and a retry with no R compared nothing.
 \* No await separates planChatWrite and listMessages, so in one server process both read the same R,
 \* and Plan is one step. Two server processes on one SQLite file could edit R between them.

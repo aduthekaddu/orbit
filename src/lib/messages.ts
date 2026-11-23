@@ -155,12 +155,12 @@ export type ReplyPlan = {
   /** The id the AI SDK streams the reply under. */
   id: string;
   /** The prompt the reply answers, with its text when planned. A new reply is saved under it. */
-  prompt: { id: string; saved: SavedText } | null;
+  prompt: { id: string; saved: SavedText };
   /** The saved text of reply `id` when the stream continues that reply, or null for a new reply. */
   continues: SavedText | null;
 };
 
-export type ChatWritePlan = ReplyPlan | { error: "invalid-edit" | "cross-chat" | "stale" };
+export type ChatWritePlan = ReplyPlan | { error: "invalid-edit" | "no-prompt" | "cross-chat" | "stale" };
 
 export function planChatWrite(
   chatId: string,
@@ -180,21 +180,19 @@ export function planChatWrite(
         return { error: "invalid-edit" };
       }
     }
+    const user = incoming.findLast((message) => message.role === "user");
+    if (!user) return { error: "no-prompt" };
     const result = persistIncoming(chatId, incoming);
     if (result !== "ok") return { error: result };
-    const user = incoming.findLast((message) => message.role === "user");
-    let prompt: ReplyPlan["prompt"] = null;
-    if (user) {
-      db.update(chats).set({ headId: user.id }).where(eq(chats.id, chatId)).run();
-      const saved = savedText(chatId, user.id);
-      if (!saved) return { error: "stale" };
-      prompt = { id: user.id, saved };
-    }
+    const saved = savedText(chatId, user.id);
+    if (!saved) return { error: "stale" };
     // When the last message is an assistant's, the AI SDK streams the reply under its id and appends
     // to its parts (node_modules/ai/src/ui-message-stream/get-response-ui-message-id.ts).
     const last = incoming.at(-1);
     const id = last?.role === "assistant" ? last.id : crypto.randomUUID();
-    return { chatId, id, prompt, continues: savedText(chatId, id) ?? null } as ReplyPlan;
+    const continues = savedText(chatId, id) ?? null;
+    db.update(chats).set({ headId: continues ? id : user.id }).where(eq(chats.id, chatId)).run();
+    return { chatId, id, prompt: { id: user.id, saved }, continues } as ReplyPlan;
   });
 }
 
@@ -206,10 +204,8 @@ function unchanged(row: SavedText | undefined, copy: SavedText) {
 export function finishChatReply(plan: ReplyPlan, parts: unknown): boolean {
   if (!assistantHasVisiblePart(parts)) return false;
   return db.transaction(() => {
-    if (plan.prompt && !unchanged(savedText(plan.chatId, plan.prompt.id), plan.prompt.saved)) return false;
-    if (!plan.continues) {
-      return insertMessage(plan.chatId, { id: plan.id, role: "assistant", parts }, plan.prompt?.id ?? null);
-    }
+    if (!unchanged(savedText(plan.chatId, plan.prompt.id), plan.prompt.saved)) return false;
+    if (!plan.continues) return insertMessage(plan.chatId, { id: plan.id, role: "assistant", parts }, plan.prompt.id);
     if (!unchanged(savedText(plan.chatId, plan.id), plan.continues)) return false;
     db.update(messages).set({ content: searchTextFromParts(parts), parts: JSON.stringify(parts) })
       .where(eq(messages.id, plan.id)).run();
