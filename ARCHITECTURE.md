@@ -118,7 +118,7 @@ statechart docs/architecture/ChatTurn.tla --config docs/architecture/ChatTurn.cf
 | `src/components/shell/` | App shell, sidebar, command palette, and keyboard shortcuts. |
 | `src/components/ui/` | shadcn/ui primitives, styled with the tokens in `src/app/globals.css`. |
 | `drizzle/` | SQL migrations. `npm run db:generate` writes new ones from `src/lib/db/schema.ts`. |
-| `scripts/` | Smoke tests against a running server, the provider check, and the browser QA script with its mock provider. |
+| `scripts/` | Smoke tests against a running server and the browser QA script with its mock provider. |
 | `.agents/skills/verify-orbit/` | The verification skill. It launches a sandboxed server and drives each feature. |
 
 ## Data model

@@ -22,7 +22,7 @@ jobs:
     concurrency:
       group: claude-${{ github.event.issue.number || github.event.pull_request.number }}
       cancel-in-progress: false
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
@@ -36,9 +36,6 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
-
-      - name: Install GitHub CLI
-        run: scripts/ci/install-gh.sh
 
       - name: Run Claude Code
         id: claude
