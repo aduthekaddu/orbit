@@ -26,7 +26,7 @@ Orbit is built for one person on their own machine. These are the protections it
 
 - The database stores the provider key in plain text. Anyone who can read `data/orbit.db` can read the key.
 - The database stores the GitHub token in plain text, the same way. Use a fine-grained personal access token that can only read the repositories you want Orbit to see. Orbit does not use GitHub sign-in.
-- Sign-in relies on better-auth's default rate limits. Orbit adds no lockout of its own. Keep it on `127.0.0.1`, or behind [Cloudflare Access](#cloudflare-access).
+- Sign-in relies on better-auth's default rate limits, such as 3 sign-in attempts per 10 seconds. A client can forge the `X-Forwarded-For` header, so Orbit reads no client address. Each auth path has one limit that every client shares, not one per address. Anyone who can reach sign-in shares that limit with you, so a steady stream of wrong passwords can keep you from signing in until it stops. Orbit adds no lockout of its own. Keep it on `127.0.0.1`, or behind [Cloudflare Access](#cloudflare-access). better-auth may warn that it is falling back to a shared per-path bucket and that `advanced.ipAddress.ipAddressHeaders` should be set. That warning is expected. Leave `ipAddressHeaders` empty unless a proxy that clients cannot get around sets that header.
 - Model output is untrusted. Markdown renders without raw HTML. Generated UI specs are checked against a fixed component catalog before they render.
 
 ## Cloudflare Access
