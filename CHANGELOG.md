@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- When the sign-out request fails, Sign out stays on the page and shows "Could not sign out". It no longer leaves the chat while the session may still be valid, or fails with no message. (#139)
 - A turn that calls no GitHub tool no longer connects to GitHub, so that reply no longer waits up to 10 seconds for a connection when GitHub is slow or down. A turn that already opened a client still waits for the close. The close request itself still has no deadline. (#136)
 - When Ollama is down, the nightly dream no longer sends chats to the model. The night fails with the Ollama error on `/memory`, and the next night retries those chats. (#121)
 - Markdown images in chat replies and reasoning appear as links that open on click. (#114)
