@@ -4,6 +4,10 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- When the sign-out request fails, Sign out stays on the page and shows "Could not sign out". It no longer leaves the chat while the session may still be valid, or fails with no message. (#139)
+- A turn that calls no GitHub tool no longer connects to GitHub, so that reply no longer waits up to 10 seconds for a connection when GitHub is slow or down. A turn that already opened a client still waits for the close. The close request itself still has no deadline. (#136)
+- When Ollama is down, the nightly dream no longer sends chats to the model. The night fails with the Ollama error on `/memory`, and the next night retries those chats. (#121)
+- Markdown images in chat replies and reasoning appear as links that open on click. (#114)
 - An interrupted generated view shows Stopped instead of an empty cancelled tool card.
 - Set `ORBIT_VERIFY_PORT` to run verify-orbit on another port when the deployment owns `3210`. The default stays `3210`.
 - Override Drizzle tooling's `@esbuild-kit/core-utils` dependency to use patched `esbuild` 0.25.12, removing GHSA-67mh-4wv8-2f99. (#71)
@@ -13,6 +17,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - Settings can remove a saved GitHub token. The stored token is cleared and GitHub tools stop.
 - Check says "GitHub rejected the token (bad request)." when GitHub answers HTTP 400.
 - Keep earlier prompts and replies when editing or regenerating. Switch versions with the message arrows. Reload opens the last written branch.
+- A forged `X-Forwarded-For` header no longer gets around the sign-in rate limit. Every client now shares one limit per auth path, such as 3 sign-in attempts per 10 seconds. (#117)
 
 ### Changed
 
@@ -73,7 +78,6 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Fixed
 
-- When the sign-out request fails, Sign out stays on the page and shows "Could not sign out". It no longer leaves the chat while the session may still be valid, or fails with no message. (#139)
 - GitHub Check asks for `get_me` on its own, so a valid token still shows the login when the chat tools are limited to repositories, issues, and pull requests.
 - The saved GitHub token is sent only to `api.githubcopilot.com`, `github.com`, and `api.github.com` over HTTPS. Any other MCP URL, including plain HTTP, is refused before the request. Tests can set `ORBIT_GITHUB_MCP_FIXTURE=1` to allow the local fixture.
 - A GitHub server that repeats the token does not get that token back out through Check, a tool result, or a chat stream error. The text says `[redacted]` instead.
