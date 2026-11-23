@@ -1,0 +1,32 @@
+src/lib/chat-errors.test.ts
+  s_6d6f669fed7156::t_befad0f330381a 40,213-216,221-224,227-232,237-238
+  s_6d6f669fed7156::t_2f2d834de34ebf 3,39,41,95,101-103,132,137-139,147,156-157,164-165,192,245,253-326
+ARCHITECTURE.md
+  s_6d6f669fed7156::t_a4e5838b227b86 141
+CHANGELOG.md
+  s_6d6f669fed7156::t_566967d7f531eb 7
+SECURITY.md
+  s_6d6f669fed7156::t_5f798629a25690 17
+src/app/api/chat/route.test.ts
+  s_6d6f669fed7156::t_1f41d967a06cc4 68-75,77,194-196,198,216
+src/lib/chat-errors.ts
+  s_6d6f669fed7156::t_42c9c8067df18c 6,10,13,41-42,45-66,69,71-73,76,78-84,86,99-104,106-107,110-116,126-127,129,137-140,142-144,147,151-153,159,166-167,174-178,183,190
+src/lib/tools/github.test.ts
+  s_6d6f669fed7156::t_2f8c4e8d3bbd4d 331-348
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "33a1736629c406e6ac7e384489ddfa0a4f0693b4",
+  "prompts": {},
+  "sessions": {
+    "s_6d6f669fed7156": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "23c3bf8f-11ea-47f7-a37c-774701612673",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
