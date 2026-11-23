@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- A turn that calls no GitHub tool no longer connects to GitHub, so that reply no longer waits up to 10 seconds for a connection when GitHub is slow or down. A turn that already opened a client still waits for the close. The close request itself still has no deadline. (#136)
 - When Ollama is down, the nightly dream no longer sends chats to the model. The night fails with the Ollama error on `/memory`, and the next night retries those chats. (#121)
 - Markdown images in chat replies and reasoning appear as links that open on click. (#114)
 - An interrupted generated view shows Stopped instead of an empty cancelled tool card.
@@ -80,7 +81,6 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - The saved GitHub token is sent only to `api.githubcopilot.com`, `github.com`, and `api.github.com` over HTTPS. Any other MCP URL, including plain HTTP, is refused before the request. Tests can set `ORBIT_GITHUB_MCP_FIXTURE=1` to allow the local fixture.
 - A GitHub server that repeats the token does not get that token back out through Check, a tool result, or a chat stream error. The text says `[redacted]` instead.
 - A GitHub connection that does not answer stops after 10 seconds, closes, and the chat continues without those tools. Stopping the chat still cancels the connection immediately.
-- A turn that calls no GitHub tool no longer connects to GitHub, so that reply no longer waits up to 10 seconds for a connection when GitHub is slow or down. A turn that already opened a client still waits for the close. The close request itself still has no deadline. (#136)
 - GitHub cards link an issue or a pull request on github.com, and a file result links to that file. A URL inside the issue text, a label, or the file body stays text.
 - A GitHub tool result that reports an error, such as a rate limit or a permission failure, shows Failed on the card. A rejected token check stays Failed.
 
