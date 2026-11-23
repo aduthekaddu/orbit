@@ -55,6 +55,15 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// A process group can end between the check that it runs and the signal.
+function killGroup(pid, signal) {
+  try {
+    process.kill(-pid, signal);
+  } catch (error) {
+    if (error?.code !== "ESRCH") throw error;
+  }
+}
+
 // A launch killed mid-write leaves a truncated file. Treat it as no state so cleanup still runs.
 function readState(file = statePath) {
   try {
@@ -275,20 +284,18 @@ async function startServer() {
     const ready = await waitReady();
     console.log(`ready origin=${ORIGIN} pid=${child.pid} signupOpen=${ready.signupOpen ? "yes" : "no"}`);
   } catch (error) {
-    try {
-      process.kill(-child.pid, "SIGTERM");
-    } catch {
-      // The child already exited.
-    }
+    killGroup(child.pid, "SIGTERM");
     fail(error instanceof Error ? error.message : "launch failed");
   }
 }
 
 // Field 22 of /proc/<pid>/stat is the start time in clock ticks since boot. A pid with its start time names one process.
+// A zombie (state Z) keeps its stat file but runs nothing, so it has no start time here.
 function startTime(pid) {
   try {
     const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
-    return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19] ?? "";
+    const [state, ...rest] = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+    return state === "Z" || state === "X" ? "" : (rest[18] ?? "");
   } catch {
     return "";
   }
@@ -317,7 +324,8 @@ function readyLine(child, pattern, timeoutMs) {
     const finish = (error, match) => {
       clearTimeout(timer);
       child.stdout.off("data", onData);
-      child.off("exit", onExit);
+      child.off("close", onClose);
+      child.off("error", onError);
       if (error) reject(error);
       else resolve(match);
     };
@@ -329,67 +337,100 @@ function readyLine(child, pattern, timeoutMs) {
       const match = pattern.exec(line);
       finish(match ? null : new Error(`first line was "${line}"`), match);
     };
-    const onExit = (code) => finish(new Error(`exited ${code ?? "on a signal"} before its ready line`));
+    const onClose = (code) => finish(new Error(`closed its output (exit ${code ?? "on a signal"}) before its ready line`));
+    const onError = (error) => finish(error);
     const timer = setTimeout(() => finish(new Error(`printed no ready line within ${timeoutMs} ms`)), timeoutMs);
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", onData);
-    child.once("exit", onExit);
+    child.once("close", onClose);
+    child.once("error", onError);
   });
 }
 
 async function spawnMock() {
-  const logFd = fs.openSync(mockLogPath, "a");
-  const child = spawn(process.execPath, [mockScript], {
-    env: { PATH: process.env.PATH ?? "", MOCK_MODEL },
-    detached: true,
-    stdio: ["ignore", "pipe", logFd],
-  });
-  fs.closeSync(logFd);
+  let child = null;
   const stopChild = () => {
-    try {
-      process.kill(-child.pid, "SIGTERM");
-    } catch {
-      // The child already exited.
-    }
+    if (child) killGroup(child.pid, "SIGTERM");
   };
-  let match;
-  try {
-    match = await readyLine(child, /^mock provider on http:\/\/127\.0\.0\.1:(\d+)\/v1 model=\S+$/, 10_000);
-  } catch (error) {
+  // The mock is detached, so a signal to this process does not reach it. Until its record is published, stop it here.
+  const onSignal = (signal) => {
     stopChild();
-    fail(`mock provider ${error.message}. Log: ${mockLogPath}`);
-  }
-  // The mock's later stdout lines go nowhere. Its requests are in .verify/mock-requests.jsonl.
-  child.stdout.destroy();
-  child.unref();
-  const mock = { pid: child.pid, startTime: startTime(child.pid), port: Number(match[1]) };
-  // link() publishes the whole record at once and fails if another launch in this checkout published first.
+    process.exit(signal === "SIGINT" ? 130 : 143);
+  };
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
   const draft = `${mockStatePath}.${process.pid}`;
-  fs.writeFileSync(draft, JSON.stringify(mock, null, 2));
+  let failure;
   try {
-    fs.linkSync(draft, mockStatePath);
+    const logFd = fs.openSync(mockLogPath, "a");
+    child = spawn(process.execPath, [mockScript], {
+      env: { PATH: process.env.PATH ?? "", MOCK_MODEL },
+      detached: true,
+      stdio: ["ignore", "pipe", logFd],
+    });
+    fs.closeSync(logFd);
+    const match = await readyLine(child, /^mock provider on http:\/\/127\.0\.0\.1:(\d+)\/v1 model=\S+$/, 10_000).catch((error) => {
+      throw new Error(`mock provider ${error.message}`);
+    });
+    // The mock's later stdout lines go nowhere. Its requests are in .verify/mock-requests.jsonl.
+    child.stdout.destroy();
+    child.unref();
+    const mock = { pid: child.pid, startTime: startTime(child.pid), port: Number(match[1]) };
+    if (!mock.startTime) throw new Error("mock provider exited right after printing its port");
+    // link() publishes the whole record at once and fails if another launch in this checkout published first.
+    fs.writeFileSync(draft, JSON.stringify(mock, null, 2));
+    try {
+      fs.linkSync(draft, mockStatePath);
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+      stopChild();
+      const winner = runningMock();
+      if (!winner) throw new Error("another launch --mock in this checkout recorded a mock that has stopped. Run cleanup, then launch --mock again");
+      console.log(`mock already running pid=${winner.pid}`);
+      return winner;
+    }
+    child = null;
     console.log(`mock ready pid=${mock.pid} base=http://127.0.0.1:${mock.port}/v1 model=${MOCK_MODEL}`);
     return mock;
   } catch (error) {
-    if (error?.code !== "EEXIST") throw error;
     stopChild();
-    const winner = runningMock();
-    if (!winner) fail("another launch --mock in this checkout recorded a mock that has stopped. Run cleanup, then launch --mock again.");
-    console.log(`mock already running pid=${winner.pid}`);
-    return winner;
+    failure = error instanceof Error ? error.message : String(error);
   } finally {
     fs.rmSync(draft, { force: true });
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
+  }
+  return fail(`${failure}. Log: ${mockLogPath}`);
+}
+
+// A record that names no running mock is removed. rename() takes whatever is there now, so a record that another launch
+// published since the caller read the file goes back, and that mock is returned.
+function removeStaleMock() {
+  const grave = `${mockStatePath}.stale.${process.pid}`;
+  try {
+    fs.renameSync(mockStatePath, grave);
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
+  const taken = readState(grave);
+  try {
+    if (!isRunning(taken)) return null;
+    try {
+      fs.linkSync(grave, mockStatePath);
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+    }
+    return taken;
+  } finally {
+    fs.rmSync(grave, { force: true });
   }
 }
 
 async function startMock() {
-  let mock = readState(mockStatePath);
-  if (isRunning(mock)) {
-    console.log(`mock already running pid=${mock.pid}`);
-  } else {
-    if (mock) fs.rmSync(mockStatePath, { force: true });
-    mock = await spawnMock();
-  }
+  let mock = runningMock() ?? removeStaleMock();
+  if (mock) console.log(`mock already running pid=${mock.pid}`);
+  else mock = await spawnMock();
   const cookies = await signInVerify();
   const saved = await request("/api/settings", {
     method: "PUT",
@@ -406,10 +447,10 @@ async function startMock() {
 async function stopMock() {
   const mock = runningMock();
   if (mock) {
-    process.kill(-mock.pid, "SIGTERM");
+    killGroup(mock.pid, "SIGTERM");
     const deadline = Date.now() + 5_000;
     while (isRunning(mock) && Date.now() < deadline) await sleep(100);
-    if (isRunning(mock)) process.kill(-mock.pid, "SIGKILL");
+    if (isRunning(mock)) killGroup(mock.pid, "SIGKILL");
   }
   fs.rmSync(mockStatePath, { force: true });
   fs.rmSync(mockLogPath, { force: true });
@@ -462,19 +503,11 @@ async function stopServer() {
     fail(`pid ${state.pid} is not the sandbox server. Not killing it.`);
   }
   if (alive(state.pid) || sandboxListening(state.port)) {
-    try {
-      process.kill(-state.pid, "SIGTERM");
-    } catch (error) {
-      if (error?.code !== "ESRCH") throw error;
-    }
+    killGroup(state.pid, "SIGTERM");
   }
   let stopped = await waitForStopped(state.pid, state.port, 5_000);
   if (!stopped) {
-    try {
-      process.kill(-state.pid, "SIGKILL");
-    } catch {
-      // Already gone.
-    }
+    killGroup(state.pid, "SIGKILL");
     stopped = await waitForStopped(state.pid, state.port, 5_000);
   }
   if (!stopped) {
@@ -887,7 +920,7 @@ function runDreamCli(ollamaUrl) {
 async function startDriveOllama() {
   if (process.env.ORBIT_OLLAMA_URL) return { url: process.env.ORBIT_OLLAMA_URL, stop: async () => {} };
   const child = spawn(process.execPath, [path.join(repoRoot, "scripts/qa/mock-ollama.mjs")], {
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", "pipe", "inherit"],
   });
   const [, port] = await readyLine(child, /^mock-ollama port=(\d+)$/, 5_000).catch((error) => {
     child.kill("SIGTERM");

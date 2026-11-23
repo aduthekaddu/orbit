@@ -48,7 +48,7 @@ async function signIn(page) {
 }
 
 // `verify.mjs launch --mock` publishes .verify/mock.json once the mock listens, with its port already in it.
-function mockBase() {
+async function mockBase() {
   if (process.env.ORBIT_MOCK_BASE_URL) return process.env.ORBIT_MOCK_BASE_URL;
   let mock = null;
   try {
@@ -56,14 +56,19 @@ function mockBase() {
   } catch {
     // No mock launched.
   }
-  if (!Number.isInteger(mock?.port)) {
+  if (!Number.isInteger(mock?.port) || mock.port < 1) {
     throw new Error("no mock provider in .verify/mock.json. Run node .agents/skills/verify-orbit/verify.mjs launch --mock, or set ORBIT_MOCK_BASE_URL.");
   }
-  return `http://127.0.0.1:${mock.port}/v1`;
+  const base = `http://127.0.0.1:${mock.port}/v1`;
+  const answers = await fetch(`${base}/models`).then((response) => response.ok, () => false);
+  if (!answers) {
+    throw new Error(`the mock provider in .verify/mock.json does not answer on ${base}. Run node .agents/skills/verify-orbit/verify.mjs launch --mock again.`);
+  }
+  return base;
 }
 
 async function useMockProvider(request) {
-  const MOCK_BASE = mockBase();
+  const MOCK_BASE = await mockBase();
   const response = await request.put(`${ORIGIN}/api/settings`, {
     data: { baseUrl: MOCK_BASE, apiKey: "mock-key", model: "mock-genui", reasoningEffort: "low" },
   });
@@ -487,11 +492,15 @@ async function main() {
   if (findings.some((item) => item.severity === "high")) process.exitCode = 2;
 }
 
-main()
-  .catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    if (browser) await browser.close();
-  });
+module.exports = { mockBase };
+
+if (require.main === module) {
+  main()
+    .catch((error) => {
+      console.error(error);
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      if (browser) await browser.close();
+    });
+}
