@@ -12,7 +12,9 @@ const ALLOWED = new Map([
   ["src/components/memory/memory-list.tsx", "PR #159, PR #166"],
   ["src/components/shell/command-palette.tsx", "PR #167"],]);
 
-const FETCH_CALL = /\bfetch\s*\(/;
+// Also catches fetch?.(, ["fetch"](, XMLHttpRequest, EventSource and sendBeacon. It misses an alias such as
+// `const get = fetch`, a call split across lines, and a module without "use client" outside the scanned trees.
+const REQUEST_CALL = /\bfetch\s*(\?\.\s*)?\(|\[\s*["'`]fetch["'`]\s*\]\s*(\?\.\s*)?\(|\bnew\s+(XMLHttpRequest|EventSource)\b|\bsendBeacon\s*\(/;
 
 function browserFiles() {
   return globSync("src/**/*.{ts,tsx}")
@@ -27,14 +29,14 @@ function browserFiles() {
 function fetchCalls(file: string) {
   return readFileSync(file, "utf8")
     .split("\n")
-    .flatMap((line, index) => (FETCH_CALL.test(line) ? [`${file}:${index + 1}`] : []));
+    .flatMap((line, index) => (REQUEST_CALL.test(line) ? [`${file}:${index + 1}`] : []));
 }
 
 test("browser code sends requests through requestJson, not fetch", () => {
   const calls = browserFiles()
     .filter((file) => !ALLOWED.has(file))
     .flatMap(fetchCalls);
-  assert.deepEqual(calls, [], `Call requestJson from ${HELPER} instead of fetch, so the request names what happens when it fails:\n${calls.join("\n")}`);
+  assert.deepEqual(calls, [], `Call requestJson from ${HELPER} instead of fetch, XMLHttpRequest, EventSource or sendBeacon, so the request names what happens when it fails:\n${calls.join("\n")}`);
 });
 
 test("every allowlisted file still calls fetch", () => {

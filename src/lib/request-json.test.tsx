@@ -47,6 +47,49 @@ test("a success body that does not match is invalid, not empty", async () => {
   assert.deepEqual(await outcome(async () => new Response(null, { status: 204 })), { failed: { kind: "invalid" } });
 });
 
+test("a success body that is not JSON is invalid, even for a schema that allows null", async () => {
+  assert.deepEqual(await outcome(async () => new Response("{not json", { status: 200 }), z.null()), { failed: { kind: "invalid" } });
+});
+
+const throws = () => {
+  throw new Error("boom");
+};
+
+// Collects what console.error saw, so a handler's own bug still shows in the console.
+function reported(run: () => Promise<unknown>) {
+  const realError = console.error;
+  const errors: unknown[] = [];
+  console.error = (error: unknown) => errors.push(error);
+  return run()
+    .then((value) => ({ value, errors: errors.map((error) => (error instanceof Error ? error.message : error)) }))
+    .finally(() => (console.error = realError));
+}
+
+test("a schema that throws makes the answer invalid and is reported", async () => {
+  const { value, errors } = await reported(() => outcome(async () => Response.json({ id: "c1" }), z.custom(throws)));
+  assert.deepEqual(value, { failed: { kind: "invalid" } });
+  assert.deepEqual(errors, ["boom"]);
+});
+
+test("an onOk that throws or rejects ends in onFailed and is reported", async () => {
+  globalThis.fetch = async () => Response.json({ id: "c1" });
+  for (const onOk of [throws, async () => throws()]) {
+    const failures: RequestFailure[] = [];
+    const { errors } = await reported(() => requestJson("/api/chats", {}, { parse: z.object({ id: z.string() }), onOk, onFailed: (failure) => failures.push(failure) }));
+    assert.deepEqual(failures, [{ kind: "handler" }]);
+    assert.deepEqual(errors, ["boom"]);
+  }
+});
+
+test("an onFailed that throws is reported, and requestJson still resolves", async () => {
+  globalThis.fetch = async () => new Response(null, { status: 500 });
+  for (const onFailed of [throws, async () => throws()]) {
+    const { value, errors } = await reported(() => requestJson("/api/chats", {}, { parse: z.object({ id: z.string() }), onOk: () => {}, onFailed }));
+    assert.equal(value, undefined);
+    assert.deepEqual(errors, ["boom"]);
+  }
+});
+
 test("a request aborted before its answer runs neither handler", async () => {
   const controller = new AbortController();
   const answer = async () => {

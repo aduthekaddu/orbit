@@ -90,6 +90,16 @@ test("a not-configured request without a key stays idle", async () => {
   assert.deepEqual(await connectionFor(json({ error: "Add a base URL and key.", models: [] }, 400), false), { status: "idle" });
 });
 
+test("a not-configured request for a new base URL with only the saved key stays idle", async () => {
+  assert.deepEqual(await connectionFor(json({ error: "Add a base URL and key.", models: [] }, 400), true), { status: "idle" });
+});
+
+test("a model list 400 that is not the not-configured answer is failed", async () => {
+  assert.deepEqual(await connectionFor(json({ error: "Invalid model request" }, 400)), { status: "failed" });
+  const proxy = async () => new Response("<html>400 Bad Request</html>", { status: 400, headers: { "content-type": "text/html" } });
+  assert.deepEqual(await connectionFor(proxy), { status: "failed" });
+});
+
 test("a model list that is not JSON is failed, not 0 models", async () => {
   const html = async () => new Response("<html>502 Bad Gateway</html>", { status: 200, headers: { "content-type": "text/html" } });
   assert.deepEqual(await connectionFor(html), { status: "failed" });

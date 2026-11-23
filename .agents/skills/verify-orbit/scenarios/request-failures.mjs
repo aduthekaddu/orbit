@@ -40,6 +40,21 @@ export default async function requestFailures({ page, origin, step, shot }) {
   await page.waitForTimeout(500);
   step("New chat that gets a body with no id shows Could not create chat and stays put", invalid && page.url() === chatUrl, `alert ${invalid}, url ${page.url()}`);
 
+  // Radix hides the page behind an open modal from screen readers, so the alert must sit inside the drawer.
+  await newChatError.waitFor({ state: "hidden", timeout: 6_000 }).catch(() => {});
+  const desktop = page.viewportSize();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await failNewChat((route) => route.fulfill({ status: 500, contentType: "application/json", body: '{"error":"boom"}' }));
+  await page.getByRole("button", { name: "Open sidebar" }).click();
+  const drawer = page.getByRole("dialog", { name: "Chats" });
+  await drawer.getByRole("button", { name: "New chat" }).click();
+  const announced = await shows(newChatError);
+  await shot("new-chat-drawer-500");
+  step("New chat that fails from the open mobile drawer shows Could not create chat to screen readers", announced && (await drawer.isVisible()), `alert ${announced}`);
+  await page.keyboard.press("Escape");
+  await drawer.waitFor({ state: "hidden", timeout: 5_000 });
+  await page.setViewportSize(desktop);
+
   posts = 0;
   await failNewChat(async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 1_500));
@@ -63,6 +78,16 @@ export default async function requestFailures({ page, origin, step, shot }) {
   const unreadable = await shows(failedLabel, 10_000);
   await shot("models-unreadable");
   step("a model list that is not JSON shows Failed, not 0 models", unreadable && !(await zeroModels.isVisible()), unreadable ? "0 models is visible" : "no Failed label");
+
+  for (const [label, body, contentType] of [
+    ["a bad request", '{"error":"Invalid model request"}', "application/json"],
+    ["a proxy", "<html>400 Bad Request</html>", "text/html"],
+  ]) {
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await page.route("**/api/models", (route) => route.fulfill({ status: 400, contentType, body }));
+    await page.reload();
+    step(`a model list 400 from ${label} shows Failed, not Not checked`, await shows(failedLabel, 10_000), `status ${await status.locator("[aria-live]").first().textContent()}`);
+  }
 
   await page.unrouteAll({ behavior: "ignoreErrors" });
   await page.route("**/api/models", (route) => route.abort());

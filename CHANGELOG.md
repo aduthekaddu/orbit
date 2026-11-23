@@ -5,7 +5,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 ## [Unreleased]
 
 - New chat shows "Could not create chat" when the request fails, instead of doing nothing or opening `/c/undefined`.
-- Settings shows Failed when the model list answer cannot be read, instead of a green "0 models".
+- Settings shows Failed when the model list answer cannot be read, instead of a green "0 models", and when the model list request is rejected, instead of "No key" or "Not checked".
+- A stopped code run whose saved result cannot be loaded shows "Could not load output" instead of an empty card.
 
 - An interrupted generated view shows Stopped instead of an empty cancelled tool card.
 - Set `ORBIT_VERIFY_PORT` to run verify-orbit on another port when the deployment owns `3210`. The default stays `3210`.

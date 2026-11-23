@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 
+// `handler` means the answer arrived but onOk threw on it.
 export type RequestFailure =
   | { kind: "network" }
   | { kind: "http"; status: number; error: string | null }
-  | { kind: "invalid" };
+  | { kind: "invalid" }
+  | { kind: "handler" };
 
 export type RequestHandlers<T> = {
   parse: z.ZodType<T>;
@@ -15,6 +17,27 @@ export type RequestHandlers<T> = {
 type Outcome<T> = { ok: true; data: T } | { ok: false; failure: RequestFailure };
 
 const errorBody = z.object({ error: z.string() });
+const NOT_JSON = Symbol("not JSON");
+
+function readBody(text: string): unknown {
+  if (text === "") return undefined;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return NOT_JSON;
+  }
+}
+
+function parseOk<T>(parse: z.ZodType<T>, body: unknown): Outcome<T> {
+  if (body === NOT_JSON) return { ok: false, failure: { kind: "invalid" } };
+  try {
+    const parsed = parse.safeParse(body);
+    if (parsed.success) return { ok: true, data: parsed.data };
+  } catch (error) {
+    console.error(error);
+  }
+  return { ok: false, failure: { kind: "invalid" } };
+}
 
 async function settle<T>(input: string, init: RequestInit, parse: z.ZodType<T>): Promise<Outcome<T>> {
   let text: string;
@@ -25,24 +48,29 @@ async function settle<T>(input: string, init: RequestInit, parse: z.ZodType<T>):
   } catch {
     return { ok: false, failure: { kind: "network" } };
   }
-  let body: unknown;
-  try {
-    body = text === "" ? undefined : JSON.parse(text);
-  } catch {
-    body = null;
-  }
+  const body = readBody(text);
   if (!response.ok) return { ok: false, failure: { kind: "http", status: response.status, error: errorBody.safeParse(body).data?.error ?? null } };
-  const parsed = parse.safeParse(body);
-  return parsed.success ? { ok: true, data: parsed.data } : { ok: false, failure: { kind: "invalid" } };
+  return parseOk(parse, body);
 }
 
-// The only way browser code sends a request. Exactly one handler runs, unless `init.signal` aborted first:
-// then a newer request or an unmount replaced this one, and neither runs.
+// Reports a handler's own bug in the console, because a handler that throws, or an async one that rejects, must not make requestJson reject.
+async function reportThrow(run: () => void): Promise<boolean> {
+  try {
+    await run();
+    return false;
+  } catch (error) {
+    console.error(error);
+    return true;
+  }
+}
+
+// The only way browser code sends a request. It never rejects. Exactly one handler runs, unless `init.signal` aborted first:
+// then a newer request or an unmount replaced this one, and neither runs. An onOk that throws hands over to onFailed.
 export async function requestJson<T>(input: string, init: RequestInit, { parse, onOk, onFailed }: RequestHandlers<T>): Promise<void> {
   const outcome = await settle(input, init, parse);
   if (init.signal?.aborted) return;
-  if (outcome.ok) onOk(outcome.data);
-  else onFailed(outcome.failure);
+  if (!outcome.ok) await reportThrow(() => onFailed(outcome.failure));
+  else if (await reportThrow(() => onOk(outcome.data))) await reportThrow(() => onFailed({ kind: "handler" }));
 }
 
 // Each call aborts the previous signal, so an older response can never overwrite a newer one.

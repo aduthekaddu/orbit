@@ -118,6 +118,18 @@ export function AppShell({
   const current = chats.find((chat) => pathname === `/c/${chat.id}`);
   const title = pathname === "/settings" ? "Settings" : pathname === "/memory" ? "Memory" : current && chatLabel(current.title);
 
+  // An open drawer hides the rest of the page from screen readers, so the alert goes inside it then.
+  const newChatError =
+    newChatState === "failed" ? (
+      <p
+        role="alert"
+        className="fixed left-1/2 top-[max(0.75rem,env(safe-area-inset-top))] z-[60] flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-2 rounded-lg border bg-popover px-3 py-2 text-xs text-destructive shadow-float animate-rise"
+      >
+        <WarningCircleIcon weight="regular" className="size-3.5 shrink-0" />
+        Could not create chat
+      </p>
+    ) : null;
+
   const sidebarProps = {
     chats,
     email,
@@ -153,6 +165,7 @@ export function AppShell({
           >
             <DialogTitle className="sr-only">Chats</DialogTitle>
             <Sidebar {...sidebarProps} onNavigate={() => setDrawerOpen(false)} />
+            {drawerOpen ? newChatError : null}
           </DialogPrimitive.Content>
         </DialogPortal>
       </Dialog>
@@ -192,15 +205,7 @@ export function AppShell({
         onAction={() => setDrawerOpen(false)}
       />
 
-      {newChatState === "failed" ? (
-        <p
-          role="alert"
-          className="fixed left-1/2 top-[max(0.75rem,env(safe-area-inset-top))] z-[60] flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-2 rounded-lg border bg-popover px-3 py-2 text-xs text-destructive shadow-float animate-rise"
-        >
-          <WarningCircleIcon weight="regular" className="size-3.5 shrink-0" />
-          Could not create chat
-        </p>
-      ) : null}
+      {drawerOpen ? null : newChatError}
     </div>
   );
 }

@@ -26,33 +26,30 @@ export function useSaveMessageText() {
       setSaving(true);
       setError("");
       let saved = false;
-      try {
-        await requestJson(
-          `/api/chats/${chatId}/messages/${messageId}`,
-          {
-            method: "PATCH",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(partIndex == null ? { text } : { text, partIndex }),
+      await requestJson(
+        `/api/chats/${chatId}/messages/${messageId}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(partIndex == null ? { text } : { text, partIndex }),
+        },
+        {
+          parse: savedMessage,
+          onOk: () => {
+            chat?.setMessages((messages) =>
+              messages.map((message) => {
+                if (message.id !== messageId) return message;
+                if (partIndex == null) return { ...message, parts: replaceTextParts(message.parts as MessageParts, text) };
+                const parts = replaceTextPart(message.parts as MessageParts, partIndex, text);
+                return parts ? { ...message, parts } : message;
+              }),
+            );
+            saved = true;
           },
-          {
-            parse: savedMessage,
-            onOk: () => {
-              saved = true;
-              chat?.setMessages((messages) =>
-                messages.map((message) => {
-                  if (message.id !== messageId) return message;
-                  if (partIndex == null) return { ...message, parts: replaceTextParts(message.parts as MessageParts, text) };
-                  const parts = replaceTextPart(message.parts as MessageParts, partIndex, text);
-                  return parts ? { ...message, parts } : message;
-                }),
-              );
-            },
-            onFailed: () => setError("Could not save"),
-          },
-        );
-      } finally {
-        setSaving(false);
-      }
+          onFailed: () => setError("Could not save"),
+        },
+      );
+      setSaving(false);
       return saved;
     });
   }

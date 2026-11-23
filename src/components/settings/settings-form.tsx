@@ -85,43 +85,40 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
     setPending(true);
     setError("");
     setSaved(false);
-    try {
-      await requestJson(
-        "/api/settings",
-        {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            baseUrl: formValues.baseUrl,
-            apiKey: formValues.apiKey || undefined,
-            model: formValues.model,
-            reasoningEffort: formValues.effort,
-            searxngUrl: formValues.searxngUrl.trim(),
-            tavilyApiKey: formValues.tavilyApiKey === null ? null : formValues.tavilyApiKey || undefined,
-            githubToken: formValues.githubToken === null ? null : formValues.githubToken || undefined,
-            githubMcpUrl: formValues.githubMcpUrl.trim(),
-          }),
+    await requestJson(
+      "/api/settings",
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          baseUrl: formValues.baseUrl,
+          apiKey: formValues.apiKey || undefined,
+          model: formValues.model,
+          reasoningEffort: formValues.effort,
+          searxngUrl: formValues.searxngUrl.trim(),
+          tavilyApiKey: formValues.tavilyApiKey === null ? null : formValues.tavilyApiKey || undefined,
+          githubToken: formValues.githubToken === null ? null : formValues.githubToken || undefined,
+          githubMcpUrl: formValues.githubMcpUrl.trim(),
+        }),
+      },
+      {
+        parse: savedBody,
+        onOk: (body) => {
+          // Pages that read settings on the server stay in the router cache, so Back would show them stale.
+          router.refresh();
+          const applied = appliedSave(formValues, latestValues.current);
+          if (applied.applyKeySet) setKeySet(body.keySet);
+          if (applied.clearKey) setApiKey("");
+          setTavilyKeySet(body.tavilyKeySet);
+          if (applied.clearTavilyKey) setTavilyApiKey("");
+          setGithubTokenSet(body.githubTokenSet);
+          if (applied.clearGithubToken) setGithubToken("");
+          if (applied.saved) setSaved(true);
         },
-        {
-          parse: savedBody,
-          onOk: (body) => {
-            // Pages that read settings on the server stay in the router cache, so Back would show them stale.
-            router.refresh();
-            const applied = appliedSave(formValues, latestValues.current);
-            if (applied.applyKeySet) setKeySet(body.keySet);
-            if (applied.clearKey) setApiKey("");
-            setTavilyKeySet(body.tavilyKeySet);
-            if (applied.clearTavilyKey) setTavilyApiKey("");
-            setGithubTokenSet(body.githubTokenSet);
-            if (applied.clearGithubToken) setGithubToken("");
-            if (applied.saved) setSaved(true);
-          },
-          onFailed: (failure) => setError((failure.kind === "http" && failure.error) || "Could not save"),
-        },
-      );
-    } finally {
-      setPending(false);
-    }
+        onFailed: (failure) => setError((failure.kind === "http" && failure.error) || "Could not save"),
+      },
+    );
+    setPending(false);
   }
 
   function onCheckGithub() {
