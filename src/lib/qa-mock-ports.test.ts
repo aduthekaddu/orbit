@@ -32,7 +32,7 @@ const holders: net.Server[] = [];
 function stop(child: ChildProcess): Promise<void> {
   return new Promise((resolve) => {
     if (child.exitCode !== null || child.signalCode) return resolve();
-    child.once("exit", () => resolve());
+    child.once("close", () => resolve());
     child.kill("SIGTERM");
   });
 }
@@ -133,8 +133,17 @@ for (const mock of mocks) {
 }
 
 // verify.mjs reads the ready line, then closes the pipe and exits. A later stdout write would crash the mock with EPIPE.
+// Stopping the mock and waiting for its pipes to close means every byte it wrote has arrived before the check.
 test("mock provider writes nothing to stdout after its ready line", async () => {
   const provider = await start(mocks[0], { MOCK_REQUEST_LOG: path.join(os.tmpdir(), `orbit-mock-requests-${process.pid}.jsonl`) });
   assert.equal(await postChat(provider.port), 200);
+  await stop(provider.child);
   assert.deepEqual(provider.stdout().split("\n").filter(Boolean).slice(1), []);
+});
+
+test("mock ollama writes nothing to stdout after its ready line", async () => {
+  const ollama = await start(mocks[1]);
+  assert.equal(await status(ollama.port, "/qa/received"), 200);
+  await stop(ollama.child);
+  assert.deepEqual(ollama.stdout().split("\n").filter(Boolean).slice(1), []);
 });
