@@ -17,7 +17,7 @@ The diagram predates slices 7 and 8. SearXNG, Tavily, and the code sandbox now c
 
 1. You type in the composer. assistant-ui sends `POST /api/chat` through `orbitChatTransport` in `src/lib/chat-transport.ts`. The transport puts the open chat id on the request, because assistant-ui would otherwise send its own local thread id.
 2. `src/proxy.ts` checks the session cookie. Every page and API route needs a session except `/login`, `/signup`, `/api/auth/*`, and `/api/setup`.
-3. `src/app/api/chat/route.ts` parses the body with zod, loads the settings row, and calls `planChatWrite` in `src/lib/messages.ts`. That function saves the incoming user messages and picks the id the reply will be stored under. It rejects a write planned against an older copy of the chat with `409`.
+3. `src/app/api/chat/route.ts` parses the body with zod (a user message over 50,000 characters gets `413`), loads the settings row, and calls `planChatWrite` in `src/lib/messages.ts`. That function saves the incoming user messages and picks the id the reply will be stored under. It rejects a write planned against an older copy of the chat with `409`.
 4. The route calls `streamText` from the AI SDK with the model from `orbitModel` in `src/lib/provider.ts` and the tools from `toolsFor(settings)` in `src/lib/tools/index.ts`. The registry always enables `render_ui`, enables `web_search` when a search backend is configured, and enables `run_code` only when the server sets `ORBIT_SANDBOX=on`. The loop stops after at most five model steps. With search enabled, the fifth step receives the completed conversation as JSON data and allows only `render_ui`. It keeps the route instructions so the model can answer with citations, render a card, or write an artifact without searching again.
 5. The stream goes back to the browser as AI SDK UI message parts. Text, reasoning, and tool parts render as they arrive.
 6. When the stream ends, `onEnd` asks `shouldSaveReply` in `src/lib/messages.ts`, then saves the assistant message with `upsertMessage`. It saves only a reply that has a visible part. A regenerate saves a new sibling and keeps the earlier reply.
@@ -140,7 +140,7 @@ Tool output, generated UI specs, and reasoning all live inside `parts`. A new to
 
 - **The key stays on the server.** `GET /api/settings` returns `keySet`, `tavilyKeySet`, and `sandbox` booleans. `sandbox` says only whether the server set `ORBIT_SANDBOX=on`. The browser cannot change it. Logs pass through `sanitize` in the chat route. Tests and smoke scripts redact `ORBIT_API_KEY`.
 - **One user.** The auth hook and the database trigger both close signup after the first account.
-- **Validate at the edge.** Routes parse request bodies with zod. Tool input is parsed by the tool's schema and then by `parseRenderSpec`. Code behind those checks trusts its types.
+- **Validate at the edge.** Routes parse request bodies, queries, and path parameters with zod schemas built from `r` in `src/lib/route-schema.ts`, which has no string or list without a size limit. `route-schema.test.ts` fails a route that imports `zod` directly. Tool input is parsed by the tool's schema and then by `parseRenderSpec`. Code behind those checks trusts its types.
 - **The server owns history.** The client sends its copy of the thread, but `planChatWrite` decides what is stored and refuses a write against a changed chat.
 - **Bind to localhost.** Docker Compose publishes `127.0.0.1:3210` only. Remote access is planned behind Cloudflare Access in [slice 12](docs/slices/12.md).
 

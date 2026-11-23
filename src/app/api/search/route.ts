@@ -1,12 +1,12 @@
-import { z } from "zod";
 import { searchMessages } from "@/lib/search";
 import { getSession, unauthorized } from "@/lib/session";
+import { LIMITS, r } from "@/lib/route-schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const querySchema = z.object({
-  q: z.string().max(500),
+const querySchema = r.object({
+  q: r.text(LIMITS.query),
 });
 
 export async function GET(request: Request) {

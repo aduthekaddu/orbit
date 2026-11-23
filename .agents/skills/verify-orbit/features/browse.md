@@ -90,6 +90,21 @@ PASS starters are at least 44px tall on a phone
 
 Screenshots: `starters.png`, `filled.png`, `phone-390x844.png`.
 
+### long-message
+
+Posts 80,000 letters to `/api/chat`, then sends a 60,000 character message from the composer, then a short one.
+
+Pass lines:
+
+```
+PASS 80,000 letters get 413 from the route
+PASS composer shows the refusal
+PASS a refused message is not saved
+PASS a short message still gets a reply
+```
+
+Screenshot: `too-long.png`.
+
 ## Gotchas
 
 - The mock counts `fail-first` failures for each prompt text. `retry-stop` adds the time to the prompt, so a second run fails three times again.

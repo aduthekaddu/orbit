@@ -11,7 +11,7 @@ Orbit is a self-hosted chat app for one user: Next.js App Router, the AI SDK, as
 ## Guardrails
 
 - Secrets stay on the server. Pass keys through the environment. Never print, log, or commit one. `GET /api/settings` returns `keySet` and never a key.
-- Routes parse request bodies with zod. Code behind a route trusts its types.
+- Routes parse request bodies, queries, and path parameters with zod schemas built from `r` in `src/lib/route-schema.ts`. A route never imports `zod`, and every string and list has a limit. Code behind a route trusts its types.
 - Message writes go through `planChatWrite` and `upsertMessage` in `src/lib/messages.ts`.
 - For a schema change, edit `src/lib/db/schema.ts`, then run `npm run db:generate`. FTS5 and `vec0` tables need `npx drizzle-kit generate --custom`.
 - Colors and sizes come from the tokens in `src/app/globals.css`. UI copy has no taglines, helper text, or secondary labels.

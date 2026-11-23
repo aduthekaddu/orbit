@@ -1,5 +1,4 @@
 import { convertToModelMessages, createUIMessageStreamResponse, stepCountIs, streamText, toUIMessageStream, type UIMessage } from "ai";
-import { z } from "zod";
 import { ARTIFACT_INSTRUCTIONS } from "@/lib/artifacts/detect";
 import { sanitize, streamErrorMessage } from "@/lib/chat-errors";
 import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
@@ -13,24 +12,38 @@ import { chatTitle, ensureChat, listMessages, planChatWrite, replyGuard, shouldS
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { startChatTitle } from "@/lib/titles";
 import { getSettings } from "@/lib/settings";
+import { LIMITS, r } from "@/lib/route-schema";
 import { getSession, unauthorized } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-const messageSchema = z.object({
-  id: z.string().min(1).max(100),
-  role: z.enum(["user", "assistant", "system"]),
-  parts: z.array(z.unknown()).optional(),
-});
+const partSchema = (textMax: number) =>
+  r.looseObject({
+    type: r.text(LIMITS.partType),
+    text: r.text(textMax).optional(),
+  });
 
-const bodySchema = z.object({
-  id: z.string().min(1).max(100),
-  messages: z.array(messageSchema).min(1),
-  trigger: z.enum(["submit-message", "regenerate-message", "resume-stream"]).optional(),
-  editMessageId: z.string().min(1).max(100).optional(),
-  messageId: z.string().min(1).max(100).optional(),
+const messageSchema = r.discriminatedUnion("role", [
+  r.object({
+    id: r.text(LIMITS.id).min(1),
+    role: r.literal("user"),
+    parts: r.list(partSchema(LIMITS.userMessageText), LIMITS.partsPerMessage).optional(),
+  }),
+  r.object({
+    id: r.text(LIMITS.id).min(1),
+    role: r.enum(["assistant", "system"]),
+    parts: r.list(partSchema(LIMITS.assistantText), LIMITS.partsPerMessage).optional(),
+  }),
+]);
+
+const bodySchema = r.object({
+  id: r.text(LIMITS.id).min(1),
+  messages: r.list(messageSchema, LIMITS.messagesPerRequest).min(1),
+  trigger: r.enum(["submit-message", "regenerate-message", "resume-stream"]).optional(),
+  editMessageId: r.text(LIMITS.id).min(1).optional(),
+  messageId: r.text(LIMITS.id).min(1).optional(),
 });
 
 export async function POST(request: Request) {
@@ -40,6 +53,9 @@ export async function POST(request: Request) {
   const json = await request.json().catch(() => null);
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
+    if (parsed.error.issues.some((issue) => issue.code === "too_big" && issue.path.at(-1) === "text")) {
+      return Response.json({ error: "Message is too long." }, { status: 413 });
+    }
     return Response.json({ error: "Invalid chat request" }, { status: 400 });
   }
 
