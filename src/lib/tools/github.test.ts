@@ -328,8 +328,24 @@ test("a GitHub tool error does not include the token when the server echoes it",
     try {
       const call = opened.tools.github_list_issues?.execute?.({ owner: "aduthekaddu", repo: "orbit" }, toolOptions);
       await assert.rejects(Promise.resolve(call), (error: Error) => {
-        assert.match(error.message, /cannot read this repository/);
-        assert.equal(error.message.includes(mock.token), false, error.message);
+        assert.equal(error.message, "[redacted]");
+        return true;
+      });
+    } finally {
+      await opened.close();
+    }
+  });
+});
+
+test("a GitHub tool error does not include a stored key shorter than the saved-reply minimum", { timeout: 20_000 }, async () => {
+  await withMock(async (mock) => {
+    const shortKey = "made-up-01";
+    const url = `${mock.url}?mode=error-token&echo=${shortKey}`;
+    const opened = await githubTools({ ...githubSettings(mock.token, url), apiKey: shortKey });
+    try {
+      const call = opened.tools.github_list_issues?.execute?.({ owner: "aduthekaddu", repo: "orbit" }, toolOptions);
+      await assert.rejects(Promise.resolve(call), (error: Error) => {
+        assert.equal(error.message.includes(shortKey), false, error.message);
         return true;
       });
     } finally {

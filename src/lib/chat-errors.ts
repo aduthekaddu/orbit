@@ -3,18 +3,14 @@ import type { SettingsRecord } from "./settings";
 
 const INPUT_ERROR = /^(?:AI_InvalidToolInputError: )?Invalid input for tool ([\w-]+): (.*)$/s;
 const ISSUES_MARK = "\nError message: ";
-const ISSUE_LIMIT = 3;
-const PART_LIMIT = 40;
-const FIELD_LIMIT = 80;
-const MESSAGE_LIMIT = 120;
-const REASON_LIMIT = 240;
+const MODEL_FAILED = "The model request failed";
 
 type StoredColumn = Exclude<keyof typeof settings.$inferSelect, "id" | "updatedAt">;
 
-// A field whose name ends in one of these, optionally plural or numbered, must be labelled a credential.
+// A field whose name ends in one of these, optionally plural, numbered or both, must be labelled a credential.
 // The rest may take either label.
 export const CREDENTIAL_NOUNS = ["key", "token", "secret", "password", "passwd", "passphrase", "pat", "credential", "cookie", "jwt"] as const;
-type CredentialName = `${string}${(typeof CREDENTIAL_NOUNS)[number]}${"" | "s" | `${number}`}`;
+type CredentialName = `${string}${(typeof CREDENTIAL_NOUNS)[number]}${"" | "s"}${"" | `${number}`}`;
 export type SettingsLabels<Field extends string> = {
   [Name in Field]: Lowercase<Name> extends CredentialName ? "credential" : "credential" | "setting";
 };
@@ -42,36 +38,52 @@ const CREDENTIAL_FIELDS = (Object.keys(SETTINGS_FIELDS) as SettingsField[]).filt
 
 export const REDACTED = "[redacted]";
 // Saved and model-facing text keeps a shorter value, such as the placeholder "ollama", so
-// ordinary words in replies survive. Log lines and error text drop it. The minimum is longer
-// than REDACTED, so no masked credential is part of the marker.
+// ordinary words in replies survive. The minimum is longer than REDACTED, so no masked
+// credential is part of the marker.
 export const MIN_CREDENTIAL_LENGTH = 12;
+
+// Every index where needle starts in text, overlaps included. Knuth-Morris-Pratt, so a key of one
+// repeated character costs the same as any other key.
+function starts(text: string, needle: string) {
+  const found: number[] = [];
+  if (!text.includes(needle)) return found;
+  const fallback = new Int32Array(needle.length);
+  for (let at = 1, matched = 0; at < needle.length; at++) {
+    while (matched > 0 && needle[at] !== needle[matched]) matched = fallback[matched - 1];
+    if (needle[at] === needle[matched]) matched++;
+    fallback[at] = matched;
+  }
+  for (let at = 0, matched = 0; at < text.length; at++) {
+    while (matched > 0 && text[at] !== needle[matched]) matched = fallback[matched - 1];
+    if (text[at] === needle[matched]) matched++;
+    if (matched === needle.length) {
+      found.push(at - matched + 1);
+      matched = fallback[matched - 1];
+    }
+  }
+  return found;
+}
 
 // Each run of characters that any occurrence of a secret covers, overlaps included, becomes one marker.
 function maskRuns(text: string, secrets: readonly string[]) {
-  let covered: Uint8Array | undefined;
+  let reach: Int32Array | undefined;
   for (const secret of secrets) {
-    let end = 0;
-    for (let at = text.indexOf(secret); at !== -1; at = text.indexOf(secret, at + 1)) {
-      covered ??= new Uint8Array(text.length);
-      covered.fill(1, Math.max(at, end), at + secret.length);
-      end = at + secret.length;
+    for (const at of starts(text, secret)) {
+      reach ??= new Int32Array(text.length);
+      reach[at] = Math.max(reach[at], at + secret.length);
     }
   }
-  if (!covered) return text;
+  if (!reach) return text;
   let masked = "";
-  for (let start = 0; start < text.length; ) {
-    let stop = start;
-    while (stop < text.length && covered[stop] === covered[start]) stop++;
-    masked += covered[start] ? REDACTED : text.slice(start, stop);
-    start = stop;
+  let end = -1;
+  let plain = 0;
+  for (let at = 0; at < text.length; at++) {
+    if (reach[at] === 0) continue;
+    if (at > end) masked += text.slice(plain, at) + REDACTED;
+    end = Math.max(end, reach[at]);
+    plain = end;
   }
-  return masked;
-}
-
-// A marker next to other text can spell a credential again; then the whole text is dropped.
-function mask(text: string, replaced: readonly string[], forbidden: readonly string[]) {
-  const result = maskRuns(text, replaced);
-  return forbidden.some((secret) => result.includes(secret)) ? REDACTED : result;
+  return masked + text.slice(plain);
 }
 
 export class Redactor {
@@ -84,12 +96,24 @@ export class Redactor {
     this.#long = this.#every.filter((value) => value.length >= MIN_CREDENTIAL_LENGTH);
   }
 
-  text(message: string) {
-    return mask(message, this.#long, this.#long);
+  #holds(text: string) {
+    return this.#every.some((secret) => text.includes(secret));
   }
 
-  diagnostic(message: string) {
-    return mask(message, this.#long, this.#every);
+  // Saved replies and tool results: each long credential becomes the marker. A marker next to other
+  // text can spell a credential again; then the whole text is dropped.
+  text(message: string) {
+    const masked = maskRuns(message, this.#long);
+    return this.#long.some((secret) => masked.includes(secret)) ? REDACTED : masked;
+  }
+
+  // Log lines, stream error text and GitHub tool errors are never masked in place. The detail is shown
+  // only when neither it nor any text it was built from holds a stored credential of any length, so no
+  // collapse, strip, cut or join can leave part of one. Otherwise the first fallback that holds none is
+  // shown, or nothing.
+  diagnostic(detail: string, sources: readonly string[] = [], fallbacks: readonly string[] = [REDACTED]) {
+    if (![detail, ...sources].some((text) => this.#holds(text))) return detail;
+    return fallbacks.find((text) => !this.#holds(text)) ?? "";
   }
 
   value(value: unknown): unknown {
@@ -99,8 +123,10 @@ export class Redactor {
     return Object.fromEntries(Object.entries(value).map(([key, child]) => [this.text(key), this.value(child)]));
   }
 
+  // One string, so the line checked is the line printed: a credential spread across the label and
+  // the details is found too.
   logError(label: string, ...details: string[]) {
-    console.error(label, ...details.map((detail) => this.diagnostic(detail)));
+    console.error(this.diagnostic([label, ...details].join(" "), [], [`${label} ${REDACTED}`, label, REDACTED]));
   }
 }
 
@@ -108,65 +134,60 @@ function cleanErrorText(text: string) {
   return text.replace(/AI_[A-Za-z]+Error:\s*/g, "").trim();
 }
 
-// Masks before it cuts, so a cut cannot leave part of a credential.
-function short(text: string, limit: number, redact: Redactor) {
-  const flat = redact.diagnostic(text.replace(/[\x00-\x1f\x7f\s]+/g, " "));
+type Limits = { issues: number; part: number; field: number; message: number; reason: number };
+const CUT: Limits = { issues: 3, part: 40, field: 80, message: 120, reason: 240 };
+// The same text with no cut, so a credential that a cut would hide is still found.
+const WHOLE: Limits = { issues: Infinity, part: Infinity, field: Infinity, message: Infinity, reason: Infinity };
+
+function short(text: string, limit: number) {
+  const flat = text.replace(/[\x00-\x1f\x7f\s]+/g, " ");
   return flat.length > limit ? `${flat.slice(0, limit - 1)}…` : flat;
 }
 
-// Paths can hold keys the model chose, so every part is bounded. A credential that only the
-// joined path spells would lose its tail in a part's cut, so that path is masked whole first.
-function pathField(path: unknown[], redact: Redactor) {
-  const whole = path.map(String).join(".");
-  const masked = redact.diagnostic(whole);
-  if (masked !== whole) return short(masked, FIELD_LIMIT, redact);
-  return short(path.map((part) => short(String(part), PART_LIMIT, redact)).join("."), FIELD_LIMIT, redact);
-}
-
-function issueLine(issue: unknown, redact: Redactor): string[] {
+function issueLine(issue: unknown, limits: Limits): string[] {
   if (!issue || typeof issue !== "object") return [];
   const { path, message } = issue as { path?: unknown; message?: unknown };
   if (typeof message !== "string") return [];
-  const field = Array.isArray(path) ? pathField(path, redact) : "";
-  const reason = short(message, MESSAGE_LIMIT, redact);
+  // Paths can hold keys the model chose, so every part is bounded.
+  const field = Array.isArray(path) ? short(path.map((part) => short(String(part), limits.part)).join("."), limits.field) : "";
+  const reason = short(message, limits.message);
   return [field ? `${field}: ${reason}` : reason];
 }
 
 // The SDK writes the rejected value, then "\nError message: ", then the schema issues as JSON.
 // The value is compact JSON with no raw newline, so the first newline starts the issues.
-function inputProblem(rest: string, redact: Redactor) {
+function inputProblem(rest: string, limits: Limits) {
   const unknown = "the input does not match the tool schema";
   if (rest.startsWith("AI_JSONParseError:")) return "the input is not valid JSON";
   const mark = rest.indexOf(ISSUES_MARK);
   if (mark === -1) return unknown;
   try {
     const issues: unknown = JSON.parse(rest.slice(mark + ISSUES_MARK.length));
-    const lines = Array.isArray(issues) ? issues.slice(0, ISSUE_LIMIT).flatMap((issue) => issueLine(issue, redact)) : [];
-    return lines.length > 0 ? short(lines.join("; "), REASON_LIMIT, redact) : unknown;
+    const lines = Array.isArray(issues) ? issues.slice(0, limits.issues).flatMap((issue) => issueLine(issue, limits)) : [];
+    return lines.length > 0 ? short(lines.join("; "), limits.reason) : unknown;
   } catch {
     return unknown;
   }
 }
 
-function shortToolInputError(text: string, redact: Redactor) {
-  const match = INPUT_ERROR.exec(text);
-  return match ? `Invalid input for tool ${match[1]}: ${inputProblem(match[2], redact)}` : undefined;
-}
-
 function errorText(message: string, redact: Redactor) {
-  return redact.diagnostic(shortToolInputError(message, redact) ?? cleanErrorText(message));
+  const match = INPUT_ERROR.exec(message);
+  if (!match) return redact.diagnostic(cleanErrorText(message), [message]);
+  const head = `Invalid input for tool ${match[1]}: `;
+  const whole = head + inputProblem(match[2], WHOLE);
+  return redact.diagnostic(head + inputProblem(match[2], CUT), [message, whole], [head + REDACTED, REDACTED]);
 }
 
 export function streamErrorMessage(error: unknown, redact: Redactor) {
   if (typeof error === "string") return errorText(error, redact);
-  const message = error instanceof Error ? error.message : "The model request failed";
+  const message = error instanceof Error ? error.message : MODEL_FAILED;
   if (error instanceof Error && error.name === "AI_InvalidToolInputError") {
     const text = errorText(message, redact);
     redact.logError("chat stream error", text);
     return text;
   }
   redact.logError("chat stream error", message);
-  return "The model request failed";
+  return redact.diagnostic(MODEL_FAILED);
 }
 
 // One line for the operator in place of the SDK's raw dump, which carries request and response bodies.

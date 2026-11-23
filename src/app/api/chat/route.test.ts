@@ -65,10 +65,16 @@ function sse(res: http.ServerResponse, deltas: unknown[], finish: string) {
 
 function answer(res: http.ServerResponse, body: { stream?: boolean; messages?: Array<{ role: string; content: unknown }> }) {
   const prompt = JSON.stringify(body.messages ?? []);
-  const echoed = prompt.includes("[echo-keys]") ? `${TAVILY_KEY} and ${PROVIDER_KEY} and ${github.token}` : prompt.includes("[echo-provider-key]") ? PROVIDER_KEY : "";
-  if (echoed) {
+  const rejected = prompt.includes("[echo-keys]")
+    ? `${TAVILY_KEY} and ${PROVIDER_KEY} and ${github.token}`
+    : prompt.includes("[echo-provider-key]")
+      ? PROVIDER_KEY
+      : prompt.includes("[reject]")
+        ? "the request"
+        : "";
+  if (rejected) {
     res.writeHead(400, { "content-type": "application/json" });
-    res.end(JSON.stringify({ error: { message: `upstream rejected ${echoed}`, type: "invalid_request_error" } }));
+    res.end(JSON.stringify({ error: { message: `upstream rejected ${rejected}`, type: "invalid_request_error" } }));
     return;
   }
   if (body.stream !== true) {
@@ -185,9 +191,11 @@ test("a provider error that echoes all three stored credentials leaves them out 
   assertNoCredential("stream error", errorTexts(streamed));
 });
 
-test("a provider error is logged once by streamText with its name and status, redacted, and never as the raw SDK dump", async () => {
+test("a provider error is logged once by streamText with its name and status, with only its label when it holds a stored credential, and never as the raw SDK dump", async () => {
+  const plain = await send("c-provider-plain", "[reject] hello");
+  assert.match(plain.logged, /chat provider error AI_APICallError 400 upstream rejected the request/);
   const { streamed, logged } = await send("c-provider", "[echo-provider-key] hello");
-  assert.match(logged, /chat provider error AI_APICallError 400 /);
+  assert.match(logged, /chat provider error \[redacted\]/);
   assert.equal(logged.match(/chat provider error/g)?.length, 1);
   assert.doesNotMatch(logged, /requestBodyValues|responseBody/);
   assertNoCredential("log", logged);
@@ -205,7 +213,7 @@ test("a tool input error that names the Tavily key leaves it out of the stream e
 
 test("a GitHub tool error that names every stored credential leaves them out of the stream error text, the saved reply and the log", async () => {
   const { streamed, logged, saved } = await send("c-github", "[github-call] list issues");
-  assert.match(logged, /chat stream error token \[redacted\] cannot read this repository with \[redacted\] and \[redacted\]/);
+  assert.match(logged, /chat stream error \[redacted\]/);
   assert.match(errorTexts(streamed), /The model request failed/);
   assert.match(saved, /Done\./);
   assert.ok(github.callCount() > 0, "the GitHub tool was not called");
