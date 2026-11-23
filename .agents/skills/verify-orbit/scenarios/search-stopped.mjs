@@ -9,15 +9,15 @@ export default async function searchStopped({ page, origin, step, shot }) {
   const messages = path.resolve("src/lib/messages.ts");
   const search = path.resolve("src/lib/tools/search.ts");
   execFileSync(process.execPath, ["--import", "tsx", "-e", `
-    const { upsertMessage } = require(${JSON.stringify(messages)});
+    const { finishChatReply, planChatWrite } = require(${JSON.stringify(messages)});
     const { searchWeb } = require(${JSON.stringify(search)});
     (async () => {
       const id = process.argv[1];
       const output = await searchWeb({ searxngUrl: "", tavilyApiKey: "" }, "orbit", AbortSignal.abort());
-      upsertMessage(id, { id: id + "-prompt", role: "user", parts: [{ type: "text", text: "Search orbit" }] });
-      upsertMessage(id, { id: id + "-reply", role: "assistant", parts: [{
+      const plan = planChatWrite(id, [{ id: id + "-prompt", role: "user", parts: [{ type: "text", text: "Search orbit" }] }]);
+      if ("error" in plan || !finishChatReply(plan, [{
         type: "tool-web_search", toolCallId: "stopped-search", state: "output-available", input: { query: "orbit" }, output,
-      }] });
+      }])) process.exitCode = 1;
     })().catch(error => { console.error(error); process.exitCode = 1; });
   `, id], { cwd: path.resolve(".verify/sandbox"), env: { ...process.env, ORBIT_DATA_DIR: path.resolve(".verify/sandbox/data") }, stdio: "pipe" });
   const stored = await (await page.request.get(`${origin}/api/chats/${id}`)).json();
