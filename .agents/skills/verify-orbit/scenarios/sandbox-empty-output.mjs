@@ -69,7 +69,7 @@ export default async function sandboxEmptyOutput({ page, origin, step, shot }) {
   await shot("reloaded");
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(300);
+  await page.waitForFunction(() => window.innerWidth === 390);
   step("the page fits 390 pixels", await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   for (const [index, run] of runs.entries()) {
     const card = cards.nth(index);

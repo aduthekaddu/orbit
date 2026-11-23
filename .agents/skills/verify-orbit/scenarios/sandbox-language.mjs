@@ -1,6 +1,4 @@
-import { execFileSync } from "node:child_process";
-
-const containerRunning = () => execFileSync("docker", ["ps", "--filter", "label=orbit.sandbox=true", "--filter", "status=running", "--format", "{{.ID}}"], { encoding: "utf8" }).trim() !== "";
+import { waitForSpinningProgram } from "../sandbox-program.mjs";
 
 const runs = [
   { tag: "run-python", name: "a Python run", language: "Python", status: "succeeded" },
@@ -58,12 +56,9 @@ export default async function sandboxLanguage({ page, origin, step, shot }) {
     if (run.stop) {
       await card.locator('[data-tool-status="running"]').waitFor({ timeout: 15_000 });
       await check(step, card, run, "while running");
-      await page.waitForTimeout(400);
       await card.evaluate((node) => node.scrollIntoView({ block: "center" }));
       await shot("running");
-      const started = Date.now();
-      while (!containerRunning() && Date.now() - started < 20_000) await page.waitForTimeout(50);
-      await page.waitForTimeout(1_000);
+      await waitForSpinningProgram();
       await page.getByRole("button", { name: "Stop", exact: true }).click();
     }
     await card.locator(`[data-tool-status="${run.status}"]`).waitFor({ timeout: 40_000 });
@@ -87,7 +82,7 @@ export default async function sandboxLanguage({ page, origin, step, shot }) {
   for (const [index, run] of runs.entries()) await check(step, cards.nth(starts[index]), run, "after reload");
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(300);
+  await page.waitForFunction(() => window.innerWidth === 390);
   step("the page fits 390 pixels", await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   for (const [index, run] of runs.entries()) {
     const card = cards.nth(starts[index]);

@@ -1,6 +1,4 @@
-import { execFileSync } from "node:child_process";
-
-const containerRunning = () => execFileSync("docker", ["ps", "--filter", "label=orbit.sandbox=true", "--filter", "status=running", "--format", "{{.ID}}"], { encoding: "utf8" }).trim() !== "";
+import { waitForSpinningProgram } from "../sandbox-program.mjs";
 
 const runs = [
   { tag: "run-pass", name: "a success", status: "succeeded", outcome: /^Exit 0$/ },
@@ -51,9 +49,7 @@ export default async function sandboxOutcome({ page, origin, step, shot }) {
     await composer.press("Enter");
     if (run.stop) {
       await card.locator('[data-tool-status="running"]').waitFor({ timeout: 15_000 });
-      const started = Date.now();
-      while (!containerRunning() && Date.now() - started < 20_000) await page.waitForTimeout(50);
-      await page.waitForTimeout(2_000);
+      await waitForSpinningProgram();
       await page.getByRole("button", { name: "Stop", exact: true }).click();
     }
     await card.locator(`[data-tool-status="${run.status}"]`).waitFor({ timeout: 40_000 });
@@ -80,7 +76,7 @@ export default async function sandboxOutcome({ page, origin, step, shot }) {
   await shot("cancelled-reloaded");
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(300);
+  await page.waitForFunction(() => window.innerWidth === 390);
   step("the page fits 390 pixels", await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   for (const [index, run] of runs.entries()) {
     const card = cards.nth(index);

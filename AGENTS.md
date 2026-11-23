@@ -22,6 +22,7 @@ Orbit is a self-hosted chat app for one user: Next.js App Router, the AI SDK, as
 
 - Give each file its own temporary data directory before importing anything that opens SQLite. Never share the checkout's database or rely on another file's fixtures.
 - In file teardown, close database handles and servers, stop and await child processes, restore environment variables, cwd, mocks and timers, and remove only the temporary files this test owns. Await cleanup before the file exits.
+- Wait for state with `eventually(read, predicate, { timeoutMs, what })` from `src/lib/eventually.mjs`, never a fixed sleep or one read of state that settles later. `src/lib/no-fixed-waits.test.ts` fails a `setTimeout`, `sleep`, or `waitForTimeout` in a test or verify-orbit scenario. Its `ALLOWED` list holds the delays that are the behavior under test.
 - CI shuffles the test files and runs one fewer worker than available CPUs when possible, so fixtures have room to run. Reproduce a CI dispatch order with `ORBIT_TEST_SEED=<seed> ORBIT_TEST_WORKERS=<workers> scripts/ci/test-with-ollama.sh` using the seed and worker count from the CI log (this reproduces file dispatch order and worker count, not async timing or OS scheduling).
 
 ## Gotchas

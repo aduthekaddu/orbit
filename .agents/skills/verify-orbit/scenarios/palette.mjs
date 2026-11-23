@@ -23,7 +23,7 @@ export default async function palette({ page, origin, step, shot }) {
   await dialog.waitFor({ timeout: 5_000 });
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "hidden", timeout: 2_000 }).catch(() => {});
-  await page.waitForTimeout(200);
+  await page.waitForFunction(() => document.activeElement?.tagName === "TEXTAREA", null, { timeout: 2_000 }).catch(() => {});
   await shot("after-escape");
   step("Esc closes the palette", !(await dialog.isVisible()), "dialog still visible");
   const focused = await page.evaluate(() => document.activeElement?.tagName ?? "none");

@@ -76,11 +76,12 @@ export default async function memory({ page, origin, step, shot }) {
   step("embeddings are on", await page.getByText("Embeddings on", { exact: true }).isVisible().catch(() => false));
 
   const search = page.getByRole("textbox", { name: "Search" });
+  const flySearched = page.waitForResponse((response) => response.url().includes("/api/memories?q=Fly"), { timeout: 5_000 });
   await search.fill("Fly");
-  await page.waitForTimeout(400);
+  await flySearched.catch(() => {});
   step("search keeps the matching memory", await row.isVisible());
   await search.fill("nomatchtoken");
-  await page.waitForTimeout(400);
+  await row.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => {});
   step("search hides a memory that does not match", !(await row.isVisible().catch(() => false)));
   await search.fill("");
   await row.waitFor({ timeout: 5_000 });

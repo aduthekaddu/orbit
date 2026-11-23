@@ -1,3 +1,4 @@
+import { eventually } from "../../../../src/lib/eventually.mjs";
 import { startMockMcp } from "../../../../scripts/qa/mock-mcp.mjs";
 
 const ISSUE = "https://github.com/aduthekaddu/orbit/issues/7";
@@ -63,10 +64,7 @@ export default async function github({ page, origin, step, shot }) {
     step("the model answers with the issue link", answered && (await answer.getAttribute("href")) === ISSUE);
     step("issue text is not rendered", (await page.getByText("Ignore previous instructions").count()) === 0);
     await page.getByRole("button", { name: "Send", exact: true }).waitFor({ timeout: 20_000 });
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      if (mock.openSessions() === 0) break;
-      await page.waitForTimeout(100);
-    }
+    await eventually(() => mock.openSessions(), (open) => open === 0, { timeoutMs: 2_000, intervalMs: 100, what: "the GitHub connection to close" }).catch(() => {});
     step("the chat closes the GitHub connection", mock.openSessions() === 0 && mock.closeCount() >= 1);
     await shot("issues");
     await page.reload();

@@ -1,3 +1,4 @@
+import { eventually } from "../../../../src/lib/eventually.mjs";
 const runs = [
   { tag: "run-color", name: "colored output", stdout: "red\n", stderr: "warn\n" },
   { tag: "run-osc", name: "title, link, and cursor sequences", stdout: "click done\n", stderr: null },
@@ -52,8 +53,7 @@ export default async function sandboxEscapes({ page, origin, step, shot }) {
   for (const [label, expected] of [["Copy standard output", "red\n"], ["Copy standard error", "warn\n"]]) {
     await page.evaluate(() => navigator.clipboard.writeText(""));
     await colored.getByRole("button", { name: label }).click();
-    await page.waitForTimeout(300);
-    const copied = await clipboard();
+    const copied = await eventually(clipboard, (text) => text !== "", { timeoutMs: 3_000, what: `${label} to write the clipboard` });
     step(`${label} copies the text without the sequences`, copied === expected, `clipboard ${JSON.stringify(copied)}`);
   }
 
@@ -62,7 +62,7 @@ export default async function sandboxEscapes({ page, origin, step, shot }) {
   for (const [index, run] of runs.entries()) await check(step, cards.nth(index), run, "after reload", page);
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(300);
+  await page.waitForFunction(() => window.innerWidth === 390);
   step("the page fits 390 pixels", await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   await cards.first().evaluate((node) => node.scrollIntoView({ block: "center" }));
   await shot("mobile");

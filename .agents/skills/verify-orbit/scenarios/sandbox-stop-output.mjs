@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { eventually } from "../../../../src/lib/eventually.mjs";
+import { waitForSpinningProgram } from "../sandbox-program.mjs";
 
 const cases = [
   { scenario: "run-timeout", printed: "before-timeout\n" },
@@ -8,7 +10,6 @@ const cases = [
 const SANDBOX_LABEL_FILTER = "label=orbit.sandbox=true";
 const CONTAINER_FORMAT = "{{.ID}}\t{{.Status}}";
 const CLEANUP_TIMEOUT_MS = 10_000;
-const CLEANUP_POLL_MS = 250;
 
 export function parseSandboxContainers(output) {
   return output
@@ -25,53 +26,28 @@ export function formatSandboxContainers(containers) {
   return containers.map(({ id, status }) => `${id} (${status})`).join(", ");
 }
 
-function listSandboxContainers({ running = false } = {}) {
-  const args = ["ps"];
-  if (!running) args.push("-a");
-  args.push("--filter", SANDBOX_LABEL_FILTER);
-  if (running) args.push("--filter", "status=running");
-  args.push("--format", CONTAINER_FORMAT);
+function listSandboxContainers() {
+  const args = ["ps", "-a", "--filter", SANDBOX_LABEL_FILTER, "--format", CONTAINER_FORMAT];
   return parseSandboxContainers(execFileSync("docker", args, { encoding: "utf8" }));
 }
 
-export async function waitForNoSandboxContainers({
-  list = () => listSandboxContainers(),
-  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-  now = Date.now,
-  timeoutMs = CLEANUP_TIMEOUT_MS,
-  pollMs = CLEANUP_POLL_MS,
-} = {}) {
-  const started = now();
-  let remaining = list();
-  const waited = remaining.length > 0;
-  while (remaining.length > 0 && now() - started < timeoutMs) {
-    const remainingMs = timeoutMs - (now() - started);
-    await sleep(Math.min(pollMs, Math.max(0, remainingMs)));
-    remaining = list();
-  }
-  return {
-    cleared: remaining.length === 0,
-    remaining,
-    elapsedMs: Math.max(0, now() - started),
-    waited,
+// runCode removes a stopped container after it returns the cancelled result, so the list empties a moment later.
+async function assertNoSandboxContainers(step, label) {
+  const started = Date.now();
+  let waited = false;
+  const read = () => {
+    const containers = listSandboxContainers();
+    if (containers.length > 0) waited = true;
+    return containers;
   };
+  const cleared = await eventually(read, (containers) => containers.length === 0, {
+    timeoutMs: CLEANUP_TIMEOUT_MS,
+    intervalMs: 250,
+    what: "the sandbox containers to be removed",
+  }).then(() => "", (error) => error.message);
+  if (cleared === "" && waited) console.log(`${label} cleared after ${Date.now() - started}ms`);
+  step(label, cleared === "", cleared);
 }
-
-async function assertNoSandboxContainers(step, label, page) {
-  const result = await waitForNoSandboxContainers({
-    sleep: (ms) => page.waitForTimeout(ms),
-  });
-  if (result.cleared && result.waited) {
-    console.log(`${label} cleared after ${result.elapsedMs}ms`);
-  }
-  step(
-    label,
-    result.cleared,
-    result.cleared ? "" : `after ${result.elapsedMs}ms: ${formatSandboxContainers(result.remaining)}`,
-  );
-}
-
-const containerRunning = () => listSandboxContainers({ running: true }).length > 0;
 
 // What a person sees on the card: header, the outcome line with its duration, and the output wells.
 const inspect = (card) => card.evaluate((node) => {
@@ -105,9 +81,7 @@ async function startAndStop(page, card, tag) {
   await composer.fill(`[qa:${tag}]`);
   await composer.press("Enter");
   await card.locator('[data-tool-status="running"]').waitFor({ timeout: 15_000 });
-  const started = Date.now();
-  while (!containerRunning() && Date.now() - started < 20_000) await page.waitForTimeout(50);
-  await page.waitForTimeout(1_000);
+  await waitForSpinningProgram();
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await card.locator('[data-tool-status="cancelled"]').waitFor({ timeout: 8_000 });
 }
@@ -132,21 +106,16 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
     console.log(`${scenario} live card ${JSON.stringify(live)}`);
     step(`${scenario} live card keeps Cancelled in its header`, live.header === "Cancelled", `header ${JSON.stringify(live.header)}`);
     step(`${scenario} live card ${printed === "" ? "shows no output well" : "shows the output printed before Stop"}`, printed === "" ? live.stdout === null && live.stderr === null : live.stdout === printed, `stdout ${JSON.stringify(live.stdout)} stderr ${JSON.stringify(live.stderr)}`);
-    await page.waitForTimeout(500);
     step(`${scenario} keeps the draft typed after Stop`, (await composer.inputValue()) === draft, `composer holds ${JSON.stringify(await composer.inputValue())}`);
     step(`${scenario} keeps the same messages and branch`, (await page.locator("[data-message-role]").count()) === messagesBefore && (await page.locator("[data-branch-picker]").count()) === 0, `messages ${messagesBefore} then ${await page.locator("[data-message-role]").count()}`);
     await card.scrollIntoViewIfNeeded();
     await shot(`${scenario}-live`);
 
-    let part;
-    const deadline = Date.now() + 8_000;
-    while (Date.now() < deadline) {
+    const part = await eventually(async () => {
       const body = await (await page.request.get(`${origin}/api/chats/${id}`)).json();
       const reply = body.messages.map(({ message }) => message).find((message) => message.role === "assistant");
-      part = reply?.parts.find((entry) => entry.type === "tool-run_code");
-      if (part) break;
-      await page.waitForTimeout(250);
-    }
+      return reply?.parts.find((entry) => entry.type === "tool-run_code");
+    }, Boolean, { timeoutMs: 8_000, what: "the stopped run saved in the chat" });
     console.log(`${scenario} saved part state=${part?.state} stdout=${JSON.stringify(part?.output?.stdout)} cancelled=${part?.output?.cancelled} errorText=${JSON.stringify(part?.errorText)}`);
     step(`${scenario} saves the output collected before Stop`, part?.state === "output-available" && part.output.stdout === printed && part.output.cancelled === true, `state ${part?.state}, output ${JSON.stringify(part?.output)}`);
 
@@ -162,7 +131,7 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
     await card.scrollIntoViewIfNeeded();
     await shot(`${scenario}-stopped`);
 
-    await assertNoSandboxContainers(step, `${scenario} leaves no sandbox container`, page);
+    await assertNoSandboxContainers(step, `${scenario} leaves no sandbox container`);
   }
 
   // Regenerate a stopped run and stop it again, then switch between the two versions. Both keep their result.
@@ -174,9 +143,7 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
   await regenerate.waitFor({ timeout: 15_000 });
   await regenerate.click();
   await card.locator('[data-tool-status="running"]').waitFor({ timeout: 15_000 });
-  const started = Date.now();
-  while (!containerRunning() && Date.now() - started < 20_000) await page.waitForTimeout(50);
-  await page.waitForTimeout(1_000);
+  await waitForSpinningProgram();
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await card.locator('[data-tool-status="cancelled"]').waitFor({ timeout: 8_000 });
   const picker = page.locator('[data-message-role="assistant"] [data-branch-picker]');
@@ -189,16 +156,14 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
     const firstShown = await picker.getByText("1 / 2", { exact: true }).waitFor({ timeout: 5_000 }).then(() => true, () => false);
     const first = await card.locator("span", { hasText: /^Stopped$/ }).first().waitFor({ timeout: 5_000 }).then(() => true, () => false);
     step("Previous opens the first version with its Stopped line", firstShown && first, `picker ${firstShown}, line ${first}`);
-    await page.waitForTimeout(500);
     await shot("branch-previous");
     await picker.getByRole("button", { name: "Next", exact: true }).click();
     const secondShown = await picker.getByText("2 / 2", { exact: true }).waitFor({ timeout: 5_000 }).then(() => true, () => false);
     const again = await card.locator("span", { hasText: /^Stopped$/ }).first().waitFor({ timeout: 5_000 }).then(() => true, () => false);
     step("Next returns to the second version with its Stopped line", secondShown && again, `picker ${secondShown}, line ${again}`);
-    await page.waitForTimeout(500);
     await shot("branch-next");
   }
-  await assertNoSandboxContainers(step, "regenerate after Stop leaves no sandbox container", page);
+  await assertNoSandboxContainers(step, "regenerate after Stop leaves no sandbox container");
 
   // Regenerate the moment Stop lands, before the saved result can reach the first version.
   const quick = (await (await page.request.post(`${origin}/api/chats`)).json()).id;
@@ -210,9 +175,7 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
   const quickHeld = await releaseQuick();
   step("Regenerate is clicked before the first version has its saved result", early && quickHeld > 0, `no Stopped line ${early}, held reads ${quickHeld}`);
   await card.locator('[data-tool-status="running"]').waitFor({ timeout: 15_000 });
-  const quickStarted = Date.now();
-  while (!containerRunning() && Date.now() - quickStarted < 20_000) await page.waitForTimeout(50);
-  await page.waitForTimeout(1_000);
+  await waitForSpinningProgram();
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await card.locator('[data-tool-status="cancelled"]').waitFor({ timeout: 8_000 });
   await card.locator("span", { hasText: /^Stopped$/ }).first().waitFor({ timeout: 15_000 }).catch(() => {});
@@ -220,9 +183,8 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
   const quickFirstShown = await picker.getByText("1 / 2", { exact: true }).waitFor({ timeout: 5_000 }).then(() => true, () => false);
   const quickFirst = await card.locator("span", { hasText: /^Stopped$/ }).first().waitFor({ timeout: 5_000 }).then(() => true, () => false);
   step("regenerate right after Stop still gives the first version its Stopped line", quickFirstShown && quickFirst, `picker ${quickFirstShown}, line ${quickFirst}`);
-  await page.waitForTimeout(500);
   await shot("quick-regenerate-previous");
-  await assertNoSandboxContainers(step, "regenerate right after Stop leaves no sandbox container", page);
+  await assertNoSandboxContainers(step, "regenerate right after Stop leaves no sandbox container");
 
   // Send a message typed during the run the moment Stop lands. The stopped card still gets its saved result.
   const sent = (await (await page.request.post(`${origin}/api/chats`)).json()).id;
@@ -232,9 +194,7 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
   await composer.fill("[qa:run-timeout]");
   await composer.press("Enter");
   await card.locator('[data-tool-status="running"]').waitFor({ timeout: 15_000 });
-  const sentStarted = Date.now();
-  while (!containerRunning() && Date.now() - sentStarted < 20_000) await page.waitForTimeout(50);
-  await page.waitForTimeout(1_000);
+  await waitForSpinningProgram();
   await composer.fill("sent right after Stop");
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await card.locator('[data-tool-status="cancelled"]').waitFor({ timeout: 8_000 });
@@ -250,5 +210,5 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
   step("a message sent right after Stop leaves the stopped card its Stopped line and output", sentLanded && sentCard.header === "Cancelled" && sentCard.stdout === "before-timeout\n", JSON.stringify(sentCard));
   await card.scrollIntoViewIfNeeded();
   await shot("send-after-stop");
-  await assertNoSandboxContainers(step, "a message sent right after Stop leaves no sandbox container", page);
+  await assertNoSandboxContainers(step, "a message sent right after Stop leaves no sandbox container");
 }
