@@ -1,0 +1,59 @@
+.agents/skills/verify-orbit/features/browse.md
+  s_6d6f669fed7156::t_35fa38352f9679 74,82,85-86,97
+.agents/skills/verify-orbit/features/sandbox.md
+  s_6d6f669fed7156::t_9e20219a5e05b6 100
+.agents/skills/verify-orbit/scenarios/request-failures.mjs
+  s_6d6f669fed7156::t_0cec9049bc87b5 43-57,82-91
+.agents/skills/verify-orbit/scenarios/sandbox-stop-output.mjs
+  s_6d6f669fed7156::t_91a5593fd0a1e5 254-268
+ARCHITECTURE.md
+  s_6d6f669fed7156::t_71cd80b7502359 144
+CHANGELOG.md
+  s_6d6f669fed7156::t_cc6dde11684d8a 8-9
+src/app/api/models/route.ts
+  s_6d6f669fed7156::t_fa82dbc9d521aa 4,20,40
+src/components/chat/chat-panel.tsx
+  s_6d6f669fed7156::t_245a2a452a9c69 75-79
+src/components/chat/stopped-run-sync.test.tsx
+  s_6d6f669fed7156::t_ba6a048e62c215 1-57
+src/components/chat/stopped-run-sync.tsx
+  s_6d6f669fed7156::t_e6e7536a6e59cd 3,7,13-17,19,23-28,34-37,40-41,44-52,57,60,64-66,76-81
+src/components/chat/use-save-message.ts
+  s_6d6f669fed7156::t_9114c378306785 29-47,49-52
+src/components/settings/settings-form.tsx
+  s_6d6f669fed7156::t_4f84196e1be7af 88-116,118-121
+src/components/shell/app-shell.tsx
+  s_6d6f669fed7156::t_844ef5e44e2144 121-132,168,208
+src/components/tools/run-card.test.tsx
+  s_6d6f669fed7156::t_83074dd25f1ad8 5,11,16-20,47-54
+src/components/tools/run-card.tsx
+  s_6d6f669fed7156::t_e679b4b712d38a 4,21,42-43,54
+src/lib/chat-stopped-runs.ts
+  s_6d6f669fed7156::t_61e700aaccf6f2 15-19,22
+src/lib/no-direct-fetch.test.ts
+  s_6d6f669fed7156::t_7136bfd83536dc 15-17,32,39
+src/lib/request-json.test.tsx
+  s_6d6f669fed7156::t_026f71a2044af7 50-92
+src/lib/request-json.ts
+  s_6d6f669fed7156::t_8b4eb1186bfb2d 4,8-9,20-40,51-57,59-63,67-68,72-73
+src/lib/settings-form.test.ts
+  s_6d6f669fed7156::t_9137297cbcfdfc 93-102
+src/lib/settings-form.ts
+  s_6d6f669fed7156::t_6afb435001ae40 14-16,31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5eb05a1097df2762478e030a8b5b7c38b9cbe02e",
+  "prompts": {},
+  "sessions": {
+    "s_6d6f669fed7156": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "23c3bf8f-11ea-47f7-a37c-774701612673",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
