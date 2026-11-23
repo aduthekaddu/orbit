@@ -41,6 +41,32 @@ test("toOrMatchQuery keeps only content words", () => {
   assert.equal(search.toOrMatchQuery('say "hi"'), '"say" OR "hi"');
 });
 
+test("toOrMatchQuery quotes 200,000 consecutive letters within two seconds", () => {
+  const word = "a".repeat(200_000);
+  const started = performance.now();
+  const query = search.toOrMatchQuery(word);
+  const elapsed = performance.now() - started;
+
+  assert.equal(query, `"${word}"`);
+  assert.ok(elapsed < 2_000, `Building the query took ${elapsed.toFixed(0)} ms`);
+});
+
+test("toOrMatchQuery preserves how contractions affect content words", () => {
+  const cases = [
+    ["I don’t know what to do", '"know"'],
+    ["isn't it", null],
+    ["123don't", '"123"'],
+    ["Don't", null],
+    ["can't won't aren't", null],
+    ["xdon't", null],
+    ["don'tx", '"don" OR "tx"'],
+    ["𐐀n’t", null],
+  ] as const;
+  for (const [input, expected] of cases) {
+    assert.equal(search.toOrMatchQuery(input), expected, input);
+  }
+});
+
 test("toOrMatchQuery is null when the question has no content word", () => {
   assert.equal(search.toOrMatchQuery("What is 2+2?"), null);
   assert.equal(search.toOrMatchQuery("It isn't what I'm after"), null);

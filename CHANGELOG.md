@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- A chat message with a long run of letters no longer blocks Orbit for seconds while it looks up memories. (#115)
 - A memory search no longer waits for an Ollama check. It answers from SQLite alone. The embeddings line on the Memory page updates when the page loads and after a save or delete. (#141)
 - When the sign-out request fails, Sign out stays on the page and shows "Could not sign out". It no longer leaves the chat while the session may still be valid, or fails with no message. (#139)
 - A turn that calls no GitHub tool no longer connects to GitHub, so that reply no longer waits up to 10 seconds for a connection when GitHub is slow or down. A turn that already opened a client still waits for the close. The close request itself still has no deadline. (#136)
