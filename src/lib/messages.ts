@@ -91,62 +91,21 @@ export function replaceFallbackTitle(chatId: string, fallback: string, title: st
   db.update(chats).set({ title }).where(and(eq(chats.id, chatId), eq(chats.title, fallback))).run();
 }
 
-type ReplyEnd = {
-  regenerate: boolean;
-  interrupted: boolean;
-  hadReply: boolean;
-  visible: boolean;
-};
-
-export function shouldSaveReply({ visible }: ReplyEnd): boolean {
-  return visible;
-}
-
-export type ExpectedMessage = { id: string; content: string; parts: string };
-
-export function replyGuard(chatId: string, _regenerate: boolean, _responseId: string, promptId?: string) {
-  const prompt = promptId ? db.select().from(messages)
-    .where(and(eq(messages.id, promptId), eq(messages.chatId, chatId))).get() : undefined;
-  return { hadReply: false, expected: prompt && { id: prompt.id, content: prompt.content, parts: prompt.parts } };
-}
-
-export function upsertMessage(
-  chatId: string,
-  message: { id: string; role: string; parts: unknown },
-  replyTo?: string | null,
-  expected?: ExpectedMessage,
-) {
-  if (message.role !== "user" && message.role !== "assistant") return true;
-  if (message.role === "assistant" && !assistantHasVisiblePart(message.parts)) return true;
-  return db.transaction((tx) => {
-    if (expected) {
-      const current = tx.select().from(messages)
-        .where(and(eq(messages.id, expected.id), eq(messages.chatId, chatId))).get();
-      if (!current || current.content !== expected.content || current.parts !== expected.parts) return false;
-    }
-    const content = searchTextFromParts(message.parts);
-    const parts = JSON.stringify(message.parts ?? []);
-    const existing = tx.select().from(messages).where(eq(messages.id, message.id)).get();
-    if (existing) {
-      if (existing.chatId !== chatId) return false;
-      tx.update(messages).set({ role: message.role, content, parts }).where(eq(messages.id, message.id)).run();
-      return true;
-    }
-    const chat = tx.select().from(chats).where(eq(chats.id, chatId)).get();
-    if (!chat) return false;
-    const parentId = replyTo === undefined ? chat.headId : replyTo;
-    const parent = parentId ? tx.select().from(messages)
-      .where(and(eq(messages.id, parentId), eq(messages.chatId, chatId))).get() : undefined;
-    if (parentId && !parent) return false;
-    tx.insert(messages).values({
-      id: message.id, chatId, parentId,
-      role: message.role, content, parts,
-      position: parent ? parent.position + 1 : 0,
-      createdAt: new Date(),
-    }).run();
-    tx.update(chats).set({ headId: message.id }).where(eq(chats.id, chatId)).run();
-    return true;
-  });
+// Callers hold the transaction.
+function insertMessage(chatId: string, message: { id: string; role: "user" | "assistant"; parts: unknown }, parentId: string | null) {
+  if (db.select().from(messages).where(eq(messages.id, message.id)).get()) return false;
+  if (!db.select().from(chats).where(eq(chats.id, chatId)).get()) return false;
+  const parent = parentId ? db.select().from(messages)
+    .where(and(eq(messages.id, parentId), eq(messages.chatId, chatId))).get() : undefined;
+  if (parentId && !parent) return false;
+  db.insert(messages).values({
+    id: message.id, chatId, parentId,
+    role: message.role, content: searchTextFromParts(message.parts), parts: JSON.stringify(message.parts),
+    position: parent ? parent.position + 1 : 0,
+    createdAt: new Date(),
+  }).run();
+  db.update(chats).set({ headId: message.id }).where(eq(chats.id, chatId)).run();
+  return true;
 }
 
 export type IncomingMessage = { id: string; role: string; parts?: unknown };
@@ -174,21 +133,39 @@ export function persistIncoming(chatId: string, incoming: IncomingMessage[]): Wr
       }
     }
     if (tail && !byId.has(tail.id)) {
-      if (!upsertMessage(chatId, { ...tail, parts: tail.parts }, prefix.at(-1)?.id ?? null)) return "cross-chat";
+      if (!insertMessage(chatId, { id: tail.id, role: "user", parts: tail.parts }, prefix.at(-1)?.id ?? null)) return "cross-chat";
     }
     return "ok";
   });
 }
 
-export type ChatWritePlan =
-  | { regenerate: boolean; responseId: string }
-  | { error: "invalid-edit" | "cross-chat" | "stale" };
+type SavedText = { content: string; parts: string };
+
+function savedText(chatId: string, id: string): SavedText | undefined {
+  return db.select({ content: messages.content, parts: messages.parts }).from(messages)
+    .where(and(eq(messages.id, id), eq(messages.chatId, chatId))).get();
+}
+
+declare const madeByPlanChatWrite: unique symbol;
+
+/** How a chat request saves its reply. Only planChatWrite makes one, and finishChatReply saves a reply only through one. */
+export type ReplyPlan = {
+  readonly [madeByPlanChatWrite]: true;
+  chatId: string;
+  /** The id the AI SDK streams the reply under. */
+  id: string;
+  /** The prompt the reply answers, with its text when planned. A new reply is saved under it. */
+  prompt: { id: string; saved: SavedText } | null;
+  /** The saved text of reply `id` when the stream continues that reply, or null for a new reply. */
+  continues: SavedText | null;
+};
+
+export type ChatWritePlan = ReplyPlan | { error: "invalid-edit" | "cross-chat" | "stale" };
 
 export function planChatWrite(
   chatId: string,
   incoming: IncomingMessage[],
   trigger?: string,
-  _messageId?: string,
   editMessageId?: string,
 ): ChatWritePlan {
   return db.transaction(() => {
@@ -205,9 +182,38 @@ export function planChatWrite(
     }
     const result = persistIncoming(chatId, incoming);
     if (result !== "ok") return { error: result };
-    const prompt = incoming.findLast((message) => message.role === "user");
-    if (prompt) db.update(chats).set({ headId: prompt.id }).where(eq(chats.id, chatId)).run();
-    return { regenerate: trigger === "regenerate-message", responseId: crypto.randomUUID() };
+    const user = incoming.findLast((message) => message.role === "user");
+    let prompt: ReplyPlan["prompt"] = null;
+    if (user) {
+      db.update(chats).set({ headId: user.id }).where(eq(chats.id, chatId)).run();
+      const saved = savedText(chatId, user.id);
+      if (!saved) return { error: "stale" };
+      prompt = { id: user.id, saved };
+    }
+    // When the last message is an assistant's, the AI SDK streams the reply under its id and appends
+    // to its parts (node_modules/ai/src/ui-message-stream/get-response-ui-message-id.ts).
+    const last = incoming.at(-1);
+    const id = last?.role === "assistant" ? last.id : crypto.randomUUID();
+    return { chatId, id, prompt, continues: savedText(chatId, id) ?? null } as ReplyPlan;
+  });
+}
+
+function unchanged(row: SavedText | undefined, copy: SavedText) {
+  return row !== undefined && row.content === copy.content && row.parts === copy.parts;
+}
+
+/** Saves a reply with a visible part, unless a row its plan copied has changed. Returns whether it saved. */
+export function finishChatReply(plan: ReplyPlan, parts: unknown): boolean {
+  if (!assistantHasVisiblePart(parts)) return false;
+  return db.transaction(() => {
+    if (plan.prompt && !unchanged(savedText(plan.chatId, plan.prompt.id), plan.prompt.saved)) return false;
+    if (!plan.continues) {
+      return insertMessage(plan.chatId, { id: plan.id, role: "assistant", parts }, plan.prompt?.id ?? null);
+    }
+    if (!unchanged(savedText(plan.chatId, plan.id), plan.continues)) return false;
+    db.update(messages).set({ content: searchTextFromParts(parts), parts: JSON.stringify(parts) })
+      .where(eq(messages.id, plan.id)).run();
+    return true;
   });
 }
 

@@ -16,7 +16,7 @@ VARIABLES
   stored,        \* the latest turn's assistant row in the messages table, src/lib/db/schema.ts
   before,        \* stored when the turn started
   replies,       \* every assistant row whose parent_id is the turn's prompt
-  replyId,       \* responseId from planChatWrite
+  replyId,       \* the reply id in the ReplyPlan that planChatWrite returns
   beforeReplies  \* replies when the turn started
 vars == <<phase, kind, visible, stored, before, replies, replyId, beforeReplies>>
 
@@ -48,8 +48,8 @@ YouRetry == phase = "failed" /\ Regenerate
 VisiblePartArrives == phase = "streaming" /\ ~visible /\ visible' = TRUE /\ UNCHANGED <<phase, kind, stored, before, replies, replyId, beforeReplies>>
 
 \* code: src/app/api/chat/route.ts POST
-\* code: src/lib/messages.ts shouldSaveReply
-\* code: src/lib/messages.ts upsertMessage
+\* code: src/lib/messages.ts finishChatReply
+\* code: src/lib/messages.ts insertMessage
 \* onEnd with a completed outcome saves the reply when it is visible.
 Finishes ==
   /\ phase = "streaming" /\ phase' = "idle"
@@ -58,8 +58,8 @@ Finishes ==
   /\ UNCHANGED <<kind, visible, before, replyId, beforeReplies>>
 
 \* code: src/app/api/chat/route.ts POST
-\* code: src/lib/messages.ts shouldSaveReply
-\* code: src/lib/messages.ts upsertMessage
+\* code: src/lib/messages.ts finishChatReply
+\* code: src/lib/messages.ts insertMessage
 \* code: src/lib/genui/spec.ts settleInterruptedParts
 \* onEnd after Stop (isAborted) or a provider failure applies the same rule as a finish.
 \* settleInterruptedParts marks unfinished tool parts Stopped, and they stay visible.

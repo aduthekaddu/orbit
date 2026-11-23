@@ -152,7 +152,7 @@ async function main() {
 
     const { db } = await import("../../src/lib/db/index.ts");
     const schema = await import("../../src/lib/db/schema.ts");
-    const { createChat, upsertMessage } = await import("../../src/lib/messages.ts");
+    const { createChat, persistIncoming } = await import("../../src/lib/messages.ts");
     const { runDream } = await import("../../src/lib/memory/dream.ts");
 
     db.insert(schema.user).values({ id: "qa-user", name: "QA", email: "qa@orbit.local", emailVerified: true }).run();
@@ -177,7 +177,7 @@ async function main() {
     seeds.forEach((seed, index) => {
       const chat = createChat("qa-user");
       const id = crypto.randomUUID();
-      upsertMessage(chat.id, { id, role: "user", parts: [{ type: "text", text: seed.text }] });
+      persistIncoming(chat.id, [{ id, role: "user", parts: [{ type: "text", text: seed.text }] }]);
       db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(base + index * 60_000, id);
       line(`seeded chat ${seed.chat}`, JSON.stringify(seed.text));
     });

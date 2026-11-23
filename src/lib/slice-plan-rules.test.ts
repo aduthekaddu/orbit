@@ -294,11 +294,11 @@ test("the branch backfill proof allows a chat with no messages", async (t) => {
     const { db } = await import("./db");
     t.after(() => db.$client.close());
     const schema = await import("./db/schema");
-    const { createChat, listMessages, upsertMessage } = await import("./messages");
+    const { createChat, listMessages, persistIncoming } = await import("./messages");
     db.insert(schema.user).values({ id: "u1", name: "Test", email: "plan@orbit.local" }).run();
     const empty = createChat("u1");
     const full = createChat("u1");
-    upsertMessage(full.id, { id: "m1", role: "user", parts: [{ type: "text", text: "hello" }] });
+    persistIncoming(full.id, [{ id: "m1", role: "user", parts: [{ type: "text", text: "hello" }] }]);
     const chats = 2;
     const nonempty = [empty.id, full.id].filter((id) => listMessages(id).length > 0).length;
     const roots = nonempty;

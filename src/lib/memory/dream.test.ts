@@ -95,18 +95,22 @@ async function resetChats() {
 
 async function seedChat(text: string, createdAt: number) {
   const { db } = await import("../db");
-  const { createChat, upsertMessage } = await import("../messages");
+  const { createChat, persistIncoming } = await import("../messages");
   const chat = createChat("dream-user");
   const messageId = crypto.randomUUID();
-  assert.equal(upsertMessage(chat.id, { id: messageId, role: "user", parts: [{ type: "text", text }] }), true);
+  assert.equal(persistIncoming(chat.id, [{ id: messageId, role: "user", parts: [{ type: "text", text }] }]), "ok");
   db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(createdAt, messageId);
   return { chatId: chat.id, messageId };
 }
 
+// Replies to the chat's one prompt. A request that ends in an unsaved assistant message streams the
+// reply under that message's id.
 async function seedReply(chatId: string, text: string, createdAt: number, messageId: string = crypto.randomUUID()) {
   const { db } = await import("../db");
-  const { upsertMessage } = await import("../messages");
-  assert.equal(upsertMessage(chatId, { id: messageId, role: "assistant", parts: [{ type: "text", text }] }), true);
+  const { finishChatReply, listMessages, planChatWrite } = await import("../messages");
+  const plan = planChatWrite(chatId, [...listMessages(chatId), { id: messageId, role: "assistant", parts: [] }]);
+  if ("error" in plan) assert.fail(`write refused: ${plan.error}`);
+  assert.equal(finishChatReply(plan, [{ type: "text", text }]), true);
   db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(createdAt, messageId);
   return messageId;
 }
