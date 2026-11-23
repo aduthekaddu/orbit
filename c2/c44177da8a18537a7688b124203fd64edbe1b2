@@ -1,0 +1,133 @@
+docs/architecture/model-sync.json
+  s_6d6f669fed7156::t_71cc78fe4d0d70 2,7-8,10-14
+docs/architecture/ChatWrite.continued-reply.trace
+  s_6d6f669fed7156::t_58c95248043968 33,44
+  s_6d6f669fed7156::t_97ec1f49a6b583 1-32,34-43
+docs/architecture/chat-write.view.mjs
+  s_6d6f669fed7156::t_c6f8ff830fd648 6,21,27-28
+docs/architecture/ChatWrite.stale-echo.trace
+  s_6d6f669fed7156::t_97ec1f49a6b583 7,9,18,20,29,31
+docs/slices/20.md
+  s_6d6f669fed7156::t_c84a7820c9e1e1 11
+src/lib/chat-write.test.ts
+  s_6d6f669fed7156::t_8a46d7cbab8e59 177,181,186
+  s_6d6f669fed7156::t_909b0516c48971 350-351,354
+  s_6d6f669fed7156::t_4e4078c4a3d92e 272-274,276
+  s_6d6f669fed7156::t_d8e3cfd8d04763 71
+  s_6d6f669fed7156::t_4c1a210d25bb29 6,12,14
+  s_6d6f669fed7156::t_6c98e21b5ccbe0 196,208-209,215,219-246,251-253,258
+  s_6d6f669fed7156::t_0411088963671c 398
+  s_6d6f669fed7156::t_a2d4b33dcb77fe 43,45
+  s_6d6f669fed7156::t_5ddbffcedf0fca 72-73
+  s_6d6f669fed7156::t_798bb4f96f5553 152
+  s_6d6f669fed7156::t_fa02d36324e29e 200-207,210-214,216-218
+  s_6d6f669fed7156::t_9573b7e00910ee 325,329,333
+  s_6d6f669fed7156::t_360525774f9023 86-89,92-97,99-111
+docs/architecture/ChatWrite.continued-reply.cfg
+  s_6d6f669fed7156::t_c9114c9448ca22 1-17
+src/app/api/chat/route.ts
+  s_6d6f669fed7156::t_97105c2064120a 12
+  s_6d6f669fed7156::t_854b41f9c2873d 150,158,160
+  s_6d6f669fed7156::t_5f62d70159e5c5 55
+  s_6d6f669fed7156::t_2441962147de36 143
+src/lib/messages.test.ts
+  s_6d6f669fed7156::t_a5d13e5a4d12d1 62-72,79
+  s_6d6f669fed7156::t_aecd2de104a6b9 147
+  s_6d6f669fed7156::t_8f117446c4f26d 163
+  s_6d6f669fed7156::t_cbd77d4eed75b7 122-124,128
+  s_6d6f669fed7156::t_659f8fc075eff3 44
+  s_6d6f669fed7156::t_1a0ac0a9081bb0 134
+  s_6d6f669fed7156::t_1d896eedd5da4a 13
+  s_6d6f669fed7156::t_be1c6a067a4314 104-106,108-109
+src/lib/search.test.ts
+  s_6d6f669fed7156::t_65de7fa6d60b2c 115
+  s_6d6f669fed7156::t_9c2f755b558c76 134-136
+  s_6d6f669fed7156::t_e142861459d22f 126
+  s_6d6f669fed7156::t_5f3980ffe43d0f 177
+  s_6d6f669fed7156::t_930bc3b966ffae 66
+  s_6d6f669fed7156::t_fbf4357c4ada18 233-235
+  s_6d6f669fed7156::t_2bde8ad58b7a6b 108
+  s_6d6f669fed7156::t_2704bc63e9a179 162
+  s_6d6f669fed7156::t_acfe23d597e49b 171
+  s_6d6f669fed7156::t_4be73df65270f5 184
+  s_6d6f669fed7156::t_fa1d12b22b6b89 207
+  s_6d6f669fed7156::t_cc6c6e920b0d7f 36-43
+  s_6d6f669fed7156::t_aa7f789dc3b640 225
+  s_6d6f669fed7156::t_e823c7c3728c6f 199
+docs/architecture/ChatTurn.tla
+  s_6d6f669fed7156::t_1754587b6ddbf7 19,51-52,61-62
+docs/architecture/ChatWrite.in-place-edit.cfg
+  s_6d6f669fed7156::t_85277e1d4594e1 3,9
+ARCHITECTURE.md
+  s_6d6f669fed7156::t_a66876a0470a2f 83
+  s_6d6f669fed7156::t_c1a22f8ff07e73 23
+  s_6d6f669fed7156::t_daead345780050 20
+  s_6d6f669fed7156::t_6f4ec242b6a371 89
+  s_6d6f669fed7156::t_2e115bb19c4811 92
+CHANGELOG.md
+  s_6d6f669fed7156::t_0af840645826e1 7
+docs/architecture/ChatWrite.edited-prompt.trace
+  s_6d6f669fed7156::t_97ec1f49a6b583 7,9,18,20,29,31,40,42
+scripts/qa/real-ollama-merge.mjs
+  s_6d6f669fed7156::t_e4c47a7941c61e 155,180
+.agents/skills/verify-chat-turn/SKILL.md
+  s_6d6f669fed7156::t_1f260c363520e8 12
+  s_6d6f669fed7156::t_a2f58c3977d606 15
+  s_6d6f669fed7156::t_d9e93112220e92 21
+  s_6d6f669fed7156::t_2ae7e5333ae3e4 3
+docs/architecture/ChatWrite.tla
+  s_6d6f669fed7156::t_948bf8157c1cda 100,102
+  s_6d6f669fed7156::t_0659a5cc6f34bd 108-109
+  s_6d6f669fed7156::t_606495b19a2ad0 14-15
+  s_6d6f669fed7156::t_c427b3009575e9 84
+  s_6d6f669fed7156::t_87461cc8db5d73 22,25-26,28,31,36-37,49,62,70,80,85-93,96-99,101,107,110-116,119-121,123-125,137
+  s_6d6f669fed7156::t_309c9b0d36088c 54-56,58
+docs/slices/21.md
+  s_6d6f669fed7156::t_61babee6c623d8 94
+  s_6d6f669fed7156::t_1c4a5d742e6717 146
+src/lib/memory/dream.test.ts
+  s_6d6f669fed7156::t_3c34926db302ab 98,101,106-107,110-113
+src/lib/messages.ts
+  s_6d6f669fed7156::t_d2beacccb01a88 201-203
+  s_6d6f669fed7156::t_54612cde5297bb 142-163
+  s_6d6f669fed7156::t_fc562960f41592 136
+  s_6d6f669fed7156::t_f93f50274005a1 185-200,204-216
+  s_6d6f669fed7156::t_c4f4cbef6f4dc9 94
+  s_6d6f669fed7156::t_7f3e085130245e 95-108
+src/lib/slice-plan-rules.test.ts
+  s_6d6f669fed7156::t_90700b08c5ea68 297,301
+AGENTS.md
+  s_6d6f669fed7156::t_94356588157b6b 15
+docs/slices/18.md
+  s_6d6f669fed7156::t_64b0b09c2d500d 195
+  s_6d6f669fed7156::t_61bf7ecb01a7d3 250
+docs/slices/13.md
+  s_6d6f669fed7156::t_38d8c79f233605 14
+  s_6d6f669fed7156::t_1aa51d256cccb3 97
+  s_6d6f669fed7156::t_2a3c73ab3d0409 126
+  s_6d6f669fed7156::t_c73e8ee0ac9202 157
+  s_6d6f669fed7156::t_eb4036bdce9040 174
+  s_6d6f669fed7156::t_c3501bbe60ccdf 190
+docs/architecture/ChatWrite.cfg
+  s_6d6f669fed7156::t_5927842deb9c6a 8
+docs/architecture/ChatWrite.edited-prompt.cfg
+  s_6d6f669fed7156::t_0aae3661b55e27 12
+docs/architecture/ChatWrite.stale-echo.cfg
+  s_6d6f669fed7156::t_82d6e583468fc9 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c2c44177da8a18537a7688b124203fd64edbe1b2",
+  "prompts": {},
+  "sessions": {
+    "s_6d6f669fed7156": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "23c3bf8f-11ea-47f7-a37c-774701612673",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
