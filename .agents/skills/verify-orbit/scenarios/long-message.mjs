@@ -12,9 +12,9 @@ export default async function longMessage({ page, origin, step, shot }) {
   const composer = page.getByRole("textbox");
   await composer.fill("word ".repeat(12_000));
   await composer.press("Enter");
-  await page.getByText("Message is too long.").first().waitFor({ timeout: 15_000 }).then(
-    () => step("composer shows the refusal", true),
-    () => step("composer shows the refusal", false, "no \"Message is too long.\" text within 15s"),
+  await page.getByText("Message is too long.", { exact: true }).first().waitFor({ timeout: 15_000 }).then(
+    () => step("composer shows the refusal as plain text", true),
+    async () => step("composer shows the refusal as plain text", false, `no exact "Message is too long." text within 15s; page shows ${JSON.stringify(await page.getByText("Message is too long.").first().textContent().catch(() => null))}`),
   );
   await shot("too-long");
 

@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test, { after, before } from "node:test";
+import { LIMITS } from "@/lib/route-schema";
 
 const USER_ID = "u-limits";
 const PROVIDER_KEY = "made-up-provider-key-0001";
@@ -43,6 +44,7 @@ let chatRoute: typeof import("./chat/route");
 let settingsRoute: typeof import("./settings/route");
 let modelsRoute: typeof import("./models/route");
 let getSettings: typeof import("@/lib/settings").getSettings;
+let chatStore: typeof import("@/lib/messages");
 let closeDb: () => void;
 let provider: http.Server;
 let providerRequests = 0;
@@ -92,6 +94,7 @@ before(async () => {
     model: "mock",
     reasoningEffort: "medium",
   });
+  chatStore = await import("@/lib/messages");
   chatRoute = await import("./chat/route");
   settingsRoute = await import("./settings/route");
   modelsRoute = await import("./models/route");
@@ -133,6 +136,82 @@ test("a chat message inside the limit is accepted", async () => {
   assert.equal(response.status, 200);
   await response.text();
   await Promise.allSettled(afterTasks);
+});
+
+type SeedMessage = { id: string; role: "user" | "assistant"; text: string };
+
+// A chat as an older Orbit stored it: no limit applied when these were written.
+function seedChat(chatId: string, history: SeedMessage[]) {
+  assert.ok(chatStore.ensureChat(chatId, USER_ID));
+  for (const message of history) {
+    assert.equal(chatStore.upsertMessage(chatId, { id: message.id, role: message.role, parts: [{ type: "text", text: message.text }] }), true);
+  }
+}
+
+function pathBody(chatId: string, history: SeedMessage[], next: unknown, extra: object = {}) {
+  const stored = history.map((message) => ({ id: message.id, role: message.role, parts: [{ type: "text", text: message.text }] }));
+  return { id: chatId, trigger: "submit-message", messages: [...stored, next], ...extra };
+}
+
+async function post(body: unknown) {
+  const response = await chatRoute.POST(postJson("/api/chat", "POST", body));
+  const text = await response.text();
+  await Promise.allSettled(afterTasks);
+  return { status: response.status, text };
+}
+
+const shortUser = (id: string, text = "next question") => ({ id, role: "user", parts: [{ type: "text", text }] });
+
+test("a stored 60,000 letter message does not block the next short turn", async () => {
+  const history: SeedMessage[] = [
+    { id: "h-u1", role: "user", text: "a".repeat(60_000) },
+    { id: "h-a1", role: "assistant", text: "ok" },
+  ];
+  seedChat("c-stored-long", history);
+  const { status, text } = await post(pathBody("c-stored-long", history, shortUser("h-u2")));
+  assert.equal(status, 200, `the route answered ${status}: ${text.slice(0, 200)}`);
+});
+
+test("a stored chat of 2,000 messages does not block the next short turn", async () => {
+  const history: SeedMessage[] = Array.from({ length: 2000 }, (_, index) => ({
+    id: `m-${index}`,
+    role: index % 2 === 0 ? "user" : "assistant",
+    text: `message ${index}`,
+  }));
+  seedChat("c-stored-many", history);
+  const { status, text } = await post(pathBody("c-stored-many", history, shortUser("m-new")));
+  assert.equal(status, 200, `the route answered ${status}: ${text.slice(0, 200)}`);
+});
+
+test("an edit that replaces a stored message is held to the message limit", async () => {
+  const history: SeedMessage[] = [
+    { id: "e-u1", role: "user", text: "a".repeat(60_000) },
+    { id: "e-a1", role: "assistant", text: "ok" },
+    { id: "e-u2", role: "user", text: "second" },
+    { id: "e-a2", role: "assistant", text: "ok" },
+  ];
+  seedChat("c-edit", history);
+  const prefix = history.slice(0, 2);
+  const long = await post(pathBody("c-edit", prefix, shortUser("e-u3", EIGHTY_THOUSAND_LETTERS), { editMessageId: "e-u2" }));
+  assert.equal(long.status, 413, `the route answered ${long.status}: ${long.text.slice(0, 200)}`);
+  const short = await post(pathBody("c-edit", prefix, shortUser("e-u4"), { editMessageId: "e-u2" }));
+  assert.equal(short.status, 200, `the route answered ${short.status}: ${short.text.slice(0, 200)}`);
+});
+
+test("a stored message cannot carry a new long message into the history", async () => {
+  const history: SeedMessage[] = [{ id: "n-u1", role: "user", text: "first" }, { id: "n-a1", role: "assistant", text: "ok" }];
+  seedChat("c-new-long", history);
+  const { status } = await post(pathBody("c-new-long", history, shortUser("n-u2", EIGHTY_THOUSAND_LETTERS)));
+  assert.equal(status, 413);
+  assert.equal(chatStore.storedMessageCount("c-new-long"), 2);
+});
+
+test("a request body over the size cap is refused before it is parsed", async () => {
+  const body = JSON.stringify({ ...chatBody("c-huge", "hi"), pad: "a".repeat(LIMITS.requestBytes) });
+  const response = await chatRoute.POST(new Request("http://127.0.0.1/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body }));
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), { error: "This chat is too large." });
+  assert.equal(chatStore.storedMessageCount("c-huge"), 0);
 });
 
 test("an 80,000 letter API key is refused by settings and leaves the saved key alone", async () => {

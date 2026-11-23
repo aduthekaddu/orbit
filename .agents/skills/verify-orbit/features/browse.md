@@ -98,7 +98,7 @@ Pass lines:
 
 ```
 PASS 80,000 letters get 413 from the route
-PASS composer shows the refusal
+PASS composer shows the refusal as plain text
 PASS a refused message is not saved
 PASS a short message still gets a reply
 ```

@@ -8,16 +8,38 @@ import { attachMemoryNotes, quotedMemoryNotes, recall, REMEMBER_INSTRUCTIONS } f
 import { toolsForTurn } from "@/lib/tools";
 import { CHAT_STEP_LIMIT, searchAnswerStep } from "@/lib/tools/answer-step";
 import { createStoppedRuns } from "@/lib/tools/stopped-runs";
-import { chatTitle, ensureChat, listMessages, planChatWrite, replyGuard, shouldSaveReply, storedMessageCount, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
+import { chatTitle, ensureChat, listMessages, planChatWrite, replyGuard, shouldSaveReply, storedMessageCount, storedMessageIds, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { startChatTitle } from "@/lib/titles";
 import { getSettings } from "@/lib/settings";
-import { LIMITS, r } from "@/lib/route-schema";
+import { LIMITS, r, readJsonBody } from "@/lib/route-schema";
 import { getSession, unauthorized } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
+
+// A message the chat already stores can be older than the limits, and the client sends the whole
+// path on every turn. Stored messages are held to the request size cap. A message the request adds,
+// or that an edit replaces, is held to the message limits.
+const historyPartSchema = r.looseObject({
+  type: r.history.text(),
+  text: r.history.text().optional(),
+});
+
+const historyMessageSchema = r.object({
+  id: r.text(LIMITS.id).min(1),
+  role: r.enum(["user", "assistant", "system"]),
+  parts: r.history.list(historyPartSchema).optional(),
+});
+
+const bodySchema = r.object({
+  id: r.text(LIMITS.id).min(1),
+  messages: r.history.list(historyMessageSchema).min(1),
+  trigger: r.enum(["submit-message", "regenerate-message", "resume-stream"]).optional(),
+  editMessageId: r.text(LIMITS.id).min(1).optional(),
+  messageId: r.text(LIMITS.id).min(1).optional(),
+});
 
 const partSchema = (textMax: number) =>
   r.looseObject({
@@ -25,7 +47,7 @@ const partSchema = (textMax: number) =>
     text: r.text(textMax).optional(),
   });
 
-const messageSchema = r.discriminatedUnion("role", [
+const addedMessageSchema = r.discriminatedUnion("role", [
   r.object({
     id: r.text(LIMITS.id).min(1),
     role: r.literal("user"),
@@ -38,22 +60,24 @@ const messageSchema = r.discriminatedUnion("role", [
   }),
 ]);
 
-const bodySchema = r.object({
-  id: r.text(LIMITS.id).min(1),
-  messages: r.list(messageSchema, LIMITS.messagesPerRequest).min(1),
-  trigger: r.enum(["submit-message", "regenerate-message", "resume-stream"]).optional(),
-  editMessageId: r.text(LIMITS.id).min(1).optional(),
-  messageId: r.text(LIMITS.id).min(1).optional(),
-});
-
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session) return unauthorized();
 
-  const json = await request.json().catch(() => null);
-  const parsed = bodySchema.safeParse(json);
-  if (!parsed.success) {
-    if (parsed.error.issues.some((issue) => issue.code === "too_big" && issue.path.at(-1) === "text")) {
+  const body = await readJsonBody(request, LIMITS.requestBytes);
+  if (!body.ok) {
+    if (body.reason === "too-large") return Response.json({ error: "This chat is too large." }, { status: 413 });
+    return Response.json({ error: "Invalid chat request" }, { status: 400 });
+  }
+  const parsed = bodySchema.safeParse(body.json);
+  if (!parsed.success) return Response.json({ error: "Invalid chat request" }, { status: 400 });
+
+  const storedIds = storedMessageIds(parsed.data.id);
+  for (const message of parsed.data.messages) {
+    if (storedIds.has(message.id)) continue;
+    const added = addedMessageSchema.safeParse(message);
+    if (added.success) continue;
+    if (added.error.issues.some((issue) => issue.code === "too_big" && issue.path.at(-1) === "text")) {
       return Response.json({ error: "Message is too long." }, { status: 413 });
     }
     return Response.json({ error: "Invalid chat request" }, { status: 400 });
