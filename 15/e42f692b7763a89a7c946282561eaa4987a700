@@ -1,0 +1,33 @@
+.agents/skills/verify-orbit/scenarios/sandbox-scroll.mjs
+  s_6d6f669fed7156::t_f97fe6df56655f 10,16
+ARCHITECTURE.md
+  s_6d6f669fed7156::t_e37b1570938362 137
+CHANGELOG.md
+  s_6d6f669fed7156::t_89e8c59fe8f123 7
+docs/slices/08.md
+  s_6d6f669fed7156::t_c9d43e686162a9 68
+scripts/qa/sandbox-timing.ts
+  s_6d6f669fed7156::t_0f62dc8ef1af57 5,14
+src/lib/sandbox/run-lifecycle.test.ts
+  s_6d6f669fed7156::t_4079f00a906b6b 12,24,42,44,48,54,88,90,212-213,232,236,239,247-301,340,370,383
+src/lib/sandbox/run.test.ts
+  s_6d6f669fed7156::t_fa47d8a489bfc2 9,30,32
+src/lib/sandbox/run.ts
+  s_6d6f669fed7156::t_0445f431999509 10-11,14,16-17,19,22-23,74-75,77,79,84-85,105-106,114-115,123,127,130-131,154,156-160,162-163,185,187,200-206
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "15e42f692b7763a89a7c946282561eaa4987a700",
+  "prompts": {},
+  "sessions": {
+    "s_6d6f669fed7156": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "23c3bf8f-11ea-47f7-a37c-774701612673",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
