@@ -1,0 +1,30 @@
+.github/dependabot.yml
+  h_9f68edf4527855 6,14-15,25,38,50
+CHANGELOG.md
+  h_9f68edf4527855 7-8
+CONTRIBUTING.md
+  h_9f68edf4527855 77
+package-lock.json
+  h_9f68edf4527855 33,365-367,389-391,394,405-407,410,421-423,426,431-433,436,447-449,452,467-469,472,4819-4821,4824-4830
+package.json
+  h_9f68edf4527855 38
+src/components/chat/markdown-text.test.tsx
+  h_9f68edf4527855 1-37
+src/components/chat/markdown-text.tsx
+  h_9f68edf4527855 3,52-53,56-63,67-74,85
+src/lib/memory/dream.test.ts
+  h_9f68edf4527855 313,316,318,321-347,351-402
+src/lib/memory/dream.ts
+  h_9f68edf4527855 435-441
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "664064679b4b40d311e5b8305fca63307e4eb59c",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
