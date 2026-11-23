@@ -1,0 +1,16 @@
+.github/workflows/claude-code-review.yml
+  h_9f68edf4527855 33
+.github/workflows/claude.yml
+  h_9f68edf4527855 42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b1e0e1f134dcd8249451bb1bef227962ec74784a",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
