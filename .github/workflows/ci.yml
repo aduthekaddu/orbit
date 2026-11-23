@@ -20,7 +20,7 @@ env:
 jobs:
   checks:
     name: Typecheck, test, build (Node ${{ matrix.node }})
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -49,7 +49,7 @@ jobs:
 
   e2e:
     name: End to end (${{ matrix.suite }})
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
       contents: read
@@ -87,7 +87,7 @@ jobs:
 
   docker:
     name: Docker image
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -126,7 +126,7 @@ jobs:
 
   workflows:
     name: Workflow files
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -151,7 +151,7 @@ jobs:
     name: Full suite passed
     if: always()
     needs: [checks, e2e, docker, workflows]
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
     steps:
