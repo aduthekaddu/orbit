@@ -1,3 +1,5 @@
+import { eventually } from "../../../../src/lib/eventually.mjs";
+
 export default async function threadMap({ page, origin, step, shot }) {
   const { id } = await (await page.request.post(`${origin}/api/chats`)).json();
   await page.goto(`${origin}/c/${id}`);
@@ -37,8 +39,11 @@ export default async function threadMap({ page, origin, step, shot }) {
     .locator('nav[aria-label="Prompts in this chat"] ul button')
     .evaluateAll((buttons) => buttons.findIndex((button) => button.getAttribute("aria-current") === "location"));
   await page.keyboard.press("Alt+ArrowUp");
-  await page.waitForTimeout(700);
-  const afterPage = await focused();
+  const afterPage = await eventually(
+    focused,
+    (state) => currentIndex > 0 && state.turnId === turnIds[currentIndex - 1],
+    { timeoutMs: 2_000, what: "Alt+Up to move focus to the previous prompt" },
+  ).catch(focused);
   await shot("page");
   step(
     "Alt+Up on the page moves focus to the previous prompt",

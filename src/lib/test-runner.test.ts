@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test, { after } from "node:test";
-import { setTimeout as sleep } from "node:timers/promises";
+import { eventually } from "./eventually.mjs";
 
 const runner = path.join(process.cwd(), "scripts/test.mjs");
 const modules = path.join(process.cwd(), "node_modules");
@@ -230,10 +230,7 @@ for (const [signal, code] of [["SIGTERM", 143], ["SIGINT", 130]] as const) {
     const ready = path.join(dir, "ready.log");
     let filePid: number | undefined;
     try {
-      for (let waited = 0; !fs.existsSync(ready); waited += 50) {
-        assert.ok(waited < 20_000, "the fixture never opened its database");
-        await sleep(50);
-      }
+      await eventually(() => fs.existsSync(ready), Boolean, { timeoutMs: 20_000, intervalMs: 50, what: "the fixture to open its database" });
       filePid = Number(fs.readFileSync(ready, "utf8").split("\n")[1]);
       assert.ok(Number.isSafeInteger(filePid) && filePid > 0, `unexpected fixture pid: ${filePid}`);
       assert.ok(fs.readdirSync(tmp).some((name) => name.startsWith("orbit-test-")));
@@ -269,10 +266,7 @@ test("blocks in exit handler on SIGTERM", async () => {
   const ready = path.join(dir, "ready.log");
   let filePid: number | undefined;
   try {
-    for (let waited = 0; !fs.existsSync(ready); waited += 50) {
-      assert.ok(waited < 20_000, "the fixture never started");
-      await sleep(50);
-    }
+    await eventually(() => fs.existsSync(ready), Boolean, { timeoutMs: 20_000, intervalMs: 50, what: "the fixture to start" });
     filePid = Number(fs.readFileSync(ready, "utf8"));
     assert.ok(Number.isSafeInteger(filePid) && filePid > 0, `unexpected fixture pid: ${filePid}`);
     child.kill("SIGTERM");
@@ -341,10 +335,7 @@ if (tryClaim("slot-1")) {
   let pid1: number | undefined;
   let pid2: number | undefined;
   try {
-    for (let waited = 0; !fs.existsSync(ready1) || !fs.existsSync(ready2); waited += 50) {
-      assert.ok(waited < 20_000, "the initial workers never started");
-      await sleep(50);
-    }
+    await eventually(() => fs.existsSync(ready1) && fs.existsSync(ready2), Boolean, { timeoutMs: 20_000, intervalMs: 50, what: "the initial workers to start" });
     pid1 = Number(fs.readFileSync(ready1, "utf8"));
     pid2 = Number(fs.readFileSync(ready2, "utf8"));
     assert.ok(Number.isSafeInteger(pid1) && pid1 > 0, `unexpected slow worker pid: ${pid1}`);
@@ -381,14 +372,11 @@ test("ignores SIGTERM after opening the database", async () => {
   const ready = path.join(dir, "ready.log");
   let filePid: number | undefined;
   try {
-    for (let waited = 0; !fs.existsSync(ready); waited += 50) {
-      assert.ok(waited < 20_000, "the fixture never opened its database");
-      await sleep(50);
-    }
+    await eventually(() => fs.existsSync(ready), Boolean, { timeoutMs: 20_000, intervalMs: 50, what: "the fixture to open its database" });
     filePid = Number(fs.readFileSync(ready, "utf8").split("\n")[1]);
     assert.ok(Number.isSafeInteger(filePid) && filePid > 0, `unexpected fixture pid: ${filePid}`);
     child.kill("SIGINT");
-    await sleep(200);
+    await new Promise((resolve) => setTimeout(resolve, 200));
     assert.equal(isAlive(filePid), true, "expected the stubborn fixture to still be running after first SIGINT");
     const forcedAt = Date.now();
     child.kill("SIGINT");
@@ -423,10 +411,7 @@ test("creates an empty sibling pid file then hangs", async () => {
   const ready = path.join(dir, "ready.log");
   let filePid: number | undefined;
   try {
-    for (let waited = 0; !fs.existsSync(ready); waited += 50) {
-      assert.ok(waited < 20_000, "the fixture never opened its database");
-      await sleep(50);
-    }
+    await eventually(() => fs.existsSync(ready), Boolean, { timeoutMs: 20_000, intervalMs: 50, what: "the fixture to open its database" });
     filePid = Number(fs.readFileSync(ready, "utf8").split("\n")[1]);
     assert.ok(Number.isSafeInteger(filePid) && filePid > 0, `unexpected fixture pid: ${filePid}`);
     child.kill("SIGTERM");

@@ -72,12 +72,16 @@ export function findFixedWaits(source: string): FixedWait[] {
 // `count` is the number of waits the file keeps. A file that gains or loses one fails until the entry is updated.
 // Add an entry only for a delay that is the behavior under test, or a wait for something that must not happen.
 const ALLOWED: { file: string; count: number; reason: string }[] = [
-  { file: "src/lib/sandbox/run.test.ts", count: 9, reason: "PR 187 rewrites this file without sleeps. Delete the entry when it merges." },
+  { file: "src/lib/sandbox/run.test.ts", count: 11, reason: "PR 187 rewrites this file without sleeps. Delete the entry when it merges." },
   { file: "scripts/qa/genui-qa.cjs", count: 8, reason: "PR 181 rewrites this script. Delete the entry when it merges, and convert any wait it keeps." },
   { file: ".agents/skills/verify-orbit/scenarios/sandbox-real.mjs", count: 1, reason: "Its reply-saved loop must end in a failed step. sandbox-verification.test.ts drives it with a no-op waitForTimeout stub, and PR 181 changes that test. Convert both together." },
+  { file: ".agents/skills/verify-orbit/scenarios/artifact-navigation.mjs", count: 1, reason: "Waits 1.5 s after blocked iframe navigation to verify no request reaches the probe and no frame navigates." },
+  { file: ".agents/skills/verify-orbit/scenarios/sign-out.mjs", count: 1, reason: "Waits 500 ms after a failed sign-out request to verify the page does not navigate away." },
+  { file: ".agents/skills/verify-orbit/scenarios/thread-map.mjs", count: 1, reason: "Waits 700 ms after Alt+Up in the composer to verify focus does not leave the textarea." },
   { file: "src/lib/memory/dream.test.ts", count: 1, reason: "A startup watchdog that rejects when the mock provider never prints its port; the wait itself is the stdout event. PRs 169, 180, 181 and 198 also edit this file." },
   { file: "src/lib/db/migration-lock.test.ts", count: 1, reason: "A watchdog that kills a hung child process after 30 s; the tests wait on the child's output with eventually." },
-  { file: "src/lib/tools/github.test.ts", count: 4, reason: "Three races assert a call returns within its deadline (800 ms, 1 s), and one 50 ms pause asserts that a held tool call has not reached the server. Both check that something does not happen, so no state change ends the wait." },
+  { file: "src/lib/test-runner.test.ts", count: 1, reason: "Waits 200 ms after the first SIGINT to verify a SIGTERM-ignoring test file is still running before sending the second SIGINT." },
+  { file: "src/lib/tools/github.test.ts", count: 7, reason: "Four races assert a call or close returns within its deadline (500 ms, 800 ms, 1 s), two pauses (50 ms, 100 ms) assert that no held or post-close request reaches the server, and one 400 ms pause waits past the 300 ms setup window under test." },
   { file: "src/lib/tools/tavily-signal.test.ts", count: 4, reason: "The delays are the behavior under test: a slow Tavily call (150 ms), a slow fixture response (100 ms), and a search deadline (100 ms)." },
   { file: "src/vendor/stageshow/act.test.ts", count: 1, reason: "A requestAnimationFrame stand-in for the code under test, not a wait." },
 ];

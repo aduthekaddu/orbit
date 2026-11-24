@@ -49,7 +49,8 @@ export default async function artifactNavigation({ page, origin, step, shot }) {
     // artifact code ran up to the navigation.
     const leave = (name, delay) => {
       const go = `location.href = "${probeOrigin}/leak?case=${name}&d=secret"; throw new Error("navigation started: ${name}");`;
-      return `<p>leaving</p>\n<script>\n${delay ? `setTimeout(() => { ${go} }, ${delay});` : go}\n</script>`;
+      const script = delay ? `setTimeout(() => { ${go} }, ${delay});` : go;
+      return `<p>leaving</p>\n<script>\n${script}\n</script>`;
     };
     async function check(label, name, open) {
       requests.length = 0;
