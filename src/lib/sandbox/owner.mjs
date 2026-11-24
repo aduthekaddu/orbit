@@ -42,3 +42,8 @@ export function ownedSandboxFilter(owner) {
 export function ownedSandboxFilterArgs(owner) {
   return ownedSandboxFilter(owner).label.flatMap((label) => ["--filter", `label=${label}`]);
 }
+
+// For code whose job is to act on every Orbit container on the host, such as the stale-container sweep.
+export function allSandboxesFilter() {
+  return { label: [`${SANDBOX_LABEL}=true`] };
+}

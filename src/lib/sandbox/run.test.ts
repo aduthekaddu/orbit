@@ -1,13 +1,63 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Docker from "dockerode";
+import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { Duplex, Writable } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
+import { format } from "node:util";
 import { sandboxImages } from "./images";
 import { ownedSandboxFilter, parseSandboxOwner, sandboxLabels, sandboxOwner, type SandboxOwner } from "./owner.mjs";
 import { runCode, runCodeToEnd } from "./run";
-import type { RunCodeInput, RunCodeOutput } from "./spec";
+import { containerSpec, type RunCodeInput, type RunCodeOutput } from "./spec";
+import { removeStaleSandboxes } from "./sweep";
+
+// The child prints its container's id, then passes on the program's own stdout.
+function runCodeInChild(input: RunCodeInput): ChildProcess {
+  const script = `
+    const { Writable } = await import("node:stream");
+    const { default: Docker } = await import("dockerode");
+    const { runCodeToEnd } = await import(${JSON.stringify(new URL("./run.ts", import.meta.url).href)});
+    const docker = new Docker();
+    const create = docker.createContainer.bind(docker);
+    docker.createContainer = async (options) => {
+      const container = await create(options);
+      process.stdout.write("container " + container.id + "\\n");
+      return container;
+    };
+    const demux = docker.modem.demuxStream.bind(docker.modem);
+    docker.modem.demuxStream = (stream, stdout, stderr) => demux(stream, new Writable({
+      write(chunk, encoding, done) {
+        process.stdout.write(chunk);
+        stdout.write(chunk, done);
+      },
+    }), stderr);
+    await runCodeToEnd(docker, ${JSON.stringify(input)});
+  `;
+  return spawn(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", script], { stdio: ["ignore", "pipe", "inherit"] });
+}
+
+function loopingContainerId(child: ChildProcess): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let printed = "";
+    child.stdout?.on("data", (chunk: Buffer) => {
+      printed += chunk.toString();
+      const id = /^container ([0-9a-f]{64})$/m.exec(printed)?.[1];
+      if (id && /^looping$/m.test(printed)) resolve(id);
+    });
+    child.once("exit", (code, signal) => reject(new Error(`the child exited before its program started looping (${code ?? signal})`)));
+  });
+}
+
+async function inspectUntil(container: Docker.Container, done: (state: Docker.ContainerInspectInfo["State"]) => boolean, timeoutMs: number) {
+  const deadline = performance.now() + timeoutMs;
+  let state = (await container.inspect()).State;
+  while (!done(state) && performance.now() < deadline) {
+    await delay(100);
+    state = (await container.inspect()).State;
+  }
+  return state;
+}
 
 const owner = sandboxOwner();
 
@@ -257,6 +307,93 @@ finally:
       assert.equal((await container.inspect()).State.Running, false, "a denied removal must not leave untrusted code running");
     } finally {
       await new Docker().getContainer(container.id).remove({ force: true });
+    }
+  });
+  await t.test("a container stops at its own ten-second limit after the process running it is killed", async () => {
+    await Promise.all(([
+      { language: "python", code: 'print("looping")\nwhile True: pass' },
+      { language: "javascript", code: 'console.log("looping"); for (;;) {}' },
+    ] as const).map(async (input) => {
+      const child = runCodeInChild(input);
+      const childExited = new Promise((resolve) => child.once("exit", resolve));
+      let id: string | undefined;
+      try {
+        id = await loopingContainerId(child);
+        const container = docker.getContainer(id);
+        child.kill("SIGKILL");
+        await childExited;
+        const started = Date.parse((await container.inspect()).State.StartedAt);
+        const state = await inspectUntil(container, (state) => !state.Running, started + 15_000 - Date.now());
+        assert.equal(state.Status, "exited", `the ${input.language} container must stop after the process that ran it is killed`);
+        assert.equal(state.ExitCode, 137);
+        assert.ok(Date.parse(state.FinishedAt) - started < 12_000);
+      } finally {
+        if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+        await childExited;
+        if (id) await docker.getContainer(id).remove({ force: true });
+      }
+    }));
+  });
+  await t.test("a run reports a timeout when its container stops itself before Orbit's timer fires", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const running = runPython('print("before-timeout")\nwhile True: pass');
+    let guard: ReturnType<typeof setInterval> | undefined;
+    try {
+      const result = await Promise.race([
+        running,
+        new Promise<"pending">((resolve) => { guard = setInterval(() => resolve("pending"), 15_000); }),
+      ]);
+      assert.ok(result !== "pending", "the container must stop at its own ten-second limit");
+      assert.deepEqual({ ...result, durationMs: 0 }, { stdout: "before-timeout\n", stderr: "", exitCode: null, durationMs: 0, timedOut: true, truncated: false });
+    } finally {
+      clearInterval(guard);
+      t.mock.timers.tick(10_000);
+      t.mock.timers.reset();
+      await running;
+    }
+  });
+  await t.test("the sweep keeps sandbox containers younger than a minute and removes older ones in any state", async (t) => {
+    // Other Orbit servers can share this Docker host, so every listing is narrowed to the containers this test makes.
+    const sweepOwner = parseSandboxOwner(randomUUID());
+    const list = docker.listContainers.bind(docker);
+    t.mock.method(docker, "listContainers", (options: { filters: { label: string[] } }) =>
+      list({ ...options, filters: { ...options.filters, label: [...options.filters.label, `orbit.test=${sweepOwner}`] } }));
+    const removals: string[] = [];
+    t.mock.method(console, "warn", (...args: unknown[]) => { removals.push(format(...args)); });
+    const spec = containerSpec({ language: "python", code: "" }, sweepOwner);
+    const labels = { ...spec.Labels, "orbit.test": sweepOwner };
+    const made: Record<string, Docker.Container> = {};
+    const states = async () => Object.fromEntries(await Promise.all(Object.entries(made).map(async ([name, container]) => {
+      try {
+        return [name, (await container.inspect()).State.Status];
+      } catch (error) {
+        if (isDockerStatus(error, 404)) return [name, "removed"];
+        throw error;
+      }
+    })));
+    try {
+      made.created = await docker.createContainer({ ...spec, Labels: labels });
+      made.exited = await docker.createContainer({ ...spec, Labels: labels, Cmd: ["true"] });
+      made.running = await docker.createContainer({ ...spec, Labels: labels, Cmd: ["sleep", "60"] });
+      made.unlabeled = await docker.createContainer({ Image: spec.Image, Cmd: ["true"], Labels: { "orbit.test": sweepOwner } });
+      await made.exited.start();
+      await made.exited.wait();
+      await made.running.start();
+      await removeStaleSandboxes(docker, Date.now() + 5_000);
+      assert.deepEqual(await states(), { created: "created", exited: "exited", running: "running", unlabeled: "created" }, "a young container may belong to a live run");
+      assert.equal(removals.length, 0, "a container the sweep keeps is not logged as removed");
+      await removeStaleSandboxes(docker, Date.now() + 60_000);
+      assert.deepEqual(await states(), { created: "removed", exited: "removed", running: "removed", unlabeled: "created" });
+      assert.deepEqual(
+        [...removals].sort(),
+        ["created", "exited", "running"].map((state) => `Sandbox sweep removed a stale container id=${made[state]!.id} state=${state}`).sort(),
+      );
+    } finally {
+      for (const container of Object.values(made)) {
+        await container.remove({ force: true }).catch((error: unknown) => {
+          if (!isDockerStatus(error, 404)) throw error;
+        });
+      }
     }
   });
   await t.test("no sandbox containers remain after success, errors, timeout, or cancellation", async () => {

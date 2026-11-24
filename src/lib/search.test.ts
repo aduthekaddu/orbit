@@ -41,6 +41,32 @@ test("toOrMatchQuery keeps only content words", () => {
   assert.equal(search.toOrMatchQuery('say "hi"'), '"say" OR "hi"');
 });
 
+test("toOrMatchQuery quotes 200,000 consecutive letters within two seconds", () => {
+  const word = "a".repeat(200_000);
+  const started = performance.now();
+  const query = search.toOrMatchQuery(word);
+  const elapsed = performance.now() - started;
+
+  assert.equal(query, `"${word}"`);
+  assert.ok(elapsed < 2_000, `Building the query took ${elapsed.toFixed(0)} ms`);
+});
+
+test("toOrMatchQuery preserves how contractions affect content words", () => {
+  const cases = [
+    ["I don’t know what to do", '"know"'],
+    ["isn't it", null],
+    ["123don't", '"123"'],
+    ["Don't", null],
+    ["can't won't aren't", null],
+    ["xdon't", null],
+    ["don'tx", '"don" OR "tx"'],
+    ["𐐀n’t", null],
+  ] as const;
+  for (const [input, expected] of cases) {
+    assert.equal(search.toOrMatchQuery(input), expected, input);
+  }
+});
+
 test("toOrMatchQuery is null when the question has no content word", () => {
   assert.equal(search.toOrMatchQuery("What is 2+2?"), null);
   assert.equal(search.toOrMatchQuery("It isn't what I'm after"), null);
@@ -131,6 +157,24 @@ test("a hit off the stored head opens that path and leaves the head", () => {
   const head = db.select().from(schema.chats).where(eq(schema.chats.id, "c-branch")).get();
   assert.deepEqual(path, ["u-root", "a-side"]);
   assert.equal(head?.headId, "a-active");
+});
+
+test("a hit in the middle of a branch off the stored head opens the whole branch", () => {
+  const now = new Date();
+  db.insert(schema.chats).values({ id: "c-mid", userId: "u1", title: "Middle", createdAt: now, updatedAt: now }).run();
+  messages.upsertMessage("c-mid", part("m-u1", "user", "first question"), null);
+  messages.upsertMessage("c-mid", part("m-a1", "assistant", "first answer"), "m-u1");
+  messages.upsertMessage("c-mid", part("m-u2", "user", "second question"), "m-a1");
+  messages.upsertMessage("c-mid", part("m-a2", "assistant", "second answer"), "m-u2");
+  messages.upsertMessage("c-mid", part("m-u2b", "user", "middlehit question"), "m-a1");
+  messages.upsertMessage("c-mid", part("m-a2b", "assistant", "middlehit answer"), "m-u2b");
+  messages.upsertMessage("c-mid", part("m-u3b", "user", "later question"), "m-a2b");
+  messages.upsertMessage("c-mid", part("m-a3b", "assistant", "later answer"), "m-u3b");
+  db.update(schema.chats).set({ headId: "m-a2" }).where(eq(schema.chats.id, "c-mid")).run();
+  const path = search.openHitPath("u1", "c-mid", "m-u2b");
+  const head = db.select().from(schema.chats).where(eq(schema.chats.id, "c-mid")).get();
+  assert.deepEqual(path, ["m-u1", "m-a1", "m-u2b", "m-a2b", "m-u3b", "m-a3b"]);
+  assert.equal(head?.headId, "m-a2");
 });
 
 function toolMessage(id: string, run: { stdout?: string; stderr?: string; code?: string }, reply = "Ran it.") {

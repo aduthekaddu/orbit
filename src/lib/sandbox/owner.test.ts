@@ -14,6 +14,9 @@ const bareLabel = ["orbit", "sandbox"].join(".");
 // Files that may name the bare label: the helper that owns it, and the test that pins the container policy.
 // Add a file here only when its job is to act on every Orbit container on the host. Each entry must still name the label.
 const allowed = new Set(["src/lib/sandbox/owner.mjs", "src/lib/sandbox/spec.test.ts"]);
+// Files whose job is to act on every Orbit container on the host, so their listing intentionally skips the owner filter.
+// Each entry must still contain a host-wide container listing.
+const allowedHostWideListings = new Set(["src/lib/sandbox/sweep.ts"]);
 const helpers = "ownedSandboxFilter or ownedSandboxFilterArgs from src/lib/sandbox/owner.mjs";
 
 const sourceFiles = scanned
@@ -85,7 +88,11 @@ test(`no file lists Docker containers by the bare ${bareLabel} label`, () => {
 });
 
 test("every container listing goes through the owner helpers", () => {
-  const offenders = sourceFiles.flatMap((file) => unfilteredListings(readFileSync(path.join(repo, file), "utf8")).map((problem) => `  ${file} ${problem}`));
+  const stale = [...allowedHostWideListings].filter((file) => unfilteredListings(readFileSync(path.join(repo, file), "utf8")).length === 0);
+  assert.deepEqual(stale, [], `These allowlist entries in ${thisFile} no longer have a host-wide container listing, so remove them:\n  ${stale.join("\n  ")}`);
+  const offenders = sourceFiles
+    .filter((file) => !allowedHostWideListings.has(file))
+    .flatMap((file) => unfilteredListings(readFileSync(path.join(repo, file), "utf8")).map((problem) => `  ${file} ${problem}`));
   assert.deepEqual(offenders, [], [
     "These container listings are not limited to one owner, so a check on them fails on another run's container:",
     ...offenders,

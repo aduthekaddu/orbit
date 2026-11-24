@@ -3,10 +3,10 @@ import { Duplex, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { z } from "zod";
 import { sandboxOwner } from "./owner.mjs";
-import { containerSpec, type RunCodeInput, type RunCodeOutput } from "./spec";
+import { containerSpec, RUN_TIMEOUT_SECONDS, type RunCodeInput, type RunCodeOutput } from "./spec";
 
 const OUTPUT_LIMIT = 65_536;
-const RUN_TIMEOUT_MS = 10_000;
+const RUN_TIMEOUT_MS = RUN_TIMEOUT_SECONDS * 1000;
 const MEMORY_CHECK_TIMEOUT_MS = 5_000;
 const waitResultSchema = z.object({ StatusCode: z.number().int(), Error: z.object({ Message: z.string() }).nullish() });
 const SIGKILL_EXIT = 137;
@@ -154,12 +154,18 @@ export function runCode(docker: Docker, input: RunCodeInput, signal?: AbortSigna
       const reply = waitResultSchema.parse(await container.wait());
       if (outcome) return;
       if (reply.Error) throw new Error(`Docker could not wait for the program: ${reply.Error.Message}`);
+      const elapsedAtWait = performance.now() - started;
       exit = { exitCode: reply.StatusCode, oomKilled: false };
       const output = Promise.race([outputFinished, outputCutOff.promise]);
       if (reply.StatusCode === SIGKILL_EXIT && await killedForMemory(container)) exit = { exitCode: reply.StatusCode, oomKilled: true };
       const ended = await output;
       if (outcome) return;
       if (ended.kind === "failed") throw ended.error;
+      // The container's own limit fired before Orbit's timer ran.
+      if (reply.StatusCode === SIGKILL_EXIT && !exit.oomKilled && elapsedAtWait >= RUN_TIMEOUT_MS) {
+        settle({ kind: "timed-out" });
+        return;
+      }
       settle({ kind: "exited", exit, outputEnded: ended.kind === "ended" });
     };
     await Promise.race([program(), settled.promise]);

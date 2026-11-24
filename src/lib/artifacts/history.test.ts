@@ -19,6 +19,15 @@ test("an artifact on another saved branch restores that reply without changing s
   assert.equal(history.headId, "later-reply");
 });
 
+test("an artifact on another branch keeps the turns below its reply visible", () => {
+  const history = toRepository([
+    ...messages,
+    { id: "first-follow-up", parentId: "first.reply", role: "user", parts: [{ type: "text", text: "Continue the first page" }] },
+    { id: "first-follow-up-reply", parentId: "first-follow-up", role: "assistant", parts: [{ type: "text", text: "More on the first page" }] },
+  ], "later-reply");
+  assert.equal(artifactHistory(history, "first.reply.0.8").headId, "first-follow-up-reply");
+});
+
 test("an earlier artifact on the saved branch keeps the later turns visible", () => {
   const history = toRepository(messages, "later-reply");
   assert.equal(artifactHistory(history, "second.reply.0.8"), history);

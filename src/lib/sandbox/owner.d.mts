@@ -8,3 +8,4 @@ export function sandboxOwner(): SandboxOwner;
 export function sandboxLabels(owner: SandboxOwner): Record<string, string>;
 export function ownedSandboxFilter(owner: SandboxOwner): { label: string[] };
 export function ownedSandboxFilterArgs(owner: SandboxOwner): string[];
+export function allSandboxesFilter(): { label: string[] };
