@@ -101,13 +101,32 @@ export default async function memory({ page, origin, step, shot }) {
   step("memory page lists the saved fact", listed);
   step("embeddings are on", await page.getByText("Embeddings on", { exact: true }).isVisible().catch(() => false));
 
+  const ollamaUrl = process.env.ORBIT_OLLAMA_URL;
+  const embedInputs = async () => (ollamaUrl ? (await (await fetch(`${ollamaUrl}/qa/received`)).json()).length : null);
+  const searched = (q) =>
+    page
+      .waitForResponse((response) => {
+        const url = new URL(response.url());
+        return url.pathname === "/api/memories" && url.searchParams.get("q") === q;
+      }, { timeout: 10_000 })
+      .then((response) => response.ok(), () => false);
+  const embedsBefore = await embedInputs();
   const search = page.getByRole("textbox", { name: "Search" });
+  const flySearched = searched("Fly");
   await search.fill("Fly");
   await page.waitForTimeout(400);
   step("search keeps the matching memory", await row.isVisible());
+  const missSearched = searched("nomatchtoken");
   await search.fill("nomatchtoken");
   await page.waitForTimeout(400);
   step("search hides a memory that does not match", !(await row.isVisible().catch(() => false)));
+  const responded = (await flySearched) && (await missSearched);
+  const embedsAfter = await embedInputs();
+  step(
+    "memory search makes no Ollama call",
+    responded && embedsBefore !== null && embedsAfter === embedsBefore,
+    embedsBefore === null ? "ORBIT_OLLAMA_URL is unset" : `responses=${responded ? "ok" : "missing"} new embed inputs=${embedsAfter - embedsBefore}`,
+  );
   await search.fill("");
   await row.waitFor({ timeout: 5_000 });
 
@@ -165,7 +184,6 @@ export default async function memory({ page, origin, step, shot }) {
   step("a save or delete that fails on the network raises no page error", pageErrors.length === 0, pageErrors.join("; "));
   await page.unroute("**/api/memories/*");
 
-  const ollamaUrl = process.env.ORBIT_OLLAMA_URL;
   if (ollamaUrl) {
     await page.request.post(`${ollamaUrl}/qa/fail`);
     await page.goto(`${origin}/memory`);

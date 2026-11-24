@@ -51,7 +51,6 @@ export function MemoryList({
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [fetched, setFetched] = useState<{ query: string; rows: MemoryItem[] } | null>(null);
-  const [status, setStatus] = useState(embeddings);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [kind, setKind] = useState<MemoryKind>("fact");
@@ -61,17 +60,13 @@ export function MemoryList({
   const [pendingDelete, setPendingDelete] = useState<MemoryItem | null>(null);
 
   useEffect(() => {
-    setStatus(embeddings);
-  }, [embeddings]);
-
-  useEffect(() => {
     const trimmed = query.trim();
     if (!trimmed) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       fetch(`/api/memories?q=${encodeURIComponent(trimmed)}`, { signal: controller.signal })
         .then((response) => (response.ok ? response.json() : null))
-        .then((payload: { memories?: MemoryItem[]; embeddings?: { ok: true } | { ok: false; error: string } } | null) => {
+        .then((payload: { memories?: MemoryItem[] } | null) => {
           if (controller.signal.aborted) return;
           if (!payload || !Array.isArray(payload.memories)) {
             setFetched({ query: trimmed, rows: [] });
@@ -80,7 +75,6 @@ export function MemoryList({
           }
           setFetched({ query: trimmed, rows: payload.memories });
           setSearchFailed(false);
-          if (payload.embeddings) setStatus(payload.embeddings);
         })
         .catch(() => {
           if (controller.signal.aborted) return;
@@ -137,7 +131,7 @@ export function MemoryList({
     <div className="mx-auto w-full max-w-widget px-6 py-10">
       <h1 className="mb-6 text-xl font-semibold tracking-tight">Memory</h1>
       {dreamStatus ? <p className="mb-4 text-sm text-muted-foreground num">{dreamStatus}</p> : null}
-      <p className={status.ok ? "mb-4 text-sm text-positive" : "mb-4 text-sm text-destructive"}>{status.ok ? "Embeddings on" : status.error}</p>
+      <p className={embeddings.ok ? "mb-4 text-sm text-positive" : "mb-4 text-sm text-destructive"}>{embeddings.ok ? "Embeddings on" : embeddings.error}</p>
       <Input aria-label="Search" placeholder="Search" value={query} onChange={(event) => setQuery(event.target.value)} className="mb-4" />
       {searchFailed && <p className="mb-3 text-sm text-destructive">Could not search</p>}
       <ul className="flex flex-col gap-3">

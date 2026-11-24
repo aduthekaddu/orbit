@@ -71,7 +71,7 @@ Utilities: `num` (Geist Mono, tabular figures), `shimmer`, `scrollbar-none`, `sc
 
 `OrbitMark` (`src/components/orbit-mark.tsx`) is the app's only loading indicator. Pass `busy` while the assistant is thinking or streaming and the moon travels the ring, passing behind the planet on the far side. `tone` is `"accent"` (violet ring and moon) or `"mono"` (muted). It is `aria-hidden`, so pair it with a status label where the state matters to a screen reader.
 
-`ThreadMap` (`src/components/chat/thread-map.tsx`) is a rail of ticks on the thread's right edge, one per prompt, shown from three prompts when the thread is at least 52rem wide. Ticks for turns in view are brighter and the current turn is sun. Hovering or focusing the rail opens the prompt list. A row jumps to its prompt and moves focus there. `Alt+Up` and `Alt+Down` step between prompts. The current-turn math lives in `src/lib/thread-map.ts`.
+`ThreadMap` (`src/components/chat/thread-map.tsx`) is a rail of ticks on the thread's right edge, one per prompt, shown from three prompts when the thread is at least 52rem wide. Ticks for turns in view are brighter and the current turn is sun. Hovering or focusing the rail opens the prompt list. A row jumps to its prompt and moves focus there. `Alt+Up` and `Alt+Down` step between prompts when focus is outside a text field. The current-turn math lives in `src/lib/thread-map.ts`.
 
 A chat with no provider and no messages shows the provider form in place, so the first run never leaves the chat. Saving refreshes the route and the composer appears.
 
