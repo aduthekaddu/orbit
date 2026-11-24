@@ -21,11 +21,11 @@ export function turnLabel(text: string) {
   return text.trim().split("\n")[0].slice(0, 120);
 }
 
-type ShortcutKey = Pick<KeyboardEvent, "altKey" | "shiftKey" | "metaKey" | "ctrlKey" | "key">;
+type ShortcutKey = Pick<KeyboardEvent, "altKey" | "shiftKey" | "metaKey" | "ctrlKey" | "key" | "isComposing">;
 
 /** The prompt index Alt+Arrow jumps to, or null when the key combination belongs to the page. */
 export function shortcutTarget(event: ShortcutKey, current: number, count: number) {
-  if (!event.altKey || event.shiftKey || event.metaKey || event.ctrlKey) return null;
+  if (event.isComposing || !event.altKey || event.shiftKey || event.metaKey || event.ctrlKey) return null;
   if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return null;
   if (count <= 0) return null;
   return Math.max(0, Math.min(count - 1, current + (event.key === "ArrowUp" ? -1 : 1)));

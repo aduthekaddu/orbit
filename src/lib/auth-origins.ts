@@ -26,3 +26,21 @@ export function resolveTrustedOrigins(baseURL: string, extra?: string, publicURL
   }
   return [...origins];
 }
+
+const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/**
+ * A write that another origin sent with the user's cookie. The browser sets Sec-Fetch-Site itself and a page cannot forge
+ * it, so a write it marks same-origin passes without consulting the trusted list, and a wildcard pattern in
+ * ORBIT_TRUSTED_ORIGINS still lets that user write. Any other Sec-Fetch-Site is refused. Without Fetch Metadata the Origin
+ * decides, and the comparison is by exact string, so a wildcard entry trusts nothing there. A request with neither header
+ * passes, so curl and scripts keep working. Browsers send Origin on every cross-origin write.
+ */
+export function isCrossOriginWrite(request: Pick<Request, "method" | "headers">, trustedOrigins: readonly string[]) {
+  if (READ_METHODS.has(request.method)) return false;
+  const site = request.headers.get("sec-fetch-site");
+  if (site === "same-origin") return false;
+  if (site !== null) return true;
+  const origin = request.headers.get("origin");
+  return origin !== null && !trustedOrigins.includes(origin);
+}
