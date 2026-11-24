@@ -27,11 +27,13 @@ function authSecret() {
 const localURL = readEnv("BETTER_AUTH_URL") ?? LOCAL_AUTH_URL;
 const publicURL = readEnv("ORBIT_PUBLIC_URL");
 
+// The local origin stays trusted, so 127.0.0.1:3210 still signs in when a public URL is set.
+export const trustedOrigins = resolveTrustedOrigins(localURL, readEnv("ORBIT_TRUSTED_ORIGINS"), publicURL);
+
 export const auth = betterAuth({
   baseURL: resolveAuthBaseUrl({ BETTER_AUTH_URL: localURL, ORBIT_PUBLIC_URL: publicURL }),
   secret: authSecret(),
-  // The local origin stays trusted, so 127.0.0.1:3210 still signs in when a public URL is set.
-  trustedOrigins: resolveTrustedOrigins(localURL, readEnv("ORBIT_TRUSTED_ORIGINS"), publicURL),
+  trustedOrigins,
   database: drizzleAdapter(db, {
     provider: "sqlite",
     schema: { user, session, account, verification },
