@@ -1,0 +1,168 @@
+.agents/skills/verify-orbit/features/README.md
+  h_9f68edf4527855 38
+.agents/skills/verify-orbit/features/artifacts.md
+  h_9f68edf4527855 18-19,22,36-37
+.agents/skills/verify-orbit/features/browse.md
+  h_9f68edf4527855 44,54-60,63,100-130
+.agents/skills/verify-orbit/features/memory.md
+  h_9f68edf4527855 5,7,10-11
+.agents/skills/verify-orbit/features/sandbox.md
+  h_9f68edf4527855 74,163
+.agents/skills/verify-orbit/scenarios/artifact-navigation.mjs
+  h_9f68edf4527855 1-78
+.agents/skills/verify-orbit/scenarios/artifacts.mjs
+  h_9f68edf4527855 1-3,201-234
+.agents/skills/verify-orbit/scenarios/memory.mjs
+  h_9f68edf4527855 55-80,104-113,115,119,123-129,166-186,254-296
+.agents/skills/verify-orbit/scenarios/message-actions.mjs
+  h_9f68edf4527855 1-144
+.agents/skills/verify-orbit/scenarios/no-search-final-answer.mjs
+  h_9f68edf4527855 1-38
+.agents/skills/verify-orbit/scenarios/palette.mjs
+  h_9f68edf4527855 31-86
+.agents/skills/verify-orbit/scenarios/sandbox-validation.mjs
+  h_9f68edf4527855 1
+.agents/skills/verify-orbit/scenarios/sign-out.mjs
+  h_9f68edf4527855 1-53
+.agents/skills/verify-orbit/scenarios/thread-map.mjs
+  h_9f68edf4527855 1-48
+.dockerignore
+  h_9f68edf4527855 3-13
+.github/PULL_REQUEST_TEMPLATE.md
+  h_9f68edf4527855 9,11
+.github/dependabot.yml
+  h_9f68edf4527855 6,14-15,25,38,50
+.github/workflows/ci.yml
+  h_9f68edf4527855 23,52,90,107-108,131,156
+.github/workflows/claude-code-review.yml
+  h_9f68edf4527855 16,33
+.github/workflows/claude.yml
+  h_9f68edf4527855 25,42
+.github/workflows/codeql.yml
+  h_9f68edf4527855 20
+.github/workflows/pr-checks.yml
+  h_9f68edf4527855 16
+.github/workflows/security.yml
+  h_9f68edf4527855 20,37,60,84
+ARCHITECTURE.md
+  h_9f68edf4527855 19,21,111,121,137,152
+CHANGELOG.md
+  h_9f68edf4527855 7-22,33-34
+CONTRIBUTING.md
+  h_9f68edf4527855 30,34,77
+README.md
+  h_9f68edf4527855 113
+SECURITY.md
+  h_9f68edf4527855 21,30,58-61,72
+docs/adr/0001-ci-on-romper.md
+  h_9f68edf4527855 5,13,32
+docs/adr/0002-several-users.md
+  h_9f68edf4527855 43
+docs/adr/0003-ci-on-github-hosted-runners.md
+  h_9f68edf4527855 1-35
+docs/design.md
+  h_9f68edf4527855 74
+docs/slices/08.md
+  h_9f68edf4527855 54
+docs/slices/16.md
+  h_9f68edf4527855 13,178,240-241
+docs/slices/17.md
+  h_9f68edf4527855 69,200,248,250
+docs/slices/18.md
+  h_9f68edf4527855 441
+next.config.ts
+  h_9f68edf4527855 5-10
+package-lock.json
+  h_9f68edf4527855 33,67-68,366-368,390-392,395,406-408,411,422-424,427,432-434,437,448-450,453,468-470,473,4820-4831,10305-10320
+package.json
+  h_9f68edf4527855 38,72-73
+scripts/ci/pr-checks.sh
+  h_9f68edf4527855 48-54,59
+scripts/qa/assert-docker-context.sh
+  h_9f68edf4527855 2-6,9-28,30-42,45-46,50-53,55-68,70-77,81
+scripts/qa/ci-e2e.sh
+  h_9f68edf4527855 155-160
+scripts/qa/mock-provider.mjs
+  h_9f68edf4527855 259-282,288,294-296,547-548,556-568,579-580
+src/app/api/chat/route.ts
+  h_9f68edf4527855 10,134
+src/app/api/memories/route.ts
+  h_9f68edf4527855 19
+src/components/chat/markdown-text.test.tsx
+  h_9f68edf4527855 1-37
+src/components/chat/markdown-text.tsx
+  h_9f68edf4527855 3,52-53,56-63,67-74,85,96
+src/components/chat/messages.tsx
+  h_9f68edf4527855 58-61,75,86,103,133,135
+src/components/chat/sidebar.tsx
+  h_9f68edf4527855 3,50,54-60,134-164
+src/components/chat/thread-map.tsx
+  h_9f68edf4527855 93
+src/components/memory/memory-list.tsx
+  h_9f68edf4527855 58-59,69,73,77,82,93,99-101,113,115-117,123,134,136,203,215-219
+src/components/not-found-view.tsx
+  h_9f68edf4527855 9
+src/components/shell/command-palette.tsx
+  h_9f68edf4527855 21-23,39-40,45,50,53,57-58,60-61,64-66,79,81-83,112-114,165
+src/instrumentation.ts
+  h_9f68edf4527855 6-10
+src/lib/auth-origins.test.ts
+  h_9f68edf4527855 3,60-81
+src/lib/auth-origins.ts
+  h_9f68edf4527855 29-46
+src/lib/auth-rate-limit.test.ts
+  h_9f68edf4527855 1-51
+src/lib/auth.ts
+  h_9f68edf4527855 30-32,36,56-58
+src/lib/fixed-runners.test.ts
+  h_9f68edf4527855 1-65
+src/lib/memory/dream.test.ts
+  h_9f68edf4527855 312,315,317,320-346,350-401
+src/lib/memory/dream.ts
+  h_9f68edf4527855 435-441
+src/lib/pr-checks.test.ts
+  h_9f68edf4527855 10,90,105-109,119,121-122,135
+src/lib/provider.test.ts
+  h_9f68edf4527855 1-3,11-15,17-18,21-28,32-35,37-38,41-42,44-45,47-50,52-53,56-57,59-60,62-115,119-135,137-170,173-229
+src/lib/sandbox/run.test.ts
+  h_9f68edf4527855 4-5,7,14,16-67,529-615
+src/lib/sandbox/run.ts
+  h_9f68edf4527855 5,8,109-113
+src/lib/sandbox/spec.test.ts
+  h_9f68edf4527855 16
+src/lib/sandbox/spec.ts
+  h_9f68edf4527855 5-7,41-42,51
+src/lib/sandbox/sweep.ts
+  h_9f68edf4527855 1-49
+src/lib/search.test.ts
+  h_9f68edf4527855 44-69
+src/lib/search.ts
+  h_9f68edf4527855 50
+src/lib/thread-map.test.ts
+  h_9f68edf4527855 11,59-62
+src/lib/thread-map.ts
+  h_9f68edf4527855 24,28
+src/lib/tools/answer-step.test.ts
+  h_9f68edf4527855 7-43
+src/lib/tools/answer-step.ts
+  h_9f68edf4527855 7-11,19,23-30
+src/lib/tools/github.test.ts
+  h_9f68edf4527855 225-275
+src/lib/tools/github.ts
+  h_9f68edf4527855 102-103,105-116,122,131,164,177,182,184
+src/proxy.test.ts
+  h_9f68edf4527855 1-44
+src/proxy.ts
+  h_9f68edf4527855 2,4,24,38-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "561093f1a3b3ba6ca8dee76fb775ccefd61b0aee",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
