@@ -16,6 +16,7 @@ const statePath = path.join(verifyDir, "server.json");
 const logPath = path.join(verifyDir, "server.log");
 const mockStatePath = path.join(verifyDir, "mock.json");
 const mockLogPath = path.join(verifyDir, "mock.log");
+const mockLockPath = path.join(verifyDir, "mock.lock.db");
 const mockScript = path.join(repoRoot, "scripts/qa/mock-provider.mjs");
 const scenarioDir = path.join(scriptDir, "scenarios");
 const evidenceRoot = path.join(verifyDir, "evidence");
@@ -347,20 +348,57 @@ function readyLine(child, pattern, timeoutMs) {
   });
 }
 
+function isSqliteBusy(error) {
+  const code = error?.code;
+  return code === "SQLITE_BUSY" || code === "SQLITE_BUSY_SNAPSHOT" || /database is locked/i.test(String(error?.message ?? error));
+}
+
+// Serializes mock state inspection, stale-record reclamation, publication, and cleanup in one checkout.
+// The OS owns SQLite's exclusive lock, so a killed holder releases it when the process exits.
+async function withMockLock(run, timeoutMs = 30_000) {
+  fs.mkdirSync(verifyDir, { recursive: true });
+  const sqlite = new Database(mockLockPath);
+  const deadline = Date.now() + timeoutMs;
+  try {
+    sqlite.pragma("busy_timeout = 0");
+    for (;;) {
+      try {
+        sqlite.exec("BEGIN EXCLUSIVE");
+        break;
+      } catch (error) {
+        if (!isSqliteBusy(error)) throw error;
+        if (Date.now() >= deadline) throw new Error(`timed out waiting for mock lock at ${mockLockPath}`);
+        await sleep(25);
+      }
+    }
+    try {
+      return await run();
+    } finally {
+      try {
+        sqlite.exec("ROLLBACK");
+      } catch {
+        // Already closed or ended.
+      }
+    }
+  } finally {
+    sqlite.close();
+  }
+}
+
 async function spawnMock() {
   let child = null;
+  const draft = `${mockStatePath}.${process.pid}`;
   const stopChild = () => {
     if (child) killGroup(child.pid, "SIGTERM");
   };
   // The mock is detached, so a signal to this process does not reach it. Until its record is published, stop it here.
   const onSignal = (signal) => {
     stopChild();
+    fs.rmSync(draft, { force: true });
     process.exit(signal === "SIGINT" ? 130 : 143);
   };
   process.once("SIGINT", onSignal);
   process.once("SIGTERM", onSignal);
-  const draft = `${mockStatePath}.${process.pid}`;
-  let failure;
   try {
     const logFd = fs.openSync(mockLogPath, "a");
     child = spawn(process.execPath, [mockScript], {
@@ -377,60 +415,37 @@ async function spawnMock() {
     child.unref();
     const mock = { pid: child.pid, startTime: startTime(child.pid), port: Number(match[1]) };
     if (!mock.startTime) throw new Error("mock provider exited right after printing its port");
-    // link() publishes the whole record at once and fails if another launch in this checkout published first.
+    // Write to a sibling draft, then rename into place so readers only ever see a complete record.
     fs.writeFileSync(draft, JSON.stringify(mock, null, 2));
-    try {
-      fs.linkSync(draft, mockStatePath);
-    } catch (error) {
-      if (error?.code !== "EEXIST") throw error;
-      stopChild();
-      const winner = runningMock();
-      if (!winner) throw new Error("another launch --mock in this checkout recorded a mock that has stopped. Run cleanup, then launch --mock again");
-      console.log(`mock already running pid=${winner.pid}`);
-      return winner;
-    }
+    fs.renameSync(draft, mockStatePath);
     child = null;
     console.log(`mock ready pid=${mock.pid} base=http://127.0.0.1:${mock.port}/v1 model=${MOCK_MODEL}`);
     return mock;
   } catch (error) {
     stopChild();
-    failure = error instanceof Error ? error.message : String(error);
+    throw error;
   } finally {
     fs.rmSync(draft, { force: true });
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
   }
-  return fail(`${failure}. Log: ${mockLogPath}`);
-}
-
-// A record that names no running mock is removed. rename() takes whatever is there now, so a record that another launch
-// published since the caller read the file goes back, and that mock is returned.
-function removeStaleMock() {
-  const grave = `${mockStatePath}.stale.${process.pid}`;
-  try {
-    fs.renameSync(mockStatePath, grave);
-  } catch (error) {
-    if (error?.code === "ENOENT") return null;
-    throw error;
-  }
-  const taken = readState(grave);
-  try {
-    if (!isRunning(taken)) return null;
-    try {
-      fs.linkSync(grave, mockStatePath);
-    } catch (error) {
-      if (error?.code !== "EEXIST") throw error;
-    }
-    return taken;
-  } finally {
-    fs.rmSync(grave, { force: true });
-  }
 }
 
 async function startMock() {
-  let mock = runningMock() ?? removeStaleMock();
-  if (mock) console.log(`mock already running pid=${mock.pid}`);
-  else mock = await spawnMock();
+  let mock;
+  try {
+    mock = await withMockLock(async () => {
+      const existing = runningMock();
+      if (existing) {
+        console.log(`mock already running pid=${existing.pid}`);
+        return existing;
+      }
+      fs.rmSync(mockStatePath, { force: true });
+      return await spawnMock();
+    });
+  } catch (error) {
+    fail(`${error instanceof Error ? error.message : String(error)}. Log: ${mockLogPath}`);
+  }
   const cookies = await signInVerify();
   const saved = await request("/api/settings", {
     method: "PUT",
@@ -445,15 +460,22 @@ async function startMock() {
 }
 
 async function stopMock() {
-  const mock = runningMock();
-  if (mock) {
-    killGroup(mock.pid, "SIGTERM");
-    const deadline = Date.now() + 5_000;
-    while (isRunning(mock) && Date.now() < deadline) await sleep(100);
-    if (isRunning(mock)) killGroup(mock.pid, "SIGKILL");
+  if (!fs.existsSync(verifyDir)) return;
+  try {
+    await withMockLock(async () => {
+      const mock = runningMock();
+      if (mock) {
+        killGroup(mock.pid, "SIGTERM");
+        const deadline = Date.now() + 5_000;
+        while (isRunning(mock) && Date.now() < deadline) await sleep(100);
+        if (isRunning(mock)) killGroup(mock.pid, "SIGKILL");
+      }
+      fs.rmSync(mockStatePath, { force: true });
+      fs.rmSync(mockLogPath, { force: true });
+    });
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
   }
-  fs.rmSync(mockStatePath, { force: true });
-  fs.rmSync(mockLogPath, { force: true });
 }
 
 function doctor() {

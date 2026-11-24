@@ -332,6 +332,113 @@ test("two launches in one checkout at once share one mock", async () => {
   assert.equal(mocks.length, 1, `mock providers: ${mocks}`);
 });
 
+test("three overlapping launches cannot reclaim a live mock record and orphan a provider", async () => {
+  const checkout = new Checkout();
+  const started = await checkout.verify(["launch"]);
+  assert.equal(started.code, 0, started.out);
+
+  const hookPath = path.join(checkout.dir, "race-hook.mjs");
+  fs.writeFileSync(
+    hookPath,
+    `import fs from "node:fs";
+import path from "node:path";
+const dir = process.env.RACE_DIR;
+const mockJson = path.join(dir, ".verify", "mock.json");
+const origRead = fs.readFileSync;
+const origRename = fs.renameSync;
+let pausedRead = false;
+let pausedRename = false;
+function waitFor(file, timeoutMs) {
+  const buf = new Int32Array(new SharedArrayBuffer(4));
+  const deadline = Date.now() + timeoutMs;
+  while (!fs.existsSync(file) && Date.now() < deadline) Atomics.wait(buf, 0, 0, 10);
+}
+fs.readFileSync = function (target, ...args) {
+  let ok = false;
+  let value;
+  let caught;
+  try {
+    value = origRead.call(this, target, ...args);
+    ok = true;
+  } catch (error) {
+    caught = error;
+  }
+  if (!pausedRead && String(target) === mockJson) {
+    pausedRead = true;
+    fs.writeFileSync(path.join(dir, ".verify", "a-read"), "");
+    waitFor(path.join(dir, ".verify", "b-done"), 5_000);
+  }
+  if (ok) return value;
+  throw caught;
+};
+fs.renameSync = function (from, to) {
+  origRename.call(this, from, to);
+  if (!pausedRename && String(from) === mockJson) {
+    pausedRename = true;
+    fs.writeFileSync(path.join(dir, ".verify", "a-moved"), "");
+    waitFor(path.join(dir, ".verify", "c-done"), 5_000);
+  }
+};
+`,
+  );
+
+  const aRead = path.join(checkout.dir, ".verify", "a-read");
+  const bDone = path.join(checkout.dir, ".verify", "b-done");
+  const aMoved = path.join(checkout.dir, ".verify", "a-moved");
+  const cDone = path.join(checkout.dir, ".verify", "c-done");
+
+  const a = run(process.execPath, ["--import", hookPath, path.join(checkout.dir, ".agents/skills/verify-orbit/verify.mjs"), "launch", "--mock"], {
+    cwd: checkout.dir,
+    env: { ORBIT_VERIFY_PORT: String(checkout.port), ORBIT_MOCK_BASE_URL: undefined, RACE_DIR: checkout.dir },
+  });
+  let aExited = false;
+  a.done.then(() => {
+    aExited = true;
+  });
+
+  await eventually(() => fs.existsSync(aRead), Boolean, "first launch read mock.json", 5_000);
+  const b = checkout.verifyStarted(["launch", "--mock"]);
+  // Unserialized launches let b publish while a is paused; serialized launches make b wait on a's lock.
+  await Promise.race([b.done, new Promise((resolve) => setTimeout(resolve, 1_000))]);
+  fs.writeFileSync(bDone, "");
+
+  await eventually(() => aExited || fs.existsSync(aMoved), Boolean, "first launch finished or moved mock.json", 5_000);
+  const c = checkout.verifyStarted(["launch", "--mock"]);
+  await c.done;
+  fs.writeFileSync(cDone, "");
+
+  const results = await Promise.all([a.done, b.done, c.done]);
+  for (const result of results) assert.equal(result.code, 0, result.out);
+
+  const record = checkout.record();
+  assert.ok(record?.port, `missing mock record: ${JSON.stringify(record)}`);
+  const mockPids = () => pidsUnder(checkout.dir).filter((pid) => fs.readFileSync(`/proc/${pid}/cmdline`, "utf8").includes("mock-provider.mjs"));
+  assert.deepEqual(mockPids(), [record.pid], "only the recorded mock provider should run");
+  assert.deepEqual(new Set(checkout.savedBaseUrls()), new Set([`http://127.0.0.1:${record.port}/v1`]));
+
+  const stopped = await checkout.verify(["cleanup"]);
+  assert.equal(stopped.code, 0, stopped.out);
+  assert.deepEqual(mockPids(), [], "cleanup should stop every mock provider");
+});
+
+test("three overlapping launches over a stale mock record share one new mock", async () => {
+  const checkout = new Checkout();
+  const started = await checkout.verify(["launch"]);
+  assert.equal(started.code, 0, started.out);
+  fs.writeFileSync(path.join(checkout.dir, ".verify/mock.json"), JSON.stringify({ pid: 1, startTime: "stale", port: 1 }));
+  const results = await Promise.all([
+    checkout.verify(["launch", "--mock"]),
+    checkout.verify(["launch", "--mock"]),
+    checkout.verify(["launch", "--mock"]),
+  ]);
+  for (const result of results) assert.equal(result.code, 0, result.out);
+  const record = checkout.record();
+  assert.ok(record?.port && record.startTime !== "stale");
+  const mockPids = () => pidsUnder(checkout.dir).filter((pid) => fs.readFileSync(`/proc/${pid}/cmdline`, "utf8").includes("mock-provider.mjs"));
+  assert.deepEqual(mockPids(), [record.pid]);
+  assert.deepEqual(new Set(checkout.savedBaseUrls()), new Set([`http://127.0.0.1:${record.port}/v1`]));
+});
+
 test("a launch stopped while its mock starts leaves no mock without a record", async () => {
   const checkout = new Checkout();
   const started = await checkout.verify(["launch"]);
