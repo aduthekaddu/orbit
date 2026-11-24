@@ -1,0 +1,64 @@
+.agents/skills/verify-orbit/features/search.md
+  h_9f68edf4527855 11-12
+.agents/skills/verify-orbit/scenarios/search-focus.mjs
+  h_9f68edf4527855 59-110
+.agents/skills/verify-orbit/scenarios/title-prompt.mjs
+  h_9f68edf4527855 1-66
+.github/workflows/ci.yml
+  h_9f68edf4527855 40-45
+.github/workflows/pr-agent.yml
+  h_9f68edf4527855 1-123
+.oxlintrc.json
+  h_9f68edf4527855 1-10
+.pr_agent.toml
+  h_9f68edf4527855 1-12
+ARCHITECTURE.md
+  h_9f68edf4527855 153
+CHANGELOG.md
+  h_9f68edf4527855 17,24-26
+CONTRIBUTING.md
+  h_9f68edf4527855 24-25,34
+package-lock.json
+  h_9f68edf4527855 60,1905-2251,8382-8430
+package.json
+  h_9f68edf4527855 11,66
+src/components/settings/settings-form.tsx
+  h_9f68edf4527855 23,81,84,86
+src/lib/artifacts/history.test.ts
+  h_9f68edf4527855 22-30
+src/lib/artifacts/history.ts
+  h_9f68edf4527855 1,10-12
+src/lib/chat-tree.test.ts
+  h_9f68edf4527855 3,30-62
+src/lib/chat-tree.ts
+  h_9f68edf4527855 20,46-54
+src/lib/chat-write.test.ts
+  h_9f68edf4527855 70,326-333
+src/lib/db/branch-and-search-migrations.test.ts
+  h_9f68edf4527855 7-8,11-12,15-17,20,22-23,27-59
+src/lib/lint.test.ts
+  h_9f68edf4527855 1-76
+src/lib/memory/dream.test.ts
+  h_9f68edf4527855 421-448
+src/lib/pr-agent-workflow.test.ts
+  h_9f68edf4527855 1-147
+src/lib/search.test.ts
+  h_9f68edf4527855 156-173
+src/lib/search.ts
+  h_9f68edf4527855 4,94-97
+src/lib/titles.test.ts
+  h_9f68edf4527855 6,12,29-47
+src/lib/titles.ts
+  h_9f68edf4527855 7-8,12-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a86db60175f4308ff79c5996f65b8d105205e7b0",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
