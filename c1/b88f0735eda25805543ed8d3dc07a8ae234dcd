@@ -1,0 +1,14 @@
+src/lib/qa-harness.test.ts
+  h_9f68edf4527855 55,58,61,68-83,139-140,149,218-244,246-286,288-291,294-297,355-373,441-483
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c1b88f0735eda25805543ed8d3dc07a8ae234dcd",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
