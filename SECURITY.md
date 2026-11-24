@@ -18,6 +18,7 @@ Orbit is built for one person on their own machine. These are the protections it
 - **The GitHub token stays on the server.** `GET /api/settings` reports `githubTokenSet` and the MCP URL, never the token. GitHub tools are read-only and limited to repositories, issues, and pull requests. A check calls `get_me` and returns the login or an error, not the token. The token is sent only to `https://api.githubcopilot.com`, `https://github.com`, or `https://api.github.com`, and only on port 443. Plain HTTP and any other host are refused before the request. `ORBIT_GITHUB_MCP_FIXTURE=1` also allows `127.0.0.1`, `localhost`, and `::1` so the local test fixture can run. Leave that variable unset outside tests. The verify harness sets it for its own server.
 - **One account.** An auth hook and a SQLite trigger both reject a second signup.
 - **Every page and API route needs a session**, except the login and signup pages, `/api/auth/*`, and `/api/setup`.
+- **API writes come from a trusted origin.** A `POST`, `PUT`, `PATCH`, or `DELETE` under `/api`, other than `/api/auth/*`, gets 403 when it carries a `Sec-Fetch-Site` other than `same-origin`, or, without Fetch Metadata, an `Origin` that is not a trusted origin. The browser sets `Sec-Fetch-Site` and a page cannot forge it, so a write it marks `same-origin` passes. A write with neither header, such as curl, passes. `/api/auth/*` uses better-auth's origin check, which can accept wildcard patterns; for the `Origin` match here, a wildcard entry counts for nothing. A page on another port of the same host cannot write with your session.
 - **Local files are private.** The data directory is mode `0700`. The database and `data/auth-secret` are mode `0600`.
 - **Local only by default.** Docker Compose publishes port 3210 on `127.0.0.1`, so other machines cannot reach Orbit.
 - **The Docker server is not root.** The process runs as the `node` user. The entrypoint may start as root only to give the data directory to that user, and it drops root before the server listens.
@@ -26,7 +27,7 @@ Orbit is built for one person on their own machine. These are the protections it
 
 - The database stores the provider key in plain text. Anyone who can read `data/orbit.db` can read the key.
 - The database stores the GitHub token in plain text, the same way. Use a fine-grained personal access token that can only read the repositories you want Orbit to see. Orbit does not use GitHub sign-in.
-- Sign-in relies on better-auth's default rate limits. Orbit adds no lockout of its own. Keep it on `127.0.0.1`, or behind [Cloudflare Access](#cloudflare-access).
+- Sign-in relies on better-auth's default rate limits, such as 3 sign-in attempts per 10 seconds. A client can forge the `X-Forwarded-For` header, so Orbit reads no client address. Each auth path has one limit that every client shares, not one per address. Anyone who can reach sign-in shares that limit with you, so a steady stream of wrong passwords can keep you from signing in until it stops. Orbit adds no lockout of its own. Keep it on `127.0.0.1`, or behind [Cloudflare Access](#cloudflare-access). better-auth may warn that it is falling back to a shared per-path bucket and that `advanced.ipAddress.ipAddressHeaders` should be set. That warning is expected. Leave `ipAddressHeaders` empty unless a proxy that clients cannot get around sets that header.
 - Model output is untrusted. Markdown renders without raw HTML. Generated UI specs are checked against a fixed component catalog before they render.
 
 ## Cloudflare Access
@@ -54,6 +55,10 @@ default-src 'none'; script-src 'unsafe-inline' https://esm.sh; style-src 'unsafe
 
 This policy blocks fetch requests, including requests to Orbit's API. It allows inline scripts and scripts from esm.sh. React previews load React 19.3.1 from esm.sh, so they need a network connection. HTML and SVG previews work offline. React source can import only the supported React modules.
 
+Orbit's pages also send `Content-Security-Policy: frame-src 'none'`. The browser checks this policy each time a frame on the page loads a URL, including a load the frame starts itself. When preview code sets `location.href`, follows a link or uses a meta refresh, the browser blocks the load before the request leaves, so the code cannot send data out in a URL. Chrome 155 and Firefox 157 block these loads. Safari is untested. The browser may show its own blocked page in the frame, and Reload brings the preview back. Orbit passes the preview document as `srcdoc`, not as a URL, so this policy does not block it.
+
+`next.config.ts` sets this header on the named app pages. Route handlers outside those paths can set their own CSP. A matching Next.js header rule can replace a handler's CSP, so keep the rule limited to pages. Client-side links keep the current document's CSP. Give new pages that link into chat the same policy or use a link that loads a new document, as the 404 page does.
+
 The app accepts an error report only from the preview frame's own window and shows the message as text. The frame does not limit CPU or memory use. Preview only code you are willing to run under these limits.
 
 The [code sandbox](docs/slices/08.md) runs server-side code in a separate container. It is separate from artifact previews.
@@ -64,7 +69,7 @@ The [code sandbox](docs/slices/08.md) runs server-side code in a separate contai
 
 Each run uses a fresh container from a digest-pinned image and passes source through stdin. The container runs as `65534:65534` with no network, no host mounts, and a read-only root filesystem. Its only writable scratch space is a 64 MiB `/tmp` mount with `noexec` and `nosuid`. The limits are one CPU, 256 MiB of memory with no swap, 64 processes, and ten seconds. The container drops all capabilities and disallows new privileges.
 
-Orbit keeps at most 64 KiB each of stdout and stderr. Docker log storage is disabled for these containers. The runner removes the container after success, program failure, timeout, or cancellation. No files last between runs. Images must be pulled separately. A code run never pulls an image.
+Orbit keeps at most 64 KiB each of stdout and stderr. Docker log storage is disabled for these containers. The runner removes the container after success, program failure, timeout, or cancellation. The container also stops itself after ten seconds, so the limit holds when Orbit dies during a run. With the sandbox on, Orbit removes sandbox containers older than a minute when it starts and every minute after, which clears containers a crash left behind. No files last between runs. Images must be pulled separately. A code run never pulls an image.
 
 During development, the server uses the local Docker socket. The default Compose deployment has no Docker proxy. The optional `docker-compose.sandbox.yml` override enables the tool and connects Orbit to a private socket proxy. Only that proxy mounts `/var/run/docker.sock`. The proxy permits container endpoints and their writes, and denies other Docker API groups.
 

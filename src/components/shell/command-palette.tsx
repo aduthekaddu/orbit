@@ -18,6 +18,9 @@ function filter(value: string, search: string, keywords?: string[]) {
   return defaultFilter(keywords?.length ? keywords.join(" ") : value, search);
 }
 
+type MessageHit = { chatId: string; chatTitle: string; messageId: string; snippet: string };
+type MessageSearch = { status: "idle" } | { status: "searching" } | { status: "failed" } | { status: "done"; hits: MessageHit[] };
+
 export function CommandPalette({
   open,
   onOpenChange,
@@ -33,32 +36,34 @@ export function CommandPalette({
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [hits, setHits] = useState<{ chatId: string; chatTitle: string; messageId: string; snippet: string }[]>([]);
+  const [messageSearch, setMessageSearch] = useState<MessageSearch>({ status: "idle" });
+  const hits = messageSearch.status === "done" ? messageSearch.hits : [];
 
   useEffect(() => {
     if (!open) {
       setSearch("");
-      setHits([]);
+      setMessageSearch({ status: "idle" });
       return;
     }
     const query = search.trim();
     if (!query) {
-      setHits([]);
+      setMessageSearch({ status: "idle" });
       return;
     }
-    setHits([]);
+    setMessageSearch({ status: "searching" });
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       fetch(`/api/search?q=${encodeURIComponent(query)}`, { signal: controller.signal })
-        .then((response) => (response.ok ? response.json() : { hits: [] }))
-        .then((payload: { hits?: unknown }) => {
+        .then((response) => (response.ok ? response.json() : null))
+        .then((payload: { hits?: unknown } | null) => {
           if (controller.signal.aborted) return;
-          if (!Array.isArray(payload.hits)) {
-            setHits([]);
+          if (!payload || !Array.isArray(payload.hits)) {
+            setMessageSearch({ status: "failed" });
             return;
           }
-          setHits(
-            payload.hits.flatMap((hit) => {
+          setMessageSearch({
+            status: "done",
+            hits: payload.hits.flatMap((hit) => {
               if (!hit || typeof hit !== "object") return [];
               const row = hit as Record<string, unknown>;
               if (
@@ -71,9 +76,11 @@ export function CommandPalette({
               }
               return [{ chatId: row.chatId, chatTitle: row.chatTitle, messageId: row.messageId, snippet: row.snippet }];
             }),
-          );
+          });
         })
-        .catch(() => {});
+        .catch(() => {
+          if (!controller.signal.aborted) setMessageSearch({ status: "failed" });
+        });
     }, 150);
     return () => {
       window.clearTimeout(timer);
@@ -102,7 +109,9 @@ export function CommandPalette({
           </div>
           <ScrollFade axis="y" fade="var(--popover)" scrollerClassName="max-h-[min(24rem,60vh)]">
             <Command.List className="p-1.5">
-              <Command.Empty className="py-8 text-center text-sm text-muted-foreground">No results</Command.Empty>
+              {(messageSearch.status === "idle" || messageSearch.status === "done") && (
+                <Command.Empty className="py-8 text-center text-sm text-muted-foreground">No results</Command.Empty>
+              )}
               <Command.Group className={groupClass}>
                 <Command.Item value="New chat" onSelect={() => run(onNewChat)} className={itemClass}>
                   <NotePencilIcon weight="light" className="size-4" />
@@ -153,6 +162,7 @@ export function CommandPalette({
                   ))}
                 </Command.Group>
               )}
+              {messageSearch.status === "failed" && <p className="py-8 text-center text-sm text-destructive">Could not search</p>}
             </Command.List>
           </ScrollFade>
         </Command>
