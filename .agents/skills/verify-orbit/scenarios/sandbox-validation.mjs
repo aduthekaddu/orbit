@@ -1,5 +1,5 @@
 import { eventually } from "../../../../src/lib/eventually.mjs";
-const attempts = 5;
+const attempts = 4;
 const cases = [
   { scenario: "run-long", reason: "20000", program: "#".repeat(100) },
   { scenario: "run-ruby", reason: "javascript", program: "puts 1" },

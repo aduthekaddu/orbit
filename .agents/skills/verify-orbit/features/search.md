@@ -8,4 +8,6 @@ The scenario saves `long-title.png`, `before.png` or `results.png`, `opened.png`
 
 Run `browse search-focus` to check user-message focus in a long chat and scrolling during a follow-up reply on a phone. Opening the result must keep the saved branch head. The scenario saves `user-hit.png` and `follow-up-stream.png` under `.verify/evidence/search-focus/`.
 
+Run `browse title-prompt` to check the size of the title request. It sends a first message of 200,000 characters tagged `[qa:plain]` and reads `.verify/mock-requests.jsonl`. The reply request carries the whole message. The title request holds at most 2,100 characters and ends with the message's first 2,000. The sidebar title becomes `Mock title`. The scenario saves `title.png` under `.verify/evidence/title-prompt/`.
+
 Run `cleanup` after the server stops. Evidence stays on disk.

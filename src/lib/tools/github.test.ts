@@ -1,4 +1,4 @@
-import { testDataDir } from "../test-data-dir";
+import { dataDirectory } from "../paths";
 import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
@@ -192,6 +192,57 @@ test("a warm turn gets its tools before the MCP server answers the start", { tim
       await noOpenSessions(mock);
     } finally {
       release();
+    }
+  });
+});
+
+test("a warm turn that calls no GitHub tool sends no MCP request and closes at once", { timeout: 20_000 }, async () => {
+  await withMock(async (mock) => {
+    const first = await githubTools({ token: mock.token, mcpUrl: mock.url });
+    await first.close();
+    const sent = mock.requests.length;
+    const release = mock.holdStart();
+    try {
+      const warm = await githubTools({ token: mock.token, mcpUrl: mock.url });
+      const closed = await Promise.race([
+        warm.close().then(() => "closed" as const),
+        new Promise<"hung">((resolve) => setTimeout(() => resolve("hung"), 500)),
+      ]);
+      assert.equal(closed, "closed");
+      await assert.rejects(warm.tools.github_list_issues?.execute?.({ owner: "aduthekaddu", repo: "orbit" }, toolOptions) ?? Promise.resolve());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      assert.deepEqual(mock.requests.slice(sent), []);
+    } finally {
+      release();
+    }
+  });
+});
+
+test("a warm turn that calls a GitHub tool closes its session when the turn closes", { timeout: 20_000 }, async () => {
+  await withMock(async (mock) => {
+    const first = await githubTools({ token: mock.token, mcpUrl: mock.url });
+    await first.close();
+    const closes = mock.closeCount();
+    const warm = await githubTools({ token: mock.token, mcpUrl: mock.url });
+    await warm.tools.github_list_issues?.execute?.({ owner: "aduthekaddu", repo: "orbit" }, toolOptions);
+    assert.equal(mock.openSessions(), 1);
+    await warm.close();
+    assert.equal(mock.closeCount(), closes + 1);
+    assert.equal(mock.openSessions(), 0);
+  });
+});
+
+test("a warm turn whose first GitHub tool call comes after the setup time still reaches GitHub", { timeout: 20_000 }, async () => {
+  await withMock(async (mock) => {
+    const first = await githubTools({ token: mock.token, mcpUrl: mock.url });
+    await first.close();
+    const warm = await githubTools({ token: mock.token, mcpUrl: mock.url }, { setupMs: 300 });
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      const result = await warm.tools.github_list_issues?.execute?.({ owner: "aduthekaddu", repo: "orbit" }, toolOptions);
+      assert.equal(githubLinks(result)[0]?.href, "https://github.com/aduthekaddu/orbit/issues/7");
+    } finally {
+      await warm.close();
     }
   });
 });
@@ -395,7 +446,7 @@ test("a turn without a GitHub token does not open GitHub", async () => {
 
 test("the tool registry opens its database in the test data directory", async () => {
   const { db } = await import("../db");
-  assert.equal(db.$client.name, path.join(testDataDir, "orbit.db"));
+  assert.equal(db.$client.name, path.join(dataDirectory(), "orbit.db"));
 });
 
 test("issue, pull request, and file results become GitHub links", () => {
