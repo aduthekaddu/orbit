@@ -69,6 +69,7 @@ before(async () => {
     "c-invisible",
     "c-invisible-retry",
     "c-retry-edit",
+    "c-head",
     "c-prompt-changed",
   ]) {
     mods.db.insert(mods.schema.chats).values({ id, userId: "u1", title: id, createdAt: now, updatedAt: now }).run();
@@ -353,4 +354,12 @@ test("provider failure and stop before visible text leave the saved prompt as he
     assert.deepEqual(row, { head_id: promptId });
     assert.deepEqual(ids(chatId), [promptId]);
   }
+});
+
+test("a saved reply becomes the head after its prompt", () => {
+  write("c-head", [message("h1", "user", "question")]);
+  const head = () => mods.db.$client.prepare("select head_id from chats where id = ?").get("c-head");
+  assert.deepEqual(head(), { head_id: "h1" });
+  answer("c-head", "h2", "answer", "h1");
+  assert.deepEqual(head(), { head_id: "h2" });
 });

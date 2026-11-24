@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 export function NotFoundView() {
@@ -7,7 +6,7 @@ export function NotFoundView() {
       <p className="num text-5xl font-light tracking-tight text-muted-foreground">404</p>
       <h1 className="text-base font-medium">Not found</h1>
       <Button asChild size="sm">
-        <Link href="/">Back to chats</Link>
+        <a href="/">Back to chats</a>
       </Button>
     </main>
   );

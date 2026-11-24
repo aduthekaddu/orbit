@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import { focusedHead } from "./chat-tree";
 import { db } from "./db";
-import { getChatForUser } from "./messages";
+import { getChatForUser, messageRepository } from "./messages";
 
 export type SearchHit = {
   chatId: string;
@@ -47,7 +47,7 @@ const STOP_WORDS = new Set(
 function contentWords(input: string): string[] {
   const words = input
     .toLowerCase()
-    .replace(/\p{L}+n['’]t(?!\p{L})/gu, " ")
+    .replace(/(?<!\p{L})\p{L}+n['’]t(?!\p{L})/gu, " ")
     .match(/[\p{L}\p{N}]+/gu);
   return [...new Set((words ?? []).filter((word) => word.length > 1 && !STOP_WORDS.has(word)))];
 }
@@ -91,12 +91,10 @@ export function searchMessages(userId: string, q: string): SearchHit[] {
 }
 
 export function openHitPath(userId: string, chatId: string, messageId: string): string[] {
-  const chat = getChatForUser(chatId, userId);
-  if (!chat) return [];
-  const rows = db.$client
-    .prepare("SELECT id, parent_id AS parentId FROM messages WHERE chat_id = ?")
-    .all(chatId) as { id: string; parentId: string | null }[];
-  const head = focusedHead(rows, chat.headId, messageId);
+  if (!getChatForUser(chatId, userId)) return [];
+  const history = messageRepository(chatId);
+  const rows = history.messages.map(({ parentId, message }) => ({ id: message.id, parentId }));
+  const head = focusedHead(rows, history.headId, messageId);
   const byId = new Map(rows.map((row) => [row.id, row]));
   const path: string[] = [];
   const seen = new Set<string>();
