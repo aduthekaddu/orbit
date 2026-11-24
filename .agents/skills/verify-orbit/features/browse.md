@@ -41,7 +41,7 @@ Screenshots: `before-stop.png`, `after-reload.png`.
 
 ### palette
 
-Presses Ctrl+K in a chat, types `Settings`, and presses Enter. Then it opens the palette again and presses Escape.
+Presses Ctrl+K in a chat, types `Settings`, and presses Enter. Then it opens the palette again and presses Escape. Then it sends `[qa:plain] quokkanest` and searches messages with `/api/search` aborted, answering HTTP 500, and held for 3 seconds.
 
 Pass lines:
 
@@ -51,9 +51,16 @@ PASS Enter on Settings opens /settings
 PASS palette closes after select
 PASS Esc closes the palette
 PASS focus returns to the composer
+PASS the chat has a message to search
+PASS a failed search does not say No results
+PASS a search after a failed one shows the hit and no error
+PASS a server error says Could not search
+PASS a pending search does not say No results
+PASS a canceled search does not say Could not search
+PASS a finished search with no match says No results
 ```
 
-Screenshots: `after-select.png`, `after-escape.png`.
+Screenshots: `after-select.png`, `after-escape.png`, `search-failed.png`, `search-recovered.png`, `search-pending.png`.
 
 ### settings-short
 
