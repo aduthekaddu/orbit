@@ -1,0 +1,28 @@
+ARCHITECTURE.md
+  h_9f68edf4527855 137,139
+scripts/qa/ci-e2e.sh
+  h_9f68edf4527855 163-165
+scripts/qa/sandbox-sweep-log.sh
+  h_9f68edf4527855 1-24
+src/lib/sandbox/owner.d.mts
+  h_9f68edf4527855 5,8
+src/lib/sandbox/owner.mjs
+  h_9f68edf4527855 8,38-42
+src/lib/sandbox/run.test.ts
+  h_9f68edf4527855 14,626,643,654
+src/lib/sandbox/sweep.test.ts
+  h_9f68edf4527855 1-127
+src/lib/sandbox/sweep.ts
+  h_9f68edf4527855 3,9-14,27,37-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bc6e1e498f1ebf9180304c50d3e21b3054b8af23",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
