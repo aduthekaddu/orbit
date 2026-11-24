@@ -1,50 +1,72 @@
 "use client";
 
-import { useReducer, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { WarningCircleIcon } from "@phosphor-icons/react";
 import { authClient } from "@/lib/auth-client";
+import { AUTH_REDIRECT_RESET_MS, runAuthSubmit, type AuthResult } from "@/lib/auth-submit";
 import { idleSubmit, submitTransition } from "@/lib/submit-state";
 import { OrbitMark } from "@/components/orbit-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function LoginForm({ signupOpen }: { signupOpen: boolean }) {
+function useAuthSubmit(fallbackError: string) {
   const router = useRouter();
+  const [submit, dispatch] = useReducer(submitTransition, idleSubmit);
+
+  useEffect(() => {
+    if (submit.status !== "succeeded") return;
+    const timer = setTimeout(() => dispatch({ type: "edit" }), AUTH_REDIRECT_RESET_MS);
+    return () => clearTimeout(timer);
+  }, [submit.status]);
+
+  async function run(request: () => Promise<AuthResult>) {
+    if (submit.status === "pending" || submit.status === "succeeded") return;
+    await runAuthSubmit({ request, router, dispatch, fallbackError });
+  }
+
+  function onFieldChange() {
+    dispatch({ type: "edit" });
+  }
+
+  return { submit, run, onFieldChange };
+}
+
+export function LoginForm({ signupOpen }: { signupOpen: boolean }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [submit, dispatch] = useReducer(submitTransition, idleSubmit);
+  const { submit, run, onFieldChange } = useAuthSubmit("Could not sign in");
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    dispatch({ type: "submit" });
-    try {
-      const result = await authClient.signIn.email({ email, password });
-      if (result.error) {
-        dispatch({ type: "fail", error: result.error.message ?? "Could not sign in" });
-        return;
-      }
-      dispatch({ type: "succeed" });
-      router.push("/");
-      router.refresh();
-    } catch {
-      dispatch({ type: "fail", error: "Network error" });
-    }
+    await run(() => authClient.signIn.email({ email, password }));
   }
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <Field id="email" label="Email">
-        <Input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+        <Input
+          id="email"
+          type="email"
+          value={email}
+          onChange={(event) => {
+            onFieldChange();
+            setEmail(event.target.value);
+          }}
+          required
+        />
       </Field>
       <Field id="password" label="Password">
         <Input
           id="password"
           type="password"
           value={password}
-          onChange={(event) => setPassword(event.target.value)}
+          onChange={(event) => {
+            onFieldChange();
+            setPassword(event.target.value);
+          }}
           minLength={8}
           required
         />
@@ -57,43 +79,50 @@ export function LoginForm({ signupOpen }: { signupOpen: boolean }) {
 }
 
 export function SignupForm() {
-  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [submit, dispatch] = useReducer(submitTransition, idleSubmit);
+  const { submit, run, onFieldChange } = useAuthSubmit("Could not create account");
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    dispatch({ type: "submit" });
-    try {
-      const result = await authClient.signUp.email({ name, email, password });
-      if (result.error) {
-        dispatch({ type: "fail", error: result.error.message ?? "Could not create account" });
-        return;
-      }
-      dispatch({ type: "succeed" });
-      router.push("/");
-      router.refresh();
-    } catch {
-      dispatch({ type: "fail", error: "Network error" });
-    }
+    await run(() => authClient.signUp.email({ name, email, password }));
   }
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <Field id="name" label="Name">
-        <Input id="name" value={name} onChange={(event) => setName(event.target.value)} required />
+        <Input
+          id="name"
+          value={name}
+          onChange={(event) => {
+            onFieldChange();
+            setName(event.target.value);
+          }}
+          required
+        />
       </Field>
       <Field id="email" label="Email">
-        <Input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+        <Input
+          id="email"
+          type="email"
+          value={email}
+          onChange={(event) => {
+            onFieldChange();
+            setEmail(event.target.value);
+          }}
+          required
+        />
       </Field>
       <Field id="password" label="Password">
         <Input
           id="password"
           type="password"
           value={password}
-          onChange={(event) => setPassword(event.target.value)}
+          onChange={(event) => {
+            onFieldChange();
+            setPassword(event.target.value);
+          }}
           minLength={8}
           required
         />

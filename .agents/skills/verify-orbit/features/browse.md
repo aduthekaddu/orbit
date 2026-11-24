@@ -115,6 +115,21 @@ PASS session ends after Sign out
 
 Screenshots: `network-error.png`, `http-error.png`, `signed-out.png`.
 
+### auth-submit
+
+Clears cookies, opens `/login`, stalls navigation to `/`, and checks that **Sign in** stays disabled right after success, re-enables when navigation stalls past the reset timeout, and unlocks immediately when a field is edited. Then clears the intercepts and signs in to open a chat.
+
+Pass lines:
+
+```
+PASS Sign in stays disabled after success while navigation is pending
+PASS Sign in re-enables when navigation stalls
+PASS editing a field unlocks Sign in when navigation stalls
+PASS real sign-in opens a chat
+```
+
+Screenshots: `stalled-disabled.png`, `stalled-recovered.png`, `signed-in.png`.
+
 ### thread-map
 
 Sends three `[qa:plain]` prompts. Types two lines in the composer and presses `Alt+ArrowUp`. Then moves focus off the composer without scrolling and reads the current prompt from the map. Presses `Alt+ArrowUp` again and checks that focus moves to the prompt before it.
