@@ -21,7 +21,7 @@ const EFFORTS: { value: ReasoningEffort; label: string }[] = [
 ];
 
 
-function canLoadStored(initial: PublicSettings) {
+function canLoadStored(initial: Pick<PublicSettings, "baseUrl" | "keySet">) {
   return initial.keySet && Boolean(initial.baseUrl);
 }
 
@@ -78,11 +78,12 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
   }, []);
 
   useEffect(() => {
-    if (canLoadStored(initial)) {
+    if (canLoadStored({ baseUrl: initial.baseUrl, keySet: initial.keySet })) {
       void loadModels(initial.baseUrl, "", initial.keySet);
     }
+    const load = modelLoad.current;
     return () => {
-      modelLoad.current.controller?.abort();
+      load.controller?.abort();
     };
   }, [initial.baseUrl, initial.keySet, loadModels]);
 

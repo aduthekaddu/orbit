@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isPath, pathTo, toRepository, type StoredMessage } from "./chat-tree";
+import { focusedHead, isPath, pathTo, toRepository, type StoredMessage } from "./chat-tree";
 
 const tree: StoredMessage[] = [
   { id: "u1", parentId: null, role: "user", parts: [{ type: "text", text: "first" }] },
@@ -26,4 +26,37 @@ test("toRepository keeps every sibling and the last written head", () => {
     headId: "u2",
     messages: tree.map(({ parentId, ...message }) => ({ parentId, message })),
   });
+});
+
+// Creation order. u1 -> a1 -> u2 -> a2 is the stored branch.
+// u2b edits u2, and its branch runs on to a3b.
+const branches = [
+  { id: "u1", parentId: null },
+  { id: "a1", parentId: "u1" },
+  { id: "u2", parentId: "a1" },
+  { id: "a2", parentId: "u2" },
+  { id: "u2b", parentId: "a1" },
+  { id: "a2b", parentId: "u2b" },
+  { id: "u3b", parentId: "a2b" },
+  { id: "a3b", parentId: "u3b" },
+];
+
+test("focusedHead keeps the stored head for a hit on its path", () => {
+  for (const hit of ["u1", "a1", "u2", "a2"]) assert.equal(focusedHead(branches, "a2", hit), "a2");
+  assert.equal(focusedHead(branches, "a2", null), "a2");
+});
+
+test("focusedHead opens a hit off the stored path through to the end of its branch", () => {
+  for (const hit of ["u2b", "a2b", "u3b", "a3b"]) assert.equal(focusedHead(branches, "a2", hit), "a3b");
+});
+
+test("focusedHead opens the newest message below the hit when its branch forks again", () => {
+  // a2c regenerates a2b. The chat then went back to a2b and wrote u3b and a3b last.
+  const forked = [
+    ...branches.slice(0, 6),
+    { id: "a2c", parentId: "u2b" },
+    ...branches.slice(6),
+  ];
+  assert.equal(focusedHead(forked, "a2", "u2b"), "a3b");
+  assert.equal(focusedHead(forked, "a2", "a2c"), "a2c");
 });
