@@ -40,7 +40,7 @@ Slice 18 ships this in two pull requests. 18a scopes all data with the mode fixe
 - In `team`, members spend the admin's key with no per-member limit. A budget is a later decision.
 - Removing a person deletes all their data. Orbit has no export yet.
 - There is one admin and no way to transfer the role.
-- Open signup in `community` relies on better-auth's rate limit, 3 signups per 10 seconds per IP. Orbit does not verify email addresses, so in `community` an email proves nothing.
+- Open signup in `community` relies on better-auth's rate limit, 3 attempts per 10 seconds, in one shared bucket per path since #117, not per IP. Slice 18b needs a per-client key it can trust (a verified Access JWT, or a header set by a proxy that clients cannot reach around) before opening signup; otherwise 18b needs its own rule. Orbit does not verify email addresses, so in `community` an email proves nothing.
 - The roadmap goals, `ARCHITECTURE.md`, `SECURITY.md`, and the README stop saying Orbit serves one user. Slice 18b makes those edits.
 - **Cloudflare Access is still open.** The maintainer has not decided whether the public deployment keeps Access in front. Slice 18 works both ways. With Access in `team`, each member's email goes in the Access policy before the invite is sent. In `community`, Access needs a policy that admits any email after a one-time code, or Orbit runs without Access. No path needs an Access bypass rule until share links in slice 22.
 
