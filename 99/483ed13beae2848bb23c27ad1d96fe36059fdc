@@ -1,0 +1,18 @@
+scripts/test-data-dir.mjs
+  h_9f68edf4527855 10-11,13-23
+scripts/test.mjs
+  h_9f68edf4527855 59-62,67-90,92-105,116,135,145,170-174
+src/lib/test-runner.test.ts
+  h_9f68edf4527855 210-211,233,238,251-288,303-304,309-310,315-316,350-351,373-374,384,389,413-414,426,431
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "99483ed13beae2848bb23c27ad1d96fe36059fdc",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
