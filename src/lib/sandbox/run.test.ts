@@ -10,7 +10,7 @@ import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } fr
 import { MockLanguageModelV4 } from "ai/test";
 import { createRunCodeTool } from "../tools/run-code";
 import { createStoppedRuns } from "../tools/stopped-runs";
-import { runCode } from "./run";
+import { runCode, killedForMemory } from "./run";
 import { removeStaleSandboxes } from "./sweep";
 import { waitForRunningSandbox } from "./wait-for-running";
 import { containerSpec, type RunCodeInput, type RunCodeOutput } from "./spec";
@@ -615,5 +615,25 @@ finally:
   });
   await t.test("no sandbox containers remain after success, errors, timeout, or cancellation", async () => {
     await waitForNoContainers(docker);
+  });
+});
+
+// Docker records the OOM flag from the container's OOM event, which can arrive after the exit
+// event that container.wait() resolves on, so the first inspect can see the flag unset.
+test("a memory kill is confirmed by re-reading Docker's OOM flag", async (t) => {
+  await t.test("a late OOM flag still confirms the memory kill", async () => {
+    let inspections = 0;
+    const container = {
+      inspect: async () => {
+        inspections += 1;
+        return { State: { OOMKilled: inspections > 2 } };
+      },
+    } as unknown as Pick<Docker.Container, "inspect">;
+    assert.equal(await killedForMemory(container), true);
+    assert.ok(inspections > 1, "the flag must be re-read while Docker has not confirmed the kill yet");
+  });
+  await t.test("a container that never reports the OOM flag is not a confirmed memory kill", async () => {
+    const container = { inspect: async () => ({ State: { OOMKilled: false } }) } as unknown as Pick<Docker.Container, "inspect">;
+    assert.equal(await killedForMemory(container), false);
   });
 });

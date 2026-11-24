@@ -9,7 +9,7 @@ const RUN_TIMEOUT_MS = RUN_TIMEOUT_SECONDS * 1000;
 const waitResultSchema = z.object({ StatusCode: z.number().int() });
 const SIGKILL_EXIT = 137;
 
-async function killedForMemory(container: Docker.Container): Promise<boolean> {
+export async function killedForMemory(container: Pick<Docker.Container, "inspect">): Promise<boolean> {
   try {
     return (await container.inspect()).State?.OOMKilled === true;
   } catch {
