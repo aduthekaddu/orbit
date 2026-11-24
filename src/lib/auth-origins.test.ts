@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveAuthBaseUrl, resolveTrustedOrigins } from "./auth-origins";
+import { isCrossOriginWrite, resolveAuthBaseUrl, resolveTrustedOrigins } from "./auth-origins";
 
 test("a public base URL trusts only the deployment origin", () => {
   assert.deepEqual(resolveTrustedOrigins("https://orbit.example.com", undefined), ["https://orbit.example.com"]);
@@ -57,3 +57,25 @@ test("ORBIT_PUBLIC_URL keeps the explicit origins", () => {
 test("an empty ORBIT_PUBLIC_URL changes no origins", () => {
   assert.deepEqual(resolveTrustedOrigins("http://127.0.0.1:3210", undefined, ""), ["http://127.0.0.1:3210"]);
 });
+
+const trustedOrigin = "https://orbit.example.com";
+const trustedOrigins = [trustedOrigin, "https://*.example.com"];
+
+for (const { name, method, headers, crossOrigin } of [
+  { name: "a POST marked same-site", method: "POST", headers: { "sec-fetch-site": "same-site", origin: trustedOrigin }, crossOrigin: true },
+  { name: "a POST from a foreign origin", method: "POST", headers: { origin: "http://other.example" }, crossOrigin: true },
+  { name: "a POST from a trusted origin", method: "POST", headers: { origin: trustedOrigin }, crossOrigin: false },
+  { name: "a POST marked same-origin", method: "POST", headers: { "sec-fetch-site": "same-origin", origin: trustedOrigin }, crossOrigin: false },
+  { name: "a POST marked same-origin from a foreign origin", method: "POST", headers: { "sec-fetch-site": "same-origin", origin: "http://other.example" }, crossOrigin: false },
+  { name: "a POST with neither header", method: "POST", headers: {}, crossOrigin: false },
+  { name: "a POST from an opaque origin", method: "POST", headers: { origin: "null" }, crossOrigin: true },
+  { name: "a POST whose origin has a path", method: "POST", headers: { origin: `${trustedOrigin}/path` }, crossOrigin: true },
+  { name: "a POST from an origin only a wildcard matches", method: "POST", headers: { origin: "https://other.example.com" }, crossOrigin: true },
+  { name: "a POST marked same-origin from a host only a wildcard matches", method: "POST", headers: { "sec-fetch-site": "same-origin", origin: "https://other.example.com" }, crossOrigin: false },
+  { name: "a DELETE from a foreign origin", method: "DELETE", headers: { origin: "http://other.example" }, crossOrigin: true },
+  { name: "a GET from a foreign origin", method: "GET", headers: { origin: "http://other.example" }, crossOrigin: false },
+]) {
+  test(`${name} is ${crossOrigin ? "a cross-origin write" : "not a cross-origin write"}`, () => {
+    assert.equal(isCrossOriginWrite({ method, headers: new Headers(headers) }, trustedOrigins), crossOrigin);
+  });
+}
