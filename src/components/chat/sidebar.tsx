@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { MagnifyingGlassIcon, NotePencilIcon, SidebarSimpleIcon, SignOutIcon } from "@phosphor-icons/react";
@@ -47,10 +47,17 @@ export function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
   const today = useToday();
+  const [signOutFailed, setSignOutFailed] = useState(false);
   const groups = today === null ? [{ label: null, chats }] : groupChatsByRecency(chats, today);
 
   async function signOut() {
-    await authClient.signOut();
+    setSignOutFailed(false);
+    // A network failure rejects, and an HTTP error resolves with `error`.
+    const result = await authClient.signOut().catch(() => null);
+    if (!result || result.error) {
+      setSignOutFailed(true);
+      return;
+    }
     router.push("/login");
     router.refresh();
   }
@@ -124,30 +131,37 @@ export function Sidebar({
         ))}
       </nav>
 
-      <div className="flex shrink-0 items-center gap-1 border-t p-2">
-        <Link
-          href="/settings"
-          onClick={onNavigate}
-          aria-current={pathname === "/settings" ? "page" : undefined}
-          className={cn(
-            "flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1.5 text-sm transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-            pathname === "/settings" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
-          )}
-        >
-          <span className="sr-only">Settings</span>
-          <span aria-hidden className="grid size-6 shrink-0 place-items-center rounded-full border bg-surface-raised text-2xs font-medium text-foreground uppercase">
-            {email.charAt(0)}
-          </span>
-          <span className="truncate">{email}</span>
-        </Link>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon-sm" onClick={signOut} aria-label="Sign out" className="text-muted-foreground hover:text-foreground">
-              <SignOutIcon weight="light" className="size-[18px]" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">Sign out</TooltipContent>
-        </Tooltip>
+      <div className="shrink-0 border-t p-2">
+        {signOutFailed && (
+          <p role="alert" className="px-1.5 pb-1.5 text-xs text-destructive">
+            Could not sign out
+          </p>
+        )}
+        <div className="flex items-center gap-1">
+          <Link
+            href="/settings"
+            onClick={onNavigate}
+            aria-current={pathname === "/settings" ? "page" : undefined}
+            className={cn(
+              "flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1.5 text-sm transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+              pathname === "/settings" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+            )}
+          >
+            <span className="sr-only">Settings</span>
+            <span aria-hidden className="grid size-6 shrink-0 place-items-center rounded-full border bg-surface-raised text-2xs font-medium text-foreground uppercase">
+              {email.charAt(0)}
+            </span>
+            <span className="truncate">{email}</span>
+          </Link>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon-sm" onClick={signOut} aria-label="Sign out" className="text-muted-foreground hover:text-foreground">
+                <SignOutIcon weight="light" className="size-[18px]" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Sign out</TooltipContent>
+          </Tooltip>
+        </div>
       </div>
     </div>
   );

@@ -90,6 +90,37 @@ PASS starters are at least 44px tall on a phone
 
 Screenshots: `starters.png`, `filled.png`, `phone-390x844.png`.
 
+### sign-out
+
+Opens the older of two new chats, because a signed-in visit to `/login` redirects to the newest chat. Presses **Sign out** three times: with the browser dropping the sign-out request, with the request answered by HTTP 500, and with no route.
+
+Pass lines:
+
+```
+PASS network error keeps the chat open
+PASS network error shows Could not sign out
+PASS network error raises no page error
+PASS HTTP 500 keeps the chat open
+PASS HTTP 500 shows Could not sign out
+PASS Sign out opens /login
+PASS session ends after Sign out
+```
+
+Screenshots: `network-error.png`, `http-error.png`, `signed-out.png`.
+
+### thread-map
+
+Sends three `[qa:plain]` prompts. Types two lines in the composer and presses `Alt+ArrowUp`. Then moves focus off the composer without scrolling and reads the current prompt from the map. Presses `Alt+ArrowUp` again and checks that focus moves to the prompt before it.
+
+Pass lines:
+
+```
+PASS Alt+Up in the composer keeps focus in the composer
+PASS Alt+Up on the page moves focus to the previous prompt
+```
+
+Screenshots: `composer.png`, `page.png`.
+
 ## Gotchas
 
 - The mock counts `fail-first` failures for each prompt text. `retry-stop` adds the time to the prompt, so a second run fails three times again.

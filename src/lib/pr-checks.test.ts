@@ -7,7 +7,7 @@ import test, { after, before } from "node:test";
 
 const script = path.join(process.cwd(), "scripts/ci/pr-checks.sh");
 const template = fs.readFileSync(path.join(process.cwd(), ".github/PULL_REQUEST_TEMPLATE.md"), "utf8");
-const goodBody = "## Why\n\nA real reason.\n\n## What changed\n\n- A change.\n\n## How I checked it\n\n- [x] ran it\n";
+const goodBody = "## Why\n\nA real reason.\n\n## What changed\n\n- A change.\n\n## Verification\n\n- [x] ran it\n";
 const gitEnv = { ...process.env };
 for (const name of Object.keys(gitEnv)) {
   if (name.startsWith("GIT_")) delete gitEnv[name];
@@ -87,7 +87,7 @@ after(async () => {
   if (repo) await fs.promises.rm(repo, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
-type Case = { name: string; commit: () => string; env: Record<string, string>; ok: boolean };
+type Case = { name: string; commit: () => string; env: Record<string, string>; ok: boolean; says?: RegExp };
 
 const ready = { TITLE: "fix: keep runs cancelled", HEAD_REF: "fix/keep-cancelled", BODY: goodBody, DRAFT: "false", LABELS: "[]", ACTOR: "someone" };
 
@@ -102,7 +102,11 @@ const cases: Case[] = [
   { name: "a fix that changes only docs needs no changelog entry", commit: () => docsOnly, env: ready, ok: true },
   { name: "changes that landed on the base branch after the pull request opened do not count as its own", commit: () => merged, env: ready, ok: true },
   { name: "a fix that changes only the SearXNG settings needs a changelog entry", commit: () => searxngChange, env: ready, ok: false },
-  { name: "a ready pull request with an empty How I checked it fails", commit: () => docsOnly, env: { ...ready, BODY: "## Why\n\nA real reason.\n\n## What changed\n\n- A change.\n\n## How I checked it\n\n<!-- Commands you ran. -->\n" }, ok: false },
+  { name: "a ready pull request with an empty Verification fails", commit: () => docsOnly, env: { ...ready, BODY: "## Why\n\nA real reason.\n\n## What changed\n\n- A change.\n\n## Verification\n\n<!-- The commands that were run. -->\n" }, ok: false, says: /The "## Verification" section of the description is empty/ },
+  { name: "a pull request opened before the heading changed still passes with How I checked it", commit: () => docsOnly, env: { ...ready, BODY: "## Why\n\nA real reason.\n\n## What changed\n\n- A change.\n\n## How I checked it\n\n- [x] ran it\n" }, ok: true },
+  { name: "an empty How I checked it fails", commit: () => docsOnly, env: { ...ready, BODY: "## Why\n\nA real reason.\n\n## What changed\n\n- A change.\n\n## How I checked it\n\n<!-- Commands you ran. -->\n" }, ok: false, says: /The "## How I checked it" section of the description is empty/ },
+  { name: "an empty Verification fails even when How I checked it is filled", commit: () => docsOnly, env: { ...ready, BODY: "## Why\n\nA real reason.\n\n## What changed\n\n- A change.\n\n## Verification\n\n## How I checked it\n\n- [x] ran it\n" }, ok: false, says: /The "## Verification" section of the description is empty/ },
+  { name: "How I checked it with Windows line endings still passes", commit: () => docsOnly, env: { ...ready, BODY: "## Why\n\nA real reason.\n\n## What changed\n\n- A change.\n\n## How I checked it\n\n- [x] ran it\n".replace(/\n/g, "\r\n") }, ok: true },
   { name: "a branch with an underscore in its topic fails", commit: () => docsOnly, env: { ...ready, HEAD_REF: "fix/my_feature" }, ok: false },
   { name: "a branch with a dot in its topic fails", commit: () => docsOnly, env: { ...ready, HEAD_REF: "fix/v1.2" }, ok: false },
   { name: "a title without a type fails", commit: () => docsOnly, env: { ...ready, TITLE: "Keep runs cancelled" }, ok: false },
@@ -112,10 +116,10 @@ const cases: Case[] = [
   { name: "a branch with capitals fails", commit: () => docsOnly, env: { ...ready, HEAD_REF: "fix/Keep-Cancelled" }, ok: false },
   { name: "a branch type outside the list fails", commit: () => docsOnly, env: { ...ready, HEAD_REF: "wip/keep-cancelled" }, ok: false },
   { name: "a ready pull request with the untouched template fails", commit: () => docsOnly, env: { ...ready, BODY: template }, ok: false },
-  { name: "a ready pull request missing a section fails", commit: () => docsOnly, env: { ...ready, BODY: "## Why\n\nBecause.\n\n## What changed\n\nStuff.\n" }, ok: false },
+  { name: "a ready pull request with no verification section fails and the error names the Verification heading", commit: () => docsOnly, env: { ...ready, BODY: "## Why\n\nBecause.\n\n## What changed\n\nStuff.\n" }, ok: false, says: /missing the "## Verification" section/ },
   { name: "a body with Windows line endings passes", commit: () => docsOnly, env: { ...ready, BODY: goodBody.replace(/\n/g, "\r\n") }, ok: true },
-  { name: "a Why section that holds only a comment with a greater-than sign counts as empty", commit: () => docsOnly, env: { ...ready, BODY: "## Why\n\n<!-- Say what a > b means. -->\n\n## What changed\n\n- A change.\n\n## How I checked it\n\n- [x] ran it\n" }, ok: false },
-  { name: "a comment that spans lines is removed before the section check", commit: () => docsOnly, env: { ...ready, BODY: "## Why\n\n<!--\nThe user problem.\n-->\n\n## What changed\n\n- A change.\n\n## How I checked it\n\n- [x] ran it\n" }, ok: false },
+  { name: "a Why section that holds only a comment with a greater-than sign counts as empty", commit: () => docsOnly, env: { ...ready, BODY: "## Why\n\n<!-- Say what a > b means. -->\n\n## What changed\n\n- A change.\n\n## Verification\n\n- [x] ran it\n" }, ok: false },
+  { name: "a comment that spans lines is removed before the section check", commit: () => docsOnly, env: { ...ready, BODY: "## Why\n\n<!--\nThe user problem.\n-->\n\n## What changed\n\n- A change.\n\n## Verification\n\n- [x] ran it\n" }, ok: false },
   { name: "a draft with the untouched template passes", commit: () => docsOnly, env: { ...ready, BODY: template, DRAFT: "true" }, ok: true },
   { name: "a draft with a bad title still fails", commit: () => docsOnly, env: { ...ready, BODY: template, DRAFT: "true", TITLE: "oops" }, ok: false },
   { name: "a person on a dependabot branch is still checked", commit: () => docsOnly, env: { TITLE: "Bump x from 1 to 2", HEAD_REF: "dependabot/npm_and_yarn/x-2", BODY: "", DRAFT: "false", LABELS: "[]", ACTOR: "someone" }, ok: false },
@@ -128,5 +132,6 @@ for (const item of cases) {
     git("checkout", "-q", item.commit());
     const result = spawnSync("bash", [script], { cwd: repo, encoding: "utf8", env: { ...gitEnv, ...item.env, BASE_SHA: base } });
     assert.equal(result.status === 0, item.ok, `${result.stdout}${result.stderr}`);
+    if (item.says) assert.match(result.stdout, item.says);
   });
 }
