@@ -563,7 +563,8 @@ finally:
     // The mocked clock stays frozen so Orbit's own timer cannot fire, and the OOM flag poll
     // sleeps on that clock. Watch for the container's own limit with no mocked sleep, then
     // move mock time only after the program has stopped, so the poll can give up without
-    // Orbit's timer ever firing.
+    // Orbit's timer ever firing. Ticks run five times real speed so the five-second mock
+    // window ends well before the guard below.
     const programStopped = (async () => {
       const deadline = Date.now() + 20_000;
       while (Date.now() < deadline) {
@@ -581,7 +582,7 @@ finally:
     try {
       const result = await Promise.race([
         programStopped.then(() => {
-          ticker = setInterval(() => t.mock.timers.tick(50), 50);
+          ticker = setInterval(() => t.mock.timers.tick(50), 10);
           return running;
         }),
         new Promise<"pending">((resolve) => { guard = setInterval(() => resolve("pending"), 15_000); }),

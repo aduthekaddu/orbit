@@ -8,24 +8,34 @@ import { containerSpec, RUN_TIMEOUT_SECONDS, type RunCodeInput, type RunCodeOutp
 const OUTPUT_LIMIT = 65_536;
 const RUN_TIMEOUT_MS = RUN_TIMEOUT_SECONDS * 1000;
 const MEMORY_CHECK_INTERVAL_MS = 50;
-const MEMORY_CHECK_TIMEOUT_MS = 1_000;
+const MEMORY_CHECK_TIMEOUT_MS = 5_000;
 const waitResultSchema = z.object({ StatusCode: z.number().int() });
 const SIGKILL_EXIT = 137;
 
-// Docker records the OOM flag from the container's OOM event, which can arrive after the exit
-// event that container.wait() resolves on, so a single inspect can see the flag unset. Re-read
-// the flag until Docker confirms the kill, and return false only when the flag does not appear
-// within the window: an exit 137 without the flag can have another cause.
+// Docker records the OOM flag from the container's OOM event, which the daemon can process
+// long after the exit event that container.wait() resolves on, so a single inspect can miss
+// it and a short poll can read too early on a loaded host. Re-read the flag until Docker
+// confirms the kill, and give up after the window: an exit 137 without the flag can have
+// another cause, and a stalled check must not hold the run.
 export async function killedForMemory(container: Pick<Docker.Container, "inspect">): Promise<boolean> {
-  const deadline = performance.now() + MEMORY_CHECK_TIMEOUT_MS;
-  while (true) {
-    try {
-      if ((await container.inspect()).State?.OOMKilled === true) return true;
-    } catch {
-      return false;
-    }
-    if (performance.now() >= deadline) return false;
-    await delay(MEMORY_CHECK_INTERVAL_MS);
+  let done = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      (async () => {
+        while (!done) {
+          if ((await container.inspect()).State?.OOMKilled === true) return true;
+          await delay(MEMORY_CHECK_INTERVAL_MS);
+        }
+        return false;
+      })(),
+      new Promise<false>((resolve) => { timer = setTimeout(() => { done = true; resolve(false); }, MEMORY_CHECK_TIMEOUT_MS); }),
+    ]);
+  } catch {
+    return false;
+  } finally {
+    done = true;
+    clearTimeout(timer);
   }
 }
 
