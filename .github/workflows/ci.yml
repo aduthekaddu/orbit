@@ -37,6 +37,12 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Typecheck
         run: npm run typecheck
+      - name: Lint the React hooks
+        if: matrix.node == '22'
+        # Annotations are posted without failing the job. Drop continue-on-error
+        # in a later change so lint is a required check (part of #145).
+        continue-on-error: true
+        run: npm run lint -- --format github
       - name: Pull the pinned sandbox images
         run: |
           grep -oE '[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[a-f0-9]{64}' src/lib/sandbox/images.ts | sort -u | xargs -n1 docker pull
