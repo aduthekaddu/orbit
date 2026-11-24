@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- A memory save or delete that fails on the network shows "Could not save" or "Could not delete" inside that memory's row, so the line stays in view when the list is scrolled. A failed delete closes its dialog so the line is visible. (#124)
 - A Docker build no longer copies a `data/` database, `auth-secret`, `.env` file, `node_modules`, `.next` or `.verify/` folder from a subfolder, or any agent worktree under `.claude/` or `.worktrees/`, into the image. (#118)
 - `Alt+Up` and `Alt+Down` pressed in the composer or another text field no longer move focus to a prompt. (#120)
 - A code sandbox container stops at ten seconds and is removed even when the Orbit process dies during the run. The server log names each leftover container it removes. (#122)

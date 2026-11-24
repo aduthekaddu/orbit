@@ -55,7 +55,8 @@ export function MemoryList({
   const [draft, setDraft] = useState("");
   const [kind, setKind] = useState<MemoryKind>("fact");
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
+  const [searchFailed, setSearchFailed] = useState(false);
+  const [writeError, setWriteError] = useState<{ id: string; text: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<MemoryItem | null>(null);
 
   useEffect(() => {
@@ -69,16 +70,16 @@ export function MemoryList({
           if (controller.signal.aborted) return;
           if (!payload || !Array.isArray(payload.memories)) {
             setFetched({ query: trimmed, rows: [] });
-            setError("Could not search");
+            setSearchFailed(true);
             return;
           }
           setFetched({ query: trimmed, rows: payload.memories });
-          setError((current) => (current === "Could not search" ? "" : current));
+          setSearchFailed(false);
         })
         .catch(() => {
           if (controller.signal.aborted) return;
           setFetched({ query: trimmed, rows: [] });
-          setError("Could not search");
+          setSearchFailed(true);
         });
     }, 150);
     return () => {
@@ -89,15 +90,15 @@ export function MemoryList({
 
   async function save(id: string) {
     setPending(true);
-    setError("");
+    setWriteError(null);
     try {
       const response = await fetch(`/api/memories/${id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ text: draft, kind }),
-      });
-      if (!response.ok) {
-        setError(memoryWriteError(await response.json().catch(() => null)));
+      }).catch(() => null);
+      if (!response?.ok) {
+        setWriteError({ id, text: memoryWriteError(await response?.json().catch(() => null)) });
         return;
       }
       setEditing(null);
@@ -109,17 +110,17 @@ export function MemoryList({
 
   async function remove(id: string) {
     setPending(true);
-    setError("");
+    setWriteError(null);
     try {
-      const response = await fetch(`/api/memories/${id}`, { method: "DELETE" });
-      if (!response.ok) {
-        setError("Could not delete");
+      const response = await fetch(`/api/memories/${id}`, { method: "DELETE" }).catch(() => null);
+      if (!response?.ok) {
+        setWriteError({ id, text: "Could not delete" });
         return;
       }
-      setPendingDelete(null);
       setEditing(null);
       router.refresh();
     } finally {
+      setPendingDelete(null);
       setPending(false);
     }
   }
@@ -132,7 +133,7 @@ export function MemoryList({
       {dreamStatus ? <p className="mb-4 text-sm text-muted-foreground num">{dreamStatus}</p> : null}
       <p className={embeddings.ok ? "mb-4 text-sm text-positive" : "mb-4 text-sm text-destructive"}>{embeddings.ok ? "Embeddings on" : embeddings.error}</p>
       <Input aria-label="Search" placeholder="Search" value={query} onChange={(event) => setQuery(event.target.value)} className="mb-4" />
-      {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
+      {searchFailed && <p className="mb-3 text-sm text-destructive">Could not search</p>}
       <ul className="flex flex-col gap-3">
         {visible.map((memory) => {
           const href = sourceHref(memory);
@@ -199,7 +200,7 @@ export function MemoryList({
                           setEditing(memory.id);
                           setDraft(memory.text);
                           setKind(memory.kind);
-                          setError("");
+                          setWriteError(null);
                         }}
                       >
                         Edit
@@ -210,6 +211,11 @@ export function MemoryList({
                     </div>
                   </div>
                 </div>
+              )}
+              {writeError?.id === memory.id && (
+                <p role="alert" className="mt-3 text-sm text-destructive">
+                  {writeError.text}
+                </p>
               )}
             </li>
           );
