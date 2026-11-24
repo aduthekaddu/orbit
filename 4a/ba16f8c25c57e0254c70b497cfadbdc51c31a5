@@ -1,0 +1,28 @@
+.agents/skills/verify-orbit/scenarios/artifact-navigation.mjs
+  h_9f68edf4527855 52-53
+.agents/skills/verify-orbit/scenarios/message-actions.mjs
+  h_9f68edf4527855 1-2,50-54,85-89,107-111,121
+.agents/skills/verify-orbit/scenarios/palette.mjs
+  h_9f68edf4527855 1-2,75-79,81-82,85-107
+.agents/skills/verify-orbit/scenarios/search-focus.mjs
+  h_9f68edf4527855 1-2,103-111
+.agents/skills/verify-orbit/scenarios/thread-map.mjs
+  h_9f68edf4527855 1-2,42-46
+.agents/skills/verify-orbit/scenarios/title-prompt.mjs
+  h_9f68edf4527855 3,42-49
+src/lib/no-fixed-waits.test.ts
+  h_9f68edf4527855 75,78-80,83-84
+src/lib/test-runner.test.ts
+  h_9f68edf4527855 7,233,269,338,375,379,414
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4aba16f8c25c57e0254c70b497cfadbdc51c31a5",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
