@@ -2,6 +2,9 @@ import type Docker from "dockerode";
 import { z } from "zod";
 import { sandboxImages } from "./images";
 
+export const RUN_TIMEOUT_SECONDS = 10;
+export const SANDBOX_LABEL = "orbit.sandbox";
+
 export const runCodeInputSchema = z.object({
   language: z.enum(["python", "javascript"]),
   code: z.string().max(20_000),
@@ -44,7 +47,8 @@ export function containerSpec(input: RunCodeInput): Docker.ContainerCreateOption
   const runtime = sandboxImages[input.language];
   return {
     Image: runtime.image,
-    Cmd: [...runtime.command],
+    // The container keeps the time limit itself, so it holds when the Orbit process dies mid-run.
+    Cmd: ["timeout", "-s", "KILL", String(RUN_TIMEOUT_SECONDS), ...runtime.command],
     User: "65534:65534",
     NetworkDisabled: true,
     AttachStdin: true,
@@ -53,7 +57,7 @@ export function containerSpec(input: RunCodeInput): Docker.ContainerCreateOption
     OpenStdin: true,
     StdinOnce: true,
     Tty: false,
-    Labels: { "orbit.sandbox": "true" },
+    Labels: { [SANDBOX_LABEL]: "true" },
     HostConfig: {
       NetworkMode: "none",
       ReadonlyRootfs: true,

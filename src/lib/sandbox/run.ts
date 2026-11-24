@@ -2,11 +2,11 @@ import Docker from "dockerode";
 import { Duplex, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { z } from "zod";
-import { containerSpec, type RunCodeInput, type RunCodeOutput } from "./spec";
+import { containerSpec, RUN_TIMEOUT_SECONDS, type RunCodeInput, type RunCodeOutput } from "./spec";
 import { STOP_MARKERS } from "../tools/run-status";
 
 const OUTPUT_LIMIT = 65_536;
-const RUN_TIMEOUT_MS = 10_000;
+const RUN_TIMEOUT_MS = RUN_TIMEOUT_SECONDS * 1000;
 const waitResultSchema = z.object({ StatusCode: z.number().int() });
 const SIGKILL_EXIT = 137;
 
@@ -107,7 +107,11 @@ export async function runCode(docker: Docker, input: RunCodeInput, signal?: Abor
         const output = await outputFinished;
         if (output.kind === "failed") throw output.error;
         clearTimeout(timer);
-        if (result.StatusCode === SIGKILL_EXIT) oomKilled = await killedForMemory(container);
+        if (result.StatusCode === SIGKILL_EXIT) {
+          oomKilled = await killedForMemory(container);
+          // The container's own limit fired before Orbit's timer ran.
+          if (!oomKilled && performance.now() - started >= RUN_TIMEOUT_MS) return "timed-out";
+        }
         return result.StatusCode;
       };
       return await Promise.race([exited(), stopped]);
