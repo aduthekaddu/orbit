@@ -1,0 +1,16 @@
+.agents/skills/verify-chat-turn/SKILL.md
+  h_9f68edf4527855 35
+docs/architecture/model-sync.json
+  h_9f68edf4527855 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c28a6f31bad4aae9c3403f0c4f7b004284d445cc",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
