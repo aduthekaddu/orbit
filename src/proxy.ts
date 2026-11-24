@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { auth } from "@/lib/auth";
+import { auth, trustedOrigins } from "@/lib/auth";
 import { describeAuthMiss } from "@/lib/auth-miss";
+import { isCrossOriginWrite } from "@/lib/auth-origins";
 
 const PUBLIC_PAGES = new Set(["/login", "/signup"]);
 
@@ -20,6 +21,7 @@ export async function proxy(request: NextRequest) {
 
   if (pathname.startsWith("/api")) {
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (isCrossOriginWrite(request, trustedOrigins)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     return NextResponse.next();
   }
 
@@ -33,5 +35,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  // Every API path runs the proxy, including one that ends in an image extension.
+  matcher: ["/api/:path*", "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 };

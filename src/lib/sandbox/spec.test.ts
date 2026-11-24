@@ -13,7 +13,7 @@ for (const { language, image, command } of cases) {
     const spec = containerSpec({ language, code });
     assert.deepEqual(spec, {
       Image: image,
-      Cmd: [...command],
+      Cmd: ["timeout", "-s", "KILL", "10", ...command],
       User: "65534:65534",
       NetworkDisabled: true,
       AttachStdin: true,
