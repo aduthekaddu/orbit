@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ComponentProps, type ElementType, type JSX } from "react";
+import { createContext, useContext, useMemo, useState, type ComponentProps, type ElementType, type JSX } from "react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import { useAui, useAuiState } from "@assistant-ui/react";
 import { useAISDKChat } from "@assistant-ui/react-ai-sdk";
@@ -49,15 +49,27 @@ const styledElements = Object.fromEntries(
   Object.entries(elementClasses).map(([tag, base]) => [tag, styled(tag as Tag, base)]),
 );
 
+const InLink = createContext(false);
+
 function Link({ node: _node, className, ...props }: ComponentProps<"a"> & { node?: unknown }) {
   return (
-    <a
-      target="_blank"
-      rel="noreferrer noopener"
-      className={cn("text-foreground underline decoration-sun/50 underline-offset-2 hover:decoration-sun", className)}
-      {...props}
-    />
+    <InLink.Provider value={true}>
+      <a
+        target="_blank"
+        rel="noreferrer noopener"
+        className={cn("text-foreground underline decoration-sun/50 underline-offset-2 hover:decoration-sun", className)}
+        {...props}
+      />
+    </InLink.Provider>
   );
+}
+
+function ImageLink({ src, alt, title }: ComponentProps<"img">) {
+  const inLink = useContext(InLink);
+  const href = typeof src === "string" ? src : undefined;
+  const label = alt?.trim() || href;
+  if (!href || inLink) return label;
+  return <Link href={href} title={title}>{label}</Link>;
 }
 
 function Table({ node: _node, className, ...props }: ComponentProps<"table"> & { node?: unknown }) {
@@ -70,7 +82,7 @@ function Table({ node: _node, className, ...props }: ComponentProps<"table"> & {
   );
 }
 
-const components = { ...styledElements, a: Link, table: Table, CodeHeader, SyntaxHighlighter };
+export const components = { ...styledElements, a: Link, img: ImageLink, table: Table, CodeHeader, SyntaxHighlighter };
 const remarkPlugins = [remarkGfm];
 
 const rehypePlugins = [rehypeCodeBlocks];

@@ -310,23 +310,96 @@ test("two runs started at once produce one claim", async () => {
   assert.equal(requests.length, 1);
 });
 
-test("a failed final embed pass marks the run failed", async () => {
+test("an Ollama outage skips model calls and recovery reads the newest 100 messages", async () => {
+  const api = requireDream();
+  await resetChats();
+  fs.writeFileSync(requestLog, "");
+  const live = process.env.ORBIT_OLLAMA_URL;
+  assert.ok(live);
+  process.env.ORBIT_OLLAMA_URL = "http://127.0.0.1:1";
+  try {
+    const emptyDate = "2099-07-01";
+    const empty = await api.runDream({ date: emptyDate, now: new Date(at(emptyDate, 16)) });
+    assert.equal(empty?.state, "done");
+    assert.deepEqual(empty?.chatIds, []);
+
+    const date = "2099-07-02";
+    const start = at(date, 12);
+    const { chatId } = await seedChat("I live in Lisbon", start);
+    for (let offset = 1; offset < 100; offset++) {
+      await seedReply(chatId, "Noted.", start + offset);
+    }
+    const { db } = await import("../db");
+    const { upsertMessage } = await import("../messages");
+    const newestId = crypto.randomUUID();
+    assert.equal(upsertMessage(chatId, { id: newestId, role: "user", parts: [{ type: "text", text: "I live in Porto" }] }), true);
+    db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(start + 100, newestId);
+
+    for (const night of [date, "2099-07-03"]) {
+      const row = await api.runDream({ date: night, now: new Date(at(night, 16)) });
+      const requests = fs.readFileSync(requestLog, "utf8").split("\n").filter((line) => line.includes('"scenario":"dream"'));
+      assert.equal(requests.length, 0, `Dream model requests through ${night}`);
+      assert.ok(row);
+      assert.equal(row.state, "failed");
+      assert.match(row.error ?? "", /Ollama/);
+      assert.deepEqual(row.retryChatIds, [chatId]);
+      assert.deepEqual(memoryTexts(), []);
+    }
+  } finally {
+    process.env.ORBIT_OLLAMA_URL = live;
+  }
+
+  const recoveryDate = "2099-07-04";
+  const recovered = await api.runDream({ date: recoveryDate, now: new Date(at(recoveryDate, 16)) });
+  assert.equal(recovered?.state, "done");
+  assert.deepEqual(recovered?.retryChatIds, []);
+  assert.deepEqual(memoryTexts(), ["I live in Porto"]);
+});
+
+test("a cached query embed failure does not fail a night with Ollama back", async () => {
+  const api = requireDream();
+  await resetChats();
+  assert.ok(ollama);
+  const embed = await import("./embed");
+  const date = "2099-07-05";
+  const { chatId } = await seedChat("I keep bees on the roof", at(date, 12));
+  await fetch(`${ollama.url}/qa/fail`, { method: "POST" });
+  try {
+    assert.deepEqual(await embed.embedQuery("bees"), { ok: false, error: "Ollama returned HTTP 503" });
+  } finally {
+    await fetch(`${ollama.url}/qa/ok`, { method: "POST" });
+  }
+
+  const row = await api.runDream({ date, now: new Date(at(date, 16)) });
+  assert.ok(row);
+  assert.equal(row.state, "done");
+  assert.equal(row.error, null);
+  assert.deepEqual(row.doneChatIds, [chatId]);
+  assert.deepEqual(memoryTexts(), ["I keep bees on the roof"]);
+});
+
+test("a failed final embed pass marks the run failed", async (t) => {
   const api = requireDream();
   await resetChats();
   const store = await import("./store");
   const date = "2099-07-07";
-  store.saveMemory({ text: "I keep a kayak in the garage", kind: "fact" });
-  await seedChat("I paddle on Sundays", at(date, 12));
-  const live = process.env.ORBIT_OLLAMA_URL;
-  process.env.ORBIT_OLLAMA_URL = "http://127.0.0.1:1";
-  try {
-    const row = await api.runDream({ manual: true, date, now: new Date(at(date, 16)) });
-    assert.ok(row);
-    assert.equal(row.state, "failed");
-    assert.match(row.error ?? "", /Ollama/);
-  } finally {
-    process.env.ORBIT_OLLAMA_URL = live;
-  }
+  const unembedded = store.saveMemory({ text: "I keep a kayak in the garage", kind: "fact" });
+  const { chatId } = await seedChat("I paddle on Sundays", at(date, 12));
+  const fetchLive = globalThis.fetch;
+  t.mock.method(globalThis, "fetch", (url: string, init?: RequestInit) => {
+    if (url === `${ollama?.url}/api/embed` && typeof init?.body === "string" && init.body.includes(unembedded.text)) {
+      return Promise.resolve(new Response(null, { status: 503 }));
+    }
+    return fetchLive(url, init);
+  });
+
+  const row = await api.runDream({ manual: true, date, now: new Date(at(date, 16)) });
+  assert.ok(row);
+  assert.equal(row.state, "failed");
+  assert.equal(row.error, "Ollama returned HTTP 503");
+  assert.deepEqual(row.doneChatIds, [chatId]);
+  assert.deepEqual(row.retryChatIds, []);
+  assert.equal(row.added, 1);
 });
 
 test("a worker that lost the lease writes nothing", async () => {
