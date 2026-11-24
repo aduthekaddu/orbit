@@ -41,22 +41,32 @@ const bodySchema = r.object({
   messageId: r.text(LIMITS.id).min(1).optional(),
 });
 
+const TEXT_TOO_LONG = "text-too-long";
+
 const partSchema = (textMax: number) =>
   r.looseObject({
     type: r.text(LIMITS.partType),
     text: r.text(textMax).optional(),
   });
 
+const partsSchema = (textMax: number) =>
+  r
+    .list(partSchema(textMax), LIMITS.partsPerMessage)
+    .refine((parts) => parts.reduce((total, part) => total + (part.text?.length ?? 0), 0) <= textMax, {
+      message: TEXT_TOO_LONG,
+    })
+    .optional();
+
 const addedMessageSchema = r.discriminatedUnion("role", [
   r.object({
     id: r.text(LIMITS.id).min(1),
     role: r.literal("user"),
-    parts: r.list(partSchema(LIMITS.userMessageText), LIMITS.partsPerMessage).optional(),
+    parts: partsSchema(LIMITS.userMessageText),
   }),
   r.object({
     id: r.text(LIMITS.id).min(1),
     role: r.enum(["assistant", "system"]),
-    parts: r.list(partSchema(LIMITS.assistantText), LIMITS.partsPerMessage).optional(),
+    parts: partsSchema(LIMITS.assistantText),
   }),
 ]);
 
@@ -77,7 +87,7 @@ export async function POST(request: Request) {
     if (storedIds.has(message.id)) continue;
     const added = addedMessageSchema.safeParse(message);
     if (added.success) continue;
-    if (added.error.issues.some((issue) => issue.code === "too_big" && issue.path.at(-1) === "text")) {
+    if (added.error.issues.some((issue) => (issue.code === "too_big" && issue.path.at(-1) === "text") || issue.message === TEXT_TOO_LONG)) {
       return Response.json({ error: "Message is too long." }, { status: 413 });
     }
     return Response.json({ error: "Invalid chat request" }, { status: 400 });

@@ -131,6 +131,98 @@ test("an 80,000 letter chat message is refused at the route and never reaches th
   assert.equal(providerRequests, before, "the provider received a request for a refused message");
 });
 
+test("a new user message split across multiple text parts over the limit is refused", async () => {
+  const before = providerRequests;
+  const splitMessage = {
+    id: "c-split-long",
+    trigger: "submit-message",
+    messages: [{
+      id: "c-split-long-u1",
+      role: "user",
+      parts: [
+        { type: "text", text: "a".repeat(40_000) },
+        { type: "text", text: "a".repeat(40_000) },
+      ],
+    }],
+  };
+  const { status, text } = await post(splitMessage);
+  assert.equal(status, 413, `the route answered ${status}: ${text.slice(0, 200)}`);
+  assert.deepEqual(JSON.parse(text), { error: "Message is too long." });
+  assert.equal(providerRequests, before, "the provider received a request for a split message over the limit");
+  assert.equal(chatStore.storedMessageCount("c-split-long"), 0);
+
+  const justOver = {
+    id: "c-split-over",
+    trigger: "submit-message",
+    messages: [{
+      id: "c-split-over-u1",
+      role: "user",
+      parts: [
+        { type: "text", text: "a".repeat(25_000) },
+        { type: "text", text: "b".repeat(25_001) },
+      ],
+    }],
+  };
+  const overResult = await post(justOver);
+  assert.equal(overResult.status, 413, `the route answered ${overResult.status}: ${overResult.text.slice(0, 200)}`);
+  assert.deepEqual(JSON.parse(overResult.text), { error: "Message is too long." });
+
+  const splitAssistant = {
+    id: "c-split-assistant",
+    trigger: "submit-message",
+    messages: [{
+      id: "c-split-assistant-a1",
+      role: "assistant",
+      parts: [
+        { type: "text", text: "a".repeat(120_000) },
+        { type: "text", text: "b".repeat(120_000) },
+      ],
+    }],
+  };
+  const assistantResult = await post(splitAssistant);
+  assert.equal(assistantResult.status, 413, `the route answered ${assistantResult.status}: ${assistantResult.text.slice(0, 200)}`);
+  assert.deepEqual(JSON.parse(assistantResult.text), { error: "Message is too long." });
+});
+
+test("a new user message split across multiple text parts within the limit is accepted", async () => {
+  const halfA = "ab ".repeat(8_000);
+  const halfB = "cd ".repeat(8_666) + "cd";
+  assert.equal(halfA.length + halfB.length, LIMITS.userMessageText);
+  const { status, text } = await post({
+    id: "c-split-ok",
+    trigger: "submit-message",
+    messages: [{
+      id: "c-split-ok-u1",
+      role: "user",
+      parts: [
+        { type: "text", text: halfA },
+        { type: "text", text: halfB },
+      ],
+    }],
+  });
+  assert.equal(status, 200, `the route answered ${status}: ${text.slice(0, 200)}`);
+});
+
+test("a stored multi-part message over the limit does not block the next short turn", async () => {
+  const parts = [
+    { type: "text", text: "a".repeat(40_000) },
+    { type: "text", text: "a".repeat(40_000) },
+  ];
+  assert.ok(chatStore.ensureChat("c-stored-split", USER_ID));
+  assert.equal(chatStore.upsertMessage("c-stored-split", { id: "sp-u1", role: "user", parts }), true);
+  assert.equal(chatStore.upsertMessage("c-stored-split", { id: "sp-a1", role: "assistant", parts: [{ type: "text", text: "ok" }] }), true);
+  const { status, text } = await post({
+    id: "c-stored-split",
+    trigger: "submit-message",
+    messages: [
+      { id: "sp-u1", role: "user", parts },
+      { id: "sp-a1", role: "assistant", parts: [{ type: "text", text: "ok" }] },
+      shortUser("sp-u2"),
+    ],
+  });
+  assert.equal(status, 200, `the route answered ${status}: ${text.slice(0, 200)}`);
+});
+
 test("a chat message inside the limit is accepted", async () => {
   const response = await chatRoute.POST(postJson("/api/chat", "POST", chatBody("c-ok", LONG_PROMPT_WITHIN_LIMIT)));
   assert.equal(response.status, 200);
@@ -194,6 +286,15 @@ test("an edit that replaces a stored message is held to the message limit", asyn
   const prefix = history.slice(0, 2);
   const long = await post(pathBody("c-edit", prefix, shortUser("e-u3", EIGHTY_THOUSAND_LETTERS), { editMessageId: "e-u2" }));
   assert.equal(long.status, 413, `the route answered ${long.status}: ${long.text.slice(0, 200)}`);
+  const splitEdit = await post(pathBody("c-edit", prefix, {
+    id: "e-u3-split",
+    role: "user",
+    parts: [
+      { type: "text", text: "a".repeat(40_000) },
+      { type: "text", text: "a".repeat(40_000) },
+    ],
+  }, { editMessageId: "e-u2" }));
+  assert.equal(splitEdit.status, 413, `the route answered ${splitEdit.status}: ${splitEdit.text.slice(0, 200)}`);
   const short = await post(pathBody("c-edit", prefix, shortUser("e-u4"), { editMessageId: "e-u2" }));
   assert.equal(short.status, 200, `the route answered ${short.status}: ${short.text.slice(0, 200)}`);
 });
