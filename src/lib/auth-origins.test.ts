@@ -66,11 +66,12 @@ for (const { name, method, headers, crossOrigin } of [
   { name: "a POST from a foreign origin", method: "POST", headers: { origin: "http://other.example" }, crossOrigin: true },
   { name: "a POST from a trusted origin", method: "POST", headers: { origin: trustedOrigin }, crossOrigin: false },
   { name: "a POST marked same-origin", method: "POST", headers: { "sec-fetch-site": "same-origin", origin: trustedOrigin }, crossOrigin: false },
-  { name: "a POST marked same-origin from a foreign origin", method: "POST", headers: { "sec-fetch-site": "same-origin", origin: "http://other.example" }, crossOrigin: true },
+  { name: "a POST marked same-origin from a foreign origin", method: "POST", headers: { "sec-fetch-site": "same-origin", origin: "http://other.example" }, crossOrigin: false },
   { name: "a POST with neither header", method: "POST", headers: {}, crossOrigin: false },
   { name: "a POST from an opaque origin", method: "POST", headers: { origin: "null" }, crossOrigin: true },
   { name: "a POST whose origin has a path", method: "POST", headers: { origin: `${trustedOrigin}/path` }, crossOrigin: true },
   { name: "a POST from an origin only a wildcard matches", method: "POST", headers: { origin: "https://other.example.com" }, crossOrigin: true },
+  { name: "a POST marked same-origin from a host only a wildcard matches", method: "POST", headers: { "sec-fetch-site": "same-origin", origin: "https://other.example.com" }, crossOrigin: false },
   { name: "a DELETE from a foreign origin", method: "DELETE", headers: { origin: "http://other.example" }, crossOrigin: true },
   { name: "a GET from a foreign origin", method: "GET", headers: { origin: "http://other.example" }, crossOrigin: false },
 ]) {
