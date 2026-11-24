@@ -115,13 +115,15 @@ export async function runCode(docker: Docker, input: RunCodeInput, signal?: Abor
       const exited = async () => {
         connection.end(input.code);
         const result = waitResultSchema.parse(await container.wait());
+        const exitedAt = performance.now();
         const output = await outputFinished;
         if (output.kind === "failed") throw output.error;
         clearTimeout(timer);
         if (result.StatusCode === SIGKILL_EXIT) {
           oomKilled = await killedForMemory(container);
-          // The container's own limit fired before Orbit's timer ran.
-          if (!oomKilled && performance.now() - started >= RUN_TIMEOUT_MS) return "timed-out";
+          // The container's own limit fired before Orbit's timer ran. The flag poll runs after
+          // the program ended, so it must not move the elapsed time past the limit.
+          if (!oomKilled && exitedAt - started >= RUN_TIMEOUT_MS) return "timed-out";
         }
         return result.StatusCode;
       };
