@@ -53,5 +53,8 @@ export const auth = betterAuth({
       },
     },
   },
+  // Clients can forge X-Forwarded-For. Reading no header keeps a forged value from getting its
+  // own rate-limit bucket, so every client shares one bucket per auth path.
+  advanced: { ipAddress: { ipAddressHeaders: [] } },
   telemetry: { enabled: false },
 });

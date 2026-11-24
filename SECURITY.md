@@ -27,7 +27,7 @@ Orbit is built for one person on their own machine. These are the protections it
 
 - The database stores the provider key in plain text. Anyone who can read `data/orbit.db` can read the key.
 - The database stores the GitHub token in plain text, the same way. Use a fine-grained personal access token that can only read the repositories you want Orbit to see. Orbit does not use GitHub sign-in.
-- Sign-in relies on better-auth's default rate limits. Orbit adds no lockout of its own. Keep it on `127.0.0.1`, or behind [Cloudflare Access](#cloudflare-access).
+- Sign-in relies on better-auth's default rate limits, such as 3 sign-in attempts per 10 seconds. A client can forge the `X-Forwarded-For` header, so Orbit reads no client address. Each auth path has one limit that every client shares, not one per address. Anyone who can reach sign-in shares that limit with you, so a steady stream of wrong passwords can keep you from signing in until it stops. Orbit adds no lockout of its own. Keep it on `127.0.0.1`, or behind [Cloudflare Access](#cloudflare-access). better-auth may warn that it is falling back to a shared per-path bucket and that `advanced.ipAddress.ipAddressHeaders` should be set. That warning is expected. Leave `ipAddressHeaders` empty unless a proxy that clients cannot get around sets that header.
 - Model output is untrusted. Markdown renders without raw HTML. Generated UI specs are checked against a fixed component catalog before they render.
 
 ## Cloudflare Access
@@ -65,7 +65,7 @@ The [code sandbox](docs/slices/08.md) runs server-side code in a separate contai
 
 Each run uses a fresh container from a digest-pinned image and passes source through stdin. The container runs as `65534:65534` with no network, no host mounts, and a read-only root filesystem. Its only writable scratch space is a 64 MiB `/tmp` mount with `noexec` and `nosuid`. The limits are one CPU, 256 MiB of memory with no swap, 64 processes, and ten seconds. The container drops all capabilities and disallows new privileges.
 
-Orbit keeps at most 64 KiB each of stdout and stderr. Docker log storage is disabled for these containers. The runner removes the container after success, program failure, timeout, or cancellation. No files last between runs. Images must be pulled separately. A code run never pulls an image.
+Orbit keeps at most 64 KiB each of stdout and stderr. Docker log storage is disabled for these containers. The runner removes the container after success, program failure, timeout, or cancellation. The container also stops itself after ten seconds, so the limit holds when Orbit dies during a run. With the sandbox on, Orbit removes sandbox containers older than a minute when it starts and every minute after, which clears containers a crash left behind. No files last between runs. Images must be pulled separately. A code run never pulls an image.
 
 During development, the server uses the local Docker socket. The default Compose deployment has no Docker proxy. The optional `docker-compose.sandbox.yml` override enables the tool and connects Orbit to a private socket proxy. Only that proxy mounts `/var/run/docker.sock`. The proxy permits container endpoints and their writes, and denies other Docker API groups.
 
