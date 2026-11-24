@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- An artifact preview can no longer load another web page into its frame, so its code cannot send data out in that page's URL. (#132)
 - A chat turn without web search keeps its fifth and last model step for an answer. That step offers only `render_ui` and gets the earlier tool calls as JSON data, so a turn that calls tools on every step no longer ends with tool cards and no reply. (#126)
 - Tab reaches Copy, Edit and Regenerate on earlier messages too, not only on the last reply. With a mouse they still show on hover, and they also show when they take focus. (#125)
 - A memory save or delete that fails on the network shows "Could not save" or "Could not delete" inside that memory's row, so the line stays in view when the list is scrolled. A failed delete closes its dialog so the line is visible. (#124)
