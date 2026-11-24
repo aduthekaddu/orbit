@@ -160,8 +160,9 @@ case $suite in
     done
     check node scripts/qa/sandbox-fixture-isolation.mjs
     # The sweep removes a container a run leaked once it is a minute old, before the leftover check
-    # below can see it. A removal in this server's log is that leak.
-    if grep "Sandbox sweep removed a stale container" .verify/server.log; then
+    # below can see it. A removal for this suite's owner in this server's log is that leak;
+    # removals of another process's stale containers are ignored.
+    if ! scripts/qa/sandbox-sweep-log.sh .verify/server.log; then
       echo "::error title=verify-orbit::the sandbox sweep removed a leftover container during the suite"
       failures+=("the sandbox sweep removed a leftover container")
     fi
