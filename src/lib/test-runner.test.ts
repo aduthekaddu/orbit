@@ -245,3 +245,152 @@ for (const [signal, code] of [["SIGTERM", 143], ["SIGINT", 130]] as const) {
     }
   });
 }
+
+test("a stopped runner aborts queued test files instead of spawning them", async () => {
+  const roleScript = `import fs from "node:fs";
+const tryClaim = (name: string) => {
+  try {
+    fs.mkdirSync(name);
+    return true;
+  } catch {
+    return false;
+  }
+};
+if (tryClaim("slot-1")) {
+  process.on("SIGTERM", () => {
+    setTimeout(() => {
+      const dirs = fs.readdirSync(process.env.ORBIT_TEST_ROOT!).filter((name) => name.startsWith("orbit-test-data-"));
+      fs.writeFileSync("dirs-seen.log", String(dirs.length));
+      process.exit(0);
+    }, 600);
+  });
+  test("slow worker", async () => {
+    fs.writeFileSync("ready-1.log", String(process.pid));
+    await new Promise((resolve) => setTimeout(resolve, 60_000));
+  });
+} else if (tryClaim("slot-2")) {
+  test("fast worker", async () => {
+    fs.writeFileSync("ready-2.log", String(process.pid));
+    await new Promise((resolve) => setTimeout(resolve, 60_000));
+  });
+} else {
+  fs.appendFileSync("queued-ran.log", process.pid + "\\n");
+  test("queued worker", async () => {
+    await new Promise((resolve) => setTimeout(resolve, 60_000));
+  });
+}`;
+  const { dir, env, tmp } = makeProject({
+    "a.test.ts": roleScript,
+    "b.test.ts": roleScript,
+    "c.test.ts": roleScript,
+    "d.test.ts": roleScript,
+    "e.test.ts": roleScript,
+  });
+  env.ORBIT_TEST_WORKERS = "2";
+  const child = spawn(process.execPath, [runner], { cwd: dir, env, stdio: ["ignore", "pipe", "pipe"] });
+  let stdout = "";
+  child.stdout?.on("data", (chunk) => {
+    stdout += chunk;
+  });
+  const exited = new Promise<number | null>((resolve) => child.on("exit", (status) => resolve(status)));
+  const ready1 = path.join(dir, "ready-1.log");
+  const ready2 = path.join(dir, "ready-2.log");
+  let pid1: number | undefined;
+  let pid2: number | undefined;
+  try {
+    for (let waited = 0; !fs.existsSync(ready1) || !fs.existsSync(ready2); waited += 50) {
+      assert.ok(waited < 20_000, "the initial workers never started");
+      await sleep(50);
+    }
+    pid1 = Number(fs.readFileSync(ready1, "utf8"));
+    pid2 = Number(fs.readFileSync(ready2, "utf8"));
+    child.kill("SIGTERM");
+    assert.equal(await exited, 143);
+    assert.equal(isAlive(pid1), false, "slow worker outlived the runner");
+    assert.equal(isAlive(pid2), false, "fast worker outlived the runner");
+    assert.equal(fs.existsSync(path.join(dir, "queued-ran.log")), false, "a queued test file ran after SIGTERM");
+    const dirsSeen = Number(fs.readFileSync(path.join(dir, "dirs-seen.log"), "utf8"));
+    assert.ok(dirsSeen <= 2, `expected at most 2 data dirs for 2 active workers, saw ${dirsSeen}`);
+    assert.equal((stdout.match(/signal: 'SIGTERM'/g) ?? []).length, 0, "queued files were spawned and killed by SIGTERM");
+    assert.deepEqual(fs.readdirSync(tmp).filter((name) => name.startsWith("orbit-test-")), []);
+  } finally {
+    child.kill("SIGKILL");
+    if (pid1 && isAlive(pid1)) process.kill(pid1, "SIGKILL");
+    if (pid2 && isAlive(pid2)) process.kill(pid2, "SIGKILL");
+  }
+});
+
+test("a second signal stops a SIGTERM-ignoring test file immediately without leaking its data directory", async () => {
+  const stubborn = `import fs from "node:fs";
+import { db } from ${JSON.stringify(dbModule)};
+process.on("SIGTERM", () => {});
+test("ignores SIGTERM after opening the database", async () => {
+  fs.writeFileSync("ready.log", db.$client.name + "\\n" + process.pid);
+  await new Promise((resolve) => setTimeout(resolve, 60_000));
+});`;
+  const { dir, env, tmp } = makeProject({ "stubborn.test.ts": stubborn });
+  env.ORBIT_TEST_WORKERS = "1";
+  const child = spawn(process.execPath, [runner], { cwd: dir, env, stdio: "ignore" });
+  const exited = new Promise<number | null>((resolve) => child.on("exit", (status) => resolve(status)));
+  const ready = path.join(dir, "ready.log");
+  let filePid: number | undefined;
+  try {
+    for (let waited = 0; !fs.existsSync(ready) || !fs.readFileSync(ready, "utf8").includes("\n"); waited += 50) {
+      assert.ok(waited < 20_000, "the fixture never opened its database");
+      await sleep(50);
+    }
+    filePid = Number(fs.readFileSync(ready, "utf8").split("\n")[1]);
+    child.kill("SIGINT");
+    await sleep(200);
+    assert.equal(isAlive(filePid), true, "expected the stubborn fixture to still be running after first SIGINT");
+    const forcedAt = Date.now();
+    child.kill("SIGINT");
+    assert.equal(await exited, 130);
+    const elapsed = Date.now() - forcedAt;
+    assert.ok(elapsed < 2_000, `second SIGINT waited ${elapsed}ms instead of stopping immediately`);
+    assert.equal(isAlive(filePid), false, "the test file outlived the runner after a second SIGINT");
+    assert.deepEqual(fs.readdirSync(tmp).filter((name) => name.startsWith("orbit-test-")), []);
+  } finally {
+    child.kill("SIGKILL");
+    if (filePid && isAlive(filePid)) process.kill(filePid, "SIGKILL");
+  }
+});
+
+test("an empty pid file in the test root does not make the runner signal its own process group", async () => {
+  const emptyPid = `import fs from "node:fs";
+import path from "node:path";
+import { db } from ${JSON.stringify(dbModule)};
+test("creates an empty sibling pid file then hangs", async () => {
+  const sibling = fs.mkdtempSync(path.join(process.env.ORBIT_TEST_ROOT!, "orbit-test-data-empty-"));
+  fs.writeFileSync(path.join(sibling, "pid"), "");
+  fs.writeFileSync("ready.log", db.$client.name + "\\n" + process.pid);
+  await new Promise((resolve) => setTimeout(resolve, 60_000));
+});`;
+  const { dir, env, tmp } = makeProject({ "empty-pid.test.ts": emptyPid });
+  env.ORBIT_TEST_WORKERS = "1";
+  const child = spawn(process.execPath, [runner], { cwd: dir, env, detached: true, stdio: "ignore" });
+  const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) =>
+    child.on("exit", (code, signal) => resolve({ code, signal })),
+  );
+  const ready = path.join(dir, "ready.log");
+  let filePid: number | undefined;
+  try {
+    for (let waited = 0; !fs.existsSync(ready) || !fs.readFileSync(ready, "utf8").includes("\n"); waited += 50) {
+      assert.ok(waited < 20_000, "the fixture never opened its database");
+      await sleep(50);
+    }
+    filePid = Number(fs.readFileSync(ready, "utf8").split("\n")[1]);
+    child.kill("SIGTERM");
+    const result = await exited;
+    assert.deepEqual(result, { code: 143, signal: null });
+    assert.equal(isAlive(filePid), false, "the test file outlived the runner");
+    assert.deepEqual(fs.readdirSync(tmp).filter((name) => name.startsWith("orbit-test-")), []);
+  } finally {
+    try {
+      if (child.pid) process.kill(-child.pid, "SIGKILL");
+    } catch {
+      // Already exited.
+    }
+    if (filePid && isAlive(filePid)) process.kill(filePid, "SIGKILL");
+  }
+});

@@ -10,5 +10,8 @@ import path from "node:path";
 const dir = fs.mkdtempSync(path.join(process.env.ORBIT_TEST_ROOT || os.tmpdir(), "orbit-test-data-"));
 process.env.ORBIT_DATA_DIR = dir;
 // Lets the runner find this process and stop it on SIGINT or SIGTERM.
-fs.writeFileSync(path.join(dir, "pid"), String(process.pid));
+const pidFile = path.join(dir, "pid");
+const pidTmp = `${pidFile}.tmp`;
+fs.writeFileSync(pidTmp, String(process.pid));
+fs.renameSync(pidTmp, pidFile);
 process.on("exit", () => fs.rmSync(dir, { recursive: true, force: true }));

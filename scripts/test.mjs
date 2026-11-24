@@ -57,8 +57,9 @@ if (seed !== undefined) {
 
 // One root for every file's data directory (see test-data-dir.mjs). A file killed by a signal
 // cannot clean up after itself, so the runner removes the whole root when the run ends.
-// On SIGINT or SIGTERM it first stops the files still running and waits for them to exit,
-// so none recreates the root afterwards. Only a SIGKILL of this runner leaves the root behind.
+// On SIGINT or SIGTERM it aborts queued files, stops the files still running and waits for
+// them to exit, so none recreates the root afterwards. Only a SIGKILL of this runner leaves
+// the root behind.
 const root = mkdtempSync(join(tmpdir(), "orbit-test-run-"));
 process.env.ORBIT_TEST_ROOT = root;
 process.on("exit", () => rmSync(root, { recursive: true, force: true }));
@@ -67,7 +68,10 @@ function runningFiles() {
   const pids = [];
   for (const entry of readdirSync(root)) {
     try {
-      const pid = Number(readFileSync(join(root, entry, "pid"), "utf8"));
+      const raw = readFileSync(join(root, entry, "pid"), "utf8").trim();
+      if (!/^[1-9]\d*$/.test(raw)) continue;
+      const pid = Number(raw);
+      if (!Number.isSafeInteger(pid) || pid === process.pid) continue;
       process.kill(pid, 0);
       pids.push(pid);
     } catch {
@@ -77,11 +81,19 @@ function runningFiles() {
   return pids;
 }
 
+const controller = new AbortController();
+let stopping = false;
+let forceKill = false;
+
 async function stopFiles(graceMs) {
+  const termed = new Set();
   for (let waited = 0, pids = runningFiles(); pids.length > 0; waited += 50, pids = runningFiles()) {
+    const hard = forceKill || waited >= graceMs;
     for (const pid of pids) {
+      if (!hard && termed.has(pid)) continue;
+      termed.add(pid);
       try {
-        process.kill(pid, waited < graceMs ? "SIGTERM" : "SIGKILL");
+        process.kill(pid, hard ? "SIGKILL" : "SIGTERM");
       } catch {
         // Exited since the check.
       }
@@ -90,11 +102,21 @@ async function stopFiles(graceMs) {
   }
 }
 
-let stopping = false;
 for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
   process.on(signal, async () => {
-    if (stopping) return;
+    if (stopping) {
+      forceKill = true;
+      for (const pid of runningFiles()) {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+          // Exited since the check.
+        }
+      }
+      return;
+    }
     stopping = true;
+    controller.abort();
     await stopFiles(5000);
     process.exit(code);
   });
@@ -105,6 +127,7 @@ const tests = run({
   execArgv: ["--import", "tsx", "--import", fileURLToPath(new URL("./test-data-dir.mjs", import.meta.url))],
   isolation: "process",
   concurrency: workers ?? true,
+  signal: controller.signal,
 });
 
 // The summary counts leave out a skipped suite, so count every skip or todo mark, on tests and suites.
@@ -117,7 +140,7 @@ tests.on("test:fail", countNotRun);
 
 let completed = false;
 tests.on("test:summary", ({ file, counts, success }) => {
-  if (file) return;
+  if (file || stopping) return;
   completed = true;
   if (!success || counts.tests === 0) process.exitCode = 1;
   if (requireAll && (counts.passed !== counts.tests || notRun > 0)) {
@@ -126,7 +149,7 @@ tests.on("test:summary", ({ file, counts, success }) => {
   }
 });
 tests.on("end", () => {
-  if (completed) return;
+  if (completed || stopping) return;
   console.error("The test runner did not report a suite result.");
   process.exitCode = 1;
 });
