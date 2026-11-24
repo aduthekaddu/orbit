@@ -99,29 +99,36 @@ function prefixedTools(raw: Record<string, Tool>, token: string): Record<string,
   return tools;
 }
 
-// A warm turn returns the cached tools at once and starts the client alongside the model call.
-// Each call waits for the client, so a turn that calls no GitHub tool waits for nothing.
+// A warm turn returns the cached tools at once and starts the client, with the full setup time, at its first GitHub tool call.
+// A turn that calls no GitHub tool opens no connection, so its close returns at once.
 function warmTools(cached: CachedList, connect: () => Promise<MCPClient>, token: string, signal: AbortSignal | undefined): McpToolSet {
-  const ready = connect().then((client) => ({ client, tools: client.toolsFromDefinitions(cached.definitions) as Record<string, Tool> }));
-  ready.catch((error: unknown) => {
-    if (!signal?.aborted) console.error("github tools unavailable", githubFailureText(error, token));
-  });
+  let ready: Promise<{ client: MCPClient; tools: Record<string, Tool> }> | undefined;
+  let closed = false;
+  const start = () => {
+    if (closed) throw new Error("GitHub tool unavailable");
+    if (!ready) {
+      ready = connect().then((client) => ({ client, tools: client.toolsFromDefinitions(cached.definitions) as Record<string, Tool> }));
+      ready.catch((error: unknown) => {
+        if (!signal?.aborted) console.error("github tools unavailable", githubFailureText(error, token));
+      });
+    }
+    return ready;
+  };
   const raw: Record<string, Tool> = {};
   for (const [name, shape] of Object.entries(cached.shapes)) {
     raw[name] = {
       ...shape,
       execute: async (args: unknown, options: Parameters<NonNullable<Tool["execute"]>>[1]) => {
-        const execute = (await ready).tools[name]?.execute;
+        const execute = (await start()).tools[name]?.execute;
         if (!execute) throw new Error("GitHub tool unavailable");
         return execute(args, options);
       },
     } as Tool;
   }
-  let closed = false;
   const close = async () => {
     if (closed) return;
     closed = true;
-    const started = await ready.catch(() => null);
+    const started = await ready?.catch(() => null);
     if (started) await started.client.close();
   };
   return { tools: prefixedTools(raw, token), close };
@@ -154,7 +161,7 @@ export async function githubTools(settings: GithubSettings, input?: { signal?: A
     closed = true;
     if (client) await client.close();
   };
-  const connect = () =>
+  const connect = (timeout: number) =>
     createMCPClient({
       transport: {
         type: "http",
@@ -167,14 +174,14 @@ export async function githubTools(settings: GithubSettings, input?: { signal?: A
         },
         redirect: "error",
       },
-      initializationOptions: { signal: input?.signal, timeout: timeoutMs() },
+      initializationOptions: { signal: input?.signal, timeout },
     });
   const now = input?.now ?? Date.now();
   const key = `${mcpUrl}\n${GITHUB_TOOLSETS}\n${extraTools}\n${token}`;
   const cached = listCache.get(key);
-  if (cached && cached.expires > now) return warmTools(cached, connect, token, input?.signal);
+  if (cached && cached.expires > now) return warmTools(cached, () => connect(setupMs), token, input?.signal);
   try {
-    client = await connect();
+    client = await connect(timeoutMs());
     const definitions = await listedTools(client, input?.signal, timeoutMs);
     const raw = client.toolsFromDefinitions(definitions) as Record<string, Tool>;
     const shapes = Object.fromEntries(Object.entries(raw).map(([name, tool]) => [name, { ...tool, execute: undefined } as Tool]));
