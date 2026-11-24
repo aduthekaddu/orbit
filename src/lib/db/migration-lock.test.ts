@@ -4,13 +4,21 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
+import test, { after } from "node:test";
 import { withMigrationLock } from "./migration-lock";
 
 const repo = process.cwd();
 
+const dirs: string[] = [];
+
+after(() => {
+  for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true });
+});
+
 function tempDir(prefix: string) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), `orbit-migration-lock-${prefix}-`));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `orbit-migration-lock-${prefix}-`));
+  dirs.push(dir);
+  return dir;
 }
 
 const holderSource = `

@@ -1,16 +1,14 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import test, { before, after } from "node:test";
 import { createRequire } from "node:module";
 import Database from "better-sqlite3";
+import { dataDirectory } from "../paths";
 import { startMockOllama } from "./ollama-harness";
 
 const require = createRequire(import.meta.url);
 
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-memory-store-"));
-process.env.ORBIT_DATA_DIR = dataDir;
 delete process.env.ORBIT_OLLAMA_URL;
 
 type StoreModule = typeof import("./store");
@@ -53,8 +51,7 @@ test("an existing database gains memory tables and keeps its user", () => {
   });
   assert.ok(memory, "memories migration is missing");
   const older = names.filter((name) => name < memory);
-  const file = path.join(os.tmpdir(), `orbit-memory-migrate-${process.pid}.db`);
-  fs.rmSync(file, { force: true });
+  const file = path.join(dataDirectory(), "memory-migrate.db");
   const db = new Database(file);
   db.function("orbit_clean_output", (text: unknown) => (typeof text === "string" ? text : null));
   for (const name of older) {
@@ -84,8 +81,7 @@ test("an older memories table keeps its vector when it gains a stable rowid", ()
   const stable = names.find((name) => fs.readFileSync(path.join(folder, name), "utf8").includes("memories_stable") || fs.readFileSync(path.join(folder, name), "utf8").includes("__new_memories"));
   assert.ok(stable, "stable rowid migration is missing");
   const older = names.filter((name) => name < stable);
-  const file = path.join(os.tmpdir(), `orbit-memory-rowid-${process.pid}.db`);
-  fs.rmSync(file, { force: true });
+  const file = path.join(dataDirectory(), "memory-rowid.db");
   const db = new Database(file);
   db.function("orbit_clean_output", (text: unknown) => (typeof text === "string" ? text : null));
   const sqliteVec = require("sqlite-vec") as { load: (database: Database.Database) => void };
@@ -126,8 +122,7 @@ test("vectors made without task prefixes are cleared and the memory stays", () =
   const names = fs.readdirSync(folder).filter((name) => name.endsWith(".sql")).sort();
   const reembed = names.find((name) => name.includes("memories_reembed"));
   assert.ok(reembed, "re-embed migration is missing");
-  const file = path.join(os.tmpdir(), `orbit-memory-reembed-${process.pid}.db`);
-  fs.rmSync(file, { force: true });
+  const file = path.join(dataDirectory(), "memory-reembed.db");
   const db = new Database(file);
   db.function("orbit_clean_output", (text: unknown) => (typeof text === "string" ? text : null));
   const sqliteVec = require("sqlite-vec") as { load: (database: Database.Database) => void };
