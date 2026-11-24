@@ -4,6 +4,22 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- An artifact preview can no longer load another web page into its frame, so its code cannot send data out in that page's URL. (#132)
+- A chat turn without web search keeps its fifth and last model step for an answer. That step offers only `render_ui` and gets the earlier tool calls as JSON data, so a turn that calls tools on every step no longer ends with tool cards and no reply. (#126)
+- Tab reaches Copy, Edit and Regenerate on earlier messages too, not only on the last reply. With a mouse they still show on hover, and they also show when they take focus. (#125)
+- A memory save or delete that fails on the network shows "Could not save" or "Could not delete" inside that memory's row, so the line stays in view when the list is scrolled. A failed delete closes its dialog so the line is visible. (#124)
+- A Docker build no longer copies a `data/` database, `auth-secret`, `.env` file, `node_modules`, `.next` or `.verify/` folder from a subfolder, or any agent worktree under `.claude/` or `.worktrees/`, into the image. (#118)
+- `Alt+Up` and `Alt+Down` pressed in the composer or another text field no longer move focus to a prompt. (#120)
+- A code sandbox container stops at ten seconds and is removed even when the Orbit process dies during the run. The server log names each leftover container it removes. (#122)
+- A chat message with a long run of letters no longer blocks Orbit for seconds while it looks up memories. (#115)
+- A memory search no longer waits for an Ollama check. It answers from SQLite alone. The embeddings line on the Memory page updates when the page loads and after a save or delete. (#141)
+- When the sign-out request fails, Sign out stays on the page and shows "Could not sign out". It no longer leaves the chat while the session may still be valid, or fails with no message. (#139)
+- A turn that calls no GitHub tool no longer connects to GitHub, so that reply no longer waits up to 10 seconds for a connection when GitHub is slow or down. A turn that already opened a client still waits for the close. The close request itself still has no deadline. (#136)
+- When Ollama is down, the nightly dream no longer sends chats to the model. The night fails with the Ollama error on `/memory`, and the next night retries those chats. (#121)
+- Markdown images in chat replies and reasoning appear as links that open on click. (#114)
+- Orbit's API answers 403 to a write from another origin, so a page on another port of the same host cannot post a chat or call `/api/models` with your session. (#116)
+- An HTML, SVG or React block in a reply's Thought no longer takes over the reply's Preview, and closing Thought keeps the reply's Preview working. Blocks in Thought have no Preview button. (#137)
+- The command palette says Could not search when a message search fails. It no longer says No results while the search is still running. (#138)
 - An interrupted generated view shows Stopped instead of an empty cancelled tool card.
 - Set `ORBIT_VERIFY_PORT` to run verify-orbit on another port when the deployment owns `3210`. The default stays `3210`.
 - Override Drizzle tooling's `@esbuild-kit/core-utils` dependency to use patched `esbuild` 0.25.12, removing GHSA-67mh-4wv8-2f99. (#71)
@@ -13,6 +29,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - Settings can remove a saved GitHub token. The stored token is cleared and GitHub tools stop.
 - Check says "GitHub rejected the token (bad request)." when GitHub answers HTTP 400.
 - Keep earlier prompts and replies when editing or regenerating. Switch versions with the message arrows. Reload opens the last written branch.
+- `npm test` now checks that the model list never reuses the saved key for a different base URL. It also checks the model cache, the OpenCode Go fallback, and the reasoning retry. These tests replace `scripts/provider-check.ts`, which nothing ran. (#129)
+- A forged `X-Forwarded-For` header no longer gets around the sign-in rate limit. Every client now shares one limit per auth path, such as 3 sign-in attempts per 10 seconds. (#117)
 
 ### Changed
 
