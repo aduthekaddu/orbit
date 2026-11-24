@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- A code sandbox container stops at ten seconds and is removed even when the Orbit process dies during the run. The server log names each leftover container it removes. (#122)
 - A chat message with a long run of letters no longer blocks Orbit for seconds while it looks up memories. (#115)
 - A memory search no longer waits for an Ollama check. It answers from SQLite alone. The embeddings line on the Memory page updates when the page loads and after a save or delete. (#141)
 - When the sign-out request fails, Sign out stays on the page and shows "Could not sign out". It no longer leaves the chat while the session may still be valid, or fails with no message. (#139)
