@@ -257,25 +257,45 @@ export default () => {
   "artifact-error": ["html", `<h1>Artifact error</h1><script>throw new Error('Artifact exploded');</script>`],
 };
 
+function textOf(content) {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => (part && typeof part === "object" && typeof part.text === "string" ? part.text : ""))
+      .join("");
+  }
+  return "";
+}
+
+// The last model step sends the whole conversation as one JSON user message.
+// Read the latest user entry in it, so the mock answers the turn it is in.
+function historyOf(content) {
+  if (typeof content !== "string" || !content.trimStart().startsWith("[")) return null;
+  try {
+    const parsed = JSON.parse(content);
+    if (!Array.isArray(parsed)) return null;
+    if (!parsed.every((entry) => entry && typeof entry.role === "string" && "content" in entry)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 function lastUserText(body) {
   const messages = Array.isArray(body?.messages) ? body.messages : [];
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (!message || message.role !== "user") continue;
-    if (typeof message.content === "string") return message.content;
-    if (Array.isArray(message.content)) {
-      return message.content
-        .map((part) => (part && typeof part === "object" && typeof part.text === "string" ? part.text : ""))
-        .join("");
-    }
+    return textOf(message.content);
   }
   return "";
 }
 
 function scenarioOf(text) {
-  let last = null;
-  for (const match of text.matchAll(/\[qa:([a-z-]+)\]/g)) last = match;
-  return last?.[1] ?? "text";
+  const history = historyOf(text);
+  const source = history ? textOf([...history].reverse().find((entry) => entry?.role === "user")?.content) : text;
+  const match = /\[qa:([a-z-]+)\]/.exec(source);
+  return match?.[1] ?? "text";
 }
 
 function firstGithubLink(value) {
