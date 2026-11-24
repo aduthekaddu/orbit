@@ -554,16 +554,37 @@ finally:
   await t.test("a run reports a timeout when its container stops itself before Orbit's timer fires", async (t) => {
     t.mock.timers.enable({ apis: ["setTimeout"] });
     const running = runPython('print("before-timeout")\nwhile True: pass');
+    // The mocked clock stays frozen so Orbit's own timer cannot fire, and the OOM flag poll
+    // sleeps on that clock. Watch for the container's own limit with no mocked sleep, then
+    // move mock time only after the program has stopped, so the poll can give up without
+    // Orbit's timer ever firing.
+    const programStopped = (async () => {
+      const deadline = Date.now() + 20_000;
+      while (Date.now() < deadline) {
+        const containers = await docker.listContainers({ filters: { label: ["orbit.sandbox=true"], status: ["running"] } });
+        if (containers.length > 0) {
+          await docker.getContainer(containers[0]!.Id).wait();
+          return;
+        }
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      throw new Error("the program's container never started");
+    })();
+    let ticker: ReturnType<typeof setInterval> | undefined;
     let guard: ReturnType<typeof setInterval> | undefined;
     try {
       const result = await Promise.race([
-        running,
+        programStopped.then(() => {
+          ticker = setInterval(() => t.mock.timers.tick(50), 50);
+          return running;
+        }),
         new Promise<"pending">((resolve) => { guard = setInterval(() => resolve("pending"), 15_000); }),
       ]);
       assert.ok(result !== "pending", "the container must stop at its own ten-second limit");
       assert.deepEqual({ ...result, durationMs: 0 }, { stdout: "before-timeout\n", stderr: "", exitCode: null, durationMs: 0, timedOut: true, truncated: false });
     } finally {
       clearInterval(guard);
+      clearInterval(ticker);
       t.mock.timers.tick(10_000);
       t.mock.timers.reset();
       await running;

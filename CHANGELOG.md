@@ -4,6 +4,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- A code run the memory limit kills no longer loses its Out of memory mark. Docker can record the kill after the run's exit event, and one read of the flag missed it, so the card sometimes said Exit 137 instead. (#66)
+
 - An artifact preview can no longer load another web page into its frame, so its code cannot send data out in that page's URL. (#132)
 - A chat turn without web search keeps its fifth and last model step for an answer. That step offers only `render_ui` and gets the earlier tool calls as JSON data, so a turn that calls tools on every step no longer ends with tool cards and no reply. (#126)
 - Tab reaches Copy, Edit and Regenerate on earlier messages too, not only on the last reply. With a mouse they still show on hover, and they also show when they take focus. (#125)

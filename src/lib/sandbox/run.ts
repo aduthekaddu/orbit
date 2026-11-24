@@ -1,19 +1,31 @@
 import Docker from "dockerode";
 import { Duplex, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
+import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import { containerSpec, RUN_TIMEOUT_SECONDS, type RunCodeInput, type RunCodeOutput } from "./spec";
 
 const OUTPUT_LIMIT = 65_536;
 const RUN_TIMEOUT_MS = RUN_TIMEOUT_SECONDS * 1000;
+const MEMORY_CHECK_INTERVAL_MS = 50;
+const MEMORY_CHECK_TIMEOUT_MS = 1_000;
 const waitResultSchema = z.object({ StatusCode: z.number().int() });
 const SIGKILL_EXIT = 137;
 
+// Docker records the OOM flag from the container's OOM event, which can arrive after the exit
+// event that container.wait() resolves on, so a single inspect can see the flag unset. Re-read
+// the flag until Docker confirms the kill, and return false only when the flag does not appear
+// within the window: an exit 137 without the flag can have another cause.
 export async function killedForMemory(container: Pick<Docker.Container, "inspect">): Promise<boolean> {
-  try {
-    return (await container.inspect()).State?.OOMKilled === true;
-  } catch {
-    return false;
+  const deadline = performance.now() + MEMORY_CHECK_TIMEOUT_MS;
+  while (true) {
+    try {
+      if ((await container.inspect()).State?.OOMKilled === true) return true;
+    } catch {
+      return false;
+    }
+    if (performance.now() >= deadline) return false;
+    await delay(MEMORY_CHECK_INTERVAL_MS);
   }
 }
 
