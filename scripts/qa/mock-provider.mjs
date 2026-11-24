@@ -273,8 +273,9 @@ function lastUserText(body) {
 }
 
 function scenarioOf(text) {
-  const match = /\[qa:([a-z-]+)\]/.exec(text);
-  return match?.[1] ?? "text";
+  let last = null;
+  for (const match of text.matchAll(/\[qa:([a-z-]+)\]/g)) last = match;
+  return last?.[1] ?? "text";
 }
 
 function firstGithubLink(value) {
