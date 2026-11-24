@@ -56,29 +56,55 @@ if (seed !== undefined) {
 }
 
 // One root for every file's data directory (see test-data-dir.mjs). A file killed by a signal
-// cannot clean up after itself, so the runner removes the whole root when the run ends.
-// On SIGINT or SIGTERM it aborts queued files, stops the files still running and waits for
-// them to exit, so none recreates the root afterwards. Only a SIGKILL of this runner leaves
-// the root behind.
+// cannot clean up after itself, so the runner removes finished file directories and the whole
+// root when the run ends. On SIGINT or SIGTERM it aborts queued files, stops the files still
+// running and waits until each process has exited and been reaped, so none outlives the runner
+// or recreates the root afterwards. Only a SIGKILL of this runner leaves the root behind.
 const root = mkdtempSync(join(tmpdir(), "orbit-test-run-"));
 process.env.ORBIT_TEST_ROOT = root;
 process.on("exit", () => rmSync(root, { recursive: true, force: true }));
 
-function runningFiles() {
-  const pids = [];
+function readPid(entry) {
+  try {
+    const raw = readFileSync(join(root, entry, "pid"), "utf8").trim();
+    if (!/^[1-9]\d*$/.test(raw)) return undefined;
+    const pid = Number(raw);
+    if (!Number.isSafeInteger(pid) || pid === process.pid) return undefined;
+    return pid;
+  } catch {
+    return undefined;
+  }
+}
+
+function isAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const tracked = new Set();
+
+function liveFiles() {
   for (const entry of readdirSync(root)) {
-    try {
-      const raw = readFileSync(join(root, entry, "pid"), "utf8").trim();
-      if (!/^[1-9]\d*$/.test(raw)) continue;
-      const pid = Number(raw);
-      if (!Number.isSafeInteger(pid) || pid === process.pid) continue;
-      process.kill(pid, 0);
-      pids.push(pid);
-    } catch {
-      // No pid yet, or the file already exited.
+    const pid = readPid(entry);
+    if (pid !== undefined && isAlive(pid)) tracked.add(pid);
+  }
+  for (const pid of tracked) {
+    if (!isAlive(pid)) tracked.delete(pid);
+  }
+  return [...tracked];
+}
+
+function pruneExitedFiles() {
+  for (const entry of readdirSync(root)) {
+    const pid = readPid(entry);
+    if (pid !== undefined && !isAlive(pid)) {
+      rmSync(join(root, entry), { recursive: true, force: true });
     }
   }
-  return pids;
 }
 
 const controller = new AbortController();
@@ -87,7 +113,7 @@ let forceKill = false;
 
 async function stopFiles(graceMs) {
   const termed = new Set();
-  for (let waited = 0, pids = runningFiles(); pids.length > 0; waited += 50, pids = runningFiles()) {
+  for (let waited = 0, pids = liveFiles(); pids.length > 0; waited += 50, pids = liveFiles()) {
     const hard = forceKill || waited >= graceMs;
     for (const pid of pids) {
       if (!hard && termed.has(pid)) continue;
@@ -106,7 +132,7 @@ for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
   process.on(signal, async () => {
     if (stopping) {
       forceKill = true;
-      for (const pid of runningFiles()) {
+      for (const pid of liveFiles()) {
         try {
           process.kill(pid, "SIGKILL");
         } catch {
@@ -116,6 +142,7 @@ for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
       return;
     }
     stopping = true;
+    liveFiles();
     controller.abort();
     await stopFiles(5000);
     process.exit(code);
@@ -140,7 +167,11 @@ tests.on("test:fail", countNotRun);
 
 let completed = false;
 tests.on("test:summary", ({ file, counts, success }) => {
-  if (file || stopping) return;
+  if (file) {
+    if (!stopping) pruneExitedFiles();
+    return;
+  }
+  if (stopping) return;
   completed = true;
   if (!success || counts.tests === 0) process.exitCode = 1;
   if (requireAll && (counts.passed !== counts.tests || notRun > 0)) {

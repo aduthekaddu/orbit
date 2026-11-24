@@ -207,7 +207,8 @@ test("a killed test file leaves nothing in the temp directory after the run", ()
 const hangs = `import fs from "node:fs";
 import { db } from ${JSON.stringify(dbModule)};
 test("hangs after opening the database", async () => {
-  fs.writeFileSync("ready.log", db.$client.name + "\\n" + process.pid);
+  fs.writeFileSync("ready.tmp", db.$client.name + "\\n" + process.pid);
+  fs.renameSync("ready.tmp", "ready.log");
   await new Promise((resolve) => setTimeout(resolve, 60_000));
 });`;
 
@@ -229,11 +230,12 @@ for (const [signal, code] of [["SIGTERM", 143], ["SIGINT", 130]] as const) {
     const ready = path.join(dir, "ready.log");
     let filePid: number | undefined;
     try {
-      for (let waited = 0; !fs.existsSync(ready) || !fs.readFileSync(ready, "utf8").includes("\n"); waited += 50) {
+      for (let waited = 0; !fs.existsSync(ready); waited += 50) {
         assert.ok(waited < 20_000, "the fixture never opened its database");
         await sleep(50);
       }
       filePid = Number(fs.readFileSync(ready, "utf8").split("\n")[1]);
+      assert.ok(Number.isSafeInteger(filePid) && filePid > 0, `unexpected fixture pid: ${filePid}`);
       assert.ok(fs.readdirSync(tmp).some((name) => name.startsWith("orbit-test-")));
       child.kill(signal);
       assert.equal(await exited, code);
@@ -245,6 +247,44 @@ for (const [signal, code] of [["SIGTERM", 143], ["SIGINT", 130]] as const) {
     }
   });
 }
+
+test("a stopped runner waits for a test file's exit handlers and OS exit before exiting", async () => {
+  const slowExit = `import fs from "node:fs";
+process.on("SIGTERM", () => process.exit(0));
+process.on("exit", () => {
+  const end = Date.now() + 300;
+  while (Date.now() < end) {}
+  fs.writeFileSync("exit-done.tmp", "done");
+  fs.renameSync("exit-done.tmp", "exit-done.log");
+});
+test("blocks in exit handler on SIGTERM", async () => {
+  fs.writeFileSync("ready.tmp", String(process.pid));
+  fs.renameSync("ready.tmp", "ready.log");
+  await new Promise((resolve) => setTimeout(resolve, 60_000));
+});`;
+  const { dir, env, tmp } = makeProject({ "slow-exit.test.ts": slowExit });
+  env.ORBIT_TEST_WORKERS = "1";
+  const child = spawn(process.execPath, [runner], { cwd: dir, env, stdio: "ignore" });
+  const exited = new Promise<number | null>((resolve) => child.on("exit", (status) => resolve(status)));
+  const ready = path.join(dir, "ready.log");
+  let filePid: number | undefined;
+  try {
+    for (let waited = 0; !fs.existsSync(ready); waited += 50) {
+      assert.ok(waited < 20_000, "the fixture never started");
+      await sleep(50);
+    }
+    filePid = Number(fs.readFileSync(ready, "utf8"));
+    assert.ok(Number.isSafeInteger(filePid) && filePid > 0, `unexpected fixture pid: ${filePid}`);
+    child.kill("SIGTERM");
+    assert.equal(await exited, 143);
+    assert.equal(isAlive(filePid), false, "the test file outlived the runner");
+    assert.equal(fs.existsSync(path.join(dir, "exit-done.log")), true, "the runner exited before the test file finished its exit handler");
+    assert.deepEqual(fs.readdirSync(tmp).filter((name) => name.startsWith("orbit-test-")), []);
+  } finally {
+    child.kill("SIGKILL");
+    if (filePid && isAlive(filePid)) process.kill(filePid, "SIGKILL");
+  }
+});
 
 test("a stopped runner aborts queued test files instead of spawning them", async () => {
   const roleScript = `import fs from "node:fs";
@@ -260,17 +300,20 @@ if (tryClaim("slot-1")) {
   process.on("SIGTERM", () => {
     setTimeout(() => {
       const dirs = fs.readdirSync(process.env.ORBIT_TEST_ROOT!).filter((name) => name.startsWith("orbit-test-data-"));
-      fs.writeFileSync("dirs-seen.log", String(dirs.length));
+      fs.writeFileSync("dirs-seen.tmp", String(dirs.length));
+      fs.renameSync("dirs-seen.tmp", "dirs-seen.log");
       process.exit(0);
     }, 600);
   });
   test("slow worker", async () => {
-    fs.writeFileSync("ready-1.log", String(process.pid));
+    fs.writeFileSync("ready-1.tmp", String(process.pid));
+    fs.renameSync("ready-1.tmp", "ready-1.log");
     await new Promise((resolve) => setTimeout(resolve, 60_000));
   });
 } else if (tryClaim("slot-2")) {
   test("fast worker", async () => {
-    fs.writeFileSync("ready-2.log", String(process.pid));
+    fs.writeFileSync("ready-2.tmp", String(process.pid));
+    fs.renameSync("ready-2.tmp", "ready-2.log");
     await new Promise((resolve) => setTimeout(resolve, 60_000));
   });
 } else {
@@ -304,6 +347,8 @@ if (tryClaim("slot-1")) {
     }
     pid1 = Number(fs.readFileSync(ready1, "utf8"));
     pid2 = Number(fs.readFileSync(ready2, "utf8"));
+    assert.ok(Number.isSafeInteger(pid1) && pid1 > 0, `unexpected slow worker pid: ${pid1}`);
+    assert.ok(Number.isSafeInteger(pid2) && pid2 > 0, `unexpected fast worker pid: ${pid2}`);
     child.kill("SIGTERM");
     assert.equal(await exited, 143);
     assert.equal(isAlive(pid1), false, "slow worker outlived the runner");
@@ -325,7 +370,8 @@ test("a second signal stops a SIGTERM-ignoring test file immediately without lea
 import { db } from ${JSON.stringify(dbModule)};
 process.on("SIGTERM", () => {});
 test("ignores SIGTERM after opening the database", async () => {
-  fs.writeFileSync("ready.log", db.$client.name + "\\n" + process.pid);
+  fs.writeFileSync("ready.tmp", db.$client.name + "\\n" + process.pid);
+  fs.renameSync("ready.tmp", "ready.log");
   await new Promise((resolve) => setTimeout(resolve, 60_000));
 });`;
   const { dir, env, tmp } = makeProject({ "stubborn.test.ts": stubborn });
@@ -335,11 +381,12 @@ test("ignores SIGTERM after opening the database", async () => {
   const ready = path.join(dir, "ready.log");
   let filePid: number | undefined;
   try {
-    for (let waited = 0; !fs.existsSync(ready) || !fs.readFileSync(ready, "utf8").includes("\n"); waited += 50) {
+    for (let waited = 0; !fs.existsSync(ready); waited += 50) {
       assert.ok(waited < 20_000, "the fixture never opened its database");
       await sleep(50);
     }
     filePid = Number(fs.readFileSync(ready, "utf8").split("\n")[1]);
+    assert.ok(Number.isSafeInteger(filePid) && filePid > 0, `unexpected fixture pid: ${filePid}`);
     child.kill("SIGINT");
     await sleep(200);
     assert.equal(isAlive(filePid), true, "expected the stubborn fixture to still be running after first SIGINT");
@@ -363,7 +410,8 @@ import { db } from ${JSON.stringify(dbModule)};
 test("creates an empty sibling pid file then hangs", async () => {
   const sibling = fs.mkdtempSync(path.join(process.env.ORBIT_TEST_ROOT!, "orbit-test-data-empty-"));
   fs.writeFileSync(path.join(sibling, "pid"), "");
-  fs.writeFileSync("ready.log", db.$client.name + "\\n" + process.pid);
+  fs.writeFileSync("ready.tmp", db.$client.name + "\\n" + process.pid);
+  fs.renameSync("ready.tmp", "ready.log");
   await new Promise((resolve) => setTimeout(resolve, 60_000));
 });`;
   const { dir, env, tmp } = makeProject({ "empty-pid.test.ts": emptyPid });
@@ -375,11 +423,12 @@ test("creates an empty sibling pid file then hangs", async () => {
   const ready = path.join(dir, "ready.log");
   let filePid: number | undefined;
   try {
-    for (let waited = 0; !fs.existsSync(ready) || !fs.readFileSync(ready, "utf8").includes("\n"); waited += 50) {
+    for (let waited = 0; !fs.existsSync(ready); waited += 50) {
       assert.ok(waited < 20_000, "the fixture never opened its database");
       await sleep(50);
     }
     filePid = Number(fs.readFileSync(ready, "utf8").split("\n")[1]);
+    assert.ok(Number.isSafeInteger(filePid) && filePid > 0, `unexpected fixture pid: ${filePid}`);
     child.kill("SIGTERM");
     const result = await exited;
     assert.deepEqual(result, { code: 143, signal: null });

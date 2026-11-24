@@ -7,11 +7,17 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const dir = fs.mkdtempSync(path.join(process.env.ORBIT_TEST_ROOT || os.tmpdir(), "orbit-test-data-"));
+const root = process.env.ORBIT_TEST_ROOT;
+const dir = fs.mkdtempSync(path.join(root || os.tmpdir(), "orbit-test-data-"));
 process.env.ORBIT_DATA_DIR = dir;
-// Lets the runner find this process and stop it on SIGINT or SIGTERM.
-const pidFile = path.join(dir, "pid");
-const pidTmp = `${pidFile}.tmp`;
-fs.writeFileSync(pidTmp, String(process.pid));
-fs.renameSync(pidTmp, pidFile);
-process.on("exit", () => fs.rmSync(dir, { recursive: true, force: true }));
+if (root) {
+  // Lets the runner find this process and stop it on SIGINT or SIGTERM.
+  // The runner removes this directory after the process exits, so the pid file
+  // stays visible through exit handlers and teardown until the process is gone.
+  const pidFile = path.join(dir, "pid");
+  const pidTmp = `${pidFile}.tmp`;
+  fs.writeFileSync(pidTmp, String(process.pid));
+  fs.renameSync(pidTmp, pidFile);
+} else {
+  process.on("exit", () => fs.rmSync(dir, { recursive: true, force: true }));
+}
