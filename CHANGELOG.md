@@ -14,12 +14,16 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - A chat message with a long run of letters no longer blocks Orbit for seconds while it looks up memories. (#115)
 - A memory search no longer waits for an Ollama check. It answers from SQLite alone. The embeddings line on the Memory page updates when the page loads and after a save or delete. (#141)
 - When the sign-out request fails, Sign out stays on the page and shows "Could not sign out". It no longer leaves the chat while the session may still be valid, or fails with no message. (#139)
+- A new chat's title request sends only the first 2,000 characters of the first message, not the whole message. A long paste is no longer sent to the model a second time. (#135)
 - A turn that calls no GitHub tool no longer connects to GitHub, so that reply no longer waits up to 10 seconds for a connection when GitHub is slow or down. A turn that already opened a client still waits for the close. The close request itself still has no deadline. (#136)
 - When Ollama is down, the nightly dream no longer sends chats to the model. The night fails with the Ollama error on `/memory`, and the next night retries those chats. (#121)
 - Markdown images in chat replies and reasoning appear as links that open on click. (#114)
 - Orbit's API answers 403 to a write from another origin, so a page on another port of the same host cannot post a chat or call `/api/models` with your session. (#116)
 - An HTML, SVG or React block in a reply's Thought no longer takes over the reply's Preview, and closing Thought keeps the reply's Preview working. Blocks in Thought have no Preview button. (#137)
 - The command palette says Could not search when a message search fails. It no longer says No results while the search is still running. (#138)
+- `npm run lint` checks the React hook rules `rules-of-hooks` and `exhaustive-deps` in `src/` with oxlint. CI shows the findings but does not fail on them yet. (#145)
+- Unit tests check the dream claim, the chat head, and the branch and search migrations in the shipped code, not in the slice plans. Editing a plan no longer fails `npm test`. (#144)
+- A search hit on an older branch opens that branch through to its newest message, so the hit's reply and later turns stay on screen. Reloading with an artifact preview open keeps those turns visible. A prompt sent from there follows the end of the branch. (#128)
 - An interrupted generated view shows Stopped instead of an empty cancelled tool card.
 - Set `ORBIT_VERIFY_PORT` to run verify-orbit on another port when the deployment owns `3210`. The default stays `3210`.
 - The verify-orbit mock provider and the mock Ollama in `scripts/qa/ci-e2e.sh` take a free port from the OS, so two runs on one host no longer collide. Give each run its own `ORBIT_VERIFY_PORT`, outside the OS's automatic port range. verify-orbit refuses one inside it.

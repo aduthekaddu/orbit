@@ -28,8 +28,6 @@ after(() => {
 before(async () => {
   const repo = process.cwd();
   sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-messages-"));
-  process.env.ORBIT_DATA_DIR = path.join(sandbox, "data");
-  fs.mkdirSync(process.env.ORBIT_DATA_DIR);
   fs.cpSync(path.join(repo, "drizzle"), path.join(sandbox, "drizzle"), { recursive: true });
   process.chdir(sandbox);
 

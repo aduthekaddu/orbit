@@ -17,6 +17,7 @@ export function pathTo(messages: StoredMessage[], headId: string | null): Stored
   return path.reverse();
 }
 
+// `messages` must be in creation order, as `messageRepository` returns them.
 export function focusedHead(
   messages: readonly { id: string; parentId: string | null }[],
   storedHeadId: string | null,
@@ -42,7 +43,15 @@ export function focusedHead(
     active.add(id);
     id = byId.get(id)?.parentId ?? null;
   }
-  return active.has(messageId) ? storedHeadId : messageId;
+  if (active.has(messageId)) return storedHeadId;
+  const below = new Set([messageId]);
+  let head = messageId;
+  for (const message of messages) {
+    if (message.parentId === null || !below.has(message.parentId)) continue;
+    below.add(message.id);
+    head = message.id;
+  }
+  return head;
 }
 
 export function isPath(messages: Pick<StoredMessage, "id" | "parentId">[], incoming: { id: string }[]): boolean {

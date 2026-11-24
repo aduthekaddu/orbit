@@ -1,4 +1,4 @@
-import { pathTo, type toRepository } from "../chat-tree";
+import { focusedHead, type toRepository } from "../chat-tree";
 
 type History = ReturnType<typeof toRepository>;
 
@@ -7,7 +7,7 @@ export function artifactHistory(history: History, key: string | undefined): Hist
   if (!match) return history;
   const id = match[1];
   if (!history.messages.some(({ message }) => message.id === id && message.role === "assistant")) return history;
-  const messages = history.messages.map(({ message, parentId }) => ({ ...message, parentId }));
-  if (pathTo(messages, history.headId).some((message) => message.id === id)) return history;
-  return { ...history, headId: id };
+  const rows = history.messages.map(({ message, parentId }) => ({ id: message.id, parentId }));
+  const headId = focusedHead(rows, history.headId, id);
+  return headId === history.headId ? history : { ...history, headId };
 }

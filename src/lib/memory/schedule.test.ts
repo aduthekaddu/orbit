@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import test, { before } from "node:test";
 
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-dream-schedule-"));
-process.env.ORBIT_DATA_DIR = dataDir;
 delete process.env.ORBIT_OLLAMA_URL;
 delete process.env.ORBIT_DREAM_HOUR;
 
