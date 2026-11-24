@@ -20,7 +20,7 @@ env:
 jobs:
   checks:
     name: Typecheck, test, build (Node ${{ matrix.node }})
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -37,6 +37,12 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Typecheck
         run: npm run typecheck
+      - name: Lint the React hooks
+        if: matrix.node == '22'
+        # Annotations are posted without failing the job. Drop continue-on-error
+        # in a later change so lint is a required check (part of #145).
+        continue-on-error: true
+        run: npm run lint -- --format github
       - name: Check the TLA+ models
         if: matrix.node == '22'
         run: scripts/ci/tlc.sh
@@ -52,7 +58,7 @@ jobs:
 
   e2e:
     name: End to end (${{ matrix.suite }})
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
       contents: read
@@ -90,7 +96,7 @@ jobs:
 
   docker:
     name: Docker image
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -107,6 +113,8 @@ jobs:
         run: |
           docker compose --file docker-compose.yml config --quiet
           docker compose --file docker-compose.yml --file docker-compose.sandbox.yml config --quiet
+      - name: Keep nested secrets and worktrees out of the build context
+        run: scripts/qa/assert-docker-context.sh
       - name: Build the image
         run: docker build --tag orbit:ci .
       - name: Start the image
@@ -129,7 +137,7 @@ jobs:
 
   workflows:
     name: Workflow files
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -154,7 +162,7 @@ jobs:
     name: Full suite passed
     if: always()
     needs: [checks, e2e, docker, workflows]
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
     steps:

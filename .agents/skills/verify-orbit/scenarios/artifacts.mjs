@@ -1,3 +1,6 @@
+import { execFileSync } from "node:child_process";
+import path from "node:path";
+
 async function security(frame, origin, kind, step) {
   const state = await frame.locator("body").evaluate(async (_body, appOrigin) => {
     let parentBlocked = false;
@@ -195,4 +198,38 @@ export default async function artifacts({ page, origin, step, shot }) {
   await mobile.getByRole("button", { name: "Close", exact: true }).click();
   step("phone Close removes the artifact URL parameter", !new URL(mobile.url()).searchParams.has("artifact"));
   await phone.close();
+
+  // No mock scenario streams reasoning, so save a reply whose reasoning drafts an HTML block the way the chat route saves one.
+  const { id: draftedId } = await (await page.request.post(`${origin}/api/chats`)).json();
+  const draftedParts = [
+    { type: "step-start" },
+    { type: "reasoning", text: "```html\n<h1>Reasoning draft</h1>\n```", state: "done" },
+    { type: "text", text: "```html\n<h1>Reply artifact</h1>\n```", state: "done" },
+  ];
+  execFileSync(process.execPath, ["--import", "tsx", "-e", `
+    const { finishChatReply, planChatWrite } = require(${JSON.stringify(path.resolve("src/lib/messages.ts"))});
+    const [id, parts] = process.argv.slice(1);
+    const plan = planChatWrite(id, [{ id: id + "-prompt", role: "user", parts: [{ type: "text", text: "Draft, then answer" }] }]);
+    if ("error" in plan || !finishChatReply(plan, JSON.parse(parts))) throw new Error("reasoning fixture was not saved");
+  `, draftedId, JSON.stringify(draftedParts)], { cwd: path.resolve(".verify/sandbox"), env: { ...process.env, ORBIT_DATA_DIR: path.resolve(".verify/sandbox/data") }, stdio: "pipe" });
+  await page.goto(`${origin}/c/${draftedId}`);
+  const thought = reply.getByRole("button", { name: "Thought", exact: true });
+  const draft = reply.locator("pre").filter({ hasText: "Reasoning draft" });
+  async function previewShows() {
+    await previews.last().click();
+    if (!await iframe.waitFor({ timeout: 10_000 }).then(() => true, () => false)) return "no preview frame";
+    const heading = await frame.locator("h1").innerText({ timeout: 10_000 });
+    await close();
+    return heading;
+  }
+  await thought.click();
+  await draft.waitFor();
+  step("open Thought shows no Preview button for its HTML block", await previews.count() === 1, `${await previews.count()} Preview buttons`);
+  await shot("reasoning-open");
+  const whileOpen = await previewShows();
+  step("reply Preview shows the reply's artifact while Thought is open", whileOpen === "Reply artifact", `shows ${whileOpen}`);
+  await thought.click();
+  await draft.waitFor({ state: "hidden" });
+  const afterClose = await previewShows();
+  step("reply Preview shows the reply's artifact after Thought opens and closes", afterClose === "Reply artifact", `shows ${afterClose}`);
 }

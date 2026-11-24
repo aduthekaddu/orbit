@@ -2,7 +2,7 @@ Doc ID: orbit/adr-0001
 
 # 0001. Run CI on romper with runner-up KVM places
 
-Status: Accepted (by the owner, 2026-11-14)
+Status: Superseded by [ADR 0003](0003-ci-on-github-hosted-runners.md) on 2026-11-22. The runbook `docs/ci-runners.md` and `scripts/ci-runner/` were deleted with it; they remain in git history.
 
 ## Context and problem
 
@@ -10,7 +10,7 @@ GitHub's included Actions minutes for this account ran out in November 2026, and
 
 ## Decision
 
-Every job's runner comes from the repository variable `CI_RUNNER`: `runs-on: ${{ vars.CI_RUNNER || '<the hosted label>' }}`. With `CI_RUNNER=romper-linux`, jobs run on romper through [runner-up](https://github.com/kunchenguid/runner-up), one fresh KVM virtual machine per job. The virtual machines run as a separate user `ci`, behind the `ci_guard` firewall and a 9 GB memory cap. romper runs two places of 4 cores and 4 GB. The same pool serves every private repository of the account that adds itself (see "Add a repository" in [the runbook](../ci-runners.md)).
+Every job's runner comes from the repository variable `CI_RUNNER`: `runs-on: ${{ vars.CI_RUNNER || '<the hosted label>' }}`. With `CI_RUNNER=romper-linux`, jobs run on romper through [runner-up](https://github.com/kunchenguid/runner-up), one fresh KVM virtual machine per job. The virtual machines run as a separate user `ci`, behind the `ci_guard` firewall and a 9 GB memory cap. romper runs two places of 4 cores and 4 GB. The same pool serves every private repository of the account that adds itself (see "Add a repository" in the runbook, `docs/ci-runners.md`, now deleted).
 
 ## Alternatives and why rejected
 
@@ -29,4 +29,4 @@ Every job's runner comes from the repository variable `CI_RUNNER`: `runs-on: ${{
 ## Evidence
 
 - Pull request [aduthekaddu/orbit#67](https://github.com/aduthekaddu/orbit/pull/67) and its proof comment.
-- [docs/ci-runners.md](../ci-runners.md) for the setup, the firewall and the risks that stay open.
+- `docs/ci-runners.md` (deleted, in git history before ADR 0003) for the setup, the firewall and the risks that stayed open.
