@@ -1,6 +1,6 @@
 import { createMCPClient, type MCPClient } from "@ai-sdk/mcp";
 import type { Tool } from "ai";
-import { redactValue, sanitize } from "../chat-errors";
+import { REDACTED, Redactor, type StoredCredentials } from "../chat-errors";
 import { githubLogin } from "./github-links";
 
 export const DEFAULT_GITHUB_MCP_URL = "https://api.githubcopilot.com/mcp/";
@@ -19,10 +19,7 @@ const LIST_CACHE_MS = 5 * 60 * 1000;
 const GITHUB_SETUP_MS = 10_000;
 const PREFIX = "github_";
 
-export type GithubSettings = {
-  token: string;
-  mcpUrl: string;
-};
+export type GithubSettings = StoredCredentials & { githubMcpUrl: string };
 
 export type McpToolSet = {
   tools: Record<string, Tool>;
@@ -63,24 +60,24 @@ function httpStatus(error: unknown): number | undefined {
   return typeof status === "number" ? status : undefined;
 }
 
-export function githubFailureText(error: unknown, token: string): string {
+export function githubFailureText(error: unknown, redact: Redactor): string {
   const status = httpStatus(error);
-  const message = sanitize(error instanceof Error ? error.message : "GitHub tools unavailable", token);
+  const message = redact.text(error instanceof Error ? error.message : "GitHub tools unavailable");
   if (status === 400 || /\bHTTP 400\b/i.test(message)) return "GitHub rejected the token (bad request).";
   if (status === 401 || status === 403 || /401|403|unauthorized|forbidden/i.test(message)) return "GitHub rejected the token.";
   return "GitHub is unavailable.";
 }
 
-function redactTool(tool: Tool, token: string): Tool {
+function redactTool(tool: Tool, redact: Redactor): Tool {
   const execute = tool.execute?.bind(tool);
   if (!execute) return tool;
   return {
     ...tool,
     execute: async (input, options) => {
       try {
-        return redactValue(await execute(input, options), token);
+        return redact.value(await execute(input, options));
       } catch (error) {
-        if (error instanceof Error) throw new Error(sanitize(error.message, token));
+        if (error instanceof Error) throw new Error(redact.diagnostic(error.message));
         throw error;
       }
     },
@@ -91,17 +88,17 @@ function emptySet(): McpToolSet {
   return { tools: {}, close: async () => {} };
 }
 
-function prefixedTools(raw: Record<string, Tool>, token: string): Record<string, Tool> {
+function prefixedTools(raw: Record<string, Tool>, redact: Redactor): Record<string, Tool> {
   const tools: Record<string, Tool> = {};
   for (const [name, tool] of Object.entries(raw)) {
-    tools[name.startsWith(PREFIX) ? name : `${PREFIX}${name}`] = redactTool(tool, token);
+    tools[name.startsWith(PREFIX) ? name : `${PREFIX}${name}`] = redactTool(tool, redact);
   }
   return tools;
 }
 
 // A warm turn returns the cached tools at once and starts the client, with the full setup time, at its first GitHub tool call.
 // A turn that calls no GitHub tool opens no connection, so its close returns at once.
-function warmTools(cached: CachedList, connect: () => Promise<MCPClient>, token: string, signal: AbortSignal | undefined): McpToolSet {
+function warmTools(cached: CachedList, connect: () => Promise<MCPClient>, redact: Redactor, signal: AbortSignal | undefined): McpToolSet {
   let ready: Promise<{ client: MCPClient; tools: Record<string, Tool> }> | undefined;
   let closed = false;
   const start = () => {
@@ -109,7 +106,7 @@ function warmTools(cached: CachedList, connect: () => Promise<MCPClient>, token:
     if (!ready) {
       ready = connect().then((client) => ({ client, tools: client.toolsFromDefinitions(cached.definitions) as Record<string, Tool> }));
       ready.catch((error: unknown) => {
-        if (!signal?.aborted) console.error("github tools unavailable", githubFailureText(error, token));
+        if (!signal?.aborted) redact.logError("github tools unavailable", githubFailureText(error, redact));
       });
     }
     return ready;
@@ -131,7 +128,7 @@ function warmTools(cached: CachedList, connect: () => Promise<MCPClient>, token:
     const started = await ready?.catch(() => null);
     if (started) await started.client.close();
   };
-  return { tools: prefixedTools(raw, token), close };
+  return { tools: prefixedTools(raw, redact), close };
 }
 
 async function listedTools(client: MCPClient, signal: AbortSignal | undefined, timeoutMs: () => number): Promise<ListPage> {
@@ -145,11 +142,15 @@ async function listedTools(client: MCPClient, signal: AbortSignal | undefined, t
   return { ...page, tools, nextCursor: undefined };
 }
 
-export async function githubTools(settings: GithubSettings, input?: { signal?: AbortSignal; now?: number; tools?: string; setupMs?: number }): Promise<McpToolSet> {
-  const target = githubMcpTarget(settings.mcpUrl);
+export async function githubTools(
+  settings: GithubSettings,
+  input?: { signal?: AbortSignal; now?: number; tools?: string; setupMs?: number; redact?: Redactor },
+): Promise<McpToolSet> {
+  const target = githubMcpTarget(settings.githubMcpUrl);
   if (!target.ok) throw new GithubMcpUrlError();
   const mcpUrl = target.url;
-  const token = settings.token;
+  const token = settings.githubToken;
+  const redact = input?.redact ?? new Redactor(settings);
   const extraTools = input?.tools ?? "";
   const setupMs = input?.setupMs ?? GITHUB_SETUP_MS;
   const started = Date.now();
@@ -179,41 +180,53 @@ export async function githubTools(settings: GithubSettings, input?: { signal?: A
   const now = input?.now ?? Date.now();
   const key = `${mcpUrl}\n${GITHUB_TOOLSETS}\n${extraTools}\n${token}`;
   const cached = listCache.get(key);
-  if (cached && cached.expires > now) return warmTools(cached, () => connect(setupMs), token, input?.signal);
+  if (cached && cached.expires > now) return warmTools(cached, () => connect(setupMs), redact, input?.signal);
   try {
     client = await connect(timeoutMs());
     const definitions = await listedTools(client, input?.signal, timeoutMs);
     const raw = client.toolsFromDefinitions(definitions) as Record<string, Tool>;
     const shapes = Object.fromEntries(Object.entries(raw).map(([name, tool]) => [name, { ...tool, execute: undefined } as Tool]));
     listCache.set(key, { expires: now + LIST_CACHE_MS, definitions, shapes });
-    return { tools: prefixedTools(raw, token), close };
+    return { tools: prefixedTools(raw, redact), close };
   } catch (error) {
     await close();
     throw error;
   }
 }
 
-export async function openGithubTurn(settings: { githubToken: string; githubMcpUrl: string }, signal?: AbortSignal, options?: { setupMs?: number }): Promise<McpToolSet> {
+export async function openGithubTurn(settings: GithubSettings, signal?: AbortSignal, options?: { setupMs?: number }): Promise<McpToolSet> {
   if (!settings.githubToken) return emptySet();
   try {
-    return await githubTools({ token: settings.githubToken, mcpUrl: settings.githubMcpUrl }, { signal, setupMs: options?.setupMs });
+    return await githubTools(settings, { signal, setupMs: options?.setupMs });
   } catch (error) {
     if (signal?.aborted) throw error;
-    console.error("github tools unavailable", githubFailureText(error, settings.githubToken));
+    const redact = new Redactor(settings);
+    redact.logError("github tools unavailable", githubFailureText(error, redact));
     return emptySet();
   }
 }
 
-export async function checkGithub(settings: GithubSettings, signal?: AbortSignal): Promise<{ ok: true; login: string } | { ok: false; error: string }> {
-  if (!settings.token.trim()) return { ok: false, error: "Add a GitHub token." };
+// A token submitted with the check replaces the stored one for this request, and the redactor covers both.
+export async function checkGithub(
+  stored: GithubSettings,
+  submitted: { token?: string; mcpUrl?: string } = {},
+  signal?: AbortSignal,
+): Promise<{ ok: true; login: string } | { ok: false; error: string }> {
+  const settings = {
+    ...stored,
+    githubToken: submitted.token?.trim() || stored.githubToken,
+    githubMcpUrl: submitted.mcpUrl ?? stored.githubMcpUrl,
+  };
+  const redact = new Redactor(stored, settings);
+  if (!settings.githubToken.trim()) return { ok: false, error: "Add a GitHub token." };
   try {
-    const opened = await githubTools({ token: settings.token, mcpUrl: settings.mcpUrl }, { signal, tools: GITHUB_CHECK_TOOLS });
+    const opened = await githubTools(settings, { signal, tools: GITHUB_CHECK_TOOLS, redact });
     try {
       const tool = opened.tools.github_get_me;
       if (!tool?.execute) return { ok: false, error: "GitHub is unavailable." };
-      const result = redactValue(await tool.execute({}, { toolCallId: "github-check", messages: [], abortSignal: signal, context: undefined }), settings.token);
-      const login = githubLogin(result);
-      if (!login || login.includes(settings.token) || login.includes("[redacted]")) return { ok: false, error: "GitHub did not return a login." };
+      // githubLogin decodes JSON inside the masked result, which can spell a credential again.
+      const login = githubLogin(await tool.execute({}, { toolCallId: "github-check", messages: [], abortSignal: signal, context: undefined }));
+      if (!login || redact.text(login).includes(REDACTED)) return { ok: false, error: "GitHub did not return a login." };
       return { ok: true, login };
     } finally {
       await opened.close();
@@ -221,6 +234,6 @@ export async function checkGithub(settings: GithubSettings, signal?: AbortSignal
   } catch (error) {
     if (signal?.aborted) throw error;
     if (error instanceof GithubMcpUrlError) return { ok: false, error: error.message };
-    return { ok: false, error: githubFailureText(error, settings.token) };
+    return { ok: false, error: githubFailureText(error, redact) };
   }
 }
