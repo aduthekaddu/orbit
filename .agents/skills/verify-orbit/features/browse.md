@@ -108,6 +108,19 @@ PASS session ends after Sign out
 
 Screenshots: `network-error.png`, `http-error.png`, `signed-out.png`.
 
+### thread-map
+
+Sends three `[qa:plain]` prompts. Types two lines in the composer and presses `Alt+ArrowUp`. Then moves focus off the composer without scrolling and reads the current prompt from the map. Presses `Alt+ArrowUp` again and checks that focus moves to the prompt before it.
+
+Pass lines:
+
+```
+PASS Alt+Up in the composer keeps focus in the composer
+PASS Alt+Up on the page moves focus to the previous prompt
+```
+
+Screenshots: `composer.png`, `page.png`.
+
 ## Gotchas
 
 - The mock counts `fail-first` failures for each prompt text. `retry-stop` adds the time to the prompt, so a second run fails three times again.
