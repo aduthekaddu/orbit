@@ -19,6 +19,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - Markdown images in chat replies and reasoning appear as links that open on click. (#114)
 - Orbit's API answers 403 to a write from another origin, so a page on another port of the same host cannot post a chat or call `/api/models` with your session. (#116)
 - An HTML, SVG or React block in a reply's Thought no longer takes over the reply's Preview, and closing Thought keeps the reply's Preview working. Blocks in Thought have no Preview button. (#137)
+- The command palette says Could not search when a message search fails. It no longer says No results while the search is still running. (#138)
 - `npm run lint` checks the React hook rules `rules-of-hooks` and `exhaustive-deps` in `src/` with oxlint. CI shows the findings but does not fail on them yet. (#145)
 - An interrupted generated view shows Stopped instead of an empty cancelled tool card.
 - Set `ORBIT_VERIFY_PORT` to run verify-orbit on another port when the deployment owns `3210`. The default stays `3210`.
