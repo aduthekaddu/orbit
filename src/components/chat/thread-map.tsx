@@ -90,6 +90,7 @@ export function ThreadMap({ viewport }: { viewport: RefObject<HTMLElement | null
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.matches("input, textarea, select"))) return;
       const target = shortcutTarget(event, current, turns.length);
       if (target === null) return;
       event.preventDefault();

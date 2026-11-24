@@ -71,7 +71,7 @@ node .agents/skills/verify-orbit/verify.mjs browse sandbox-validation
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
-`[qa:run-long]` repeats a 20,001 character program and `[qa:run-ruby]` repeats an unsupported language until the step limit. Require every saved error to stay under 400 characters, name the reason, and leave out the program. The card must show the same reason before and after a reload. The check prints the saved error lengths and the message size.
+`[qa:run-long]` repeats a 20,001 character program and `[qa:run-ruby]` repeats an unsupported language while the step offers `run_code`. The fifth and last step offers only `render_ui`, so the mock answers in text and the turn saves four rejected calls. Require every saved error to stay under 400 characters, name the reason, and leave out the program. The card must show the same reason before and after a reload. The check prints the saved error lengths and the message size.
 
 ## Configuration failure
 
@@ -160,7 +160,7 @@ node .agents/skills/verify-orbit/verify.mjs browse sandbox-language
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
-The scenario runs `[qa:run-python]`, `[qa:run-js]`, `[qa:run-js-exit]`, `[qa:run-ruby]`, and `[qa:run-spin]` with a click on Stop. Require `Python` or `JavaScript` in the header of every card whose tool input was valid, while the run goes, after Stop, after a reload, and at 390 pixels. The Ruby call is rejected before it runs, and the mock repeats it until the step limit, so require every one of its cards to show no language. Require the header to stay on one line with the tag inside it. Require the source and the output to sit on different surfaces. The check prints which part failed.
+The scenario runs `[qa:run-python]`, `[qa:run-js]`, `[qa:run-js-exit]`, `[qa:run-ruby]`, and `[qa:run-spin]` with a click on Stop. Require `Python` or `JavaScript` in the header of every card whose tool input was valid, while the run goes, after Stop, after a reload, and at 390 pixels. The Ruby call is rejected before it runs, and the mock repeats it while the step offers `run_code`, so require every one of its cards to show no language. Require the header to stay on one line with the tag inside it. Require the source and the output to sit on different surfaces. The check prints which part failed.
 
 ## Terminal escape sequences
 
@@ -216,7 +216,7 @@ Run `node scripts/qa/sandbox-native-build.mjs`. It uses the optional SSH addon i
 
 ## Isolation and timing
 
-Run `node --import tsx --test src/lib/sandbox/run.test.ts`. It skips with a reason only if Docker is unreachable. A skipped run is not isolation proof. Require every escape case to run and no sandbox containers to remain.
+Run `node --import tsx --import ./scripts/test-data-dir.mjs --test src/lib/sandbox/run.test.ts`. It skips with a reason only if Docker is unreachable. A skipped run is not isolation proof. Require every escape case to run and no sandbox containers to remain.
 
 Run `npx tsx scripts/qa/sandbox-timing.ts` with both images already pulled. It runs ten Python containers, validates each result, and reports p50 and p95 for start through result. The p95 budget is under 1,500 ms.
 
