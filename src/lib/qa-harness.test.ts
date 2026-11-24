@@ -52,21 +52,35 @@ if (process.argv[2] === "launch") {
 `;
 
 type Result = { code: number | null; out: string };
+type TrackedChild = { child: ChildProcess; done: Promise<Result>; detached: boolean };
 
 const checkouts: Checkout[] = [];
-const spawned: ChildProcess[] = [];
+const spawned: TrackedChild[] = [];
 const usedPorts = new Set<number>();
 
-function run(command: string, args: string[], options: { cwd: string; env?: Record<string, string | undefined>; detached?: boolean }): { child: ChildProcess; done: Promise<Result> } {
+function run(command: string, args: string[], options: { cwd: string; env?: Record<string, string | undefined>; detached?: boolean }): TrackedChild {
   const env: Record<string, string | undefined> = { ...process.env, ...options.env };
   for (const key of Object.keys(env)) if (env[key] === undefined) delete env[key];
   const child = spawn(command, args, { cwd: options.cwd, env: env as NodeJS.ProcessEnv, detached: options.detached, stdio: ["ignore", "pipe", "pipe"] });
-  spawned.push(child);
   let out = "";
   child.stdout?.on("data", (chunk: Buffer) => (out += chunk.toString()));
   child.stderr?.on("data", (chunk: Buffer) => (out += chunk.toString()));
-  const done = new Promise<Result>((resolve) => child.once("close", (code) => resolve({ code, out })));
-  return { child, done };
+  const done = new Promise<Result>((resolve) => {
+    let settled = false;
+    const finish = (code: number | null) => {
+      if (settled) return;
+      settled = true;
+      resolve({ code, out });
+    };
+    child.once("close", finish);
+    child.once("error", (error) => {
+      out += String(error);
+      finish(null);
+    });
+  });
+  const tracked: TrackedChild = { child, done, detached: Boolean(options.detached) };
+  spawned.push(tracked);
+  return tracked;
 }
 
 function readRange(): [number, number] {
@@ -122,6 +136,8 @@ function procEntries(): string[] {
 function pidsUnder(dir: string): number[] {
   const pids: number[] = [];
   for (const entry of procEntries()) {
+    const pid = Number(entry);
+    if (pid === process.pid) continue;
     let cmdline = "";
     let cwd = "";
     try {
@@ -130,7 +146,7 @@ function pidsUnder(dir: string): number[] {
     } catch {
       continue;
     }
-    if (cmdline.includes(dir) || cwd.startsWith(dir)) pids.push(Number(entry));
+    if (cmdline.includes(dir) || cwd.startsWith(dir)) pids.push(pid);
   }
   return pids;
 }
@@ -199,19 +215,86 @@ class Checkout {
   }
 }
 
-after(async () => {
-  for (const checkout of checkouts) {
-    if (checkout.port) await run(process.execPath, [path.join(checkout.dir, ".agents/skills/verify-orbit/verify.mjs"), "cleanup"], { cwd: checkout.dir, env: { ORBIT_VERIFY_PORT: String(checkout.port) } }).done.catch(() => {});
-    for (const pid of pidsUnder(checkout.dir)) {
-      try {
-        process.kill(pid, "SIGKILL");
-      } catch {
-        // Already gone.
+function procStartTime(pid: number): string {
+  try {
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+    const [state, ...rest] = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+    return state === "Z" || state === "X" ? "" : (rest[18] ?? "");
+  } catch {
+    return "";
+  }
+}
+
+function killPid(pid: number, group = false) {
+  try {
+    process.kill(group ? -pid : pid, "SIGKILL");
+  } catch {
+    // Already gone.
+  }
+}
+
+async function stopProcessesUnder(dir: string) {
+  const killed = new Map<number, string>();
+  await eventually(
+    () => {
+      for (const pid of pidsUnder(dir)) {
+        const started = procStartTime(pid);
+        if (!started) continue;
+        killed.set(pid, started);
+        killPid(pid);
       }
+      for (const [pid, started] of killed) {
+        if (procStartTime(pid) !== started) killed.delete(pid);
+      }
+      const remaining = new Set(killed.keys());
+      for (const pid of pidsUnder(dir)) {
+        if (procStartTime(pid)) remaining.add(pid);
+      }
+      return [...remaining];
+    },
+    (remaining) => remaining.length === 0,
+    `fixture processes under ${dir} stopped`,
+  );
+}
+
+async function teardown(targets: Checkout[], children: TrackedChild[]) {
+  const pendingChildren = new Map<number, string>();
+  for (const { child, detached } of children) {
+    if (child.exitCode !== null || child.signalCode !== null || !child.pid) continue;
+    const started = procStartTime(child.pid);
+    if (started) pendingChildren.set(child.pid, started);
+    if (detached) killPid(child.pid, true);
+    killPid(child.pid);
+  }
+  if (pendingChildren.size > 0) {
+    await eventually(
+      () => {
+        for (const [pid, started] of pendingChildren) {
+          if (procStartTime(pid) !== started) pendingChildren.delete(pid);
+        }
+        return [...pendingChildren.keys()];
+      },
+      (remaining) => remaining.length === 0,
+      "tracked children stopped",
+    );
+  }
+  for (const checkout of targets) {
+    if (checkout.port && fs.existsSync(checkout.dir)) {
+      await run(process.execPath, [path.join(checkout.dir, ".agents/skills/verify-orbit/verify.mjs"), "cleanup"], {
+        cwd: checkout.dir,
+        env: { ORBIT_VERIFY_PORT: String(checkout.port) },
+      }).done.catch(() => {});
     }
+    await stopProcessesUnder(checkout.dir);
+  }
+  await Promise.all(children.map((entry) => entry.done));
+  for (const checkout of targets) {
     fs.rmSync(checkout.dir, { recursive: true, force: true });
   }
-  for (const child of spawned) if (child.exitCode === null && child.pid && !child.signalCode) child.kill("SIGKILL");
+}
+
+after(async () => {
+  await teardown(checkouts, spawned);
 });
 
 test("two checkouts that launch a mock at once each get their own mock, and cleanup stops it", async () => {
@@ -269,21 +352,25 @@ test("a launch stopped while its mock starts leaves no mock without a record", a
 test("cleanup treats a zombie named in the mock record as stopped", async () => {
   const checkout = new Checkout();
   const parent = run("sh", ["-c", "sleep 0 & echo $!; exec sleep 60"], { cwd: checkout.dir });
-  const zombie = await new Promise<number>((resolve) => {
-    parent.child.stdout?.once("data", (chunk: Buffer) => resolve(Number(chunk.toString().trim())));
-  });
-  const stat = () => fs.readFileSync(`/proc/${zombie}/stat`, "utf8");
-  await eventually(stat, (text) => text.slice(text.lastIndexOf(")") + 2, text.lastIndexOf(")") + 3) === "Z", "the child is a zombie");
-  const text = stat();
-  const startTime = text.slice(text.lastIndexOf(")") + 2).split(" ")[19];
-  fs.mkdirSync(path.join(checkout.dir, ".verify"), { recursive: true });
-  fs.writeFileSync(path.join(checkout.dir, ".verify/mock.json"), JSON.stringify({ pid: zombie, startTime, port: 1 }));
-  const started = Date.now();
-  const result = await checkout.verify(["cleanup"]);
-  parent.child.kill("SIGKILL");
-  assert.equal(result.code, 0, result.out);
-  assert.ok(Date.now() - started < 4_000, `cleanup took ${Date.now() - started} ms`);
-  assert.equal(checkout.record(), null);
+  try {
+    const zombie = await new Promise<number>((resolve) => {
+      parent.child.stdout?.once("data", (chunk: Buffer) => resolve(Number(chunk.toString().trim())));
+    });
+    const stat = () => fs.readFileSync(`/proc/${zombie}/stat`, "utf8");
+    await eventually(stat, (text) => text.slice(text.lastIndexOf(")") + 2, text.lastIndexOf(")") + 3) === "Z", "the child is a zombie");
+    const text = stat();
+    const startTime = text.slice(text.lastIndexOf(")") + 2).split(" ")[19];
+    fs.mkdirSync(path.join(checkout.dir, ".verify"), { recursive: true });
+    fs.writeFileSync(path.join(checkout.dir, ".verify/mock.json"), JSON.stringify({ pid: zombie, startTime, port: 1 }));
+    const started = Date.now();
+    const result = await checkout.verify(["cleanup"]);
+    assert.equal(result.code, 0, result.out);
+    assert.ok(Date.now() - started < 4_000, `cleanup took ${Date.now() - started} ms`);
+    assert.equal(checkout.record(), null);
+  } finally {
+    parent.child.kill("SIGKILL");
+    await parent.done;
+  }
 });
 
 test("genui-qa reads the mock port from the record and refuses a record that nothing answers", async () => {
@@ -350,4 +437,47 @@ test("ci-e2e.sh stops its mock Ollama when it is interrupted or terminated", asy
     const port = Number(new URL(seen.url).port);
     await eventually(() => status(port, "/qa/received"), (code) => code === "ECONNREFUSED", `${signal}: mock Ollama on ${port} stopped`);
   }
+});
+
+test("teardown awaits tracked children and detached fixture processes before removing checkout directories", async () => {
+  const checkout = new Checkout();
+  let trackedSettled = false;
+  const tracked = run(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { cwd: checkout.dir });
+  tracked.done.then(() => {
+    trackedSettled = true;
+  });
+
+  const launcher = run(
+    process.execPath,
+    [
+      "-e",
+      `const { spawn } = require("node:child_process");
+const worker = spawn(process.execPath, ["-e", 'const http = require("node:http"); const server = http.createServer((_req, res) => res.end("ok")); server.listen(0, "127.0.0.1", () => console.log(process.pid + " " + server.address().port));'], { cwd: process.cwd(), detached: true, stdio: ["ignore", "pipe", "ignore"] });
+let buf = "";
+worker.stdout.on("data", (chunk) => {
+  buf += chunk.toString();
+  const nl = buf.indexOf("\\n");
+  if (nl === -1) return;
+  process.stdout.write(buf.slice(0, nl + 1));
+  worker.stdout.destroy();
+  worker.unref();
+  process.exit(0);
+});`,
+    ],
+    { cwd: checkout.dir },
+  );
+  const launched = await launcher.done;
+  assert.equal(launched.code, 0, launched.out);
+  const [detachedPid, detachedPort] = launched.out.trim().split(" ").map(Number);
+  assert.ok(detachedPid > 0 && detachedPort > 0, `unexpected launcher output: ${launched.out}`);
+  assert.equal(await status(detachedPort, "/"), 200);
+
+  await teardown([checkout], [tracked]);
+
+  assert.equal(trackedSettled, true, "tracked child done promise settled before teardown returned");
+  assert.equal(tracked.child.signalCode, "SIGKILL");
+  assert.equal(procStartTime(detachedPid), "", "detached fixture process stopped before teardown returned");
+  assert.deepEqual(pidsUnder(checkout.dir), []);
+  assert.equal(await status(detachedPort, "/"), "ECONNREFUSED");
+  assert.equal(fs.existsSync(checkout.dir), false);
 });
