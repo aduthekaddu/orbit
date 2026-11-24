@@ -4,10 +4,13 @@ import { chatTitle, replaceFallbackTitle } from "./messages";
 
 export const TITLE_ASK = "Write a title of at most six words.";
 
+const TITLE_SOURCE_CHARACTERS = 2_000;
+
 const wrappingQuotes = /^["'`“”‘’]+|["'`“”‘’]+$/g;
 
 export function titlePrompt(firstMessage: string): string {
-  return `${TITLE_ASK}\nReply with the title only.\n\n${firstMessage}`;
+  const start = Array.from(firstMessage).slice(0, TITLE_SOURCE_CHARACTERS).join("");
+  return `${TITLE_ASK}\nReply with the title only.\n\n${start}`;
 }
 
 export function cleanTitle(raw: string): string {

@@ -159,6 +159,12 @@ case $suite in
       check verify browse "$name"
     done
     check node scripts/qa/sandbox-fixture-isolation.mjs
+    # The sweep removes a container a run leaked once it is a minute old, before the leftover check
+    # below can see it. A removal in this server's log is that leak.
+    if grep "Sandbox sweep removed a stale container" .verify/server.log; then
+      echo "::error title=verify-orbit::the sandbox sweep removed a leftover container during the suite"
+      failures+=("the sandbox sweep removed a leftover container")
+    fi
     cleanup_server
     ORBIT_SANDBOX=on DOCKER_HOST=tcp://not-the-local-proxy:2375 verify launch --mock || die "launch with an invalid Docker endpoint"
     check verify browse sandbox-failure
