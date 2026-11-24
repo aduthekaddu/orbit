@@ -3,8 +3,7 @@ updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
@@ -12,15 +11,8 @@ updates:
       prefix: "chore(deps)"
       prefix-development: "chore(deps-dev)"
     groups:
-      ai-sdk:
-        patterns: ["ai", "@ai-sdk/*"]
-      assistant-ui:
-        patterns: ["@assistant-ui/*"]
-      radix-ui:
-        patterns: ["@radix-ui/*"]
-      dev-tooling:
-        dependency-type: development
-        update-types: [minor, patch]
+      npm:
+        patterns: ["*"]
     ignore:
       - dependency-name: "@types/node"
         versions: [">=23"]
@@ -30,8 +22,7 @@ updates:
       - /
       - /.github/actions/*
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
@@ -44,8 +35,7 @@ updates:
   - package-ecosystem: docker
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     cooldown:
       default-days: 7
     commit-message:
@@ -57,8 +47,7 @@ updates:
   - package-ecosystem: docker-compose
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     cooldown:
       default-days: 7
     commit-message:

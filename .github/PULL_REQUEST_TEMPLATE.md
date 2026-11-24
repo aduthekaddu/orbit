@@ -6,9 +6,9 @@
 
 <!-- What a user notices, then what the next maintainer inherits. -->
 
-## How I checked it
+## Verification
 
-<!-- Commands you ran. Paste the real output in a PR comment, with screenshots if something visible changed. -->
+<!-- The commands that were run. Paste the real output in a PR comment, with screenshots if something visible changed. -->
 
 - [ ] `npm test`, `npm run typecheck`, and `npm run build` exit 0
 - [ ] A verify-orbit drive or browse scenario covers the change, or the PR says why none applies

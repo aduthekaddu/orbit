@@ -8,6 +8,7 @@ const shortcut = (keys: Partial<Parameters<typeof shortcutTarget>[0]>) => ({
   metaKey: false,
   ctrlKey: false,
   key: "ArrowDown",
+  isComposing: false,
   ...keys,
 });
 
@@ -54,4 +55,8 @@ test("shift, meta, ctrl, and plain arrows stay with the page", () => {
   assert.equal(shortcutTarget(shortcut({ metaKey: true }), 1, 3), null);
   assert.equal(shortcutTarget(shortcut({ ctrlKey: true }), 1, 3), null);
   assert.equal(shortcutTarget(shortcut({ altKey: false }), 1, 3), null);
+});
+
+test("alt arrow stays with the field while an input method is composing", () => {
+  assert.equal(shortcutTarget(shortcut({ isComposing: true }), 1, 3), null);
 });
