@@ -6,7 +6,7 @@ import { assistantHasVisiblePart, settleInterruptedParts } from "@/lib/genui/spe
 import { embedPending } from "@/lib/memory/embed";
 import { attachMemoryNotes, quotedMemoryNotes, recall, REMEMBER_INSTRUCTIONS } from "@/lib/memory/recall";
 import { toolsForTurn } from "@/lib/tools";
-import { CHAT_STEP_LIMIT, searchAnswerStep } from "@/lib/tools/answer-step";
+import { answerStepFor, CHAT_STEP_LIMIT } from "@/lib/tools/answer-step";
 import { createStoppedRuns } from "@/lib/tools/stopped-runs";
 import { chatTitle, ensureChat, listMessages, planChatWrite, replyGuard, shouldSaveReply, storedMessageCount, storedMessageIds, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
@@ -171,7 +171,7 @@ export async function POST(request: Request) {
       messages: attachMemoryNotes(await convertToModelMessages(uiMessages, { tools }), notes),
       tools,
       stopWhen: stepCountIs(CHAT_STEP_LIMIT),
-      prepareStep: tools.web_search ? searchAnswerStep : undefined,
+      prepareStep: answerStepFor(tools),
       abortSignal: request.signal,
       ...(allowReasoning ? reasoningOptions(settings.reasoningEffort) : {}),
     });

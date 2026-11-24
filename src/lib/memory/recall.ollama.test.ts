@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import test, { before, type TestContext } from "node:test";
 import { FLY_PAIR, MAIN, type LabeledSet } from "./ollama-pairs";
-
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-memory-ollama-"));
-process.env.ORBIT_DATA_DIR = dataDir;
 
 type EmbedModule = typeof import("./embed");
 type StoreModule = typeof import("./store");
