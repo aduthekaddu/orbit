@@ -20,7 +20,6 @@ import { MarkdownText } from "./markdown-text";
 import { MessageTextEditor } from "./message-editor";
 import { Reasoning } from "./reasoning";
 import { RunCard } from "@/components/tools/run-card";
-import { useCoarsePointer } from "./use-coarse-pointer";
 import { useEditTarget } from "./chat-id";
 import { BranchPicker } from "./branch-picker";
 import { COPIED_MS } from "./use-copy";
@@ -56,6 +55,10 @@ function CopyAction() {
   );
 }
 
+// The bar always renders so Tab reaches it. With a mouse it shows on hover, and at once on focus.
+const hoverActionsClass =
+  "transition-opacity duration-150 ease-orbit pointer-fine:opacity-0 pointer-fine:group-hover/message:opacity-100 focus-within:opacity-100 focus-within:transition-none";
+
 function EditAction({ onClick, label = "Edit reply" }: { onClick: () => void; label?: string }) {
   return (
     <IconAction label={label}>
@@ -69,6 +72,7 @@ function EditAction({ onClick, label = "Edit reply" }: { onClick: () => void; la
 function AssistantMessage() {
   const running = useAuiState((s) => s.message.status?.type === "running");
   const failed = useAuiState((s) => s.message.status?.type === "incomplete" && s.message.status.reason === "error");
+  const last = useAuiState((s) => s.message.isLast);
   const messageId = useAuiState((s) => s.message.id);
   const text = useAuiState((s) =>
     s.message.parts
@@ -77,10 +81,9 @@ function AssistantMessage() {
       .join("\n\n"),
   );
   const [editing, setEditing] = useState(false);
-  const touch = useCoarsePointer();
 
   return (
-    <MessagePrimitive.Root data-message-role="assistant" data-message-id={messageId} className="relative mx-auto w-full max-w-widget animate-rise">
+    <MessagePrimitive.Root data-message-role="assistant" data-message-id={messageId} className="group/message relative mx-auto w-full max-w-widget animate-rise">
       <OrbitMark busy={running} tone={running ? "accent" : "mono"} className="absolute top-0.5 -left-9 hidden size-5 @3xl:block" />
       {editing ? (
         <MessageTextEditor messageId={messageId} initialText={text} onClose={() => setEditing(false)} label="Edit reply" />
@@ -97,7 +100,7 @@ function AssistantMessage() {
       )}
       {!editing && (
         <div className={cn("mt-1 -ml-1.5 h-7", failed && "mt-2 ml-0")}>
-          <ActionBarPrimitive.Root hideWhenRunning autohide={failed || touch ? "never" : "not-last"} className="flex gap-0.5">
+          <ActionBarPrimitive.Root hideWhenRunning className={cn("flex gap-0.5", !last && !failed && hoverActionsClass)}>
             {text && <CopyAction />}
             {text && !failed && <EditAction onClick={() => setEditing(true)} />}
             {failed ? (
@@ -125,12 +128,11 @@ function AssistantMessage() {
 function UserMessage() {
   const id = useAuiState((s) => s.message.id);
   const editing = useAuiState((s) => s.message.composer.isEditing);
-  const touch = useCoarsePointer();
   if (editing) return <UserEditComposer />;
   return (
-    <MessagePrimitive.Root data-turn-id={id} data-message-id={id} tabIndex={-1} className="mx-auto flex w-full scroll-mt-6 outline-none max-w-widget animate-rise flex-col items-end gap-1.5">
+    <MessagePrimitive.Root data-turn-id={id} data-message-id={id} tabIndex={-1} className="group/message mx-auto flex w-full scroll-mt-6 outline-none max-w-widget animate-rise flex-col items-end gap-1.5">
       <div className="flex w-full items-end justify-end gap-1.5">
-        <ActionBarPrimitive.Root autohide={touch ? "never" : "always"} className="flex">
+        <ActionBarPrimitive.Root className={cn("flex", hoverActionsClass)}>
           <CopyAction />
           <IconAction label="Edit">
             <ActionBarPrimitive.Edit className={iconActionClass}>

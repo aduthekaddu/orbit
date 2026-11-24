@@ -256,23 +256,44 @@ export default () => {
   "artifact-error": ["html", `<h1>Artifact error</h1><script>throw new Error('Artifact exploded');</script>`],
 };
 
+function textOf(content) {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => (part && typeof part === "object" && typeof part.text === "string" ? part.text : ""))
+      .join("");
+  }
+  return "";
+}
+
+// The last model step sends the whole conversation as one JSON user message.
+// Read the latest user entry in it, so the mock answers the turn it is in.
+function historyOf(content) {
+  if (typeof content !== "string" || !content.trimStart().startsWith("[")) return null;
+  try {
+    const parsed = JSON.parse(content);
+    if (!Array.isArray(parsed)) return null;
+    if (!parsed.every((entry) => entry && typeof entry.role === "string" && "content" in entry)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 function lastUserText(body) {
   const messages = Array.isArray(body?.messages) ? body.messages : [];
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (!message || message.role !== "user") continue;
-    if (typeof message.content === "string") return message.content;
-    if (Array.isArray(message.content)) {
-      return message.content
-        .map((part) => (part && typeof part === "object" && typeof part.text === "string" ? part.text : ""))
-        .join("");
-    }
+    return textOf(message.content);
   }
   return "";
 }
 
 function scenarioOf(text) {
-  const match = /\[qa:([a-z-]+)\]/.exec(text);
+  const history = historyOf(text);
+  const source = history ? textOf([...history].reverse().find((entry) => entry?.role === "user")?.content) : text;
+  const match = /\[qa:([a-z-]+)\]/.exec(source);
   return match?.[1] ?? "text";
 }
 
@@ -523,12 +544,26 @@ const server = http.createServer((req, res) => {
         textResponse(res, "Saved.");
         return;
       }
-      const text = prompt.replace(/\[qa:remember\]\s*/, "").trim();
+      const tag = "[qa:remember]";
+      const text = prompt.slice(prompt.lastIndexOf(tag) + tag.length).trim();
       toolResponse(res, scenario, { text, kind: "fact" }, "remember");
       return;
     }
     if (raw.includes("Write a title of at most six words.") && body.stream !== true) {
       jsonTitle(res);
+      return;
+    }
+    if (scenario === "remember-loop") {
+      if (body.tools?.some((entry) => entry.function?.name === "remember")) {
+        const messages = Array.isArray(body.messages) ? body.messages : [];
+        const latestUser = messages.findLastIndex((message) => message.role === "user");
+        const notes = messages.slice(latestUser + 1).filter((message) => message.role === "tool").length;
+        toolResponse(res, scenario, { text: `Loop note ${notes + 1}`, kind: "fact" }, "remember");
+      } else if (body.messages?.some((message) => message.role === "tool")) {
+        textResponse(res, '<｜DSML｜ calls><｜DSML｜ invoke name="remember"></｜DSML｜ invoke></｜DSML｜ calls>');
+      } else {
+        textResponse(res, "Answered after four notes.");
+      }
       return;
     }
     if (scenario === "dream-fail") {
@@ -541,7 +576,8 @@ const server = http.createServer((req, res) => {
       return;
     }
     if (invalidSandboxCalls.has(scenario)) {
-      toolResponse(res, scenario, invalidSandboxCalls.get(scenario), "run_code");
+      if (body.tools?.some((entry) => entry.function?.name === "run_code")) toolResponse(res, scenario, invalidSandboxCalls.get(scenario), "run_code");
+      else textResponse(res, "The sandbox rejected the code.");
       return;
     }
     if (scenario === "run-token-echo" && body.messages?.at(-1)?.role === "tool") {
