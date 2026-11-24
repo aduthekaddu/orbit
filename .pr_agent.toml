@@ -1,0 +1,12 @@
+[config]
+model = "openai/glm-5.3"
+fallback_models = ["openai/glm-5.3-flash"]
+custom_model_max_tokens = 1000000
+
+[github_action_config]
+auto_review = true
+auto_describe = true
+auto_improve = false
+
+[pr_description]
+extra_instructions = "Use a plain, impersonal tone. Prefer 'this PR' over first person."

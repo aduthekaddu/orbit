@@ -5,7 +5,7 @@ import path from "node:path";
 import test, { before, after } from "node:test";
 
 const originalCwd = process.cwd();
-const envNames = ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL", "ORBIT_DATA_DIR", "ORBIT_SEARXNG_URL", "ORBIT_TAVILY_API_KEY", "ORBIT_GITHUB_TOKEN", "ORBIT_SANDBOX"];
+const envNames = ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL", "ORBIT_SEARXNG_URL", "ORBIT_TAVILY_API_KEY", "ORBIT_GITHUB_TOKEN", "ORBIT_SANDBOX"];
 const originalEnv = Object.fromEntries(envNames.map((name) => [name, process.env[name]]));
 let sandbox: string;
 let settings: typeof import("./settings");
