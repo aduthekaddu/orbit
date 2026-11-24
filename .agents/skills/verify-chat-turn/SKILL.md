@@ -32,7 +32,7 @@ These past bugs and gaps are outside both models. A pass says nothing about them
 - Rejection of a request built on replaced or stale history (f3da71c, c435e64). The models check the text of P, not the shape of the path.
 - A retry blocked by an unsaved assistant message in the history (889e201).
 - A Send or Regenerate right after Stop, before the stopped run's output arrives (8f9a580, 9d72c39).
-- The selected head: an off-branch search hit becomes the head even when it has later turns (`src/lib/chat-tree.ts` `focusedHead`, fixed by open PR #171).
+- The selected head: an off-branch search hit becomes the head even when it has later turns (`src/lib/chat-tree.ts` `focusedHead`, 02f59af).
 - A request whose last message is a saved assistant reply: the SDK reuses that reply's id and `upsertMessage` updates it after comparing only the prompt row. Issue #188.
 - Tool calls, the new prompt's own turn after `Send`, and which reply text a regenerate wrote.
 
