@@ -130,6 +130,12 @@ test("sandbox programs run inside real isolated containers", { timeout: 90_000 }
     assert.equal(result.oomKilled, undefined);
     assert.equal(result.timedOut, false);
   });
+  await t.test("a program that exits 137 just before the limit keeps its exit code", async () => {
+    const result = await runPython("import sys, time\ntime.sleep(9)\nsys.exit(137)");
+    assert.equal(result.exitCode, 137);
+    assert.equal(result.oomKilled, undefined);
+    assert.equal(result.timedOut, false);
+  });
   await t.test("a fork loop reaches the process limit while Docker stays responsive", async () => {
     const result = await runPython(`import os, time
 children = []
