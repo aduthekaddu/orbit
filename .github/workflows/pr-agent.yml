@@ -58,8 +58,31 @@ jobs:
       github_action_config.auto_describe: "true"
       github_action_config.auto_improve: "false"
     steps:
+      - name: Check commenter write access
+        id: commenter-permission
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+        run: |
+          set -euo pipefail
+          case "$COMMENTER" in
+            ""|*[!A-Za-z0-9_-]*)
+              echo "allowed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+          permission=$(gh api "repos/${REPO}/collaborators/${COMMENTER}/permission" --jq '.permission')
+          if [ "$permission" = "admin" ] || [ "$permission" = "write" ]; then
+            echo "allowed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Resolve the OpenCode session id
         id: session
+        if: github.event_name != 'issue_comment' || steps.commenter-permission.outputs.allowed == 'true'
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
@@ -72,7 +95,7 @@ jobs:
           echo "id=pr-${n:-unknown}" >> "$GITHUB_OUTPUT"
 
       - name: Run PR-Agent
-        if: github.event_name != 'workflow_dispatch'
+        if: github.event_name == 'pull_request' || (github.event_name == 'issue_comment' && steps.commenter-permission.outputs.allowed == 'true')
         uses: the-pr-agent/pr-agent@e673a02076ce09a4726c3d0c3cc85780e59ca52b # v0.50.0
         env:
           LITELLM__EXTRA_HEADERS: '{"User-Agent":"orbit-pr-agent/1.0","x-opencode-session":"${{ steps.session.outputs.id }}"}'
