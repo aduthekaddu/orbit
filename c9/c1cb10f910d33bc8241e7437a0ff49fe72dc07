@@ -1,0 +1,14 @@
+scripts/qa/mock-provider.mjs
+  h_9f68edf4527855 276-278
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c9c1cb10f910d33bc8241e7437a0ff49fe72dc07",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
