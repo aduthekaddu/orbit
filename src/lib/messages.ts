@@ -87,6 +87,11 @@ export function storedMessageCount(chatId: string): number {
   return row.n;
 }
 
+export function storedMessageIds(chatId: string): Set<string> {
+  const rows = db.select({ id: messages.id }).from(messages).where(eq(messages.chatId, chatId)).all();
+  return new Set(rows.map((row) => row.id));
+}
+
 export function replaceFallbackTitle(chatId: string, fallback: string, title: string) {
   if (!title || title === fallback) return;
   db.update(chats).set({ title }).where(and(eq(chats.id, chatId), eq(chats.title, fallback))).run();

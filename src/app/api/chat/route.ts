@@ -1,5 +1,4 @@
 import { convertToModelMessages, createUIMessageStreamResponse, stepCountIs, streamText, toUIMessageStream, type UIMessage } from "ai";
-import { z } from "zod";
 import { ARTIFACT_INSTRUCTIONS } from "@/lib/artifacts/detect";
 import { logProviderError, Redactor, streamErrorMessage } from "@/lib/chat-errors";
 import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
@@ -9,36 +8,88 @@ import { attachMemoryNotes, quotedMemoryNotes, recall, REMEMBER_INSTRUCTIONS } f
 import { toolsForTurn } from "@/lib/tools";
 import { answerStepFor, CHAT_STEP_LIMIT } from "@/lib/tools/answer-step";
 import { createStoppedRuns } from "@/lib/tools/stopped-runs";
-import { chatTitle, ensureChat, finishChatReply, listMessages, planChatWrite, storedMessageCount, textFromParts, touchChat } from "@/lib/messages";
+import { chatTitle, ensureChat, finishChatReply, listMessages, planChatWrite, storedMessageCount, storedMessageIds, textFromParts, touchChat } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { startChatTitle } from "@/lib/titles";
 import { getSettings } from "@/lib/settings";
+import { LIMITS, r, readJsonBody } from "@/lib/route-schema";
 import { getSession, unauthorized } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-const messageSchema = z.object({
-  id: z.string().min(1).max(100),
-  role: z.enum(["user", "assistant", "system"]),
-  parts: z.array(z.unknown()).optional(),
+// A message the chat already stores can be older than the limits, and the client sends the whole
+// path on every turn. Stored messages are held to the request size cap. A message the request adds,
+// or that an edit replaces, is held to the message limits.
+const historyPartSchema = r.looseObject({
+  type: r.history.text(),
+  text: r.history.text().optional(),
 });
 
-const bodySchema = z.object({
-  id: z.string().min(1).max(100),
-  messages: z.array(messageSchema).min(1),
-  trigger: z.enum(["submit-message", "regenerate-message", "resume-stream"]).optional(),
-  editMessageId: z.string().min(1).max(100).optional(),
+const historyMessageSchema = r.object({
+  id: r.text(LIMITS.id).min(1),
+  role: r.enum(["user", "assistant", "system"]),
+  parts: r.history.list(historyPartSchema).optional(),
 });
+
+const bodySchema = r.object({
+  id: r.text(LIMITS.id).min(1),
+  messages: r.history.list(historyMessageSchema).min(1),
+  trigger: r.enum(["submit-message", "regenerate-message", "resume-stream"]).optional(),
+  editMessageId: r.text(LIMITS.id).min(1).optional(),
+  messageId: r.text(LIMITS.id).min(1).optional(),
+});
+
+const TEXT_TOO_LONG = "text-too-long";
+
+const partSchema = (textMax: number) =>
+  r.looseObject({
+    type: r.text(LIMITS.partType),
+    text: r.text(textMax).optional(),
+  });
+
+const partsSchema = (textMax: number) =>
+  r
+    .list(partSchema(textMax), LIMITS.partsPerMessage)
+    .refine((parts) => parts.reduce((total, part) => total + (part.text?.length ?? 0), 0) <= textMax, {
+      message: TEXT_TOO_LONG,
+    })
+    .optional();
+
+const addedMessageSchema = r.discriminatedUnion("role", [
+  r.object({
+    id: r.text(LIMITS.id).min(1),
+    role: r.literal("user"),
+    parts: partsSchema(LIMITS.userMessageText),
+  }),
+  r.object({
+    id: r.text(LIMITS.id).min(1),
+    role: r.enum(["assistant", "system"]),
+    parts: partsSchema(LIMITS.assistantText),
+  }),
+]);
 
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session) return unauthorized();
 
-  const json = await request.json().catch(() => null);
-  const parsed = bodySchema.safeParse(json);
-  if (!parsed.success) {
+  const body = await readJsonBody(request, LIMITS.requestBytes);
+  if (!body.ok) {
+    if (body.reason === "too-large") return Response.json({ error: "This chat is too large." }, { status: 413 });
+    return Response.json({ error: "Invalid chat request" }, { status: 400 });
+  }
+  const parsed = bodySchema.safeParse(body.json);
+  if (!parsed.success) return Response.json({ error: "Invalid chat request" }, { status: 400 });
+
+  const storedIds = storedMessageIds(parsed.data.id);
+  for (const message of parsed.data.messages) {
+    if (storedIds.has(message.id)) continue;
+    const added = addedMessageSchema.safeParse(message);
+    if (added.success) continue;
+    if (added.error.issues.some((issue) => (issue.code === "too_big" && issue.path.at(-1) === "text") || issue.message === TEXT_TOO_LONG)) {
+      return Response.json({ error: "Message is too long." }, { status: 413 });
+    }
     return Response.json({ error: "Invalid chat request" }, { status: 400 });
   }
 

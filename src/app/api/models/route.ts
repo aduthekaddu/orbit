@@ -1,15 +1,15 @@
-import { z } from "zod";
 import { credentialsForModelList, listModels } from "@/lib/provider";
 import { getSettings } from "@/lib/settings";
 import { MODELS_NOT_CONFIGURED } from "@/lib/settings-form";
 import { getSession, unauthorized } from "@/lib/session";
+import { LIMITS, r } from "@/lib/route-schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const postSchema = z.object({
-  baseUrl: z.string().trim().url().optional(),
-  apiKey: z.string().optional(),
+const postSchema = r.object({
+  baseUrl: r.text(LIMITS.url).trim().url().optional(),
+  apiKey: r.text(LIMITS.secret).optional(),
 });
 
 export async function GET() {

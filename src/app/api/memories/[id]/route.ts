@@ -1,17 +1,17 @@
-import { z } from "zod";
 import { deleteMemory, memoryJson, MemoryRejected, updateMemory } from "@/lib/memory/store";
 import { getSession, unauthorized } from "@/lib/session";
+import { LIMITS, r } from "@/lib/route-schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const paramsSchema = z.object({
-  id: z.string().min(1).max(100),
+const paramsSchema = r.object({
+  id: r.text(LIMITS.id).min(1),
 });
 
-const bodySchema = z.object({
-  text: z.string().max(2000),
-  kind: z.enum(["fact", "preference", "summary"]),
+const bodySchema = r.object({
+  text: r.text(LIMITS.memoryText),
+  kind: r.enum(["fact", "preference", "summary"]),
 });
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
