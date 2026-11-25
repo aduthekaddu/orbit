@@ -25,7 +25,7 @@ The diagram predates slices 7 and 8. SearXNG, Tavily, and the code sandbox now c
 
 ## The rules of a turn
 
-The chart below is generated from a TLA+ model of steps 3 to 6. TLC, the TLA+ model checker, checks each rule in every reachable state. Each rule is something you can see as a user.
+The chart below is generated from a TLA+ model of steps 3 to 6. TLC, the TLA+ model checker, checks each rule in every reachable state. `scripts/ci/tlc.sh` runs TLC on every model in `docs/architecture/`, locally and in CI. Each rule is something you can see as a user.
 
 ```mermaid
 ---
@@ -82,9 +82,14 @@ These rules hold in every state the model reaches:
 
 `shouldSaveReply` saves every reply with visible content. [Slice 4](docs/slices/04.md) gives a regenerate a new id, so saving a partial reply preserves the earlier version. A stop before visible content leaves the head on the saved prompt.
 
-The model tracks up to three reply attempts per prompt with separate ids. A regenerate must keep every earlier reply id. `ChatTurnRegression.tla` checks that a finished reply followed by a finished regenerate leaves two versions. Run it with the same TLC command and `ChatTurnRegression.cfg`.
+The model tracks up to three reply attempts per prompt with separate ids. A regenerate must keep every earlier reply id. `ChatTurnRegression.tla` checks that a finished reply followed by a finished regenerate leaves two versions.
 
-The model leaves out edits, tool calls, and concurrent tabs. The stale-write guard in step 3 covers concurrent tabs, and `src/lib/chat-write.test.ts` tests it.
+`ChatTurn.tla` leaves out edits, tool calls, and concurrent tabs. `ChatWrite.tla` models two tabs on one prompt and its reply, with these rules:
+
+- **A saved reply keeps its newest text (ReplyKeepsNewestText).** A tab that loaded the reply before an edit cannot undo the edit when it sends.
+- **A saved reply answers its prompt's current text (ReplyAnswersItsPrompt).** A regenerate that streamed while the prompt changed is not saved under the changed prompt.
+
+Both models have mutant configs. Each switches off one guard to replay a past bug, and its `.trace` file holds the counterexample TLC must print, state by state. CI fails if TLC stops finding that counterexample. `ChatWrite.tla` assumes one server process, as Orbit runs, because it treats `planChatWrite` and `replyGuard` as one step. `.agents/skills/verify-chat-turn/SKILL.md` says how to run the models, read a result, update a model when the code changes, and which past bugs the models leave out. `src/lib/model-sync.test.ts` fails when a function a model names changes after the model was last checked.
 
 To rebuild the chart, run the [statechart skill](https://github.com/cursor/plugins/blob/main/pstack/skills/statechart/SKILL.md) on [`docs/architecture/ChatTurn.tla`](docs/architecture/ChatTurn.tla):
 
@@ -120,6 +125,7 @@ statechart docs/architecture/ChatTurn.tla --config docs/architecture/ChatTurn.cf
 | `drizzle/` | SQL migrations. `npm run db:generate` writes new ones from `src/lib/db/schema.ts`. |
 | `scripts/` | Smoke tests against a running server and the browser QA script with its mock provider. |
 | `.agents/skills/verify-orbit/` | The verification skill. It launches a sandboxed server and drives each feature. |
+| `.agents/skills/verify-chat-turn/` | Model-checks the chat write path with TLC, and records which functions each model describes. |
 
 ## Data model
 
@@ -134,7 +140,7 @@ All state is in `data/orbit.db`. The directory is mode `0700`, and the database 
 
 Tool output, generated UI specs, and reasoning all live inside `parts`. A new tool needs no new table unless it stores something outside a message.
 
-`run_code` is available only with `ORBIT_SANDBOX=on`. The tool validates language and source, then `runCode` starts a fresh container using only `containerSpec` options. Source arrives on stdin. The runner bounds stdout and stderr, stops work after ten seconds or request cancellation, and removes the container. The container runs the interpreter under `timeout`, so it also stops at ten seconds when Orbit dies mid-run. With the sandbox on, `src/instrumentation.ts` starts `startSandboxSweep`, which removes sandbox containers older than a minute at start and every minute after, and logs each removal with its owner. The saved tool part contains the source and final output, with the raw text. The card reads that part after reload and removes terminal escape sequences from the output when it renders. When you press Stop, the AI SDK drops the tool result, so `createStoppedRuns` in `src/lib/tools/stopped-runs.ts` keeps the output the runner had collected, and the chat route saves it as a cancelled result. The open chat then fetches the saved reply and puts that result on the live card (`StoppedRunSync`), so the card matches a reload without replacing the thread. Compose reaches the Docker API through a private socket proxy. See [Security](SECURITY.md#code-sandbox) for that boundary's limits.
+`run_code` is available only with `ORBIT_SANDBOX=on`. The tool validates language and source, then `runCode` starts a fresh container using only `containerSpec` options. Source arrives on stdin. The runner bounds stdout and stderr and stops work after ten seconds or request cancellation. `runCode` returns two promises: `result`, which settles once with the first of exit, deadline, Stop or Docker error, and `cleanup`, which settles after the container is removed. Once the program has exited, Stop keeps its exit code and a confirmed memory kill, and the deadline only stops waiting for its last output, which then counts as truncated. `runCode` waits at most five seconds for Docker to confirm a memory kill, and a `wait` reply that carries a Docker error fails the run. One cleanup task owns the container, including one Docker finishes creating after Stop returned, and kills it first when the program had not exited. The container runs the interpreter under `timeout`, so it also stops at ten seconds when Orbit dies mid-run. With the sandbox on, `src/instrumentation.ts` starts `startSandboxSweep`, which removes sandbox containers older than a minute at start and every minute after, and logs each removal with its owner. The saved tool part contains the source and final output, with the raw text. The card reads that part after reload and removes terminal escape sequences from the output when it renders. When you press Stop, the AI SDK drops the tool result, so `createStoppedRuns` in `src/lib/tools/stopped-runs.ts` keeps the output the runner had collected, and the chat route saves it as a cancelled result. The open chat then fetches the saved reply and puts that result on the live card (`StoppedRunSync`), so the card matches a reload without replacing the thread. Compose reaches the Docker API through a private socket proxy. See [Security](SECURITY.md#code-sandbox) for that boundary's limits.
 
 Each container carries an owner label beside the shared sandbox label. The owner names the process that made it: one server, one test file or one QA script, from `ORBIT_SANDBOX_OWNER`, or a UUID that `sandboxOwner()` writes to that variable on first use, so every copy of the module in the process and every child process reads one value. Tests, scenarios and leftover checks list containers only through `ownedSandboxFilter` or `ownedSandboxFilterArgs` in `src/lib/sandbox/owner.mjs`, so another Orbit process on the same Docker host cannot fail them. `src/lib/sandbox/sweep.ts` stays allowlisted for host-wide listing so it can remove stale containers left by crashed processes, and `scripts/qa/ci-e2e.sh` fails only on sweep removals for its own owner. `src/lib/sandbox/owner.test.ts` fails when a file names the shared label outside its allowlist, or lists containers without those helpers outside the host-wide allowlist. It reads text, so it cannot see a label built from parts.
 
@@ -155,7 +161,7 @@ Shipped and planned slices use these boundaries. The plans in [`docs/slices/`](d
 - **Artifacts.** [Slice 5](docs/slices/05.md) renders HTML, SVG, and React code blocks in a side panel. The code runs in an `<iframe sandbox="allow-scripts">` with a strict Content Security Policy, so it cannot read the app's cookies or call its API. The app page paths in `next.config.ts` send `frame-src 'none'`, so the frame cannot load another URL into itself. Route handlers can set their own CSP.
 - **History.** Messages form a tree. Edits and regenerates add siblings, and the branch picker switches between them. A reload opens the last written branch. Switching alone does not update `head_id`. A search hit off that branch opens the branch through the hit that was written last, which ends at the newest message below the hit, and does not update `head_id` either.
 - **Search.** [Slice 6](docs/slices/06.md) adds an FTS5 index (SQLite full-text search) over `messages`, kept in sync by triggers.
-- **Memory.** [Slice 10](docs/slices/10.md) adds a `memories` table with its own FTS5 index and a `sqlite-vec` table for embeddings from Ollama. [Slice 11](docs/slices/11.md) fills it from the day's chats each night.
+- **Memory.** [Slice 10](docs/slices/10.md) adds a `memories` table with its own FTS5 index and a `sqlite-vec` table for embeddings from Ollama. [Slice 11](docs/slices/11.md) fills it from the day's chats each night. A night's row in `memory_runs` changes only through `transition` in `src/lib/memory/run-state.ts`, which `advance` in `src/lib/memory/dream.ts` applies inside one write transaction. A run reaches `done` only with a successful final embed pass, and a failed run keeps every unfinished chat for the next night.
 
 ## Rebuild the stack diagram
 
