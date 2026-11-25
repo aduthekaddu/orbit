@@ -68,6 +68,21 @@ export default async function requestFailures({ page, origin, step, shot }) {
   step("a double click and the shortcut during one pending New chat send one request, then open the chat", moved && posts === 1 && !(await newChatError.isVisible()), `moved ${moved}, ${posts} POSTs`);
   await page.unrouteAll({ behavior: "ignoreErrors" });
 
+  const heldCreates = [];
+  await page.route("**/api/chats", (route) => {
+    if (route.request().method() === "POST") heldCreates.push(route);
+    else route.continue();
+  });
+  await newChat.click();
+  const sawPending = await newChat.waitFor({ state: "disabled", timeout: 5_000 }).then(() => true, () => false);
+  await page.goto(`${origin}/settings`);
+  await page.getByRole("button", { name: "Save", exact: true }).waitFor({ timeout: 10_000 });
+  await Promise.all(heldCreates.splice(0).map((route) => route.continue().catch(() => {})));
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  const leftSettings = await page.waitForURL((url) => !url.pathname.startsWith("/settings"), { timeout: 2_000 }).then(() => true, () => false);
+  step("a New chat answer that arrives after opening Settings leaves Settings open", sawPending && !leftSettings, `pending ${sawPending}, left ${leftSettings}, url ${page.url()}`);
+  await shot("new-chat-after-leave");
+
   const status = page.locator("form").first();
   const failedLabel = status.getByText("Failed", { exact: true });
   const zeroModels = status.getByText(/^\s*0\s+models?\s*$/);
@@ -98,6 +113,21 @@ export default async function requestFailures({ page, origin, step, shot }) {
   await page.reload();
   const listed = await shows(someModels, 10_000);
   step("a model list that loads shows its count", listed && !(await failedLabel.isVisible()), listed ? "Failed is visible" : "no model count");
+
+  const heldSaves = [];
+  await page.route("**/api/settings", (route) => {
+    if (route.request().method() !== "PUT") return route.continue();
+    heldSaves.push(route);
+  });
+  const saveButton = page.getByRole("button", { name: "Save", exact: true });
+  await saveButton.click();
+  const savePending = await saveButton.waitFor({ state: "disabled", timeout: 5_000 }).then(() => true, () => false);
+  await page.locator("form").first().evaluate((form) => form.requestSubmit());
+  const saveRequests = heldSaves.length;
+  await Promise.all(heldSaves.splice(0).map((route) => route.continue().catch(() => {})));
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  step("a second Settings Save while one is pending does not start another request", savePending && saveRequests === 1, `pending ${savePending}, PUTs ${saveRequests}`);
+  await shot("settings-save-held");
 
   await page.route("**/api/settings", (route) => (route.request().method() === "PUT" ? route.abort() : route.continue()));
   await page.getByRole("button", { name: "Save", exact: true }).click();
