@@ -1,6 +1,7 @@
 "use client";
 
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
+import { useRunResultUnloaded } from "@/components/chat/stopped-run-sync";
 import { OrbitMark } from "@/components/orbit-mark";
 import { RenderUiPart } from "@/components/genui/render-ui";
 import { runCodeInputSchema } from "@/lib/sandbox/spec";
@@ -17,6 +18,7 @@ const statusLabels: Record<ToolRunStatus, string> = {
 };
 
 const languageLabels = { python: "Python", javascript: "JavaScript" };
+const RESULT_UNLOADED = { error: "Could not load output" };
 
 function toolTitle(name: string, kind: ToolCardKind) {
   if (kind === "github") return "GitHub";
@@ -38,6 +40,8 @@ export function RunCard(props: ToolCallMessagePartProps) {
   const kind = cardFor(props.toolName);
   const savedText = props.toolName === "remember" && status !== "failed" ? rememberedText(props.args, props.result) : "";
   const language = kind === "code" ? runCodeInputSchema.safeParse(props.args).data?.language : undefined;
+  const unloaded = useRunResultUnloaded(props.toolCallId);
+  const codeOutput = end.status === "cancelled" ? (end.saved ?? (unloaded ? RESULT_UNLOADED : undefined)) : props.result;
   return (
     <section data-tool-name={props.toolName} className="my-3 min-w-0 max-w-widget rounded-lg border bg-card shadow-card">
       <div className="flex min-w-0 items-center gap-2 border-b px-3 py-2.5 text-xs">
@@ -48,7 +52,7 @@ export function RunCard(props: ToolCallMessagePartProps) {
       </div>
       {(kind === "code" || status !== "running" && (kind === "genui" || status !== "cancelled")) && (
         <div className="min-w-0 p-3">
-          {kind === "code" ? <CodeRun input={props.args} output={end.status === "cancelled" ? end.saved : props.result} /> : kind === "genui" ? <RenderUiPart {...props} /> : props.isError ? <p className="text-sm text-destructive">Tool failed</p> : kind === "search" ? <SearchResults output={props.result} /> : kind === "github" ? <GithubOutput output={props.result} input={props.args} /> : savedText ? <p className="break-words text-sm text-foreground">{savedText}</p> : <GenericOutput output={props.result} />}
+          {kind === "code" ? <CodeRun input={props.args} output={codeOutput} /> : kind === "genui" ? <RenderUiPart {...props} /> : props.isError ? <p className="text-sm text-destructive">Tool failed</p> : kind === "search" ? <SearchResults output={props.result} /> : kind === "github" ? <GithubOutput output={props.result} input={props.args} /> : savedText ? <p className="break-words text-sm text-foreground">{savedText}</p> : <GenericOutput output={props.result} />}
         </div>
       )}
     </section>

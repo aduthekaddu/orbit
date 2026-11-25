@@ -12,9 +12,14 @@ const openCallId = (part: unknown) => {
   return run?.toolCallId && run.state !== "output-available" && run.state !== "output-error" ? run.toolCallId : undefined;
 };
 
+// The call ids of the code runs in `message` that have no result yet.
+export function openCodeRunIds(message: UIMessage): string[] {
+  return message.parts.flatMap((part) => openCallId(part) ?? []);
+}
+
 // A code run with no result when the stream ends is one the user stopped.
 export function hasOpenCodeRun(message: UIMessage): boolean {
-  return message.parts.some((part) => openCallId(part) !== undefined);
+  return openCodeRunIds(message).length > 0;
 }
 
 // The AI SDK drops the tool result of a stopped request, so the live card has none.

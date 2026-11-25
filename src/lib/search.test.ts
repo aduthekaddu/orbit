@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import test, { before } from "node:test";
 import { eq } from "drizzle-orm";
-
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-search-"));
-process.env.ORBIT_DATA_DIR = dataDir;
 
 type SearchModule = typeof import("./search");
 type MessageModule = typeof import("./messages");
