@@ -4,6 +4,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- Settings treats a 200 model list whose JSON is not a model list as a failed connection, not as a green "0 models". A real empty list is still an empty list. (#200)
+
 - A New chat request that finishes after the person has already opened another page no longer navigates them away. A second Settings Save while one is pending is ignored, and the full-reply editor and an inline code-block save for the same message share one lock so an older save cannot overwrite a newer one. (#201)
 
 - Saving an empty reply edit is refused, and Save stays disabled while the editor is blank, so a reply cannot be stored with no text. (#189)
