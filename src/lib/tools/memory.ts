@@ -25,6 +25,7 @@ export function rememberFact(source: MemorySource, input: { text: string; kind: 
       const memory = saveMemory({
         text: input.text,
         kind: input.kind,
+        source: "tool",
         sourceChatId: attempt.chatId,
         sourceMessageId: attempt.messageId,
       });

@@ -171,7 +171,7 @@ test("upgrading an existing database keeps the memory and gives it an unknown so
 
 test("a memory's vector stays on that memory after vacuum", async () => {
   const { store, embed } = requireStore();
-  const saved = store.saveMemory({ text: "Vacuum keeps the vectorkey token", kind: "fact" });
+  const saved = store.saveMemory({ text: "Vacuum keeps the vectorkey token", kind: "fact", source: "tool" });
   const embedded = await embed.embedPending();
   assert.equal(embedded.ok, true, embedded.ok ? undefined : embedded.error);
   const { db } = await import("../db");
@@ -199,13 +199,13 @@ test("a repeated fact keeps the original text and source", () => {
 
 test("memory text longer than 500 characters is refused", () => {
   const { store } = requireStore();
-  assert.throws(() => store.saveMemory({ text: "a".repeat(501), kind: "fact" }), /500/);
-  assert.throws(() => store.saveMemory({ text: "   ", kind: "fact" }), /empty/i);
+  assert.throws(() => store.saveMemory({ text: "a".repeat(501), kind: "fact", source: "tool" }), /500/);
+  assert.throws(() => store.saveMemory({ text: "   ", kind: "fact", source: "tool" }), /empty/i);
 });
 
 test("full text search finds a saved memory", () => {
   const { store } = requireStore();
-  const saved = store.saveMemory({ text: "The zebramemory lives in the north", kind: "fact" });
+  const saved = store.saveMemory({ text: "The zebramemory lives in the north", kind: "fact", source: "tool" });
   const hits = store.listMemories("zebramemory");
   assert.deepEqual(hits.map((memory) => memory.id), [saved.id]);
   assert.equal(store.listMemories("notawordinhere").length, 0);
@@ -213,7 +213,7 @@ test("full text search finds a saved memory", () => {
 
 test("delete removes the memory from the table, the text index, and the vector index", async () => {
   const { store, embed } = requireStore();
-  const saved = store.saveMemory({ text: "Please deletememorytoken today", kind: "summary" });
+  const saved = store.saveMemory({ text: "Please deletememorytoken today", kind: "summary", source: "tool" });
   const filled = await embed.embedPending();
   assert.equal(filled.ok, true);
   const embedded = store.getMemory(saved.id);
@@ -231,9 +231,9 @@ test("delete removes the memory from the table, the text index, and the vector i
 
 test("editing the text clears the vector until embeddings run again", async () => {
   const { store, embed } = requireStore();
-  const saved = store.saveMemory({ text: "Original embedclear token", kind: "fact" });
+  const saved = store.saveMemory({ text: "Original embedclear token", kind: "fact", source: "tool" });
   assert.equal((await embed.embedPending()).ok, true);
-  const updated = store.updateMemory(saved.id, { text: "Rewritten embedclear token", kind: "preference" });
+  const updated = store.updateMemory(saved.id, { text: "Rewritten embedclear token", kind: "preference", source: "user" });
   assert.equal(updated?.kind, "preference");
   assert.equal(updated?.embedded, false);
   assert.equal(store.listMemories("Original").length, 0);
@@ -244,12 +244,12 @@ test("editing the text clears the vector until embeddings run again", async () =
 
 test("a vector for the old text does not mark the rewritten text as embedded", async () => {
   const { store } = requireStore();
-  const saved = store.saveMemory({ text: "Stale vector token original", kind: "fact" });
+  const saved = store.saveMemory({ text: "Stale vector token original", kind: "fact", source: "tool" });
   const { db } = await import("../db");
   const located = db.$client.prepare("SELECT rowid AS rowid FROM memories WHERE id = ?").get(saved.id) as { rowid: number };
   const vector = Array.from({ length: 768 }, () => 0);
   vector[0] = 1;
-  store.updateMemory(saved.id, { text: "Stale vector token rewritten", kind: "fact" });
+  store.updateMemory(saved.id, { text: "Stale vector token rewritten", kind: "fact", source: "user" });
   store.writeVectors([{ rowid: located.rowid, text: "Stale vector token original", vector }]);
   assert.equal(store.getMemory(saved.id)?.embedded, false);
   store.writeVectors([{ rowid: located.rowid, text: "Stale vector token rewritten", vector }]);

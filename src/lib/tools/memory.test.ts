@@ -27,7 +27,7 @@ function modules() {
 
 test("forget refuses a call that has no id and leaves the memory in place", () => {
   const { tools, store } = modules();
-  const saved = store.saveMemory({ text: "Keep the forgetgate token", kind: "fact" });
+  const saved = store.saveMemory({ text: "Keep the forgetgate token", kind: "fact", source: "tool" });
   assert.deepEqual(tools.forgetMemory(""), { error: "Memory id is required" });
   assert.deepEqual(tools.forgetMemory("   "), { error: "Memory id is required" });
   assert.equal(store.getMemory(saved.id)?.text, "Keep the forgetgate token");

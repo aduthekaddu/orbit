@@ -393,7 +393,7 @@ test("a failed final embed pass marks the run failed", async (t) => {
   await resetChats();
   const store = await import("./store");
   const date = "2099-07-07";
-  const unembedded = store.saveMemory({ text: "I keep a kayak in the garage", kind: "fact" });
+  const unembedded = store.saveMemory({ text: "I keep a kayak in the garage", kind: "fact", source: "tool" });
   const { chatId } = await seedChat("I paddle on Sundays", at(date, 12));
   const fetchLive = globalThis.fetch;
   t.mock.method(globalThis, "fetch", (url: string, init?: RequestInit) => {

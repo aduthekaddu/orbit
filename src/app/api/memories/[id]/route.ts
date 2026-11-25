@@ -23,7 +23,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) return Response.json({ error: "Invalid memory" }, { status: 400 });
   try {
-    const memory = updateMemory(params.data.id, parsed.data);
+    const memory = updateMemory(params.data.id, { ...parsed.data, source: "user" });
     if (!memory) return Response.json({ error: "Not found" }, { status: 404 });
     return Response.json({ memory: memoryJson(memory) });
   } catch (error) {

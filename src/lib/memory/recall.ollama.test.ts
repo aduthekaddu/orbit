@@ -19,7 +19,7 @@ before(async () => {
     return;
   }
   for (const topic of MAIN.topics) {
-    for (const text of topic.memories) memoryIds.set(text, store.saveMemory({ text, kind: "fact" }).id);
+    for (const text of topic.memories) memoryIds.set(text, store.saveMemory({ text, kind: "fact", source: "tool" }).id);
   }
   const filled = await embed.embedPending();
   assert.equal(filled.ok, true, filled.ok ? undefined : `every labeled memory must embed: ${filled.error}`);

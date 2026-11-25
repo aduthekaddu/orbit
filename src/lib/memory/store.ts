@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "../db";
 import { memories } from "../db/schema";
 import { toMatchQuery, toOrMatchQuery } from "../search";
@@ -10,12 +11,16 @@ export type Memory = {
   id: string;
   kind: MemoryKind;
   text: string;
+  source: (typeof memories.$inferSelect)["source"];
   sourceChatId: string | null;
   sourceMessageId: string | null;
   createdAt: Date;
   lastUsedAt: Date | null;
   embedded: boolean;
 };
+
+type MemoryWrite = Pick<Memory, "text" | "kind" | "source">;
+const sourceSchema = z.enum(memories.source.enumValues);
 
 export type MemoryView = Memory & {
   sourceTitle: string | null;
@@ -32,6 +37,7 @@ type MemoryRow = {
   id: string;
   kind: string;
   text: string;
+  source: unknown;
   sourceChatId: string | null;
   sourceMessageId: string | null;
   sourceTitle: string | null;
@@ -44,6 +50,7 @@ const memorySelect = `
   SELECT memories.id AS id,
          memories.kind AS kind,
          memories.text AS text,
+         memories.source AS source,
          memories.source_chat_id AS sourceChatId,
          memories.source_message_id AS sourceMessageId,
          chats.title AS sourceTitle,
@@ -65,6 +72,7 @@ function toMemory(row: MemoryRow): MemoryView {
     id: row.id,
     kind: asKind(row.kind),
     text: row.text,
+    source: sourceSchema.parse(row.source),
     sourceChatId: row.sourceChatId,
     sourceMessageId: row.sourceMessageId,
     sourceTitle: row.sourceTitle,
@@ -204,9 +212,7 @@ export function markUsed(ids: string[], at = new Date()) {
   run(ids);
 }
 
-export function saveMemory(input: {
-  text: string;
-  kind: MemoryKind;
+export function saveMemory(input: MemoryWrite & {
   sourceChatId?: string | null;
   sourceMessageId?: string | null;
 }): MemoryView {
@@ -227,6 +233,7 @@ export function saveMemory(input: {
         kind,
         text,
         textNorm,
+        source: input.source,
         sourceChatId: input.sourceChatId ?? null,
         sourceMessageId: input.sourceMessageId ?? null,
         createdAt: new Date(),
@@ -245,7 +252,7 @@ export function saveMemory(input: {
   return memory;
 }
 
-export function updateMemory(id: string, input: { text: string; kind: MemoryKind }): MemoryView | null {
+export function updateMemory(id: string, input: MemoryWrite): MemoryView | null {
   const text = cleanMemoryText(input.text);
   const kind = asKind(input.kind);
   const textNorm = text.toLowerCase();
@@ -258,7 +265,7 @@ export function updateMemory(id: string, input: { text: string; kind: MemoryKind
   const clear = db.$client.prepare("DELETE FROM memories_vec WHERE rowid = cast(? AS integer)");
   const run = db.$client.transaction(() => {
     if (current.text !== text) clear.run(current.rowid);
-    db.update(memories).set({ text, textNorm, kind }).where(eq(memories.id, id)).run();
+    db.update(memories).set({ text, textNorm, kind, source: input.source }).where(eq(memories.id, id)).run();
   });
   run();
   return getMemory(id);

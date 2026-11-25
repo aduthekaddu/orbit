@@ -132,6 +132,7 @@ export const memories = sqliteTable(
     kind: text("kind").notNull(),
     text: text("text").notNull(),
     textNorm: text("text_norm").notNull(),
+    source: text("source", { enum: ["user", "tool", "dream", "unknown"] }).notNull().default("unknown"),
     sourceChatId: text("source_chat_id").references(() => chats.id, { onDelete: "set null" }),
     sourceMessageId: text("source_message_id").references(() => messages.id, { onDelete: "set null" }),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
