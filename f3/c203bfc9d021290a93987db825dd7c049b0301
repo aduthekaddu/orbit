@@ -1,0 +1,16 @@
+.agents/skills/verify-orbit/verify.mjs
+  h_9f68edf4527855 320,323,329-330,332,334,336-338,495-496,522-524
+src/lib/qa-harness.test.ts
+  h_9f68edf4527855 874,876-879,885-894
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f3c203bfc9d021290a93987db825dd7c049b0301",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
