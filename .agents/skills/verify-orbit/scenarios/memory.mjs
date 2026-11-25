@@ -49,15 +49,32 @@ function writeRequestProof(name) {
   fs.writeFileSync(path.join(dir, name), `${lines.join("\n")}\n`);
 }
 
-async function widths(locator) {
-  return locator.evaluate((element) => ({ scroll: element.scrollWidth, client: element.clientWidth }));
+// Chrome can end a line 1px past its own paragraph when it breaks a word inside a kerned pair, so the
+// text is measured against the border of the card or row that holds it, which is what a reader sees.
+async function textInside(locator, holder) {
+  return locator.evaluate((element, selector) => {
+    const box = element.closest(selector);
+    const style = getComputedStyle(box);
+    const outer = box.getBoundingClientRect();
+    const left = outer.left + parseFloat(style.borderLeftWidth);
+    const right = outer.right - parseFloat(style.borderRightWidth);
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const lines = [...range.getClientRects()];
+    const textLeft = Math.min(...lines.map((line) => line.left));
+    const textRight = Math.max(...lines.map((line) => line.right));
+    return {
+      inside: textLeft >= left && textRight <= right,
+      detail: `text spans x=${textLeft} to ${textRight}, inside the border spans x=${left} to ${right}`,
+    };
+  }, holder);
 }
 
-async function unwrapped(locator) {
+async function unwrapped(locator, holder) {
   await locator.evaluate((element) => {
     element.style.overflowWrap = "normal";
   });
-  const result = await widths(locator);
+  const result = await textInside(locator, holder);
   await locator.evaluate((element) => {
     element.style.overflowWrap = "";
   });
@@ -329,29 +346,32 @@ export default async function memory({ page, origin, step, shot }) {
   await page.getByRole("textbox").press("Enter");
   const longCard = page.locator('[data-tool-name="remember"] p').filter({ hasText: longText });
   const longCardShown = await longCard.waitFor({ timeout: 30_000 }).then(() => true, () => false);
-  const cardWidth = longCardShown ? await widths(longCard) : { scroll: 0, client: 0 };
+  const cardBox = '[data-tool-name="remember"]';
+  const noCard = { inside: false, detail: "no card" };
+  const cardFit = longCardShown ? await textInside(longCard, cardBox) : noCard;
   await shot("long-card");
-  step("a 500 character remember card with no spaces stays inside the card", longCardShown && cardWidth.scroll <= cardWidth.client, longCardShown ? `${cardWidth.scroll}px of text in ${cardWidth.client}px` : "no card");
-  const cardUnwrapped = longCardShown ? await unwrapped(longCard) : { scroll: 0, client: 0 };
-  step("the card check fails a remember card whose text cannot wrap", longCardShown && cardUnwrapped.scroll > cardUnwrapped.client, longCardShown ? `${cardUnwrapped.scroll}px of text in ${cardUnwrapped.client}px` : "no card");
+  step("a 500 character remember card with no spaces stays inside the card", cardFit.inside, cardFit.detail);
+  const cardUnwrapped = longCardShown ? await unwrapped(longCard, cardBox) : noCard;
+  step("the card check fails a remember card whose text cannot wrap", longCardShown && !cardUnwrapped.inside, cardUnwrapped.detail);
 
   await page.goto(`${origin}/memory`);
   const longRow = page.locator("li p").filter({ hasText: longText });
   const longRowShown = await longRow.waitFor({ timeout: 10_000 }).then(() => true, () => false);
-  const rowWidth = longRowShown ? await widths(longRow) : { scroll: 0, client: 0 };
+  const noRow = { inside: false, detail: "no row" };
+  const rowFit = longRowShown ? await textInside(longRow, "li") : noRow;
   await shot("long-row");
-  step("a 500 character memory with no spaces stays inside its row", longRowShown && rowWidth.scroll <= rowWidth.client, longRowShown ? `${rowWidth.scroll}px of text in ${rowWidth.client}px` : "no row");
-  const rowUnwrapped = longRowShown ? await unwrapped(longRow) : { scroll: 0, client: 0 };
-  step("the row check fails a memory whose text cannot wrap", longRowShown && rowUnwrapped.scroll > rowUnwrapped.client, longRowShown ? `${rowUnwrapped.scroll}px of text in ${rowUnwrapped.client}px` : "no row");
+  step("a 500 character memory with no spaces stays inside its row", rowFit.inside, rowFit.detail);
+  const rowUnwrapped = longRowShown ? await unwrapped(longRow, "li") : noRow;
+  step("the row check fails a memory whose text cannot wrap", longRowShown && !rowUnwrapped.inside, rowUnwrapped.detail);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${origin}/memory`);
   await page.getByRole("heading", { name: "Memory" }).first().waitFor({ timeout: 10_000 });
   const phoneRowShown = await longRow.waitFor({ timeout: 10_000 }).then(() => true, () => false);
-  const phoneWidth = phoneRowShown ? await widths(longRow) : { scroll: 0, client: 0 };
+  const phoneFit = phoneRowShown ? await textInside(longRow, "li") : noRow;
   await shot("mobile");
   step("memory page renders at 390 by 844", true);
-  step("a 500 character memory with no spaces stays inside its row at 390 by 844", phoneRowShown && phoneWidth.scroll <= phoneWidth.client, phoneRowShown ? `${phoneWidth.scroll}px of text in ${phoneWidth.client}px` : "no row");
+  step("a 500 character memory with no spaces stays inside its row at 390 by 844", phoneFit.inside, phoneFit.detail);
 
   await page.goto(`${origin}/c/${id}`);
   await page.getByRole("textbox").click();
