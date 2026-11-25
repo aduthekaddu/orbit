@@ -1,110 +1,134 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { WarningCircleIcon } from "@phosphor-icons/react";
 import { authClient } from "@/lib/auth-client";
+import { AUTH_REDIRECT_RESET_MS, authSubmitTransition, runAuthSubmit, type AuthResult } from "@/lib/auth-submit";
+import { idleSubmit } from "@/lib/submit-state";
 import { OrbitMark } from "@/components/orbit-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function LoginForm({ signupOpen }: { signupOpen: boolean }) {
+function useAuthSubmit(fallbackError: string) {
   const router = useRouter();
+  const [submit, dispatch] = useReducer(authSubmitTransition, idleSubmit);
+
+  useEffect(() => {
+    if (submit.status !== "succeeded") return;
+    const timer = setTimeout(() => dispatch({ type: "timeout" }), AUTH_REDIRECT_RESET_MS);
+    return () => clearTimeout(timer);
+  }, [submit.status]);
+
+  async function run(request: () => Promise<AuthResult>) {
+    if (submit.status === "pending" || submit.status === "succeeded") return;
+    await runAuthSubmit({ request, router, dispatch, fallbackError });
+  }
+
+  function onFieldChange() {
+    dispatch({ type: "edit" });
+  }
+
+  return { submit, run, onFieldChange };
+}
+
+export function LoginForm({ signupOpen }: { signupOpen: boolean }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [pending, setPending] = useState(false);
+  const { submit, run, onFieldChange } = useAuthSubmit("Could not sign in");
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setPending(true);
-    setError("");
-    try {
-      const result = await authClient.signIn.email({ email, password });
-      if (result.error) {
-        setError(result.error.message ?? "Could not sign in");
-        return;
-      }
-      router.push("/");
-      router.refresh();
-    } catch {
-      setError("Network error");
-    } finally {
-      setPending(false);
-    }
+    await run(() => authClient.signIn.email({ email, password }));
   }
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <Field id="email" label="Email">
-        <Input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+        <Input
+          id="email"
+          type="email"
+          value={email}
+          onChange={(event) => {
+            onFieldChange();
+            setEmail(event.target.value);
+          }}
+          required
+        />
       </Field>
       <Field id="password" label="Password">
         <Input
           id="password"
           type="password"
           value={password}
-          onChange={(event) => setPassword(event.target.value)}
+          onChange={(event) => {
+            onFieldChange();
+            setPassword(event.target.value);
+          }}
           minLength={8}
           required
         />
       </Field>
-      <FormError message={error} />
-      <SubmitButton pending={pending}>Sign in</SubmitButton>
+      <FormError message={submit.status === "failed" ? submit.error : ""} />
+      <SubmitButton pending={submit.status === "pending" || submit.status === "succeeded"}>Sign in</SubmitButton>
       {signupOpen ? <QuietLink href="/signup">Create account</QuietLink> : null}
     </form>
   );
 }
 
 export function SignupForm() {
-  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [pending, setPending] = useState(false);
+  const { submit, run, onFieldChange } = useAuthSubmit("Could not create account");
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setPending(true);
-    setError("");
-    try {
-      const result = await authClient.signUp.email({ name, email, password });
-      if (result.error) {
-        setError(result.error.message ?? "Could not create account");
-        return;
-      }
-      router.push("/");
-      router.refresh();
-    } catch {
-      setError("Network error");
-    } finally {
-      setPending(false);
-    }
+    await run(() => authClient.signUp.email({ name, email, password }));
   }
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <Field id="name" label="Name">
-        <Input id="name" value={name} onChange={(event) => setName(event.target.value)} required />
+        <Input
+          id="name"
+          value={name}
+          onChange={(event) => {
+            onFieldChange();
+            setName(event.target.value);
+          }}
+          required
+        />
       </Field>
       <Field id="email" label="Email">
-        <Input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+        <Input
+          id="email"
+          type="email"
+          value={email}
+          onChange={(event) => {
+            onFieldChange();
+            setEmail(event.target.value);
+          }}
+          required
+        />
       </Field>
       <Field id="password" label="Password">
         <Input
           id="password"
           type="password"
           value={password}
-          onChange={(event) => setPassword(event.target.value)}
+          onChange={(event) => {
+            onFieldChange();
+            setPassword(event.target.value);
+          }}
           minLength={8}
           required
         />
       </Field>
-      <FormError message={error} />
-      <SubmitButton pending={pending}>Create account</SubmitButton>
+      <FormError message={submit.status === "failed" ? submit.error : ""} />
+      <SubmitButton pending={submit.status === "pending" || submit.status === "succeeded"}>Create account</SubmitButton>
       <QuietLink href="/login">Sign in</QuietLink>
     </form>
   );

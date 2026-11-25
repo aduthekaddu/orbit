@@ -1,12 +1,13 @@
 import { tool } from "ai";
+import type Docker from "dockerode";
 import { sandboxImages } from "../sandbox/images";
 import { runCode, sandboxDocker } from "../sandbox/run";
 import { runCodeInputSchema, type RunCodeInput } from "../sandbox/spec";
 import { createStoppedRuns, type StoppedRuns } from "./stopped-runs";
 
-async function execute(input: RunCodeInput, abortSignal?: AbortSignal) {
+async function execute(connect: () => Docker, input: RunCodeInput, abortSignal?: AbortSignal) {
   try {
-    return await runCode(sandboxDocker(), input, abortSignal);
+    return await runCode(connect(), input, abortSignal).result;
   } catch (error) {
     if (abortSignal?.aborted || error instanceof Error && error.name === "AbortError") throw error;
     const status = error && typeof error === "object" && "statusCode" in error && typeof error.statusCode === "number" ? error.statusCode : undefined;
@@ -22,10 +23,10 @@ async function execute(input: RunCodeInput, abortSignal?: AbortSignal) {
   }
 }
 
-export function createRunCodeTool(stopped: StoppedRuns = createStoppedRuns()) {
+export function createRunCodeTool(stopped: StoppedRuns = createStoppedRuns(), connect: () => Docker = sandboxDocker) {
   return tool({
     description: "Run Python or JavaScript to calculate exact answers and inspect data. Uses only the standard library, with no network or persistent files. Each run has a 10 second limit.",
     inputSchema: runCodeInputSchema,
-    execute: (input, { abortSignal, toolCallId }) => stopped.track(toolCallId, execute(input, abortSignal)),
+    execute: (input, { abortSignal, toolCallId }) => stopped.track(toolCallId, execute(connect, input, abortSignal)),
   });
 }
