@@ -4,8 +4,8 @@ import Docker from "dockerode";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { Duplex, Writable } from "node:stream";
-import { setTimeout as delay } from "node:timers/promises";
 import { format } from "node:util";
+import { eventually } from "../eventually.mjs";
 import { sandboxImages } from "./images";
 import { OWNER_LABEL, ownedSandboxFilter, parseSandboxOwner, sandboxLabels, sandboxOwner, type SandboxOwner } from "./owner.mjs";
 import { runCode, runCodeToEnd } from "./run";
@@ -50,13 +50,11 @@ function loopingContainerId(child: ChildProcess): Promise<string> {
 }
 
 async function inspectUntil(container: Docker.Container, done: (state: Docker.ContainerInspectInfo["State"]) => boolean, timeoutMs: number) {
-  const deadline = performance.now() + timeoutMs;
-  let state = (await container.inspect()).State;
-  while (!done(state) && performance.now() < deadline) {
-    await delay(100);
-    state = (await container.inspect()).State;
-  }
-  return state;
+  return eventually(() => container.inspect().then((info) => info.State), done, {
+    timeoutMs: Math.max(timeoutMs, 1),
+    intervalMs: 100,
+    what: "the container to reach the expected state",
+  });
 }
 
 const owner = sandboxOwner();
@@ -104,15 +102,19 @@ test("sandbox programs run inside real isolated containers", { timeout: 90_000 }
   const foreign = parseSandboxOwner(randomUUID());
   await t.test("a planted container that is already gone does not fail the check", () => withPlantedContainer(foreign, async (container) => {
     await container.kill();
-    while (true) {
-      try {
-        await container.inspect();
-      } catch (error) {
-        if (isDockerStatus(error, 404)) return;
-        throw error;
-      }
-      await delay(50);
-    }
+    await eventually(
+      async () => {
+        try {
+          await container.inspect();
+          return "present";
+        } catch (error) {
+          if (isDockerStatus(error, 404)) return "gone";
+          throw error;
+        }
+      },
+      (status) => status === "gone",
+      { timeoutMs: 15_000, intervalMs: 50, what: "the planted container to be removed" },
+    );
   }));
   await t.test("another run's container does not appear in this run's leftover check", () => withPlantedContainer(foreign, async () => {
     assert.deepEqual(await ownedContainers(), []);

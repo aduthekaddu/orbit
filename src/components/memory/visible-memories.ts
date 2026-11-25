@@ -1,3 +1,8 @@
+export function isMemorySearchPending(query: string, fetched: { query: string } | null): boolean {
+  const trimmed = query.trim();
+  return trimmed.length > 0 && fetched?.query !== trimmed;
+}
+
 export function visibleMemories<T>(query: string, initial: readonly T[], fetched: { query: string; rows: readonly T[] } | null): readonly T[] {
   const trimmed = query.trim();
   if (!trimmed) return initial;

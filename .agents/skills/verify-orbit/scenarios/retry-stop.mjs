@@ -1,3 +1,4 @@
+import { eventually } from "../../../../src/lib/eventually.mjs";
 export default async function retryStop({ page, origin, step, shot }) {
   const created = await page.request.post(`${origin}/api/chats`);
   const { id } = await created.json();
@@ -27,12 +28,10 @@ export default async function retryStop({ page, origin, step, shot }) {
   step("Stop ends the stream early", ended && !seen.includes("word50"), `ended=${ended} text "${seen}"`);
   step("reply text visible at stop", seen.includes("word3"), `text was "${seen}"`);
 
-  const deadline = Date.now() + 5_000;
-  while (Date.now() < deadline) {
+  await eventually(async () => {
     const { messages } = await (await page.request.get(`${origin}/api/chats/${id}`)).json();
-    if (messages.some(({ message }) => message.role === "assistant")) break;
-    await page.waitForTimeout(250);
-  }
+    return messages.some(({ message }) => message.role === "assistant");
+  }, Boolean, { timeoutMs: 5_000, what: "the stopped reply saved in the chat" });
   await page.reload();
   await page.locator('[data-turn-id]').first().waitFor({ timeout: 15_000 });
   const saved = page.locator('[data-message-role="assistant"]');

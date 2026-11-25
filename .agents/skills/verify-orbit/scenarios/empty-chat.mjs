@@ -34,7 +34,7 @@ export default async function emptyChat({ page, origin, step, shot }) {
 
   if (found.includes("Make a table")) {
     await page.getByRole("button", { name: "Make a table", exact: true }).click();
-    await page.waitForTimeout(500);
+    await page.waitForFunction(() => document.activeElement instanceof HTMLTextAreaElement && document.activeElement.value !== "", null, { timeout: 5_000 }).catch(() => {});
     const state = await page.evaluate(() => {
       const node = document.activeElement;
       return node instanceof HTMLTextAreaElement

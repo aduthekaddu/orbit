@@ -59,8 +59,8 @@ export default async function sandboxSearch({ page, origin, mockUrl, step, shot 
   const dialog = page.getByRole("dialog", { name: "Command palette" });
   await dialog.waitFor({ timeout: 5_000 });
   await dialog.locator("input").fill("gizmowobble7");
-  await page.waitForTimeout(500);
   const heading = dialog.getByText("Messages", { exact: true });
+  await heading.waitFor({ timeout: 5_000 }).catch(() => {});
   const visible = await heading.isVisible().catch(() => false);
   await shot(visible ? "results" : "before");
   step("the palette shows a Messages result for the output token", visible, "no Messages group");

@@ -6,13 +6,15 @@ import test, { type TestContext } from "node:test";
 import axios from "axios";
 import { tavily } from "@tavily/core";
 import { z } from "zod";
+import { eventually } from "../eventually.mjs";
 import { parseSearchResults, searchWeb } from "./search";
 import { withTavilySignal } from "./tavily-signal";
 
 function latch() {
+  let released = false;
   let release = () => {};
-  const promise = new Promise<void>((resolve) => { release = resolve; });
-  return { promise, release };
+  const promise = new Promise<void>((resolve) => { release = () => { released = true; resolve(); }; });
+  return { promise, release, isReleased: () => released };
 }
 
 async function fixture(t: TestContext, handle: (query: string, response: http.ServerResponse) => void) {
@@ -36,13 +38,8 @@ function finish(response: http.ServerResponse, query: string) {
   response.end(JSON.stringify({ query, images: [], results: [{ title: "Orbit", url: "https://example.com/orbit", content: "Space", score: 1 }], response_time: 0.01 }));
 }
 
-async function closesSoon(promise: Promise<void>) {
-  let timer: NodeJS.Timeout | undefined;
-  try {
-    return await Promise.race([promise.then(() => true), new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(false), 500); })]);
-  } finally {
-    clearTimeout(timer);
-  }
+function waitForClose(closed: ReturnType<typeof latch>, what: string) {
+  return eventually(() => closed.isReleased(), (done) => done, { timeoutMs: 500, what });
 }
 
 test("stopping Tavily closes the actual SDK request", { timeout: 3000 }, async (t) => {
@@ -60,7 +57,7 @@ test("stopping Tavily closes the actual SDK request", { timeout: 3000 }, async (
   await started.promise;
   controller.abort(reason);
   await rejected;
-  assert.equal(await closesSoon(closed.promise), true, "the SDK connection remains open after cancellation");
+  await waitForClose(closed, "the SDK connection to close after cancellation");
   assert.equal(finished, false);
 });
 
@@ -90,7 +87,7 @@ test("a cancelled SDK call leaves concurrent and unrelated requests running", { 
   controller.abort();
   const unrelated = axios.get(url);
   await rejected;
-  assert.equal(await closesSoon(firstClosed.promise), true, "the cancelled connection did not close");
+  await waitForClose(firstClosed, "the cancelled connection to close");
   assert.equal((await second).results[0]?.url, "https://example.com/orbit");
   assert.equal((await unrelated).status, 200);
 });
@@ -112,5 +109,5 @@ test("a Tavily deadline closes its request and returns a search failure", { time
   t.after(() => clearTimeout(timer));
   const output = await pending;
   assert.deepEqual(output, { ok: false, query: "orbit", error: "Search timed out" });
-  assert.equal(await closesSoon(closed.promise), true, "the deadline left the SDK connection open");
+  await waitForClose(closed, "the SDK connection to close after the deadline");
 });

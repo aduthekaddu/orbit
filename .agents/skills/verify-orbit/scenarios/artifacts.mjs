@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
+import { eventually } from "../../../../src/lib/eventually.mjs";
 
 async function security(frame, origin, kind, step) {
   const state = await frame.locator("body").evaluate(async (_body, appOrigin) => {
@@ -57,15 +58,15 @@ export default async function artifacts({ page, origin, step, shot }) {
     // to the parent <iframe> until Viz aggregates the child's hit-test region. Confirm pointer routing first.
     const body = loaded.locator("body");
     await body.waitFor({ timeout: Math.max(1, deadline - Date.now()) });
-    for (let attempt = 0; Date.now() < deadline; attempt += 1) {
+    let attempt = 0;
+    await eventually(async () => {
       await body.hover({
-        position: { x: 1 + (attempt % 2), y: 1 },
+        position: { x: 1 + (attempt++ % 2), y: 1 },
         timeout: Math.max(1, deadline - Date.now()),
       });
-      if (await body.evaluate((node) => node.matches(":hover"))) return loaded;
-      await page.waitForTimeout(25);
-    }
-    throw new Error("HTML artifact frame did not accept pointer input before timeout");
+      return body.evaluate((node) => node.matches(":hover"));
+    }, Boolean, { timeoutMs: Math.max(1, deadline - Date.now()), what: "the HTML artifact frame to accept pointer input" });
+    return loaded;
   }
 
   async function close() {
@@ -90,8 +91,10 @@ export default async function artifacts({ page, origin, step, shot }) {
   step("HTML button responds to a click", await htmlButton.evaluate(node => node.style.backgroundColor === "green"));
   await security(frame, origin, "HTML", step);
   // The forged message goes to the page itself, so the wildcard target is the point of the check.
-  await page.evaluate(() => window.postMessage({ type: "orbit-artifact-error", message: "Forged artifact error" }, "*")); // nosemgrep: javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration
-  await page.waitForTimeout(100);
+  await page.evaluate(() => new Promise((resolve) => {
+    window.addEventListener("message", () => requestAnimationFrame(() => requestAnimationFrame(resolve)), { once: true });
+    window.postMessage({ type: "orbit-artifact-error", message: "Forged artifact error" }, "*"); // nosemgrep: javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration
+  }));
   step("parent ignores error messages from another window", !await page.getByRole("alert").filter({ hasText: "Forged artifact error" }).count());
   await shot("html");
   const artifactUrl = page.url();

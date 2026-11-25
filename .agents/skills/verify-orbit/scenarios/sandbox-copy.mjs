@@ -1,3 +1,4 @@
+import { eventually } from "../../../../src/lib/eventually.mjs";
 const channels = [
   { label: "Copy source", saved: (part) => part.input.code, done: "Source copied" },
   { label: "Copy standard output", saved: (part) => part.output.stdout, done: "Standard output copied" },
@@ -16,15 +17,11 @@ export default async function sandboxCopy({ page, origin, mockUrl, step, shot })
   await composer.press("Enter");
   await card.locator('[data-tool-status="succeeded"]').waitFor({ timeout: 25_000 });
 
-  let part;
-  const deadline = Date.now() + 8_000;
-  while (Date.now() < deadline) {
+  const part = await eventually(async () => {
     const body = await (await page.request.get(`${origin}/api/chats/${id}`)).json();
     const reply = body.messages.map(({ message }) => message).find((message) => message.role === "assistant");
-    part = reply?.parts.find((entry) => entry.type === "tool-run_code" && entry.state === "output-available");
-    if (part) break;
-    await page.waitForTimeout(250);
-  }
+    return reply?.parts.find((entry) => entry.type === "tool-run_code" && entry.state === "output-available");
+  }, Boolean, { timeoutMs: 8_000, what: "the finished run saved in the chat" });
   const clipboard = () => page.evaluate(() => navigator.clipboard.readText());
   const clear = () => page.evaluate(() => navigator.clipboard.writeText(""));
   console.log(`saved source ${JSON.stringify(part?.input.code.slice(0, 40))} stdout ${JSON.stringify(part?.output.stdout)} stderr ${JSON.stringify(part?.output.stderr)}`);
@@ -56,11 +53,11 @@ export default async function sandboxCopy({ page, origin, mockUrl, step, shot })
     await clear();
     await stdoutButton.focus();
     await page.keyboard.press(key);
-    await page.waitForTimeout(300);
-    step(`${key} on the focused copy button copies the standard output`, (await clipboard()) === part.output.stdout, `clipboard ${JSON.stringify(await clipboard())}`);
+    const copied = await eventually(clipboard, (text) => text !== "", { timeoutMs: 3_000, what: `${key} on the copy button to write the clipboard` });
+    step(`${key} on the focused copy button copies the standard output`, copied === part.output.stdout, `clipboard ${JSON.stringify(copied)}`);
   }
 
-  await page.waitForTimeout(1_800);
+  await page.waitForFunction(() => ![...document.querySelectorAll('[aria-live="polite"]')].some((node) => /copied/i.test(node.textContent ?? "")), null, { timeout: 5_000 });
   await page.evaluate(() => {
     Object.defineProperty(navigator.clipboard, "writeText", { configurable: true, value: () => Promise.reject(new Error("denied")) });
   });
@@ -73,8 +70,8 @@ export default async function sandboxCopy({ page, origin, mockUrl, step, shot })
   await card.locator('[data-tool-status="succeeded"]').waitFor({ timeout: 15_000 });
   await clear();
   await card.getByRole("button", { name: "Copy source" }).click();
-  await page.waitForTimeout(300);
-  step("the reopened card still copies the source exactly", (await clipboard()) === part.input.code);
+  const copiedSource = await eventually(clipboard, (text) => text !== "", { timeoutMs: 3_000, what: "Copy source to write the clipboard" });
+  step("the reopened card still copies the source exactly", copiedSource === part.input.code);
 
   const browser = context.browser();
   const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });

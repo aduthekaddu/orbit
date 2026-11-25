@@ -1,3 +1,5 @@
+import { eventually } from "../../../../src/lib/eventually.mjs";
+
 // With a mouse resting away from the thread, Tab must still reach the actions of earlier
 // messages, and a focused action must be fully visible. Retry stays visible when the last reply
 // fails, and a touch screen shows every action at rest.
@@ -45,12 +47,11 @@ async function tabStops(page, onStop = async () => {}) {
     if (stop?.composer) return stops;
     if (!stop) continue;
     // Poll for 500 ms in case a fade is still running. A focused button must end fully visible.
-    const deadline = Date.now() + 500;
-    let opacity = await focusedOpacity(page);
-    while (opacity !== 1 && Date.now() < deadline) {
-      await page.waitForTimeout(50);
-      opacity = await focusedOpacity(page);
-    }
+    const opacity = await eventually(() => focusedOpacity(page), (value) => value === 1, {
+      timeoutMs: 500,
+      intervalMs: 50,
+      what: `focused action ${stop.label} to become visible`,
+    }).catch(() => focusedOpacity(page));
     stops.push({ ...stop, opacity });
     await onStop(stop);
   }
@@ -79,10 +80,13 @@ export default async function messageActions({ page, origin, step, shot }) {
   await page.goto(`${origin}/c/${id}`);
   await replies.nth(1).getByText("pong", { exact: true }).waitFor({ timeout: 15_000 });
   await page.mouse.move(5, 795);
-  await page.waitForTimeout(500);
 
   const pointer = await page.evaluate(() => `pointer:fine=${matchMedia("(pointer: fine)").matches}`);
-  const rest = await actionsAtRest(page);
+  const rest = await eventually(
+    () => actionsAtRest(page),
+    (items) => items.length === 4 && items.slice(0, 3).every((actions) => actions.every(({ opacity }) => opacity === 0)),
+    { timeoutMs: 1_000, intervalMs: 50, what: "earlier message actions to hide at rest" },
+  ).catch(() => actionsAtRest(page));
   step("earlier message actions are hidden at rest", rest.length === 4 && rest.slice(0, 3).every((actions) => actions.every(({ opacity }) => opacity === 0)), `${pointer} ${describeRest(rest)}`);
   step("last reply actions show at rest", ["Copy", "Edit reply", "Regenerate"].every((label) => rest[3]?.some((action) => action.label === label && action.opacity === 1)), describeRest(rest));
   await shot("rest");
@@ -100,12 +104,11 @@ export default async function messageActions({ page, origin, step, shot }) {
   step("focus on the first prompt's Copy opens its tooltip", tooltip);
 
   await page.locator("[data-message-id]").first().hover();
-  const deadline = Date.now() + 1_000;
-  let hovered = false;
-  while (!hovered && Date.now() < deadline) {
-    hovered = (await actionsAtRest(page))[0]?.some(({ label, opacity }) => label === "Copy" && opacity === 1) ?? false;
-    if (!hovered) await page.waitForTimeout(50);
-  }
+  const hovered = await eventually(
+    async () => (await actionsAtRest(page))[0]?.some(({ label, opacity }) => label === "Copy" && opacity === 1) ?? false,
+    Boolean,
+    { timeoutMs: 1_000, intervalMs: 50, what: "hover to show the first prompt's actions" },
+  ).then(() => true, () => false);
   step("hover shows the first prompt's actions", hovered);
 
   const failedChat = (await (await page.request.post(`${origin}/api/chats`)).json()).id;
@@ -115,7 +118,7 @@ export default async function messageActions({ page, origin, step, shot }) {
   await sendAndWait(page, `[qa:fail-first] keyboard ${Date.now()}`, retry);
   const failedReplyId = await firstReply.getAttribute("data-message-id");
   await page.mouse.move(5, 795);
-  await page.waitForTimeout(500);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const failedRest = (await actionsAtRest(page)).flat();
   step("a failed reply shows Retry at rest", failedRest.some(({ label, opacity }) => label === "Retry" && opacity === 1), failedRest.map(({ label, opacity }) => `${label}@${opacity}`).join(","));
   const failedStops = await tabStops(page);

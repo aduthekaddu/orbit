@@ -1,3 +1,4 @@
+import { eventually } from "../../../../src/lib/eventually.mjs";
 export default async function genuiStopped({ page, origin, step, shot }) {
   const response = await page.request.post(`${origin}/api/chats`);
   if (!response.ok()) throw new Error(`could not create the test chat (${response.status()})`);
@@ -66,15 +67,10 @@ export default async function genuiStopped({ page, origin, step, shot }) {
   await expectStopped("follow-up preserves Cancelled and one muted Stopped line with no raw details");
   await shot("after-follow-up");
 
-  const deadline = Date.now() + 5_000;
-  while (Date.now() < deadline) {
+  await eventually(async () => {
     const stored = await (await page.request.get(`${origin}/api/chats/${id}`)).json();
-    const assistants = Array.isArray(stored.messages)
-      ? stored.messages.filter(({ message }) => message?.role === "assistant").length
-      : 0;
-    if (assistants >= 2) break;
-    await page.waitForTimeout(250);
-  }
+    return Array.isArray(stored.messages) ? stored.messages.filter(({ message }) => message?.role === "assistant").length : 0;
+  }, (assistants) => assistants >= 2, { timeoutMs: 5_000, what: "both assistant replies saved in the chat" });
 
   await page.reload();
   await recovered.waitFor({ timeout: 20_000 });

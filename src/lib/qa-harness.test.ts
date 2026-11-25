@@ -6,6 +6,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test, { after } from "node:test";
+import { eventually as waitUntil } from "./eventually.mjs";
 
 // These tests copy verify.mjs, ci-e2e.sh, the mocks and src/lib/sandbox/owner.mjs into a scratch checkout and run them.
 // A stub app stands in for Orbit, so no build is needed. Reverting any of those scripts to fixed ports turns a test here red.
@@ -121,13 +122,7 @@ function status(port: number, urlPath: string): Promise<number | string> {
 }
 
 async function eventually<T>(read: () => T | Promise<T>, accept: (value: T) => boolean, what: string, ms = 5_000): Promise<T> {
-  const deadline = Date.now() + ms;
-  for (;;) {
-    const value = await read();
-    if (accept(value)) return value;
-    if (Date.now() > deadline) throw new Error(`${what}: still ${JSON.stringify(value)} after ${ms} ms`);
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
+  return waitUntil(read, accept, { timeoutMs: ms, intervalMs: 25, what });
 }
 
 function procEntries(): string[] {
