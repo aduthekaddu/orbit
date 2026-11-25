@@ -1,0 +1,152 @@
+.agents/skills/verify-orbit/SKILL.md
+  h_9f68edf4527855 31-33
+.agents/skills/verify-orbit/features/README.md
+  h_9f68edf4527855 37
+.agents/skills/verify-orbit/features/browse.md
+  h_9f68edf4527855 79-105
+.agents/skills/verify-orbit/features/sandbox.md
+  h_9f68edf4527855 100,219,223
+.agents/skills/verify-orbit/fixture-process.mjs
+  h_9f68edf4527855 9
+.agents/skills/verify-orbit/scenarios/request-failures.mjs
+  h_9f68edf4527855 1-143
+.agents/skills/verify-orbit/scenarios/sandbox-language.mjs
+  h_9f68edf4527855 2,4
+.agents/skills/verify-orbit/scenarios/sandbox-outcome.mjs
+  h_9f68edf4527855 2,4
+.agents/skills/verify-orbit/scenarios/sandbox-stop-output.mjs
+  h_9f68edf4527855 2,31,254-268
+.agents/skills/verify-orbit/verify.mjs
+  h_9f68edf4527855 7,214-217,242-243,256,267,685-688
+.github/workflows/ci.yml
+  h_9f68edf4527855 31-33,58
+AGENTS.md
+  h_9f68edf4527855 15,24
+ARCHITECTURE.md
+  h_9f68edf4527855 143-145,149,152
+CHANGELOG.md
+  h_9f68edf4527855 7,28-31
+CONTRIBUTING.md
+  h_9f68edf4527855 26
+SECURITY.md
+  h_9f68edf4527855 17
+docs/architecture/model-sync.json
+  h_9f68edf4527855 2,7-8
+docs/slices/13.md
+  h_9f68edf4527855 127
+docs/slices/17.md
+  h_9f68edf4527855 176
+docs/slices/23.md
+  h_9f68edf4527855 130,167
+scripts/qa/ci-e2e.sh
+  h_9f68edf4527855 17-19,163-165,173
+scripts/qa/mock-mcp.mjs
+  h_9f68edf4527855 8,32-37,45,123-128,180
+scripts/qa/sandbox-leftovers.mjs
+  h_9f68edf4527855 1-16
+scripts/qa/sandbox-sweep-log.sh
+  h_9f68edf4527855 1-24
+scripts/qa/sandbox-timing.ts
+  h_9f68edf4527855 4,29
+scripts/test-data-dir.mjs
+  h_9f68edf4527855 1-5,10-23
+scripts/test.mjs
+  h_9f68edf4527855 2-5,8,58-151,154,157,170-174,183
+src/app/api/chat/route.test.ts
+  h_9f68edf4527855 1-223
+src/app/api/chat/route.ts
+  h_9f68edf4527855 4,50,86,110,139,149,162,165,177
+src/app/api/models/route.ts
+  h_9f68edf4527855 4,20,40
+src/app/api/settings/github/check/route.ts
+  h_9f68edf4527855 21,23,26
+src/components/chat/chat-panel.tsx
+  h_9f68edf4527855 75-79
+src/components/chat/stopped-run-sync.test.tsx
+  h_9f68edf4527855 1-57
+src/components/chat/stopped-run-sync.tsx
+  h_9f68edf4527855 3,6-8,13-21,23-41,44-52,57,60,64-66,76-81
+src/components/chat/use-save-message.ts
+  h_9f68edf4527855 5,7,11-12,28-31,35-53
+src/components/settings/settings-form.tsx
+  h_9f68edf4527855 6,13-15,18-21,46,49-50,59-71,75,90-92,105-123,126,128-130,133,138-145,170,185,291
+src/components/shell/app-shell.tsx
+  h_9f68edf4527855 6-8,19-20,40-41,45,48-53,99-109,121-132,168,207-208
+src/components/tools/run-card.test.tsx
+  h_9f68edf4527855 5,11,16-20,47-54
+src/components/tools/run-card.tsx
+  h_9f68edf4527855 4,21,42-43,54
+src/lib/auth-secret.test.ts
+  h_9f68edf4527855 5,8
+src/lib/chat-errors.test.ts
+  h_9f68edf4527855 3,6-8,14-15,39-41,45,95,99-103,108-326
+src/lib/chat-errors.ts
+  h_9f68edf4527855 1-3,6-64,67-130,137-141,147,151-153,159,166-167,173-178,181-183,185-186,189-198
+src/lib/chat-stopped-runs.ts
+  h_9f68edf4527855 15-19,22
+src/lib/db/migration-lock.test.ts
+  h_9f68edf4527855 7,12-17,19-21
+src/lib/memory/dream.test.ts
+  h_9f68edf4527855 7,10
+src/lib/memory/store.test.ts
+  h_9f68edf4527855 7,54,84,125
+src/lib/messages.test.ts
+  h_9f68edf4527855 6,169-217
+src/lib/messages.ts
+  h_9f68edf4527855 3,95-101,103-108,114,117,218,222,224
+src/lib/no-direct-fetch.test.ts
+  h_9f68edf4527855 1-46
+src/lib/paths.ts
+  h_9f68edf4527855 4-10,12-17
+src/lib/request-json.test.tsx
+  h_9f68edf4527855 1-130
+src/lib/request-json.ts
+  h_9f68edf4527855 1-111
+src/lib/sandbox/owner.d.mts
+  h_9f68edf4527855 1-12
+src/lib/sandbox/owner.mjs
+  h_9f68edf4527855 1-49
+src/lib/sandbox/owner.test.ts
+  h_9f68edf4527855 1-110
+src/lib/sandbox/run.test.ts
+  h_9f68edf4527855 13-14,71-78,80,92,99-139,203,268,320,623,626,629,640-643,654
+src/lib/sandbox/run.ts
+  h_9f68edf4527855 5,88
+src/lib/sandbox/spec.test.ts
+  h_9f68edf4527855 3,6-7,16,28,44
+src/lib/sandbox/spec.ts
+  h_9f68edf4527855 4,37,51
+src/lib/sandbox/sweep.test.ts
+  h_9f68edf4527855 1-127
+src/lib/sandbox/sweep.ts
+  h_9f68edf4527855 3,9-14,26-27,37-41
+src/lib/sandbox/wait-for-running.ts
+  h_9f68edf4527855 2,4,7
+src/lib/settings-form.test.ts
+  h_9f68edf4527855 3-4,57-59,62-80,82-105,108-112,115-116
+src/lib/settings-form.ts
+  h_9f68edf4527855 1,3,12-34
+src/lib/settings.test.ts
+  h_9f68edf4527855 8,86-88
+src/lib/test-runner.test.ts
+  h_9f68edf4527855 2,7,22,27,31-33,35-36,39-43,48,145-445
+src/lib/tools/github-mcp-url.test.ts
+  h_9f68edf4527855 40
+src/lib/tools/github.test.ts
+  h_9f68edf4527855 1,20-23,57,79,97,114,132,146,158,172,187,189,194,202,207,231,236,253,256,267,269,284,291,312,316,327,333,343,348-363,366,376-407,410,464,472,476,478,527
+src/lib/tools/github.ts
+  h_9f68edf4527855 3,22,63,65,71,78,80,91,94,101,109,131,145-149,152-153,183,190,197,200,203-204,209-221,223,227-229,237
+src/lib/tools/run-code.test.ts
+  h_9f68edf4527855 1,28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e75eecfa67c644c6dc5ef5a08e7fcd54a02171e1",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
