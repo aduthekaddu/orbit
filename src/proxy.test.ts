@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 import { NextRequest } from "next/server";
+import nextConfig from "../next.config";
 import { LOCAL_AUTH_URL } from "./lib/auth-origins";
 
 const DAY = 86_400_000;
@@ -76,6 +77,44 @@ after(() => {
   for (const key of ENV_KEYS) {
     if (savedEnv[key] === undefined) delete process.env[key];
     else process.env[key] = savedEnv[key];
+  }
+});
+
+test("signed-out API paths next to /api/auth require a session", async (t) => {
+  t.mock.method(console, "warn", () => {});
+  for (const pathname of ["/api/authors", "/api/auth-x"]) {
+    await t.test(pathname, async () => {
+      const url = new URL(pathname, LOCAL_AUTH_URL);
+      assert.equal(unstable_doesMiddlewareMatch({ config, nextConfig, url: url.href }), true);
+      const response = await proxy(new NextRequest(url));
+      assert.equal(response.status, 401);
+      assert.deepEqual(await response.json(), { error: "Unauthorized" });
+    });
+  }
+});
+
+test("a signed-out page next to /_next redirects to login", async (t) => {
+  t.mock.method(console, "warn", () => {});
+  const url = new URL("/_next-fixture", LOCAL_AUTH_URL);
+  assert.equal(unstable_doesMiddlewareMatch({ config, nextConfig, url: url.href }), true);
+  const response = await proxy(new NextRequest(url));
+  assert.equal(response.status, 307);
+  assert.equal(new URL(response.headers.get("location") ?? "").pathname, "/login");
+});
+
+test("auth and Next.js paths can still pass through without a session", async (t) => {
+  const requests = [
+    { pathname: "/api/auth", method: "GET" },
+    { pathname: "/api/auth/sign-in/email", method: "POST" },
+    { pathname: "/_next", method: "GET" },
+    { pathname: "/_next/webpack-hmr", method: "GET" },
+  ];
+  for (const { pathname, method } of requests) {
+    await t.test(`${method} ${pathname}`, async () => {
+      const request = new NextRequest(new URL(pathname, LOCAL_AUTH_URL), { method });
+      const response = await proxy(request);
+      assert.equal(response.headers.get("x-middleware-next"), "1");
+    });
   }
 });
 
