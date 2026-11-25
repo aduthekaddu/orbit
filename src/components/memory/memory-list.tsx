@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { memoryWriteError } from "./save-error";
-import { visibleMemories } from "./visible-memories";
+import { isMemorySearchPending, visibleMemories } from "./visible-memories";
 
 type MemoryKind = "fact" | "preference" | "summary";
 
@@ -126,15 +126,29 @@ export function MemoryList({
   }
 
   const visible = visibleMemories(query, initial, fetched);
+  const searching = isMemorySearchPending(query, fetched);
 
   return (
     <div className="mx-auto w-full max-w-widget px-6 py-10">
       <h1 className="mb-6 text-xl font-semibold tracking-tight">Memory</h1>
       {dreamStatus ? <p className="mb-4 text-sm text-muted-foreground num">{dreamStatus}</p> : null}
       <p className={embeddings.ok ? "mb-4 text-sm text-positive" : "mb-4 text-sm text-destructive"}>{embeddings.ok ? "Embeddings on" : embeddings.error}</p>
-      <Input aria-label="Search" placeholder="Search" value={query} onChange={(event) => setQuery(event.target.value)} className="mb-4" />
+      <Input
+        aria-label="Search"
+        placeholder="Search"
+        value={query}
+        onChange={(event) => {
+          const next = event.target.value;
+          setQuery(next);
+          if (!next.trim()) {
+            setFetched(null);
+            setSearchFailed(false);
+          }
+        }}
+        className="mb-4"
+      />
       {searchFailed && <p className="mb-3 text-sm text-destructive">Could not search</p>}
-      <ul className="flex flex-col gap-3">
+      <ul aria-busy={searching} className="flex flex-col gap-3">
         {visible.map((memory) => {
           const href = sourceHref(memory);
           const open = editing === memory.id;
