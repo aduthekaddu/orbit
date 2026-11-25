@@ -222,8 +222,8 @@ test("a continued reply's parts and search text also carry no stored credential"
   assert.equal(row.content, "first [redacted] and [redacted]");
   assert.deepEqual(JSON.parse(row.parts), [
     { type: "text", text: "first " },
-    { type: "text", text: key.slice(0, 9) },
-    { type: "text", text: key.slice(9) },
+    { type: "text", text: "[redacted]" },
+    { type: "text", text: "" },
     { type: "text", text: " and [redacted]" },
   ]);
 });

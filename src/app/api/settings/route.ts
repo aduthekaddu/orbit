@@ -1,5 +1,4 @@
-import { normalizeBaseUrl } from "@/lib/base-url";
-import { REASONING_EFFORTS, getSettings, saveSettings, toPublicSettings } from "@/lib/settings";
+import { REASONING_EFFORTS, getSettings, matchesSavedBaseUrl, saveSettings, toPublicSettings } from "@/lib/settings";
 import { githubMcpTarget } from "@/lib/tools/github";
 import { getSession, unauthorized } from "@/lib/session";
 import { LIMITS, r } from "@/lib/route-schema";
@@ -36,7 +35,7 @@ export async function PUT(request: Request) {
   if (!nextKey && !current?.apiKey) {
     return Response.json({ error: "An API key is required." }, { status: 400 });
   }
-  if (!nextKey && current && normalizeBaseUrl(current.baseUrl) !== normalizeBaseUrl(parsed.data.baseUrl)) {
+  if (!nextKey && current && !matchesSavedBaseUrl(parsed.data.baseUrl, current)) {
     return Response.json({ error: "Base URL changed. Enter the API key for the new provider." }, { status: 400 });
   }
   const saved = saveSettings(parsed.data);

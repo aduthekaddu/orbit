@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- Stored credentials (including percent-encoded, Base64/Basic-auth, JSON-escaped, ANSI-split, and chunk-split forms) are now masked across live chat stream chunks, provider-executed tool errors, tool outputs (`web_search`, `run_code` before its 64 KiB output cap, `remember`, `render_ui`), chat titles, dream memories, `/api/models`, and saved URLs returned by `/api/settings`. (#186)
 - New prompts and manual reply edits mask stored credentials in chat history and message search. (#202)
 - Signed-out requests to paths such as `/api/authors` now get the same sign-in check as other API requests. (#134)
 - A refreshed session cookie now reaches the browser on page and API responses, so daily use keeps a session rolling forward past 7 days without a forced sign-in. (#119)

@@ -194,13 +194,17 @@ export async function githubTools(
   }
 }
 
-export async function openGithubTurn(settings: GithubSettings, signal?: AbortSignal, options?: { setupMs?: number }): Promise<McpToolSet> {
+export async function openGithubTurn(
+  settings: GithubSettings,
+  signal?: AbortSignal,
+  options?: { setupMs?: number; redact?: Redactor },
+): Promise<McpToolSet> {
   if (!settings.githubToken) return emptySet();
   try {
-    return await githubTools(settings, { signal, setupMs: options?.setupMs });
+    return await githubTools(settings, { signal, setupMs: options?.setupMs, redact: options?.redact });
   } catch (error) {
     if (signal?.aborted) throw error;
-    const redact = new Redactor(settings);
+    const redact = options?.redact ?? new Redactor(settings);
     redact.logError("github tools unavailable", githubFailureText(error, redact));
     return emptySet();
   }

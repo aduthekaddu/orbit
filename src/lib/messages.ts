@@ -74,10 +74,14 @@ export function chatTitle(text: string): string {
   return `${(space > 50 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
-export function touchChat(id: string, title?: string) {
+export function redactChatTitle(text: string, redact: Redactor): string {
+  return redact.text(chatTitle(redact.text(text)));
+}
+
+export function touchChat(id: string, title?: string, redact?: Redactor) {
   const existing = db.select().from(chats).where(eq(chats.id, id)).get();
   if (!existing) return;
-  const clean = title ? chatTitle(title) : "";
+  const clean = title ? (redact ? redactChatTitle(title, redact) : chatTitle(title)) : "";
   const nextTitle = clean && existing.title === "New chat" ? clean : existing.title;
   db.update(chats).set({ title: nextTitle, updatedAt: new Date() }).where(eq(chats.id, id)).run();
 }
@@ -97,9 +101,38 @@ export function replaceFallbackTitle(chatId: string, fallback: string, title: st
   db.update(chats).set({ title }).where(and(eq(chats.id, chatId), eq(chats.title, fallback))).run();
 }
 
+function redactPartsCrossBoundary(parts: unknown, redact: Redactor): unknown {
+  if (!Array.isArray(parts)) return parts;
+  const copy = parts.map((part) => {
+    if (!part || typeof part !== "object") return part;
+    const record = part as Record<string, unknown>;
+    if (typeof record.errorText === "string") {
+      return { ...record, errorText: redact.diagnostic(record.errorText) };
+    }
+    return { ...record };
+  });
+  for (const kind of ["text", "reasoning"] as const) {
+    const indexes: number[] = [];
+    const texts: string[] = [];
+    for (let i = 0; i < copy.length; i++) {
+      const item = copy[i];
+      if (item && typeof item === "object" && (item as { type?: unknown }).type === kind && typeof (item as { text?: unknown }).text === "string") {
+        indexes.push(i);
+        texts.push((item as { text: string }).text);
+      }
+    }
+    if (indexes.length < 2) continue;
+    const masked = redact.maskSegments(texts);
+    for (let i = 0; i < indexes.length; i++) {
+      (copy[indexes[i]] as { text: string }).text = masked[i];
+    }
+  }
+  return copy;
+}
+
 // The search text joins parts and strips terminal codes, which can spell a credential, so it is masked after.
 function messageBody(parts: unknown, redact: Redactor): SavedText {
-  const saved = redact.value(parts);
+  const saved = redactPartsCrossBoundary(redact.value(parts), redact);
   return { content: redact.text(searchTextFromParts(saved)), parts: JSON.stringify(saved) };
 }
 
