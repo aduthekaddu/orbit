@@ -1,10 +1,11 @@
+import { eventually } from "../../../../src/lib/eventually.mjs";
 import { startMockSearxng, searchFixtures } from "../../../../scripts/qa/mock-searxng.mjs";
 
-export default async function searchTool({ page, origin, step, shot }) {
+export default async function searchTool({ page, origin, mockUrl, step, shot }) {
   const mock = await startMockSearxng();
   try {
     await page.request.put(`${origin}/api/settings`, {
-      data: { baseUrl: "http://127.0.0.1:3299/v1", apiKey: "test-key-not-real", model: "mock-genui", reasoningEffort: "low" },
+      data: { baseUrl: mockUrl, apiKey: "test-key-not-real", model: "mock-genui", reasoningEffort: "low" },
     });
     await page.goto(`${origin}/settings`);
     const field = page.getByLabel("SearXNG URL", { exact: true });
@@ -77,15 +78,10 @@ export default async function searchTool({ page, origin, step, shot }) {
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await cards.last().locator('[data-tool-status="cancelled"]').waitFor();
     await shot("cancelled");
-    const waitSaved = async () => {
-      for (let attempt = 0; attempt < 30; attempt += 1) {
-        const chat = await (await page.request.get(`${origin}/api/chats/${id}`)).json();
-        if (chat.messages.some(({ message }) => message.parts?.some((part) => part.type === "tool-web_search" && part.errorText === "Stopped"))) return;
-        await page.waitForTimeout(100);
-      }
-      throw new Error("Stopped search was not saved");
-    };
-    await waitSaved();
+    await eventually(async () => {
+      const chat = await (await page.request.get(`${origin}/api/chats/${id}`)).json();
+      return chat.messages.some(({ message }) => message.parts?.some((part) => part.type === "tool-web_search" && part.errorText === "Stopped"));
+    }, Boolean, { timeoutMs: 3_000, intervalMs: 100, what: "the stopped search saved in the chat" });
     await page.reload();
     await cards.last().locator('[data-tool-status="cancelled"]').waitFor();
     step("a stopped search stays cancelled after reload", true);

@@ -8,6 +8,7 @@ registerHooks({
 
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
+import { eventually } from "../../lib/eventually.mjs";
 import type { ActEnv } from "./act";
 import type { Keys } from "./keys";
 import type { Layout } from "./looks";
@@ -147,12 +148,10 @@ test("an aborted drag drops the touch dot", async () => {
   const act = createAct(controller.signal, env);
 
   const run = act.drag({ x: 100, y: 100 });
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  assert.equal(cursor.hasAttribute("data-touching"), true, "the finger lands");
+  await eventually(() => cursor.hasAttribute("data-touching"), (touching) => touching, { timeoutMs: 2_000, what: "the finger to land" });
   controller.abort();
   await assert.rejects(run, (error) => error instanceof Stopped);
-  await new Promise((resolve) => setTimeout(resolve, 300));
-  assert.equal(cursor.hasAttribute("data-touching"), false, "the finger leaves with the stage");
+  await eventually(() => cursor.hasAttribute("data-touching"), (touching) => !touching, { timeoutMs: 2_000, what: "the finger to leave with the stage" });
 });
 
 for (const layout of ["wide", "compact"] as const) {

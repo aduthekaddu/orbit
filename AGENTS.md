@@ -11,9 +11,9 @@ Orbit is a self-hosted chat app for one user: Next.js App Router, the AI SDK, as
 ## Guardrails
 
 - Secrets stay on the server. Pass keys through the environment. Never print, log, or commit one. `GET /api/settings` returns `keySet` and never a key.
-- Routes parse request bodies with zod. Code behind a route trusts its types.
+- Routes parse request bodies, queries, and path parameters with zod schemas built from `r` in `src/lib/route-schema.ts`. A route never imports `zod`, and every string and list has a limit. A chat route also caps the body size before it parses. Messages a chat already stores keep working: only content a request adds is held to the message limits. Code behind a route trusts its types.
 - Browser code sends requests with `requestJson` in `src/lib/request-json.ts`, which needs an `onFailed` handler. Each failure shows on screen.
-- Message writes go through `planChatWrite` and `upsertMessage` in `src/lib/messages.ts`.
+- Message writes go through `planChatWrite` and `finishChatReply` in `src/lib/messages.ts`. A reply is saved only with the `ReplyPlan` that `planChatWrite` returned.
 - For a schema change, edit `src/lib/db/schema.ts`, then run `npm run db:generate`. FTS5 and `vec0` tables need `npx drizzle-kit generate --custom`.
 - Colors and sizes come from the tokens in `src/app/globals.css`. UI copy has no taglines, helper text, or secondary labels.
 - verify-orbit owns the port set by `ORBIT_VERIFY_PORT` on `127.0.0.1` during a drive, default `3210`. Stop only processes you started.
@@ -23,6 +23,7 @@ Orbit is a self-hosted chat app for one user: Next.js App Router, the AI SDK, as
 
 - `npm test` gives each test file its own temporary data directory through `scripts/test-data-dir.mjs`, so a test sets no `ORBIT_DATA_DIR` for the database. The runner removes them all when the run ends, also after a SIGTERM or a killed file. Only a SIGKILL of the runner leaves them in the OS temp directory. Never share the checkout's database or rely on another file's fixtures. To run one file, use `node --import tsx --import ./scripts/test-data-dir.mjs --test <file>`; it removes its directory when the file exits, unless the file is killed. Without the preload, `dataDirectory()` throws when a `*.test.ts(x)` file or a `--test` run has no `ORBIT_DATA_DIR`.
 - In file teardown, close database handles and servers, stop and await child processes, restore environment variables, cwd, mocks and timers, and remove only the temporary files this test owns. Await cleanup before the file exits.
+- Wait for state with `eventually(read, predicate, { timeoutMs, what })` from `src/lib/eventually.mjs`, never a fixed sleep or one read of state that settles later. `src/lib/no-fixed-waits.test.ts` fails a `setTimeout`, `sleep`, or `waitForTimeout` in a test or verify-orbit scenario. Its `ALLOWED` list holds the delays that are the behavior under test.
 - CI shuffles the test files and runs one fewer worker than available CPUs when possible, so fixtures have room to run. Reproduce a CI dispatch order with `ORBIT_TEST_SEED=<seed> ORBIT_TEST_WORKERS=<workers> scripts/ci/test-with-ollama.sh` using the seed and worker count from the CI log (this reproduces file dispatch order and worker count, not async timing or OS scheduling).
 
 ## Gotchas

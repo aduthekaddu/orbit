@@ -40,8 +40,8 @@ async function check(step, card, run, when) {
   return seen;
 }
 
-export default async function sandboxEmptyOutput({ page, origin, step, shot }) {
-  await page.request.put(`${origin}/api/settings`, { data: { baseUrl: "http://127.0.0.1:3299/v1", apiKey: "test-key-not-real", model: "mock-genui", reasoningEffort: "low" } });
+export default async function sandboxEmptyOutput({ page, origin, mockUrl, step, shot }) {
+  await page.request.put(`${origin}/api/settings`, { data: { baseUrl: mockUrl, apiKey: "test-key-not-real", model: "mock-genui", reasoningEffort: "low" } });
   const { id } = await (await page.request.post(`${origin}/api/chats`)).json();
   await page.goto(`${origin}/c/${id}`);
   const composer = page.getByPlaceholder("Ask anything");
@@ -69,7 +69,7 @@ export default async function sandboxEmptyOutput({ page, origin, step, shot }) {
   await shot("reloaded");
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(300);
+  await page.waitForFunction(() => window.innerWidth === 390);
   step("the page fits 390 pixels", await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   for (const [index, run] of runs.entries()) {
     const card = cards.nth(index);

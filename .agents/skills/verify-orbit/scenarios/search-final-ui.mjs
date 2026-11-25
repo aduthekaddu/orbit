@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { startMockSearxng } from "../../../../scripts/qa/mock-searxng.mjs";
 
-export default async function searchFinalUi({ page, origin, step, shot }) {
+export default async function searchFinalUi({ page, origin, mockUrl, step, shot }) {
   const mock = await startMockSearxng();
   try {
     const saved = await page.request.put(`${origin}/api/settings`, { data: {
-      baseUrl: "http://127.0.0.1:3299/v1", model: "mock-genui", reasoningEffort: "low", searxngUrl: mock.url, tavilyApiKey: null,
+      baseUrl: mockUrl, model: "mock-genui", reasoningEffort: "low", searxngUrl: mock.url, tavilyApiKey: null,
     } });
     assert.equal(saved.status(), 200);
     for (const kind of ["card", "artifact"]) {

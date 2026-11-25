@@ -5,6 +5,7 @@ import test from "node:test";
 import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { startMockMcp } from "../../../scripts/qa/mock-mcp.mjs";
+import { eventually } from "../eventually.mjs";
 
 process.env.ORBIT_GITHUB_MCP_FIXTURE = "1";
 import { githubLinks } from "./github-links";
@@ -30,26 +31,14 @@ async function withMock(run: (mock: Awaited<ReturnType<typeof startMockMcp>>) =>
   }
 }
 
-async function assertNoOpenSessions(
-  observe: () => number,
-  { timeoutMs = 2_000, pollMs = 20 } = {},
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (observe() !== 0 && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, pollMs));
-  }
-  assert.equal(observe(), 0);
+type Mock = Awaited<ReturnType<typeof startMockMcp>>;
+
+function noOpenSessions(mock: Mock, { timeoutMs = 2_000, intervalMs = 20 } = {}) {
+  return eventually(() => mock.openSessions(), (open) => open === 0, { timeoutMs, intervalMs, what: "every MCP session to close" });
 }
 
-async function waitForListRequest(
-  mock: Awaited<ReturnType<typeof startMockMcp>>,
-  timeoutMs = 2_000,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (mock.listCount() < 1 && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  assert.ok(mock.listCount() >= 1, "expected MCP tools/list request to start before abort");
+function listRequestSeen(mock: Mock) {
+  return eventually(() => mock.listCount(), (count) => count >= 1, { timeoutMs: 2_000, intervalMs: 10, what: "the MCP tools/list request to start before abort" });
 }
 
 test("GitHub tool names get the github_ prefix and the server sees read-only toolsets", { timeout: 20_000 }, async () => {
@@ -82,7 +71,7 @@ test("close runs after a successful tool call", { timeout: 20_000 }, async () =>
     await opened.close();
     await opened.close();
     assert.equal(mock.closeCount(), 1);
-    await assertNoOpenSessions(mock.openSessions);
+    await noOpenSessions(mock);
   });
 });
 
@@ -98,7 +87,7 @@ test("a list failure closes the client and the turn keeps going without GitHub t
       assert.deepEqual(opened.tools, {});
       await opened.close();
       assert.ok(mock.closeCount() >= 1);
-      await assertNoOpenSessions(mock.openSessions);
+      await noOpenSessions(mock);
       assert.equal(logs.length, 1);
       assert.doesNotMatch(logs[0], new RegExp(mock.token));
       assert.doesNotMatch(logs[0], /Authorization/i);
@@ -121,7 +110,7 @@ test("a stalled MCP list stops within the deadline and closes the client", { tim
     assert.ok(Date.now() - started < 1_500);
     assert.deepEqual(outcome.opened.tools, {});
     await outcome.opened.close();
-    await assertNoOpenSessions(mock.openSessions);
+    await noOpenSessions(mock);
     assert.ok(mock.closeCount() >= 1);
   });
 });
@@ -136,7 +125,7 @@ test("a stalled MCP initialize stops within the deadline", { timeout: 5_000 }, a
     ]);
     assert.equal(outcome, "done");
     assert.ok(Date.now() - started < 1_500);
-    await assertNoOpenSessions(mock.openSessions);
+    await noOpenSessions(mock);
   });
 });
 
@@ -146,9 +135,9 @@ test("aborting a stalled MCP list rejects the turn", { timeout: 5_000 }, async (
     const pending = openGithubTurn(githubSettings(mock.token, `${mock.url}?mode=stall-list`), controller.signal, { setupMs: 5_000 });
     await Promise.all([
       assert.rejects(pending),
-      waitForListRequest(mock).finally(() => controller.abort()),
+      listRequestSeen(mock).finally(() => controller.abort()),
     ]);
-    await assertNoOpenSessions(mock.openSessions);
+    await noOpenSessions(mock);
   });
 });
 
@@ -161,9 +150,9 @@ test("abort closes the client", { timeout: 20_000 }, async () => {
         const name = error instanceof Error ? error.name : "";
         return name === "AbortError" || (error instanceof Error && /abort/i.test(error.message));
       }),
-      waitForListRequest(mock).finally(() => controller.abort()),
+      listRequestSeen(mock).finally(() => controller.abort()),
     ]);
-    await assertNoOpenSessions(mock.openSessions);
+    await noOpenSessions(mock);
   });
 });
 
@@ -172,13 +161,13 @@ test("open-session cleanup check fails when a session stays open", { timeout: 5_
     const opened = await githubTools(githubSettings(mock.token, mock.url));
     try {
       await assert.rejects(
-        () => assertNoOpenSessions(mock.openSessions, { timeoutMs: 80, pollMs: 10 }),
-        { name: "AssertionError" },
+        () => noOpenSessions(mock, { timeoutMs: 80, intervalMs: 10 }),
+        (error: unknown) => error instanceof Error && /Timed out after 80ms waiting for every MCP session to close/.test(error.message),
       );
     } finally {
       await opened.close();
     }
-    await assertNoOpenSessions(mock.openSessions);
+    await noOpenSessions(mock);
   });
 });
 
@@ -219,7 +208,7 @@ test("a warm turn gets its tools before the MCP server answers the start", { tim
       assert.equal(mock.listCount(), 1);
       await warm.close();
       await warm.close();
-      await assertNoOpenSessions(mock.openSessions);
+      await noOpenSessions(mock);
     } finally {
       release();
     }
@@ -472,7 +461,7 @@ test("check reports the GitHub login and a rejected token", { timeout: 20_000 },
     const ok = await checkGithub(githubSettings(mock.token, mock.url));
     assert.deepEqual(ok, { ok: true, login: "octocat" });
     assert.equal(JSON.stringify(ok).includes(mock.token), false);
-    await assertNoOpenSessions(mock.openSessions);
+    await noOpenSessions(mock);
     const bad = await checkGithub(githubSettings("wrong-github-token-0004", mock.url));
     assert.deepEqual(bad, { ok: false, error: "GitHub rejected the token." });
     assert.equal(JSON.stringify(bad).includes("wrong-github-token-0004"), false);
@@ -483,7 +472,7 @@ test("a turn merges GitHub tools when a token is set and closes the client", { t
   await withMock(async (mock) => {
     const { toolsForTurn } = await import("./index");
     const opened = await toolsForTurn({
-      baseUrl: "http://127.0.0.1:3299/v1",
+      baseUrl: "https://provider.invalid/v1",
       apiKey: "test-key-not-real",
       model: "mock-genui",
       reasoningEffort: "low",
@@ -499,7 +488,7 @@ test("a turn merges GitHub tools when a token is set and closes the client", { t
     } finally {
       await opened.close();
     }
-    await assertNoOpenSessions(mock.openSessions);
+    await noOpenSessions(mock);
     await opened.close();
     assert.equal(mock.closeCount(), 1);
   });
@@ -508,7 +497,7 @@ test("a turn merges GitHub tools when a token is set and closes the client", { t
 test("a turn without a GitHub token does not open GitHub", async () => {
   const { toolsForTurn } = await import("./index");
   const opened = await toolsForTurn({
-    baseUrl: "http://127.0.0.1:3299/v1",
+    baseUrl: "https://provider.invalid/v1",
     apiKey: "test-key-not-real",
     model: "mock-genui",
     reasoningEffort: "low",

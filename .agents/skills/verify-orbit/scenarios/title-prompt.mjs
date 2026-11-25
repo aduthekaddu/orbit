@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { eventually } from "../../../../src/lib/eventually.mjs";
 
 const requestLog = path.join(process.cwd(), ".verify", "mock-requests.jsonl");
 
@@ -25,7 +26,7 @@ export default async function titlePrompt({ page, origin, step, shot }) {
   fs.writeFileSync(requestLog, "");
 
   const head = `[qa:plain] title source ${Date.now()} `;
-  const message = `${head}${"a".repeat(200_000 - head.length)}`;
+  const message = `${head}${"a".repeat(40_000 - head.length)}`;
   const created = await page.request.post(`${origin}/api/chats`);
   const { id } = await created.json();
   await page.goto(`${origin}/c/${id}`);
@@ -36,15 +37,16 @@ export default async function titlePrompt({ page, origin, step, shot }) {
     .getByText("pong", { exact: true })
     .waitFor({ timeout: 30_000 })
     .then(() => true, () => false);
-  step("first message of 200,000 characters gets a reply", replied);
+  step("first message of 40,000 characters gets a reply", replied);
 
-  let titleRequest;
-  for (let attempt = 0; attempt < 20 && !titleRequest; attempt += 1) {
-    titleRequest = requests().find(
-      (entry) => entry.body?.stream !== true && userText(entry).includes("Write a title of at most six words.") && userText(entry).includes(head),
-    );
-    if (!titleRequest) await page.waitForTimeout(500);
-  }
+  const titleRequest = await eventually(
+    () =>
+      requests().find(
+        (entry) => entry.body?.stream !== true && userText(entry).includes("Write a title of at most six words.") && userText(entry).includes(head),
+      ),
+    Boolean,
+    { timeoutMs: 10_000, intervalMs: 100, what: "the title request in the mock provider log" },
+  ).catch(() => undefined);
   const replyRequest = requests().find((entry) => entry.body?.stream === true && userText(entry).includes(head));
   const replyLength = replyRequest ? Array.from(userText(replyRequest)).length : 0;
   step("reply request carries the whole first message", replyLength >= message.length, `user text ${replyLength} characters`);

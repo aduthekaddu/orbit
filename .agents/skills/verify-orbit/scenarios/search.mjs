@@ -19,8 +19,8 @@ export default async function search({ page, origin, step, shot }) {
   const dialog = page.getByRole("dialog", { name: "Command palette" });
   await dialog.waitFor({ timeout: 5_000 });
   await dialog.locator("input").fill("zebracorn");
-  await page.waitForTimeout(400);
   const heading = dialog.getByText("Messages", { exact: true });
+  await heading.waitFor({ timeout: 5_000 }).catch(() => {});
   const visible = await heading.isVisible().catch(() => false);
   await shot(visible ? "results" : "before");
   step("Messages result for zebracorn", visible, "no Messages group");

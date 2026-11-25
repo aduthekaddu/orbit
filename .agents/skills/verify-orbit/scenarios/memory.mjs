@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { eventually } from "../../../../src/lib/eventually.mjs";
 
 const requestLog = path.join(process.cwd(), ".verify", "mock-requests.jsonl");
 
@@ -103,24 +104,42 @@ export default async function memory({ page, origin, step, shot }) {
 
   const ollamaUrl = process.env.ORBIT_OLLAMA_URL;
   const embedInputs = async () => (ollamaUrl ? (await (await fetch(`${ollamaUrl}/qa/received`)).json()).length : null);
-  const searched = (q) =>
-    page
-      .waitForResponse((response) => {
-        const url = new URL(response.url());
+  const search = page.getByRole("textbox", { name: "Search" });
+  const list = page.locator('input[aria-label="Search"] ~ ul');
+  const runSearch = async (q) => {
+    const response = page
+      .waitForResponse((res) => {
+        const url = new URL(res.url());
         return url.pathname === "/api/memories" && url.searchParams.get("q") === q;
       }, { timeout: 10_000 })
-      .then((response) => response.ok(), () => false);
+      .then(async (res) => {
+        const error = typeof res.finished === "function" ? await res.finished().catch((cause) => cause) : null;
+        return res.ok() && !error;
+      }, () => false);
+    await search.fill(q);
+    const ok = await response;
+    if (!ok) return { ok: false, settled: false };
+    const settled = await eventually(
+      () => list.getAttribute("aria-busy"),
+      (busy) => busy === "false",
+      { timeoutMs: 5_000, what: `memory search for "${q}" to finish rendering` },
+    ).then(() => true, () => false);
+    return { ok, settled };
+  };
   const embedsBefore = await embedInputs();
-  const search = page.getByRole("textbox", { name: "Search" });
-  const flySearched = searched("Fly");
-  await search.fill("Fly");
-  await page.waitForTimeout(400);
-  step("search keeps the matching memory", await row.isVisible());
-  const missSearched = searched("nomatchtoken");
-  await search.fill("nomatchtoken");
-  await page.waitForTimeout(400);
-  step("search hides a memory that does not match", !(await row.isVisible().catch(() => false)));
-  const responded = (await flySearched) && (await missSearched);
+  const flySearch = await runSearch("Fly");
+  step(
+    "search keeps the matching memory",
+    flySearch.settled && (await row.isVisible()),
+    flySearch.ok ? (flySearch.settled ? "matching memory is hidden" : "search did not finish rendering") : "search response missing or failed",
+  );
+  const missSearch = await runSearch("nomatchtoken");
+  step(
+    "search hides a memory that does not match",
+    missSearch.settled && !(await row.isVisible().catch(() => false)),
+    missSearch.ok ? (missSearch.settled ? "non-matching memory is still visible" : "search did not finish rendering") : "search response missing or failed",
+  );
+  const responded = flySearch.ok && missSearch.ok;
   const embedsAfter = await embedInputs();
   step(
     "memory search makes no Ollama call",

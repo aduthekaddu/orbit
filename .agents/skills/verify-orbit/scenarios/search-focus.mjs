@@ -1,3 +1,5 @@
+import { eventually } from "../../../../src/lib/eventually.mjs";
+
 export default async function searchFocus({ page, origin, step, shot }) {
   const { id } = await (await page.request.post(`${origin}/api/chats`)).json();
   const token = `focusneedle${id.replaceAll("-", "")}`;
@@ -98,13 +100,15 @@ export default async function searchFocus({ page, origin, step, shot }) {
   const followUp = "[qa:plain] sent from the hit";
   await page.getByRole("textbox").fill(followUp);
   await page.getByRole("textbox").press("Enter");
-  let sent;
-  for (let tries = 0; tries < 100; tries += 1) {
-    const tree = await readTree();
-    sent = tree.messages.find(({ message }) => message.role === "user" && message.parts.some((part) => part.text === followUp));
-    if (sent && tree.messages.some(({ parentId }) => parentId === sent.message.id)) break;
-    await page.waitForTimeout(200);
-  }
+  const sent = await eventually(
+    async () => {
+      const tree = await readTree();
+      const prompt = tree.messages.find(({ message }) => message.role === "user" && message.parts.some((part) => part.text === followUp));
+      return prompt && tree.messages.some(({ parentId }) => parentId === prompt.message.id) ? prompt : null;
+    },
+    Boolean,
+    { timeoutMs: 20_000, intervalMs: 200, what: "the follow-up prompt and its reply saved in the chat" },
+  ).catch(() => undefined);
   await page.getByRole("button", { name: "Stop", exact: true }).waitFor({ state: "hidden", timeout: 20_000 });
   await shot("off-branch-sent");
   step("prompt from the hit view follows the end of its branch", sent?.parentId === expected.at(-1), `parent=${sent?.parentId} expected=${expected.at(-1)}`);

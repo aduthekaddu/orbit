@@ -1,11 +1,12 @@
+import { eventually } from "../../../../src/lib/eventually.mjs";
 const attempts = 4;
 const cases = [
   { scenario: "run-long", reason: "20000", program: "#".repeat(100) },
   { scenario: "run-ruby", reason: "javascript", program: "puts 1" },
 ];
 
-export default async function sandboxValidation({ page, origin, step, shot }) {
-  await page.request.put(`${origin}/api/settings`, { data: { baseUrl: "http://127.0.0.1:3299/v1", apiKey: "test-key-not-real", model: "mock-genui", reasoningEffort: "low" } });
+export default async function sandboxValidation({ page, origin, mockUrl, step, shot }) {
+  await page.request.put(`${origin}/api/settings`, { data: { baseUrl: mockUrl, apiKey: "test-key-not-real", model: "mock-genui", reasoningEffort: "low" } });
   const cards = page.locator('[data-tool-name="run_code"]');
   const failed = page.locator('[data-tool-name="run_code"] [data-tool-status="failed"]');
   for (const { scenario, reason, program } of cases) {
@@ -17,17 +18,14 @@ export default async function sandboxValidation({ page, origin, step, shot }) {
     await cards.first().locator('[data-tool-status="failed"]').waitFor({ timeout: 20_000 });
     await page.getByRole("button", { name: "Send", exact: true }).waitFor({ timeout: 20_000 });
 
-    let saved = [];
-    let bytes = 0;
-    const deadline = Date.now() + 8_000;
-    while (Date.now() < deadline) {
+    const { saved, bytes } = await eventually(async () => {
       const body = await (await page.request.get(`${origin}/api/chats/${id}`)).json();
       const reply = body.messages.map(({ message }) => message).find((message) => message.role === "assistant");
-      saved = reply?.parts.filter((part) => part.type === "tool-run_code") ?? [];
-      bytes = reply ? Buffer.byteLength(JSON.stringify(reply.parts)) : 0;
-      if (saved.length >= attempts) break;
-      await page.waitForTimeout(250);
-    }
+      return {
+        saved: reply?.parts.filter((part) => part.type === "tool-run_code") ?? [],
+        bytes: reply ? Buffer.byteLength(JSON.stringify(reply.parts)) : 0,
+      };
+    }, ({ saved }) => saved.length >= attempts, { timeoutMs: 8_000, what: `${attempts} rejected calls saved in the chat` });
     const lengths = saved.map((part) => part.errorText?.length ?? 0);
     console.log(`${scenario} saved ${saved.length} rejected calls, error lengths ${lengths.join(",")}, message bytes ${bytes}`);
     step(`${scenario} saves every rejected call as an error`, saved.length === attempts && saved.every((part) => part.state === "output-error"), `${saved.length} saved, states ${saved.map((part) => part.state).join(",")}`);

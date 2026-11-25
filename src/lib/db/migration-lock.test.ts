@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test, { after } from "node:test";
+import { eventually } from "../eventually.mjs";
 import { withMigrationLock } from "./migration-lock";
 
 const repo = process.cwd();
@@ -79,18 +80,14 @@ function start(source: string, env: Record<string, string>) {
   return { proc, output: () => `${stdout}\n${stderr}`, done };
 }
 
-async function waitFor(condition: () => boolean, what: string) {
-  const deadline = Date.now() + 10_000;
-  while (!condition()) {
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
+async function waitForHolder(holder: { output: () => string }) {
+  await eventually(() => holder.output(), (output) => output.includes("HOLD"), { timeoutMs: 10_000, what: "the holder to enter the lock", intervalMs: 20 });
 }
 
 test("two processes serialize and the second enters after the first releases", { timeout: 30_000 }, async () => {
   const dir = tempDir("serialize");
   const holder = start(holderSource, { LOCK_DIR: dir, HOLD_MS: "900" });
-  await waitFor(() => holder.output().includes("HOLD"), "the holder to enter");
+  await waitForHolder(holder);
   const contender = start(contenderSource, { LOCK_DIR: dir });
 
   const held = await holder.done;
@@ -105,7 +102,7 @@ test("two processes serialize and the second enters after the first releases", {
 test("a SIGKILLed holder releases the lock within a short time", { timeout: 30_000 }, async () => {
   const dir = tempDir("kill");
   const holder = start(holderSource, { LOCK_DIR: dir, HOLD_MS: "30000" });
-  await waitFor(() => holder.output().includes("HOLD"), "the holder to enter");
+  await waitForHolder(holder);
 
   const killedAt = Date.now();
   holder.proc.kill("SIGKILL");
@@ -121,7 +118,7 @@ test("a SIGKILLed holder releases the lock within a short time", { timeout: 30_0
 test("a live holder makes a 200ms waiter throw a clear timeout", { timeout: 30_000 }, async () => {
   const dir = tempDir("timeout");
   const holder = start(holderSource, { LOCK_DIR: dir, HOLD_MS: "1500" });
-  await waitFor(() => holder.output().includes("HOLD"), "the holder to enter");
+  await waitForHolder(holder);
 
   let entered = false;
   const started = Date.now();

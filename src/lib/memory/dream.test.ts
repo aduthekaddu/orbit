@@ -24,7 +24,6 @@ let provider: { url: string; stop: () => Promise<void> } | undefined;
 
 function startMockProvider(): Promise<{ url: string; stop: () => Promise<void> }> {
   const child: ChildProcess = spawn(process.execPath, [path.join(process.cwd(), "scripts/qa/mock-provider.mjs")], {
-    env: { ...process.env, MOCK_PORT: "0" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   return new Promise((resolve, reject) => {
@@ -94,18 +93,24 @@ async function resetChats() {
 
 async function seedChat(text: string, createdAt: number) {
   const { db } = await import("../db");
-  const { createChat, upsertMessage } = await import("../messages");
+  const { createChat, persistIncoming } = await import("../messages");
   const chat = createChat("dream-user");
   const messageId = crypto.randomUUID();
-  assert.equal(upsertMessage(chat.id, { id: messageId, role: "user", parts: [{ type: "text", text }] }), true);
+  assert.equal(persistIncoming(chat.id, [{ id: messageId, role: "user", parts: [{ type: "text", text }] }]), "ok");
   db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(createdAt, messageId);
   return { chatId: chat.id, messageId };
 }
 
+// Replies to the chat's one prompt. A request that ends in an unsaved assistant message streams the
+// reply under that message's id.
 async function seedReply(chatId: string, text: string, createdAt: number, messageId: string = crypto.randomUUID()) {
   const { db } = await import("../db");
-  const { upsertMessage } = await import("../messages");
-  assert.equal(upsertMessage(chatId, { id: messageId, role: "assistant", parts: [{ type: "text", text }] }), true);
+  const { finishChatReply, listMessages, planChatWrite } = await import("../messages");
+  const prompt = listMessages(chatId).find((message) => message.role === "user");
+  assert.ok(prompt, "chat has no prompt to reply to");
+  const plan = planChatWrite(chatId, [prompt, { id: messageId, role: "assistant", parts: [] }]);
+  if ("error" in plan) assert.fail(`write refused: ${plan.error}`);
+  assert.equal(finishChatReply(plan, [{ type: "text", text }]), true);
   db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(createdAt, messageId);
   return messageId;
 }
@@ -329,9 +334,9 @@ test("an Ollama outage skips model calls and recovery reads the newest 100 messa
       await seedReply(chatId, "Noted.", start + offset);
     }
     const { db } = await import("../db");
-    const { upsertMessage } = await import("../messages");
+    const { persistIncoming } = await import("../messages");
     const newestId = crypto.randomUUID();
-    assert.equal(upsertMessage(chatId, { id: newestId, role: "user", parts: [{ type: "text", text: "I live in Porto" }] }), true);
+    assert.equal(persistIncoming(chatId, [{ id: newestId, role: "user", parts: [{ type: "text", text: "I live in Porto" }] }]), "ok");
     db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(start + 100, newestId);
 
     for (const night of [date, "2099-07-03"]) {

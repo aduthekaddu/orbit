@@ -2,6 +2,7 @@ import { tavily } from "@tavily/core";
 import { tool } from "ai";
 import { z } from "zod";
 import { withTavilySignal } from "./tavily-signal";
+import { STOP_MARKERS } from "./run-status";
 
 export type SearchResult = {
   title: string;
@@ -101,10 +102,10 @@ export async function searchWeb(
   if (settings.searxngUrl) attempts.push({ backend: "searxng", run: () => backends.searxng(settings.searxngUrl, query, signal) });
   if (settings.tavilyApiKey) attempts.push({ backend: "tavily", run: () => backends.tavily(settings.tavilyApiKey, query, signal) });
   for (const attempt of attempts) {
-    if (signal?.aborted) return { ok: false, query, error: "Search was stopped" };
+    if (signal?.aborted) return { ok: false, query, error: STOP_MARKERS.searchStopped };
     try {
       const results = await attempt.run();
-      if (signal?.aborted) return { ok: false, query, error: "Search was stopped" };
+      if (signal?.aborted) return { ok: false, query, error: STOP_MARKERS.searchStopped };
       if (results.length) return { ok: true, query, results };
     } catch (error) {
       if (signal?.aborted || error instanceof Error && error.name === "AbortError") continue;
@@ -118,7 +119,7 @@ export async function searchWeb(
       timedOut ||= error instanceof Error && error.name === "TimeoutError";
     }
   }
-  if (signal?.aborted) return { ok: false, query, error: "Search was stopped" };
+  if (signal?.aborted) return { ok: false, query, error: STOP_MARKERS.searchStopped };
   return { ok: false, query, error: timedOut ? "Search timed out" : "Search is unavailable" };
 }
 

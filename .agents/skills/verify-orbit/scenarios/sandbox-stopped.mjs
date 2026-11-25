@@ -6,10 +6,10 @@ export default async function sandboxStopped({ page, origin, step, shot }) {
   const { id } = await (await page.request.post(`${origin}/api/chats`)).json();
   const repo = fileURLToPath(new URL("../../../..", import.meta.url));
   const seeded = spawnSync(process.execPath, ["--require", "tsx/cjs", "-e", `
-    const { upsertMessage } = require(${JSON.stringify(`${repo}/src/lib/messages.ts`)});
+    const { finishChatReply, planChatWrite } = require(${JSON.stringify(`${repo}/src/lib/messages.ts`)});
     const chat = process.argv[1];
-    upsertMessage(chat, { id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: "Run a loop, then stop." }] });
-    if (!upsertMessage(chat, { id: crypto.randomUUID(), role: "assistant", parts: [{ type: "tool-run_code", toolCallId: "stopped-code", state: "output-error", input: { language: "python", code: "while True: pass" }, errorText: "Code run was stopped" }] })) process.exit(1);
+    const plan = planChatWrite(chat, [{ id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: "Run a loop, then stop." }] }]);
+    if ("error" in plan || !finishChatReply(plan, [{ type: "tool-run_code", toolCallId: "stopped-code", state: "output-error", input: { language: "python", code: "while True: pass" }, errorText: "Code run was stopped" }])) process.exit(1);
   `, id], fixtureProcessOptions(repo));
   if (seeded.status !== 0) throw new Error("could not save the stopped code fixture");
   await page.goto(`${origin}/c/${id}`);

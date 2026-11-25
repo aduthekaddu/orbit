@@ -1,3 +1,5 @@
+import { eventually } from "../../../../src/lib/eventually.mjs";
+
 export default async function palette({ page, origin, step, shot }) {
   const created = await page.request.post(`${origin}/api/chats`);
   const { id } = await created.json();
@@ -23,7 +25,7 @@ export default async function palette({ page, origin, step, shot }) {
   await dialog.waitFor({ timeout: 5_000 });
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "hidden", timeout: 2_000 }).catch(() => {});
-  await page.waitForTimeout(200);
+  await page.waitForFunction(() => document.activeElement?.tagName === "TEXTAREA", null, { timeout: 2_000 }).catch(() => {});
   await shot("after-escape");
   step("Esc closes the palette", !(await dialog.isVisible()), "dialog still visible");
   const focused = await page.evaluate(() => document.activeElement?.tagName ?? "none");
@@ -70,18 +72,37 @@ export default async function palette({ page, origin, step, shot }) {
   step("a server error says Could not search", serverError && !(await noResults.isVisible()), serverError ? "No results is visible" : "Could not search is not visible");
 
   await page.unroute("**/api/search*");
+  const seenQueries = [];
+  let releasePending = () => {};
+  const pendingReleased = new Promise((resolve) => {
+    releasePending = resolve;
+  });
   await page.route("**/api/search*", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    seenQueries.push(new URL(route.request().url()).searchParams.get("q") ?? "");
+    await pendingReleased;
     await route.continue().catch(() => {});
   });
-  await input.fill("wombatness");
-  await page.waitForTimeout(1_000);
-  await shot("search-pending");
-  step("a pending search does not say No results", !(await noResults.isVisible()) && !(await searchFailed.isVisible()), "No results or Could not search is visible");
-  await input.fill("wombatnes");
-  await page.waitForTimeout(500);
-  step("a canceled search does not say Could not search", !(await searchFailed.isVisible()) && !(await noResults.isVisible()), "Could not search or No results is visible");
-  const empty = await shows(noResults, 6_000);
-  step("a finished search with no match says No results", empty && !(await searchFailed.isVisible()), empty ? "Could not search is visible" : "No results is not visible");
-  await page.unrouteAll({ behavior: "ignoreErrors" });
+  try {
+    await input.fill("wombatness");
+    await eventually(() => seenQueries.includes("wombatness"), Boolean, {
+      timeoutMs: 5_000,
+      what: "the pending search request for wombatness",
+    });
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await shot("search-pending");
+    step("a pending search does not say No results", !(await noResults.isVisible()) && !(await searchFailed.isVisible()), "No results or Could not search is visible");
+    await input.fill("wombatnes");
+    await eventually(() => seenQueries.includes("wombatnes"), Boolean, {
+      timeoutMs: 5_000,
+      what: "the follow-up search request for wombatnes",
+    });
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    step("a canceled search does not say Could not search", !(await searchFailed.isVisible()) && !(await noResults.isVisible()), "Could not search or No results is visible");
+    releasePending();
+    const empty = await shows(noResults, 6_000);
+    step("a finished search with no match says No results", empty && !(await searchFailed.isVisible()), empty ? "Could not search is visible" : "No results is not visible");
+  } finally {
+    releasePending();
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+  }
 }
