@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- A chat turn no longer reads every stored message body three times on the server before the model starts. It still checks the path and refuses a stale prompt or a cross-chat id. (#142)
 - The database sets its 5-second busy timeout before it switches to WAL, so a build that opens a fresh data directory from many workers waits for a short lock instead of failing with "database is locked". (#199)
 
 - A memory-kill check arms a Docker OOM event watch before the program starts, so a code run killed for memory is still confirmed when wait() returns 137 and a later inspect has not yet set the flag. The watch also closes its events connection when Docker answers it after the run has ended, so runs no longer leave one open Docker connection behind each.
