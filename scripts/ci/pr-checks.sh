@@ -45,18 +45,12 @@ if [ "${DRAFT:-false}" != "true" ]; then
       }
       print out
     }')
-  # Pull requests opened before the heading changed still use the old one:
-  # https://github.com/aduthekaddu/orbit/issues/178
-  verification="## Verification"
-  if ! grep -qxF "$verification" <<< "$stripped" && grep -qxF "## How I checked it" <<< "$stripped"; then
-    verification="## How I checked it"
-  fi
-  for heading in "## Why" "## What changed" "$verification"; do
+  for heading in "## Why" "## What changed" "## Verification"; do
     if ! grep -qxF "$heading" <<< "$stripped"; then
       problem "The description is missing the \"$heading\" section from the pull request template."
     fi
   done
-  for heading in "## Why" "## What changed" "$verification"; do
+  for heading in "## Why" "## What changed" "## Verification"; do
     section=$(awk -v heading="$heading" '$0 == heading {found = 1; next} /^## / {found = 0} found' <<< "$stripped" | tr -d '[:space:]')
     if grep -qxF "$heading" <<< "$stripped" && [ -z "$section" ]; then
       problem "The \"$heading\" section of the description is empty."

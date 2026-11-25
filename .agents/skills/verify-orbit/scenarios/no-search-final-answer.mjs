@@ -17,13 +17,18 @@ export default async function noSearchFinalAnswer({ page, origin, mockUrl, step,
     await composer.press("Enter");
     const reply = page.locator('[data-message-role="assistant"]').last();
     await reply.getByRole("button", { name: "Regenerate", exact: true }).waitFor({ timeout: 30_000 });
+    // Regenerate can show as soon as the run is no longer marked running, which can be a
+    // moment before the last text part is in the reply. The saved chat may already have the
+    // answer then. Wait for the answer itself; do not sample the DOM once.
+    const answerOnScreen = reply.getByText(answer, { exact: true });
+    const sawAnswer = await answerOnScreen.waitFor({ timeout: 10_000 }).then(() => true, () => false);
     const chat = await (await page.request.get(`${origin}/api/chats/${id}`)).json();
     const parts = chat.messages.flatMap(({ message }) => message.role === "assistant" ? message.parts : []);
     const notes = parts.filter((part) => part.type === "tool-remember").length;
     const steps = parts.filter((part) => part.type === "step-start").length;
     const text = parts.filter((part) => part.type === "text").map((part) => part.text).join("");
     step("four remember calls use four of the five model steps", notes === 4 && steps === 5, `remember=${notes} steps=${steps}`);
-    step("the fifth step answers in text", text === answer && await reply.getByText(answer, { exact: true }).count() > 0, `text=${JSON.stringify(text)}`);
+    step("the fifth step answers in text", text === answer && sawAnswer, `text=${JSON.stringify(text)}`);
     await shot("final-answer");
     await page.reload();
     await page.locator('[data-message-role="assistant"]').last().getByRole("button", { name: "Regenerate", exact: true }).waitFor();
