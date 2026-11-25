@@ -1,6 +1,7 @@
 import Docker from "dockerode";
 import { Duplex, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
+import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import { sandboxOwner } from "./owner.mjs";
 import { containerSpec, RUN_TIMEOUT_SECONDS, type RunCodeInput, type RunCodeOutput } from "./spec";
@@ -8,19 +9,34 @@ import { STOP_MARKERS } from "../tools/run-status";
 
 const OUTPUT_LIMIT = 65_536;
 const RUN_TIMEOUT_MS = RUN_TIMEOUT_SECONDS * 1000;
+const MEMORY_CHECK_INTERVAL_MS = 50;
 const MEMORY_CHECK_TIMEOUT_MS = 5_000;
 const waitResultSchema = z.object({ StatusCode: z.number().int(), Error: z.object({ Message: z.string() }).nullish() });
 const SIGKILL_EXIT = 137;
 
-// False when Docker does not confirm a memory kill within five seconds, so a stalled inspect reply cannot hold the run.
-async function killedForMemory(container: Docker.Container): Promise<boolean> {
-  let timer: NodeJS.Timeout | undefined;
-  const gaveUp = new Promise<false>((resolve) => { timer = setTimeout(() => resolve(false), MEMORY_CHECK_TIMEOUT_MS); });
+// Docker records the OOM flag from the container's OOM event, which the daemon can process
+// long after the exit event that container.wait() resolves on, so a single inspect can miss
+// it and a short poll can read too early on a loaded host. Re-read the flag until Docker
+// confirms the kill, and give up after the window: an exit 137 without the flag can have
+// another cause, and a stalled check must not hold the run.
+export async function killedForMemory(container: Pick<Docker.Container, "inspect">): Promise<boolean> {
+  let done = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await Promise.race([container.inspect().then((info) => info.State?.OOMKilled === true), gaveUp]);
+    return await Promise.race([
+      (async () => {
+        while (!done) {
+          if ((await container.inspect()).State?.OOMKilled === true) return true;
+          await delay(MEMORY_CHECK_INTERVAL_MS);
+        }
+        return false;
+      })(),
+      new Promise<false>((resolve) => { timer = setTimeout(() => { done = true; resolve(false); }, MEMORY_CHECK_TIMEOUT_MS); }),
+    ]);
   } catch {
     return false;
   } finally {
+    done = true;
     clearTimeout(timer);
   }
 }

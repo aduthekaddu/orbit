@@ -8,7 +8,7 @@ import { format } from "node:util";
 import { eventually } from "../eventually.mjs";
 import { sandboxImages } from "./images";
 import { OWNER_LABEL, ownedSandboxFilter, parseSandboxOwner, sandboxLabels, sandboxOwner, type SandboxOwner } from "./owner.mjs";
-import { runCode, runCodeToEnd } from "./run";
+import { killedForMemory, runCode, runCodeToEnd } from "./run";
 import { containerSpec, type RunCodeInput, type RunCodeOutput } from "./spec";
 import { removeStaleSandboxes } from "./sweep";
 
@@ -158,12 +158,6 @@ test("sandbox programs run inside real isolated containers", { timeout: 90_000 }
     assert.equal(result.oomKilled, true);
     assert.equal(result.stdout, "before-oom\n");
   });
-  await t.test("a program that exits 137 on its own is not marked as a memory kill", async () => {
-    const result = await runPython("import sys\nsys.exit(137)");
-    assert.equal(result.exitCode, 137);
-    assert.equal(result.oomKilled, undefined);
-    assert.equal(result.timedOut, false);
-  });
   await t.test("a fork loop reaches the process limit while Docker stays responsive", async () => {
     const result = await runPython(`import os, time
 children = []
@@ -187,13 +181,58 @@ finally:
     assert.equal(result.exitCode, 0);
     assert.equal(String(await docker.ping()), "OK");
   });
-  await t.test("an infinite loop times out within 12 seconds", async () => {
-    const started = performance.now();
-    const result = await runPython('print("before-timeout")\nwhile True: pass');
-    assert.equal(result.timedOut, true);
-    assert.equal(result.exitCode, null);
-    assert.ok(performance.now() - started < 12_000);
-    assert.equal(result.stdout, "before-timeout\n");
+  // These four real-Docker timing checks do not mock Docker or global timers and do not watch
+  // other containers, so running them concurrently keeps the file well inside the 90s suite limit.
+  await t.test("multi-second timeout and exit-137 checks", { concurrency: 4 }, async (t) => {
+    await Promise.all([
+      t.test("a program that exits 137 on its own is not marked as a memory kill", async () => {
+        const result = await runPython("import sys\nsys.exit(137)");
+        assert.equal(result.exitCode, 137);
+        assert.equal(result.oomKilled, undefined);
+        assert.equal(result.timedOut, false);
+      }),
+      t.test("a program that exits 137 just before the limit keeps its exit code", async () => {
+        // Seven seconds plus the five-second OOM poll crosses the ten-second limit while leaving
+        // startup headroom before the limit itself.
+        const result = await runPython("import sys, time\ntime.sleep(7)\nsys.exit(137)");
+        assert.equal(result.exitCode, 137);
+        assert.equal(result.oomKilled, undefined);
+        assert.equal(result.timedOut, false);
+      }),
+      t.test("an infinite loop times out within 12 seconds", async () => {
+        const started = performance.now();
+        const result = await runPython('print("before-timeout")\nwhile True: pass');
+        assert.equal(result.timedOut, true);
+        assert.equal(result.exitCode, null);
+        assert.ok(performance.now() - started < 12_000);
+        assert.equal(result.stdout, "before-timeout\n");
+      }),
+      t.test("a container stops at its own ten-second limit after the process running it is killed", async () => {
+        await Promise.all(([
+          { language: "python", code: 'print("looping")\nwhile True: pass' },
+          { language: "javascript", code: 'console.log("looping"); for (;;) {}' },
+        ] as const).map(async (input) => {
+          const child = runCodeInChild(input);
+          const childExited = new Promise((resolve) => child.once("exit", resolve));
+          let id: string | undefined;
+          try {
+            id = await loopingContainerId(child);
+            const container = docker.getContainer(id);
+            child.kill("SIGKILL");
+            await childExited;
+            const started = Date.parse((await container.inspect()).State.StartedAt);
+            const state = await inspectUntil(container, (state) => !state.Running, started + 15_000 - Date.now());
+            assert.equal(state.Status, "exited", `the ${input.language} container must stop after the process that ran it is killed`);
+            assert.equal(state.ExitCode, 137);
+            assert.ok(Date.parse(state.FinishedAt) - started < 12_000);
+          } finally {
+            if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+            await childExited;
+            if (id) await docker.getContainer(id).remove({ force: true });
+          }
+        }));
+      }),
+    ]);
   });
   await t.test("stdout and stderr each stop at 64 KiB without blocking the program", async () => {
     const result = await runPython('import sys\nsys.stdout.write("x" * 200000)\nsys.stderr.write("y" * 200000)');
@@ -311,44 +350,41 @@ finally:
       await new Docker().getContainer(container.id).remove({ force: true });
     }
   });
-  await t.test("a container stops at its own ten-second limit after the process running it is killed", async () => {
-    await Promise.all(([
-      { language: "python", code: 'print("looping")\nwhile True: pass' },
-      { language: "javascript", code: 'console.log("looping"); for (;;) {}' },
-    ] as const).map(async (input) => {
-      const child = runCodeInChild(input);
-      const childExited = new Promise((resolve) => child.once("exit", resolve));
-      let id: string | undefined;
-      try {
-        id = await loopingContainerId(child);
-        const container = docker.getContainer(id);
-        child.kill("SIGKILL");
-        await childExited;
-        const started = Date.parse((await container.inspect()).State.StartedAt);
-        const state = await inspectUntil(container, (state) => !state.Running, started + 15_000 - Date.now());
-        assert.equal(state.Status, "exited", `the ${input.language} container must stop after the process that ran it is killed`);
-        assert.equal(state.ExitCode, 137);
-        assert.ok(Date.parse(state.FinishedAt) - started < 12_000);
-      } finally {
-        if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
-        await childExited;
-        if (id) await docker.getContainer(id).remove({ force: true });
-      }
-    }));
-  });
   await t.test("a run reports a timeout when its container stops itself before Orbit's timer fires", async (t) => {
     t.mock.timers.enable({ apis: ["setTimeout"] });
     const running = runPython('print("before-timeout")\nwhile True: pass');
+    // The mocked clock stays frozen so Orbit's own timer cannot fire, and the OOM flag poll
+    // sleeps on that clock. Watch for the container's own limit with no mocked sleep, then
+    // move mock time only after the program has stopped, so the poll can give up without
+    // Orbit's timer ever firing. Ticks run five times real speed so the five-second mock
+    // window ends well before the guard below.
+    const programStopped = (async () => {
+      const deadline = Date.now() + 20_000;
+      while (Date.now() < deadline) {
+        const containers = await docker.listContainers({ filters: { ...ownedSandboxFilter(owner), status: ["running"] } });
+        if (containers.length > 0) {
+          await docker.getContainer(containers[0]!.Id).wait();
+          return;
+        }
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      throw new Error("the program's container never started");
+    })();
+    let ticker: ReturnType<typeof setInterval> | undefined;
     let guard: ReturnType<typeof setInterval> | undefined;
     try {
       const result = await Promise.race([
-        running,
+        programStopped.then(() => {
+          ticker = setInterval(() => t.mock.timers.tick(50), 10);
+          return running;
+        }),
         new Promise<"pending">((resolve) => { guard = setInterval(() => resolve("pending"), 15_000); }),
       ]);
       assert.ok(result !== "pending", "the container must stop at its own ten-second limit");
       assert.deepEqual({ ...result, durationMs: 0 }, { stdout: "before-timeout\n", stderr: "", exitCode: null, durationMs: 0, timedOut: true, truncated: false });
     } finally {
       clearInterval(guard);
+      clearInterval(ticker);
       t.mock.timers.tick(10_000);
       t.mock.timers.reset();
       await running;
@@ -399,5 +435,39 @@ finally:
   });
   await t.test("no sandbox containers remain after success, errors, timeout, or cancellation", async () => {
     assert.deepEqual(await ownedContainers(), []);
+  });
+});
+
+// Docker records the OOM flag from the container's OOM event, which can arrive after the exit
+// event that container.wait() resolves on, so the first inspect can see the flag unset.
+test("a memory kill is confirmed by re-reading Docker's OOM flag", async (t) => {
+  await t.test("a late OOM flag still confirms the memory kill", async () => {
+    let inspections = 0;
+    const container = {
+      inspect: async () => {
+        inspections += 1;
+        return { State: { OOMKilled: inspections > 2 } };
+      },
+    } as unknown as Pick<Docker.Container, "inspect">;
+    assert.equal(await killedForMemory(container), true);
+    assert.ok(inspections > 1, "the flag must be re-read while Docker has not confirmed the kill yet");
+  });
+  await t.test("a container that never reports the OOM flag is not a confirmed memory kill", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    let settled = false;
+    const container = { inspect: async () => ({ State: { OOMKilled: false } }) } as unknown as Pick<Docker.Container, "inspect">;
+    const checking = killedForMemory(container).finally(() => { settled = true; });
+    try {
+      await new Promise((resolve) => setImmediate(resolve));
+      t.mock.timers.tick(4_950);
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(settled, false, "the check must keep waiting until the five-second window closes");
+      t.mock.timers.tick(50);
+      assert.equal(await checking, false);
+    } finally {
+      t.mock.timers.tick(5_000);
+      t.mock.timers.reset();
+      await checking;
+    }
   });
 });

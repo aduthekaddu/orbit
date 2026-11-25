@@ -72,7 +72,7 @@ export function findFixedWaits(source: string): FixedWait[] {
 // `count` is the number of waits the file keeps. A file that gains or loses one fails until the entry is updated.
 // Add an entry only for a delay that is the behavior under test, or a wait for something that must not happen.
 const ALLOWED: { file: string; count: number; reason: string }[] = [
-  { file: "src/lib/sandbox/run.test.ts", count: 1, reason: "A 15 s setInterval guard races the container's own timeout so the test fails if the container keeps running after the parent is killed." },
+  { file: "src/lib/sandbox/run.test.ts", count: 2, reason: "A ticker advances mock time after the container's own limit so the OOM flag poll can give up without firing Orbit's timer, and a 15 s setInterval guard fails the test if the container never stops." },
   { file: "scripts/qa/genui-qa.cjs", count: 8, reason: "PR 181 rewrites this script. Delete the entry when it merges, and convert any wait it keeps." },
   { file: ".agents/skills/verify-orbit/scenarios/auth-submit.mjs", count: 4, reason: "Three 200 ms pauses check that Sign in stays disabled after success and while a field is edited during pending navigation; one wait honors a 429 Retry-After before signing in again." },
   { file: ".agents/skills/verify-orbit/scenarios/request-failures.mjs", count: 3, reason: "Two 500 ms pauses check that a failed or recovered New chat does not navigate further or show a leftover error; one 1.5 s route delay holds a POST so a double click and shortcut can fire while it is pending." },
