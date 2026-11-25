@@ -84,6 +84,7 @@ const ALLOWED: { file: string; count: number; reason: string }[] = [
   { file: ".agents/skills/verify-orbit/scenarios/thread-map.mjs", count: 1, reason: "Waits 700 ms after Alt+Up in the composer to verify focus does not leave the textarea." },
   { file: "src/lib/memory/dream.test.ts", count: 1, reason: "A startup watchdog that rejects when the mock provider never prints its port; the wait itself is the stdout event. PRs 169, 180, 181 and 198 also edit this file." },
   { file: "src/lib/db/migration-lock.test.ts", count: 1, reason: "A watchdog that kills a hung child process after 30 s; the tests wait on the child's output with eventually." },
+  { file: "src/lib/db/open.test.ts", count: 1, reason: "A watchdog that kills a hung child process after 45 s; the tests wait on the child's exit." },
   { file: "src/lib/test-runner.test.ts", count: 1, reason: "Waits 200 ms after the first SIGINT to verify a SIGTERM-ignoring test file is still running before sending the second SIGINT." },
   { file: "src/lib/tools/github.test.ts", count: 7, reason: "Four races assert a call or close returns within its deadline (500 ms, 800 ms, 1 s), two pauses (50 ms, 100 ms) assert that no held or post-close request reaches the server, and one 400 ms pause waits past the 300 ms setup window under test." },
   { file: "src/lib/tools/tavily-signal.test.ts", count: 4, reason: "The delays are the behavior under test: a slow Tavily call (150 ms), a slow fixture response (100 ms), and a search deadline (100 ms)." },
