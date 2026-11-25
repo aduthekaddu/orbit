@@ -146,6 +146,29 @@ test("vectors made without task prefixes are cleared and the memory stays", () =
   db.close();
 });
 
+test("upgrading an existing database keeps the memory and gives it an unknown source", () => {
+  const folder = path.join(process.cwd(), "drizzle");
+  const migrations = fs.readdirSync(folder).filter((name) => name.endsWith(".sql")).sort();
+  const db = new Database(":memory:");
+  try {
+    db.function("orbit_clean_output", (text: unknown) => (typeof text === "string" ? text : null));
+    const sqliteVec = require("sqlite-vec") as { load: (database: Database.Database) => void };
+    sqliteVec.load(db);
+    const apply = (names: string[]) => {
+      for (const name of names) db.exec(fs.readFileSync(path.join(folder, name), "utf8"));
+    };
+    apply(migrations.filter((name) => name <= "0010_github_settings.sql"));
+    db.prepare("INSERT INTO memories (id, kind, text, text_norm, created_at) VALUES ('legacy', 'fact', 'My old memory', 'my old memory', 1)").run();
+    const old = db.prepare("SELECT * FROM memories WHERE id = 'legacy'").get();
+    assert.ok(old && typeof old === "object");
+    apply(migrations.filter((name) => name > "0010_github_settings.sql"));
+    assert.deepEqual(db.prepare("SELECT * FROM memories WHERE id = 'legacy'").get(), { ...old, source: "unknown" });
+    assert.deepEqual(db.prepare("SELECT rowid FROM memories_fts WHERE memories_fts MATCH 'memory'").all(), [{ rowid: 1 }]);
+  } finally {
+    db.close();
+  }
+});
+
 test("a memory's vector stays on that memory after vacuum", async () => {
   const { store, embed } = requireStore();
   const saved = store.saveMemory({ text: "Vacuum keeps the vectorkey token", kind: "fact" });
@@ -162,13 +185,15 @@ test("a memory's vector stays on that memory after vacuum", async () => {
   assert.equal(joined.text, "Vacuum keeps the vectorkey token");
 });
 
-test("save stores a memory and a repeated fact returns the same id", () => {
+test("a repeated fact keeps the original text and source", () => {
   const { store } = requireStore();
-  const first = store.saveMemory({ text: "I deploy to Fly.io", kind: "fact" });
-  const second = store.saveMemory({ text: "  i   deploy   to fly.io ", kind: "preference" });
+  const original = { text: "I deploy to Fly.io", kind: "fact", source: "tool" } as const;
+  const duplicate = { text: "  i   deploy   to fly.io ", kind: "preference", source: "dream" } as const;
+  const first = store.saveMemory(original);
+  const second = store.saveMemory(duplicate);
   assert.equal(second.id, first.id);
   assert.equal(second.kind, "fact");
-  assert.equal(second.text, "I deploy to Fly.io");
+  assert.partialDeepStrictEqual(second, { text: original.text, source: "tool" });
   assert.equal(store.listMemories().filter((memory) => memory.id === first.id).length, 1);
 });
 
@@ -244,4 +269,5 @@ test("remember keeps the chat when the message id is missing", async () => {
   const memory = store.getMemory("id" in saved ? saved.id : "");
   assert.equal(memory?.sourceChatId, "mem-chat");
   assert.equal(memory?.sourceMessageId, null);
+  assert.partialDeepStrictEqual(memory, { source: "tool" });
 });

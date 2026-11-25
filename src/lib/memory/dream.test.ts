@@ -144,6 +144,8 @@ test("a run adds facts the user stated", async () => {
   assert.equal(row.added, 3);
   assert.equal(row.merged, 0);
   assert.deepEqual(memoryTexts().sort(), ["I live in Lisbon", "I prefer dark mode", "My bike is blue"].sort());
+  const { listMemories } = await import("./store");
+  for (const memory of listMemories()) assert.partialDeepStrictEqual(memory, { source: "dream" });
   assert.equal(row.chatIds.includes(first.chatId) && row.chatIds.includes(second.chatId) && row.chatIds.includes(third.chatId), true);
   assert.equal(row.error, null);
   assert.equal(api.formatDreamStatus(row).includes("I live in Lisbon"), false);
@@ -208,7 +210,8 @@ test("a near-duplicate candidate merges into the older memory", async () => {
   const { db } = await import("../db");
   const store = await import("./store");
   const embed = await import("./embed");
-  const saved = store.saveMemory({ text: "Deploy targets Fly.io", kind: "fact" });
+  const original = { text: "Deploy targets Fly.io", kind: "fact", source: "user" } as const;
+  const saved = store.saveMemory(original);
   db.$client.prepare("UPDATE memories SET created_at = ? WHERE id = ?").run(Date.parse("2099-06-01T08:00:00Z"), saved.id);
   assert.equal((await embed.embedPending()).ok, true);
   const date = "2099-06-01";
@@ -217,7 +220,10 @@ test("a near-duplicate candidate merges into the older memory", async () => {
   const row = await api.runDream({ manual: true, date, now: new Date(at(date, 16)) });
   assert.ok(row);
   assert.equal(memoryTexts().length, before);
-  assert.equal(store.getMemory(saved.id)?.text, "I host everything on Fly.io for production deploys");
+  assert.partialDeepStrictEqual(store.getMemory(saved.id), {
+    text: "I host everything on Fly.io for production deploys",
+    source: "dream",
+  });
   assert.equal(row.merged >= 1, true);
   assert.equal(row.chatIds.includes(chat.chatId), true);
 });
