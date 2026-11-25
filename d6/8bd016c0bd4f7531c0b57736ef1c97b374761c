@@ -1,0 +1,88 @@
+.agents/skills/verify-chat-turn/SKILL.md
+  h_9f68edf4527855 1-81
+.agents/skills/verify-orbit/scenarios/sandbox-scroll.mjs
+  h_9f68edf4527855 10,16-17
+.github/workflows/ci.yml
+  h_9f68edf4527855 49-51
+ARCHITECTURE.md
+  h_9f68edf4527855 28,85,87-92,128,143,164
+CHANGELOG.md
+  h_9f68edf4527855 32
+docs/architecture/ChatTurn.cfg
+  h_9f68edf4527855 1-3
+docs/architecture/ChatTurn.stopped-retry.cfg
+  h_9f68edf4527855 1-13
+docs/architecture/ChatTurn.stopped-retry.trace
+  h_9f68edf4527855 1-60
+docs/architecture/ChatTurn.tla
+  h_9f68edf4527855 2-3,6-8,11-21,23,25-26,29,32-33,37,40,44-48,50-53,56-58,60-66,69-72,77,79-80,83-86
+docs/architecture/ChatTurnRegression.cfg
+  h_9f68edf4527855 1-3
+docs/architecture/ChatTurnRegression.tla
+  h_9f68edf4527855 8,11
+docs/architecture/ChatWrite.cfg
+  h_9f68edf4527855 1-12
+docs/architecture/ChatWrite.edited-prompt.cfg
+  h_9f68edf4527855 1-16
+docs/architecture/ChatWrite.edited-prompt.trace
+  h_9f68edf4527855 1-40
+docs/architecture/ChatWrite.in-place-edit.cfg
+  h_9f68edf4527855 1-13
+docs/architecture/ChatWrite.stale-echo.cfg
+  h_9f68edf4527855 1-15
+docs/architecture/ChatWrite.stale-echo.trace
+  h_9f68edf4527855 1-30
+docs/architecture/ChatWrite.tla
+  h_9f68edf4527855 1-132
+docs/architecture/chat-turn.view.mjs
+  h_9f68edf4527855 5,18
+docs/architecture/chat-write.view.mjs
+  h_9f68edf4527855 1-28
+docs/architecture/model-sync.json
+  h_9f68edf4527855 1-14
+docs/slices/08.md
+  h_9f68edf4527855 68
+docs/slices/13.md
+  h_9f68edf4527855 112,208
+docs/slices/19.md
+  h_9f68edf4527855 111
+scripts/ci/tlc.sh
+  h_9f68edf4527855 1-158
+scripts/qa/sandbox-timing.ts
+  h_9f68edf4527855 5,14,16
+src/lib/chat-write.test.ts
+  h_9f68edf4527855 71,136,138,140,147,150,154-181
+src/lib/memory/dream.test.ts
+  h_9f68edf4527855 187,411,413,428-431,434,445,448
+src/lib/memory/dream.ts
+  h_9f68edf4527855 7-8,31,36-37,40-43,47,51-62,68,75,80-81,85,92,112,121,248-256,308,313,324,337-339,341-343
+src/lib/memory/run-state.test.ts
+  h_9f68edf4527855 1-107
+src/lib/memory/run-state.ts
+  h_9f68edf4527855 1-148
+src/lib/memory/run-writes.test.ts
+  h_9f68edf4527855 1-30
+src/lib/memory/schedule.ts
+  h_9f68edf4527855 3,6
+src/lib/model-sync.test.ts
+  h_9f68edf4527855 1-80
+src/lib/sandbox/run-lifecycle.test.ts
+  h_9f68edf4527855 1-493
+src/lib/sandbox/run.test.ts
+  h_9f68edf4527855 6,8,11,13,20,35,77-84,117-118,120-121,133,234-245,248-255,257-258,260-263,267-272,277-283,285-287,289,293,295,300-302,305-306,309,369,393,399
+src/lib/sandbox/run.ts
+  h_9f68edf4527855 10-11,14,16-17,19,22-23,74-99,103-112,114-120,123,127,129-131,133,135-211
+src/lib/tools/run-code.ts
+  h_9f68edf4527855 2,8,10,26,30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d68bd016c0bd4f7531c0b57736ef1c97b374761c",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
