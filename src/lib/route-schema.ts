@@ -5,6 +5,7 @@ import { z } from "zod";
 // route-schema.test.ts fails any route that imports zod directly.
 export const r = {
   text: (max: number) => z.string().max(max),
+  requiredText: (max: number) => z.string().trim().min(1).max(max),
   list: <T extends z.ZodType>(item: T, max: number) => z.array(item).max(max),
   object: z.object,
   looseObject: z.looseObject,

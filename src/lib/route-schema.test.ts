@@ -57,3 +57,15 @@ test("readJsonBody stops at the cap, with or without a content-length header", a
   assert.deepEqual(await readJsonBody(sized("{not json"), 1000), { ok: false, reason: "invalid" });
   assert.deepEqual(await readJsonBody(new Request("http://orbit.test/x", { method: "POST" }), 1000), { ok: false, reason: "invalid" });
 });
+
+test("required text rejects a blank or whitespace-only string and keeps a real one within the limit", () => {
+  assert.equal(r.requiredText(10).parse("  hello  "), "hello");
+  assert.throws(() => r.requiredText(10).parse(""), /too_small|Too small|>=1/);
+  assert.throws(() => r.requiredText(10).parse("   "), /too_small|Too small|>=1/);
+  assert.throws(() => r.requiredText(10).parse("a".repeat(11)), /too_big|Too big|<=10/);
+});
+
+test("the message text PATCH rejects blank text with requiredText", () => {
+  const source = readFileSync("src/app/api/chats/[id]/messages/[messageId]/route.ts", "utf8");
+  assert.match(source, /text:\s*r\.requiredText\(LIMITS\.assistantText\)/);
+});

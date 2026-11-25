@@ -131,6 +131,9 @@ export default async function requestFailures({ page, origin, step, shot }) {
   await reply.hover();
   await page.getByRole("button", { name: "Edit reply" }).last().click();
   const editor = page.getByRole("textbox", { name: "Edit reply" });
+  await editor.fill("");
+  const save = page.getByRole("button", { name: "Save", exact: true });
+  step("Save is disabled while the reply is blank", await save.isDisabled(), "Save is enabled");
   await editor.fill("pong, edited");
   await page.route("**/api/chats/*/messages/*", (route) => route.abort());
   await page.getByRole("button", { name: "Save", exact: true }).click();

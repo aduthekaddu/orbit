@@ -137,6 +137,14 @@ test("reply text editing keeps tool parts and stale echoes cannot overwrite it",
   assert.deepEqual(saved.parts, [{ type: "text", text: "after" }, parts[1]]);
 });
 
+test("a blank or whitespace-only reply edit does not change the stored row", () => {
+  reply("c2", [message("blank-prompt", "user", "ask")], message("blank-answer", "assistant", "keep me"));
+  assert.equal(mods.updateMessageText("c2", "blank-answer", ""), false);
+  assert.equal(mods.updateMessageText("c2", "blank-answer", "   "), false);
+  const saved = mods.listMessages("c2").find((row) => row.id === "blank-answer")!;
+  assert.deepEqual(saved.parts, [{ type: "text", text: "keep me" }]);
+});
+
 test("a user prompt cannot be rewritten in place", () => {
   const chat = "prompt-patch";
   mods.db
