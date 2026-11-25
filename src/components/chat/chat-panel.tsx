@@ -72,10 +72,11 @@ export function ChatPanel({
     <AssistantRuntimeProvider runtime={runtime}>
       <ChatIdProvider chatId={chatId} onEdit={(id) => { editMessageId.current = id; }}>
         <ArtifactProvider>
-          <StoppedRunSync chatId={chatId} stopped={stopped} />
-          <ArtifactWorkspace>
-            <Thread ready={ready} model={model} focusMessageId={focusMessageId} />
-          </ArtifactWorkspace>
+          <StoppedRunSync chatId={chatId} stopped={stopped}>
+            <ArtifactWorkspace>
+              <Thread ready={ready} model={model} focusMessageId={focusMessageId} />
+            </ArtifactWorkspace>
+          </StoppedRunSync>
         </ArtifactProvider>
       </ChatIdProvider>
     </AssistantRuntimeProvider>
