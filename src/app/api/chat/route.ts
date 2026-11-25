@@ -104,7 +104,7 @@ export async function POST(request: Request) {
 
   const incoming = parsed.data.messages;
   const messagesBeforeTurn = storedMessageCount(chat.id);
-  const write = planChatWrite(chat.id, incoming, parsed.data.trigger, parsed.data.editMessageId);
+  const write = planChatWrite(chat.id, incoming, redact, parsed.data.trigger, parsed.data.editMessageId);
   if ("error" in write) {
     if (write.error === "invalid-edit") {
       return Response.json({ error: "Invalid edit request" }, { status: 400 });
