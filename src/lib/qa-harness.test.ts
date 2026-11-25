@@ -439,6 +439,83 @@ test("three overlapping launches over a stale mock record share one new mock", a
   assert.deepEqual(new Set(checkout.savedBaseUrls()), new Set([`http://127.0.0.1:${record.port}/v1`]));
 });
 
+async function startLegacyMock(checkout: Checkout): Promise<{ pid: number; port: number; tracked: TrackedChild }> {
+  const mockScript = path.join(checkout.dir, "scripts/qa/mock-provider.mjs");
+  const tracked = run(process.execPath, [mockScript], { cwd: checkout.dir, detached: true });
+  const port = await new Promise<number>((resolve, reject) => {
+    let buf = "";
+    const timer = setTimeout(() => reject(new Error("legacy mock printed no ready line")), 5_000);
+    tracked.child.stdout?.on("data", (chunk: Buffer) => {
+      buf += chunk.toString();
+      const nl = buf.indexOf("\n");
+      if (nl === -1) return;
+      const match = /^mock provider on http:\/\/127\.0\.0\.1:(\d+)\/v1 model=\S+$/.exec(buf.slice(0, nl));
+      clearTimeout(timer);
+      if (match) resolve(Number(match[1]));
+      else reject(new Error(`unexpected legacy mock line: ${buf.slice(0, nl)}`));
+    });
+    tracked.done.then((res) => {
+      clearTimeout(timer);
+      reject(new Error(`legacy mock exited early (${res.code}): ${res.out}`));
+    });
+  });
+  assert.ok(tracked.child.pid);
+  return { pid: tracked.child.pid, port, tracked };
+}
+
+test("cleanup and launch --mock stop a live mock recorded in the previous pid-port format", async () => {
+  const cleanupCheckout = new Checkout();
+  const legacy = await startLegacyMock(cleanupCheckout);
+  assert.equal(await status(legacy.port, "/v1/models"), 200);
+  fs.mkdirSync(path.join(cleanupCheckout.dir, ".verify"), { recursive: true });
+  fs.writeFileSync(path.join(cleanupCheckout.dir, ".verify/mock.json"), JSON.stringify({ pid: legacy.pid, port: legacy.port }));
+
+  const cleaned = await cleanupCheckout.verify(["cleanup"]);
+  assert.equal(cleaned.code, 0, cleaned.out);
+  assert.equal(await status(legacy.port, "/v1/models"), "ECONNREFUSED", "cleanup stopped the legacy mock");
+  assert.equal(cleanupCheckout.record(), null);
+  await legacy.tracked.done;
+
+  const launchCheckout = new Checkout();
+  const started = await launchCheckout.verify(["launch"]);
+  assert.equal(started.code, 0, started.out);
+  const oldMock = await startLegacyMock(launchCheckout);
+  assert.equal(await status(oldMock.port, "/v1/models"), 200);
+  fs.writeFileSync(path.join(launchCheckout.dir, ".verify/mock.json"), JSON.stringify({ pid: oldMock.pid, port: oldMock.port }));
+
+  const launched = await launchCheckout.verify(["launch", "--mock"]);
+  assert.equal(launched.code, 0, launched.out);
+  assert.equal(await status(oldMock.port, "/v1/models"), "ECONNREFUSED", "launch --mock stopped the legacy mock");
+  await oldMock.tracked.done;
+  const record = launchCheckout.record();
+  assert.ok(record?.pid && record.startTime && record.port);
+  const mockPids = pidsUnder(launchCheckout.dir).filter((pid) => fs.readFileSync(`/proc/${pid}/cmdline`, "utf8").includes("mock-provider.mjs"));
+  assert.deepEqual(mockPids, [record.pid]);
+});
+
+test("cleanup refuses to kill a non-mock process recorded in the previous pid-port format", async () => {
+  const checkout = new Checkout();
+  const decoy = run(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { cwd: checkout.dir, detached: true });
+  assert.ok(decoy.child.pid);
+  try {
+    fs.mkdirSync(path.join(checkout.dir, ".verify"), { recursive: true });
+    fs.writeFileSync(path.join(checkout.dir, ".verify/mock.json"), JSON.stringify({ pid: decoy.child.pid, port: 3299 }));
+
+    const refused = await checkout.verify(["cleanup"]);
+    assert.equal(refused.code, 1, refused.out);
+    assert.match(refused.out, /not the mock provider/i);
+    assert.notEqual(procStartTime(decoy.child.pid), "", "decoy process stays alive");
+    assert.equal(checkout.record()?.pid, decoy.child.pid, "record stays in place after refusal");
+  } finally {
+    killPid(decoy.child.pid, true);
+    await decoy.done;
+  }
+
+  const afterExit = await checkout.verify(["cleanup"]);
+  assert.equal(afterExit.code, 0, afterExit.out);
+  assert.equal(checkout.record(), null);
+});
+
 test("a launch stopped while its mock starts leaves no mock without a record", async () => {
   const checkout = new Checkout();
   const started = await checkout.verify(["launch"]);

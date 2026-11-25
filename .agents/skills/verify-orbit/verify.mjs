@@ -58,6 +58,7 @@ function sleep(ms) {
 
 // A process group can end between the check that it runs and the signal.
 function killGroup(pid, signal) {
+  if (!Number.isInteger(pid) || pid <= 1) return;
   try {
     process.kill(-pid, signal);
   } catch (error) {
@@ -290,15 +291,57 @@ async function startServer() {
   }
 }
 
+function validPid(pid) {
+  return Number.isInteger(pid) && pid > 0;
+}
+
 // Field 22 of /proc/<pid>/stat is the start time in clock ticks since boot. A pid with its start time names one process.
 // A zombie (state Z) keeps its stat file but runs nothing, so it has no start time here.
 function startTime(pid) {
+  if (!validPid(pid)) return "";
   try {
     const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
     const [state, ...rest] = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
     return state === "Z" || state === "X" ? "" : (rest[18] ?? "");
   } catch {
     return "";
+  }
+}
+
+function procCmdline(pid) {
+  if (!validPid(pid)) return null;
+  try {
+    return fs.readFileSync(`/proc/${pid}/cmdline`, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT" || error?.code === "ESRCH") return null;
+    return "";
+  }
+}
+
+// Previous verify.mjs versions wrote { pid, port } without startTime. Verify the live process is this checkout's mock
+// before stopping it, and bind its current start time so wait and SIGKILL cannot hit a recycled pid.
+function legacyMock(state) {
+  if (!state || state.startTime || !validPid(state.pid)) return { status: "none" };
+  const started = startTime(state.pid);
+  if (!started) return { status: "none" };
+  const cmdline = procCmdline(state.pid);
+  if (cmdline === null || startTime(state.pid) !== started) return { status: "none" };
+  if (!cmdline.split("\0").includes(mockScript)) return { status: "foreign", pid: state.pid };
+  return { status: "running", mock: { pid: state.pid, startTime: started, port: state.port } };
+}
+
+async function stopRunningMock(mock) {
+  if (!isRunning(mock)) return;
+  killGroup(mock.pid, "SIGTERM");
+  const deadline = Date.now() + 5_000;
+  while (isRunning(mock) && Date.now() < deadline) await sleep(100);
+  if (isRunning(mock)) {
+    killGroup(mock.pid, "SIGKILL");
+    const killDeadline = Date.now() + 2_000;
+    while (isRunning(mock) && Date.now() < killDeadline) await sleep(50);
+  }
+  if (isRunning(mock)) {
+    throw new Error(`mock provider pid ${mock.pid} did not stop.`);
   }
 }
 
@@ -435,10 +478,14 @@ async function startMock() {
   let mock;
   try {
     mock = await withMockLock(async () => {
-      const existing = runningMock();
-      if (existing) {
-        console.log(`mock already running pid=${existing.pid}`);
-        return existing;
+      const state = readState(mockStatePath);
+      if (isRunning(state)) {
+        console.log(`mock already running pid=${state.pid}`);
+        return state;
+      }
+      const legacy = legacyMock(state);
+      if (legacy.status === "running") {
+        await stopRunningMock(legacy.mock);
       }
       fs.rmSync(mockStatePath, { force: true });
       return await spawnMock();
@@ -463,12 +510,17 @@ async function stopMock() {
   if (!fs.existsSync(verifyDir)) return;
   try {
     await withMockLock(async () => {
-      const mock = runningMock();
-      if (mock) {
-        killGroup(mock.pid, "SIGTERM");
-        const deadline = Date.now() + 5_000;
-        while (isRunning(mock) && Date.now() < deadline) await sleep(100);
-        if (isRunning(mock)) killGroup(mock.pid, "SIGKILL");
+      const state = readState(mockStatePath);
+      if (isRunning(state)) {
+        await stopRunningMock(state);
+      } else {
+        const legacy = legacyMock(state);
+        if (legacy.status === "foreign") {
+          throw new Error(`pid ${legacy.pid} is not the mock provider. Not killing it.`);
+        }
+        if (legacy.status === "running") {
+          await stopRunningMock(legacy.mock);
+        }
       }
       fs.rmSync(mockStatePath, { force: true });
       fs.rmSync(mockLogPath, { force: true });
