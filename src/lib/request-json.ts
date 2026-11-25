@@ -85,12 +85,18 @@ export function useLatestRequest() {
   }, []);
 }
 
-// Only `done` holds data, so a pending or failed load cannot render as "nothing found".
+// Only `done` and `revalidating` hold data, so a pending or failed load cannot render as "nothing found".
 export type Loaded<T> =
   | { status: "idle" }
   | { status: "pending" }
   | { status: "failed"; failure: RequestFailure }
-  | { status: "done"; data: T };
+  | { status: "done"; data: T }
+  | { status: "revalidating"; data: T };
+
+// The state a reload starts from: an answer it already holds stays visible while it refetches.
+export function nextReload<T>(current: Loaded<T>): Loaded<T> {
+  return current.status === "done" || current.status === "revalidating" ? { status: "revalidating", data: current.data } : { status: "pending" };
+}
 
 export function useLoaded<T>(initial: Loaded<T>) {
   const [state, setState] = useState<Loaded<T>>(initial);
@@ -107,10 +113,22 @@ export function useLoaded<T>(initial: Loaded<T>) {
     },
     [latest],
   );
+  const reload = useCallback(
+    (input: string, init: RequestInit, parse: z.ZodType<T>) => {
+      const signal = latest();
+      setState(nextReload);
+      void requestJson(input, { ...init, signal }, {
+        parse,
+        onOk: (data) => setState({ status: "done", data }),
+        onFailed: (failure) => setState({ status: "failed", failure }),
+      });
+    },
+    [latest],
+  );
   // Aborts an in-flight load. Pass `{ status: "pending" }` to start a new search before the request is sent, so a debounce cannot show "No results".
   const reset = useCallback((next: Loaded<T> = { status: "idle" }) => {
     latest();
     setState(next);
   }, [latest]);
-  return [state, load, reset] as const;
+  return [state, load, reload, reset] as const;
 }

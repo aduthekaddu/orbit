@@ -54,7 +54,7 @@ export function CommandPalette({
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [messageSearch, loadSearch, resetSearch] = useLoaded<MessageHit[]>({ status: "idle" });
+  const [messageSearch, loadSearch, , resetSearch] = useLoaded<MessageHit[]>({ status: "idle" });
   const hits = messageSearch.status === "done" ? messageSearch.data : [];
   const notice = paletteSearchNotice(messageSearch.status);
 

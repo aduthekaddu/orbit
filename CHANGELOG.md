@@ -5,6 +5,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 ## [Unreleased]
 
 - Memory search, a memory save or delete, and the command palette's message search go through the same request helper as the rest of the app, so a failed request cannot be treated as an empty result. (#185)
+- A memory save or delete during a search keeps the found memories on screen while the search runs again, instead of the list going blank until the new results arrive. (#185)
 - Each code sandbox container carries the label of the Orbit process that started it, and the sweep log line for a removed container names that owner, so two Orbit servers or test runs on one Docker host no longer count each other's containers as their own leftovers. (#184)
 - A code run the memory limit kills no longer loses its Out of memory mark. Docker can record the kill after the run's exit event, and one read of the flag missed it, so the card sometimes said Exit 137 instead. (#66)
 - An artifact preview can no longer load another web page into its frame, so its code cannot send data out in that page's URL. (#132)

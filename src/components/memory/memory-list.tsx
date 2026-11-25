@@ -71,8 +71,9 @@ export function MemoryList({
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const [search, loadSearch, resetSearch] = useLoaded<{ query: string; rows: MemoryItem[] }>({ status: "idle" });
+  const [search, loadSearch, reloadSearch, resetSearch] = useLoaded<{ query: string; rows: MemoryItem[] }>({ status: "idle" });
   const requested = useRef("");
+  const searchedQuery = useRef("");
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [kind, setKind] = useState<MemoryKind>("fact");
@@ -82,6 +83,7 @@ export function MemoryList({
 
   useEffect(() => {
     const trimmed = query.trim();
+    searchedQuery.current = trimmed;
     if (!trimmed) {
       requested.current = "";
       resetSearch();
@@ -93,7 +95,15 @@ export function MemoryList({
       loadSearch(`/api/memories?q=${encodeURIComponent(trimmed)}`, {}, memorySearchBody(trimmed));
     }, 150);
     return () => window.clearTimeout(timer);
-  }, [query, initial, loadSearch, resetSearch]);
+  }, [query, loadSearch, resetSearch]);
+
+  // A finished write makes the filtered view stale, so it reloads the search the user still sees. The query comes from
+  // the ref, not this closure, so a query typed while the write was in flight is the one that reloads.
+  function refreshSearch() {
+    const trimmed = searchedQuery.current;
+    if (!trimmed) return;
+    reloadSearch(`/api/memories?q=${encodeURIComponent(trimmed)}`, {}, memorySearchBody(trimmed));
+  }
 
   function save(id: string) {
     setPending(true);
@@ -111,6 +121,7 @@ export function MemoryList({
           setEditing(null);
           router.refresh();
           setPending(false);
+          refreshSearch();
         },
         onFailed: (failure) => {
           setWriteError({ id, text: (failure.kind === "http" && failure.error) || memoryWriteError(null) });
@@ -130,6 +141,7 @@ export function MemoryList({
         setPendingDelete(null);
         setPending(false);
         router.refresh();
+        refreshSearch();
       },
       onFailed: () => {
         setWriteError({ id, text: "Could not delete" });
@@ -141,9 +153,9 @@ export function MemoryList({
 
   const trimmed = query.trim();
   const searchFailed = search.status === "failed" && requested.current === trimmed;
-  const fetched = search.status === "done" ? search.data : searchFailed ? { query: trimmed, rows: [] } : null;
+  const fetched = search.status === "done" || search.status === "revalidating" ? search.data : searchFailed ? { query: trimmed, rows: [] } : null;
   const visible = visibleMemories(query, initial, fetched);
-  const searching = isMemorySearchPending(query, fetched);
+  const searching = search.status === "revalidating" || isMemorySearchPending(query, fetched);
 
   return (
     <div className="mx-auto w-full max-w-widget px-6 py-10">
