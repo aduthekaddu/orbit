@@ -452,6 +452,17 @@ test("a memory kill is confirmed by re-reading Docker's OOM flag", async (t) => 
     assert.equal(await killedForMemory(container), true);
     assert.ok(inspections > 1, "the flag must be re-read while Docker has not confirmed the kill yet");
   });
+  await t.test("an OOM event confirms the memory kill even when inspect stays unset", async () => {
+    let confirmed = false;
+    const seen = Promise.withResolvers<void>();
+    const container = {
+      inspect: async () => ({ State: { OOMKilled: false } }),
+    } as unknown as Pick<Docker.Container, "inspect">;
+    const checking = killedForMemory(container, { confirmed: () => confirmed, seen: seen.promise });
+    confirmed = true;
+    seen.resolve();
+    assert.equal(await checking, true);
+  });
   await t.test("a container that never reports the OOM flag is not a confirmed memory kill", async (t) => {
     t.mock.timers.enable({ apis: ["setTimeout"] });
     let settled = false;

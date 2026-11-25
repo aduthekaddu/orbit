@@ -14,27 +14,59 @@ const MEMORY_CHECK_TIMEOUT_MS = 5_000;
 const waitResultSchema = z.object({ StatusCode: z.number().int(), Error: z.object({ Message: z.string() }).nullish() });
 const SIGKILL_EXIT = 137;
 
-// Docker records the OOM flag from the container's OOM event, which the daemon can process
-// long after the exit event that container.wait() resolves on, so a single inspect can miss
-// it and a short poll can read too early on a loaded host. Re-read the flag until Docker
-// confirms the kill, and give up after the window: an exit 137 without the flag can have
-// another cause, and a stalled check must not hold the run.
-export async function killedForMemory(container: Pick<Docker.Container, "inspect">): Promise<boolean> {
+// Docker records the OOM from a container event that can be processed after container.wait()
+// resolves, and a post-exit inspect can still be unset. Arm an event watch before the program
+// starts so that event is not missed, then re-read inspect until it agrees or the window ends.
+// A stalled inspect must not hold the run, so the window is a hard bound.
+export type OomWatch = { confirmed: () => boolean; seen: Promise<void>; stop: () => void };
+
+export function watchOomEvents(docker: Pick<Docker, "getEvents">, containerId: string): OomWatch {
+  let confirmed = false;
+  const seen = Promise.withResolvers<void>();
+  let stream: NodeJS.ReadableStream | undefined;
+  const stop = () => {
+    stream?.removeAllListeners();
+    if (stream && "destroy" in stream && typeof stream.destroy === "function") stream.destroy();
+  };
+  const filters: { type: Array<"container">; event: string[]; container: string[] } = { type: ["container"], event: ["oom"], container: [containerId] };
+  void docker.getEvents({ filters }).then((events) => {
+    stream = events;
+    events.on("data", () => {
+      confirmed = true;
+      seen.resolve();
+    });
+    events.on("error", () => {});
+  }, () => {});
+  return { confirmed: () => confirmed, seen: seen.promise, stop };
+}
+
+export async function killedForMemory(
+  container: Pick<Docker.Container, "inspect">,
+  oom?: Pick<OomWatch, "confirmed" | "seen">,
+): Promise<boolean> {
+  if (oom?.confirmed()) return true;
   let done = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       (async () => {
         while (!done) {
+          if (oom?.confirmed()) return true;
           if ((await container.inspect()).State?.OOMKilled === true) return true;
-          await delay(MEMORY_CHECK_INTERVAL_MS);
+          if (oom?.confirmed()) return true;
+          await Promise.race([delay(MEMORY_CHECK_INTERVAL_MS), oom?.seen ?? new Promise<void>(() => {})]);
         }
-        return false;
+        return oom?.confirmed() === true;
       })(),
-      new Promise<false>((resolve) => { timer = setTimeout(() => { done = true; resolve(false); }, MEMORY_CHECK_TIMEOUT_MS); }),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => {
+          done = true;
+          resolve(oom?.confirmed() === true);
+        }, MEMORY_CHECK_TIMEOUT_MS);
+      }),
     ]);
   } catch {
-    return false;
+    return oom?.confirmed() === true;
   } finally {
     done = true;
     clearTimeout(timer);
@@ -154,38 +186,43 @@ export function runCode(docker: Docker, input: RunCodeInput, signal?: AbortSigna
   let attached: Duplex | undefined;
   const execute = async (container: Docker.Container) => {
     if (outcome) return;
-    const connection = await container.attach({ stream: true, stdin: true, stdout: true, stderr: true, hijack: true, abortSignal: signal });
-    if (!(connection instanceof Duplex)) throw new Error("Docker did not provide a duplex attach stream");
-    attached = connection;
-    if (outcome) return;
-    const outputFinished = new Promise<{ kind: "ended" } | { kind: "failed"; error: Error }>((resolve) => {
-      connection.once("end", () => resolve({ kind: "ended" }));
-      connection.once("error", (error: Error) => resolve({ kind: "failed", error }));
-      connection.once("close", () => resolve({ kind: "failed", error: new Error("Docker output connection closed before ending") }));
-    });
-    docker.modem.demuxStream(connection, stdout.stream, stderr.stream);
-    await container.start();
-    if (outcome) return;
-    const program = async () => {
-      connection.end(input.code);
-      const reply = waitResultSchema.parse(await container.wait());
+    const oom = typeof docker.getEvents === "function" ? watchOomEvents(docker, container.id) : undefined;
+    try {
+      const connection = await container.attach({ stream: true, stdin: true, stdout: true, stderr: true, hijack: true, abortSignal: signal });
+      if (!(connection instanceof Duplex)) throw new Error("Docker did not provide a duplex attach stream");
+      attached = connection;
       if (outcome) return;
-      if (reply.Error) throw new Error(`Docker could not wait for the program: ${reply.Error.Message}`);
-      const elapsedAtWait = performance.now() - started;
-      exit = { exitCode: reply.StatusCode, oomKilled: false };
-      const output = Promise.race([outputFinished, outputCutOff.promise]);
-      if (reply.StatusCode === SIGKILL_EXIT && await killedForMemory(container)) exit = { exitCode: reply.StatusCode, oomKilled: true };
-      const ended = await output;
+      const outputFinished = new Promise<{ kind: "ended" } | { kind: "failed"; error: Error }>((resolve) => {
+        connection.once("end", () => resolve({ kind: "ended" }));
+        connection.once("error", (error: Error) => resolve({ kind: "failed", error }));
+        connection.once("close", () => resolve({ kind: "failed", error: new Error("Docker output connection closed before ending") }));
+      });
+      docker.modem.demuxStream(connection, stdout.stream, stderr.stream);
+      await container.start();
       if (outcome) return;
-      if (ended.kind === "failed") throw ended.error;
-      // The container's own limit fired before Orbit's timer ran.
-      if (reply.StatusCode === SIGKILL_EXIT && !exit.oomKilled && elapsedAtWait >= RUN_TIMEOUT_MS) {
-        settle({ kind: "timed-out" });
-        return;
-      }
-      settle({ kind: "exited", exit, outputEnded: ended.kind === "ended" });
-    };
-    await Promise.race([program(), settled.promise]);
+      const program = async () => {
+        connection.end(input.code);
+        const reply = waitResultSchema.parse(await container.wait());
+        if (outcome) return;
+        if (reply.Error) throw new Error(`Docker could not wait for the program: ${reply.Error.Message}`);
+        const elapsedAtWait = performance.now() - started;
+        exit = { exitCode: reply.StatusCode, oomKilled: false };
+        const output = Promise.race([outputFinished, outputCutOff.promise]);
+        if (reply.StatusCode === SIGKILL_EXIT && await killedForMemory(container, oom)) exit = { exitCode: reply.StatusCode, oomKilled: true };
+        const ended = await output;
+        if (outcome) return;
+        if (ended.kind === "failed") throw ended.error;
+        // The container's own limit fired before Orbit's timer ran.
+        if (reply.StatusCode === SIGKILL_EXIT && !exit.oomKilled && elapsedAtWait >= RUN_TIMEOUT_MS) {
+          settle({ kind: "timed-out" });
+          return;
+        }
+        settle({ kind: "exited", exit, outputEnded: ended.kind === "ended" });
+      };
+      await Promise.race([program(), settled.promise]);
+    } finally {
+      oom?.stop();
+    }
   };
 
   const cleanup = (async (): Promise<"removed" | "failed"> => {

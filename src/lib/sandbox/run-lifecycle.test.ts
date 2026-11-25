@@ -2,7 +2,7 @@
 // Nothing here talks to Docker or sleeps, so every ordering runs the same way each time.
 import assert from "node:assert/strict";
 import { getEventListeners } from "node:events";
-import { Duplex, type Writable } from "node:stream";
+import { Duplex, PassThrough, type Writable } from "node:stream";
 import test, { type TestContext } from "node:test";
 import type Docker from "dockerode";
 import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } from "ai";
@@ -67,11 +67,22 @@ function fakeDocker(held: Step[] = []) {
       return { State: { OOMKilled: oomKilled } };
     },
   };
+  let eventStream: PassThrough | undefined;
+  let pendingOom = false;
+  const emitOom = () => {
+    pendingOom = true;
+    eventStream?.write("oom\n");
+  };
   const docker = {
     createContainer: async () => {
       await call("create");
       state = "created";
       return container;
+    },
+    getEvents: async () => {
+      eventStream = new PassThrough();
+      if (pendingOom) eventStream.write("oom\n");
+      return eventStream;
     },
     modem: { demuxStream: (stream: Duplex, out: Writable) => stream.on("data", (chunk: Buffer) => out.write(chunk)) },
   };
@@ -85,6 +96,7 @@ function fakeDocker(held: Step[] = []) {
       else once(gates, step).resolve();
     },
     print: (text: string) => connection.push(text),
+    emitOom,
     exit(code: number, { outputEnds = true, memoryKill = false, waitError = "" } = {}) {
       oomKilled = memoryKill;
       end(code, outputEnds, waitError);
@@ -256,6 +268,22 @@ test("a memory check Docker never answers holds neither the result nor the remov
   assert.equal(await isSettled(run.result), true, "the memory check must not wait for Docker without a bound");
   const result = await run.result;
   assert.deepEqual([result.exitCode, result.oomKilled, result.timedOut], [137, undefined, false]);
+  await cleanedUp(fake, run);
+});
+
+// The OOM can be recorded as a container event after wait() returns, while inspect still reads unset.
+test("an OOM event confirms the memory kill even when inspect stays unset", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const fake = fakeDocker();
+  const run = runCode(fake.docker, spin);
+  await fake.reached("start");
+  await drain();
+  fake.emitOom();
+  fake.exit(137);
+  await drain();
+  t.mock.timers.tick(5_000);
+  const result = await run.result;
+  assert.deepEqual([result.exitCode, result.oomKilled, result.timedOut], [137, true, false]);
   await cleanedUp(fake, run);
 });
 
