@@ -22,14 +22,28 @@ export type OomWatch = { confirmed: () => boolean; seen: Promise<void>; stop: ()
 
 export function watchOomEvents(docker: Pick<Docker, "getEvents">, containerId: string): OomWatch {
   let confirmed = false;
+  let stopped = false;
   const seen = Promise.withResolvers<void>();
   let stream: NodeJS.ReadableStream | undefined;
+  // Destroying can still emit an error, and a stream with no error listener would throw.
+  const destroyStream = (target: NodeJS.ReadableStream) => {
+    target.removeAllListeners();
+    target.on("error", () => {});
+    if ("destroy" in target && typeof target.destroy === "function") target.destroy();
+  };
   const stop = () => {
-    stream?.removeAllListeners();
-    if (stream && "destroy" in stream && typeof stream.destroy === "function") stream.destroy();
+    stopped = true;
+    if (stream) destroyStream(stream);
+    stream = undefined;
   };
   const filters: { type: Array<"container">; event: string[]; container: string[] } = { type: ["container"], event: ["oom"], container: [containerId] };
   void docker.getEvents({ filters }).then((events) => {
+    // stop() can run before this request settles. The stream that arrives late is destroyed here,
+    // or it would stay open against the Docker daemon for the life of the process.
+    if (stopped) {
+      destroyStream(events);
+      return;
+    }
     stream = events;
     events.on("data", () => {
       confirmed = true;
