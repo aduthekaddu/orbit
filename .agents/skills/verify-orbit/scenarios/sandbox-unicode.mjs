@@ -1,5 +1,5 @@
-export default async function sandboxUnicode({ page, origin, step, shot }) {
-  await page.request.put(`${origin}/api/settings`, { data: { baseUrl: "http://127.0.0.1:3299/v1", apiKey: "test-key-not-real", model: "mock-genui", reasoningEffort: "low" } });
+export default async function sandboxUnicode({ page, origin, mockUrl, step, shot }) {
+  await page.request.put(`${origin}/api/settings`, { data: { baseUrl: mockUrl, apiKey: "test-key-not-real", model: "mock-genui", reasoningEffort: "low" } });
   const { id } = await (await page.request.post(`${origin}/api/chats`)).json();
   await page.goto(`${origin}/c/${id}`);
   const composer = page.getByPlaceholder("Ask anything");
