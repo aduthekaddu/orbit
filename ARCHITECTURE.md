@@ -8,10 +8,8 @@ Orbit is one Next.js process. It serves the pages, the API routes, and the chat 
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/architecture/stack-dark.png">
-  <img alt="Orbit stack. The browser runs assistant-ui and json-render. A Docker container runs Next.js, the AI SDK, better-auth, Drizzle, and SQLite. The AI SDK calls an OpenAI-compatible provider. A dashed box groups the connected services: SearXNG, Tavily, a Docker sandbox, Ollama, GitHub MCP, and Cloudflare." src="docs/architecture/stack.png">
+  <img alt="Orbit stack. The browser runs assistant-ui and json-render. A Docker container runs Next.js, the AI SDK, better-auth, Drizzle, and SQLite. The AI SDK calls an OpenAI-compatible provider. A dashed box groups the optional services: a Cloudflare tunnel into Next.js, then SearXNG, Tavily, a Docker sandbox, Ollama, and GitHub MCP, which the server calls for tools and embeddings." src="docs/architecture/stack.png">
 </picture>
-
-The diagram predates slices 7 to 12. SearXNG and Tavily (slice 7), the code sandbox (slice 8), GitHub MCP (slice 9), Ollama (slice 10), and Cloudflare (slice 12) have all shipped, and the dashed box still draws them as future work. Each is optional, and each node names its slice.
 
 ## One chat turn, end to end
 
