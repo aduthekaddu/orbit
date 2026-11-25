@@ -3,6 +3,7 @@ import { Duplex, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
+import { sandboxOwner } from "./owner.mjs";
 import { containerSpec, RUN_TIMEOUT_SECONDS, type RunCodeInput, type RunCodeOutput } from "./spec";
 
 const OUTPUT_LIMIT = 65_536;
@@ -106,7 +107,7 @@ export async function runCode(docker: Docker, input: RunCodeInput, signal?: Abor
   const stderr = outputCollector();
   let oomKilled = false;
   const completed = async (): Promise<number | "timed-out" | "cancelled"> => {
-    const container = await docker.createContainer(containerSpec(input));
+    const container = await docker.createContainer(containerSpec(input, sandboxOwner()));
     let attached: Duplex | undefined;
     try {
       if (stopReason) return stopReason;

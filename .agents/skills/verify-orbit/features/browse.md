@@ -41,7 +41,7 @@ Screenshots: `before-stop.png`, `after-reload.png`.
 
 ### palette
 
-Presses Ctrl+K in a chat, types `Settings`, and presses Enter. Then it opens the palette again and presses Escape.
+Presses Ctrl+K in a chat, types `Settings`, and presses Enter. Then it opens the palette again and presses Escape. Then it sends `[qa:plain] quokkanest` and searches messages with `/api/search` aborted, answering HTTP 500, and held for 3 seconds.
 
 Pass lines:
 
@@ -51,9 +51,16 @@ PASS Enter on Settings opens /settings
 PASS palette closes after select
 PASS Esc closes the palette
 PASS focus returns to the composer
+PASS the chat has a message to search
+PASS a failed search does not say No results
+PASS a search after a failed one shows the hit and no error
+PASS a server error says Could not search
+PASS a pending search does not say No results
+PASS a canceled search does not say Could not search
+PASS a finished search with no match says No results
 ```
 
-Screenshots: `after-select.png`, `after-escape.png`.
+Screenshots: `after-select.png`, `after-escape.png`, `search-failed.png`, `search-recovered.png`, `search-pending.png`.
 
 ### settings-short
 
@@ -68,6 +75,33 @@ PASS clicking Save shows Saved
 ```
 
 Screenshot: `save-visible.png`.
+
+### request-failures
+
+Fails each browser request with `page.route`: New chat (HTTP 500, network, a body with no id, an HTTP 500 from the open drawer at 390 pixels, then a held answer with a double click and the shortcut), the settings model list (not JSON, a JSON 400, an HTML 400, network, then real), settings Save and the GitHub check on the network, a GitHub check 400, and a reply edit on the network.
+
+Pass lines:
+
+```
+PASS New chat that gets a 500 shows Could not create chat
+PASS New chat that fails on the network shows Could not create chat
+PASS New chat that gets a body with no id shows Could not create chat and stays put
+PASS New chat that fails from the open mobile drawer shows Could not create chat to screen readers
+PASS a double click and the shortcut during one pending New chat send one request, then open the chat
+PASS a model list that is not JSON shows Failed, not 0 models
+PASS a model list 400 from a bad request shows Failed, not Not checked
+PASS a model list 400 from a proxy shows Failed, not Not checked
+PASS a model list that fails on the network shows Failed
+PASS a model list that loads shows its count
+PASS a settings save that fails on the network shows Could not save
+PASS a GitHub check that fails on the network says GitHub is unavailable.
+PASS a GitHub check that gets a 400 shows the server's error
+PASS the chat has a reply to edit
+PASS a reply edit that fails on the network shows Could not save and keeps the editor
+PASS no failed request raised a page error
+```
+
+Screenshots: `new-chat-500.png`, `new-chat-drawer-500.png`, `new-chat-recovered.png`, `models-unreadable.png`, `settings-save-offline.png`, `github-check-400.png`, `reply-edit-offline.png`.
 
 ### empty-chat
 
