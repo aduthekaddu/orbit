@@ -42,9 +42,6 @@ jobs:
         run: npm run typecheck
       - name: Lint the React hooks
         if: matrix.node == '22'
-        # Annotations are posted without failing the job. Drop continue-on-error
-        # in a later change so lint is a required check (part of #145).
-        continue-on-error: true
         run: npm run lint -- --format github
       - name: Check the TLA+ models
         if: matrix.node == '22'
