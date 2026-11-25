@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { WarningCircleIcon } from "@phosphor-icons/react";
 import { authClient } from "@/lib/auth-client";
-import { AUTH_REDIRECT_RESET_MS, runAuthSubmit, type AuthResult } from "@/lib/auth-submit";
-import { idleSubmit, submitTransition } from "@/lib/submit-state";
+import { AUTH_REDIRECT_RESET_MS, authSubmitTransition, runAuthSubmit, type AuthResult } from "@/lib/auth-submit";
+import { idleSubmit } from "@/lib/submit-state";
 import { OrbitMark } from "@/components/orbit-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,11 +14,11 @@ import { Label } from "@/components/ui/label";
 
 function useAuthSubmit(fallbackError: string) {
   const router = useRouter();
-  const [submit, dispatch] = useReducer(submitTransition, idleSubmit);
+  const [submit, dispatch] = useReducer(authSubmitTransition, idleSubmit);
 
   useEffect(() => {
     if (submit.status !== "succeeded") return;
-    const timer = setTimeout(() => dispatch({ type: "edit" }), AUTH_REDIRECT_RESET_MS);
+    const timer = setTimeout(() => dispatch({ type: "timeout" }), AUTH_REDIRECT_RESET_MS);
     return () => clearTimeout(timer);
   }, [submit.status]);
 

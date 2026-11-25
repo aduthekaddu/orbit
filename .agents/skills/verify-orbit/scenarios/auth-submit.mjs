@@ -17,16 +17,11 @@ export default async function authSubmit({ page, origin, step, shot }) {
     await page.context().clearCookies();
     await page.route(SIGN_IN, (route) =>
       route.fulfill({
-        status: 200,
+        status: 401,
         contentType: "application/json",
-        body: JSON.stringify({
-          redirect: false,
-          token: "verify-token",
-          user: { id: "verify-user", email: "verify@orbit.local", name: "Verify" },
-        }),
+        body: JSON.stringify({ code: "INVALID_EMAIL_OR_PASSWORD", message: "Invalid email or password" }),
       }),
     );
-    await page.route(`${origin}/**`, blockHome);
 
     await page.goto(`${origin}/login`, { waitUntil: "domcontentloaded" });
     const email = page.getByLabel("Email");
@@ -35,7 +30,29 @@ export default async function authSubmit({ page, origin, step, shot }) {
     await button.waitFor({ timeout: 10_000 });
 
     await email.fill("verify@orbit.local");
+    await password.fill("wrong-password");
+    await button.click();
+    const errorAlert = page.getByRole("alert").filter({ hasText: "Invalid email or password" });
+    const errorShown = await errorAlert.waitFor({ timeout: 5_000 }).then(() => true, () => false);
     await password.fill("orbit-verify-pass");
+    const errorCleared = errorShown && (await errorAlert.waitFor({ state: "hidden", timeout: 5_000 }).then(() => true, () => false));
+    step("editing a field clears a sign-in error", errorCleared, `shown=${errorShown}`);
+
+    await page.unroute(SIGN_IN);
+    let signInCount = 0;
+    await page.route(SIGN_IN, (route) => {
+      signInCount += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          redirect: false,
+          token: "verify-token",
+          user: { id: "verify-user", email: "verify@orbit.local", name: "Verify" },
+        }),
+      });
+    });
+    await page.route(`${origin}/**`, blockHome);
 
     const firstSignIn = page.waitForResponse((response) => response.url().endsWith("/api/auth/sign-in/email"), { timeout: 5_000 });
     await button.click();
@@ -46,6 +63,20 @@ export default async function authSubmit({ page, origin, step, shot }) {
       "Sign in stays disabled after success while navigation is pending",
       (await button.isDisabled()) && (await button.getAttribute("aria-busy")) === "true",
       `disabled=${await button.isDisabled()} aria-busy=${await button.getAttribute("aria-busy")}`,
+    );
+
+    await password.fill("orbit-verify-pass-2");
+    await page.waitForTimeout(200);
+    const disabledAfterEdit = await button.isDisabled();
+    const busyAfterEdit = await button.getAttribute("aria-busy");
+    if (!disabledAfterEdit) {
+      await button.click();
+      await page.waitForTimeout(200);
+    }
+    step(
+      "editing a field while navigation is pending keeps Sign in disabled",
+      disabledAfterEdit && busyAfterEdit === "true" && signInCount === 1,
+      `disabled=${disabledAfterEdit} aria-busy=${busyAfterEdit} requests=${signInCount}`,
     );
 
     const unlockedByTimeout = await page
@@ -63,21 +94,6 @@ export default async function authSubmit({ page, origin, step, shot }) {
       "Sign in re-enables when navigation stalls",
       unlockedByTimeout && !(await button.isDisabled()),
       `disabled=${await button.isDisabled()}`,
-    );
-
-    if (!(await button.isDisabled())) {
-      const secondSignIn = page.waitForResponse((response) => response.url().endsWith("/api/auth/sign-in/email"), { timeout: 5_000 });
-      await button.click();
-      await secondSignIn;
-      await page.waitForTimeout(200);
-    }
-    const disabledBeforeEdit = await button.isDisabled();
-    await password.fill("orbit-verify-pass-2");
-    await page.waitForTimeout(200);
-    step(
-      "editing a field unlocks Sign in when navigation stalls",
-      disabledBeforeEdit && !(await button.isDisabled()),
-      `before=${disabledBeforeEdit} afterDisabled=${await button.isDisabled()}`,
     );
 
     await page.goto("about:blank");

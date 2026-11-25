@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { runAuthSubmit } from "./auth-submit";
-import { idleSubmit, submitTransition, type SubmitEvent, type SubmitState } from "./submit-state";
+import { authSubmitTransition, runAuthSubmit, type AuthSubmitEvent } from "./auth-submit";
+import { idleSubmit, type SubmitState } from "./submit-state";
 
 function makeMachine() {
   let state: SubmitState = idleSubmit;
   return {
-    dispatch(event: SubmitEvent) {
-      state = submitTransition(state, event);
+    dispatch(event: AuthSubmitEvent) {
+      state = authSubmitTransition(state, event);
     },
     state() {
       return state;
@@ -15,7 +15,7 @@ function makeMachine() {
   };
 }
 
-test("a successful auth submit navigates and holds succeeded until an edit or timeout resets it", async () => {
+test("a successful auth submit navigates and holds succeeded across edits until timeout resets it", async () => {
   const machine = makeMachine();
   const calls: string[] = [];
   await runAuthSubmit({
@@ -32,7 +32,27 @@ test("a successful auth submit navigates and holds succeeded until an edit or ti
   assert.deepEqual(machine.state(), { status: "succeeded" });
 
   machine.dispatch({ type: "edit" });
+  assert.deepEqual(machine.state(), { status: "succeeded" });
+
+  machine.dispatch({ type: "submit" });
+  assert.deepEqual(machine.state(), { status: "succeeded" });
+
+  machine.dispatch({ type: "timeout" });
   assert.equal(machine.state(), idleSubmit);
+});
+
+test("an auth field edit clears a failed submit and timeout outside succeeded is a no-op", () => {
+  const failed = authSubmitTransition(
+    authSubmitTransition(idleSubmit, { type: "submit" }),
+    { type: "fail", error: "Invalid email or password" },
+  );
+  assert.equal(authSubmitTransition(failed, { type: "timeout" }), failed);
+  assert.equal(authSubmitTransition(failed, { type: "edit" }), idleSubmit);
+
+  const pending = authSubmitTransition(idleSubmit, { type: "submit" });
+  assert.equal(authSubmitTransition(pending, { type: "timeout" }), pending);
+  assert.equal(authSubmitTransition(pending, { type: "edit" }), pending);
+  assert.equal(authSubmitTransition(idleSubmit, { type: "timeout" }), idleSubmit);
 });
 
 test("a throwing router.push fails the submit instead of stranding it in succeeded", async () => {

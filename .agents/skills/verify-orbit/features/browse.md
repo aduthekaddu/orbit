@@ -144,14 +144,15 @@ Screenshots: `network-error.png`, `http-error.png`, `signed-out.png`.
 
 ### auth-submit
 
-Clears cookies, opens `/login`, stalls navigation to `/`, and checks that **Sign in** stays disabled right after success, re-enables when navigation stalls past the reset timeout, and unlocks immediately when a field is edited. Then clears the intercepts and signs in to open a chat.
+Clears cookies, opens `/login`, fails one sign-in to check that editing clears the error, then stalls navigation to `/` and checks that **Sign in** stays disabled right after success even if a field is edited while navigation is pending, and re-enables when navigation stalls past the reset timeout. Then clears the intercepts and signs in to open a chat.
 
 Pass lines:
 
 ```
+PASS editing a field clears a sign-in error
 PASS Sign in stays disabled after success while navigation is pending
+PASS editing a field while navigation is pending keeps Sign in disabled
 PASS Sign in re-enables when navigation stalls
-PASS editing a field unlocks Sign in when navigation stalls
 PASS real sign-in opens a chat
 ```
 
