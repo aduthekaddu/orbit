@@ -54,6 +54,12 @@ The `Security` and `CodeQL` workflows run on every pull request, every push to `
 3. For SQL that Drizzle cannot describe, such as FTS5 or `sqlite-vec` tables, run `npx drizzle-kit generate --custom --name <name>` and write the SQL by hand.
 4. Run the migration against a copy of a real database before you open the pull request.
 
+## Dependency overrides
+
+An `overrides` entry in `package.json` is a temporary workaround, and JSON cannot hold a comment, so this section is the comment beside it. Every entry lists why it exists, when to remove it, and the open issue that tracks its removal. Delete an entry in the pull request that closes its issue. The suite check `src/lib/dependency-overrides.test.ts` fails an entry whose package has left `package-lock.json`, and an entry with no line here.
+
+- `@esbuild-kit/core-utils` pins `esbuild` to 0.25.12. drizzle-kit 0.31.11 reaches that deprecated package through `@esbuild-kit/esm-loader`. That chain asks for esbuild `~0.18.20`, which carries GHSA-67mh-4wv8-2f99 (#71, #80). Remove the entry when a drizzle-kit upgrade stops installing `@esbuild-kit/`, which `npm ls @esbuild-kit/core-utils` printing `(empty)` shows. Tracked in #237.
+
 ## Work on a planned slice
 
 Planned features are built as slices. Each one has a plan in [`docs/slices/`](docs/slices/README.md) with its scope, files, and proof. Every slice follows the same three steps: reproduce the gap and write failing tests, make the tests pass, then prove the change with verify-orbit and post the output.
