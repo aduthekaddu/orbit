@@ -114,10 +114,10 @@ export function ollamaStatus(timeoutMs = QUERY_EMBED_TIMEOUT_MS): Promise<Ollama
   return promise;
 }
 
-export async function embedQuery(text: string): Promise<EmbedResult> {
+export async function embedQuery(text: string, timeoutMs = QUERY_EMBED_TIMEOUT_MS): Promise<EmbedResult> {
   const cached = freshStatus();
   if (cached && !cached.ok) return cached;
-  const result = await embed([text], "query", QUERY_EMBED_TIMEOUT_MS);
+  const result = await embed([text], "query", timeoutMs);
   if (!result.ok) rememberStatus({ ok: false, error: result.error });
   else if (result.vectors[0]) rememberStatus({ ok: true });
   return result;
