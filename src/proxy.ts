@@ -5,6 +5,21 @@ import { isCrossOriginWrite } from "@/lib/auth-origins";
 
 const PUBLIC_PAGES = new Set(["/login", "/signup"]);
 
+function routeResponse(request: NextRequest, pathname: string, signedIn: boolean) {
+  if (pathname.startsWith("/api")) {
+    if (!signedIn) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (isCrossOriginWrite(request, trustedOrigins)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return NextResponse.next();
+  }
+  if (!signedIn && !PUBLIC_PAGES.has(pathname)) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+  if (signedIn && PUBLIC_PAGES.has(pathname)) {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+  return NextResponse.next();
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (
@@ -16,22 +31,17 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const session = await auth.api.getSession({ headers: request.headers });
+  const { response: session, headers } = await auth.api.getSession({
+    headers: request.headers,
+    returnHeaders: true,
+  });
   if (!session && !PUBLIC_PAGES.has(pathname)) console.warn(describeAuthMiss(pathname, request.headers));
 
-  if (pathname.startsWith("/api")) {
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (isCrossOriginWrite(request, trustedOrigins)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    return NextResponse.next();
+  const response = routeResponse(request, pathname, Boolean(session));
+  for (const cookie of headers.getSetCookie()) {
+    response.headers.append("set-cookie", cookie);
   }
-
-  if (!session && !PUBLIC_PAGES.has(pathname)) {
-    return NextResponse.redirect(new URL("/login", request.url));
-  }
-  if (session && PUBLIC_PAGES.has(pathname)) {
-    return NextResponse.redirect(new URL("/", request.url));
-  }
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {
