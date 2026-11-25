@@ -53,6 +53,17 @@ async function widths(locator) {
   return locator.evaluate((element) => ({ scroll: element.scrollWidth, client: element.clientWidth }));
 }
 
+async function unwrapped(locator) {
+  await locator.evaluate((element) => {
+    element.style.overflowWrap = "normal";
+  });
+  const result = await widths(locator);
+  await locator.evaluate((element) => {
+    element.style.overflowWrap = "";
+  });
+  return result;
+}
+
 // The memory list scrolls inside its own box, so a line counts as shown only inside that box and the viewport.
 async function onScreen(locator) {
   return locator.evaluate((element) => {
@@ -321,6 +332,8 @@ export default async function memory({ page, origin, step, shot }) {
   const cardWidth = longCardShown ? await widths(longCard) : { scroll: 0, client: 0 };
   await shot("long-card");
   step("a 500 character remember card with no spaces stays inside the card", longCardShown && cardWidth.scroll <= cardWidth.client, longCardShown ? `${cardWidth.scroll}px of text in ${cardWidth.client}px` : "no card");
+  const cardUnwrapped = longCardShown ? await unwrapped(longCard) : { scroll: 0, client: 0 };
+  step("the card check fails a remember card whose text cannot wrap", longCardShown && cardUnwrapped.scroll > cardUnwrapped.client, longCardShown ? `${cardUnwrapped.scroll}px of text in ${cardUnwrapped.client}px` : "no card");
 
   await page.goto(`${origin}/memory`);
   const longRow = page.locator("li p").filter({ hasText: longText });
@@ -328,6 +341,8 @@ export default async function memory({ page, origin, step, shot }) {
   const rowWidth = longRowShown ? await widths(longRow) : { scroll: 0, client: 0 };
   await shot("long-row");
   step("a 500 character memory with no spaces stays inside its row", longRowShown && rowWidth.scroll <= rowWidth.client, longRowShown ? `${rowWidth.scroll}px of text in ${rowWidth.client}px` : "no row");
+  const rowUnwrapped = longRowShown ? await unwrapped(longRow) : { scroll: 0, client: 0 };
+  step("the row check fails a memory whose text cannot wrap", longRowShown && rowUnwrapped.scroll > rowUnwrapped.client, longRowShown ? `${rowUnwrapped.scroll}px of text in ${rowUnwrapped.client}px` : "no row");
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${origin}/memory`);
