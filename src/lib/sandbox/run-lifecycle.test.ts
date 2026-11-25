@@ -12,7 +12,7 @@ import { createStoppedRuns } from "../tools/stopped-runs";
 import { runCode, runCodeToEnd } from "./run";
 import type { RunCodeOutput } from "./spec";
 
-type Step = "create" | "attach" | "start" | "inspect" | "kill" | "remove";
+type Step = "create" | "attach" | "start" | "inspect" | "kill" | "remove" | "events";
 
 // Docker as runCode sees it. A step in `held` waits until the test calls `release`; the others answer at once.
 // The program runs until the test calls `exit`, or until `kill` (exit 137, as real Docker reports SIGKILL).
@@ -80,6 +80,7 @@ function fakeDocker(held: Step[] = []) {
       return container;
     },
     getEvents: async () => {
+      await call("events");
       eventStream = new PassThrough();
       if (pendingOom) eventStream.write("oom\n");
       return eventStream;
@@ -89,6 +90,7 @@ function fakeDocker(held: Step[] = []) {
   return {
     docker: docker as unknown as Docker,
     events,
+    oomStream: () => eventStream,
     containerLeft: () => state !== undefined && state !== "removed",
     reached: (step: Step) => once(reached, step).promise,
     release(step: Step, error?: Error) {
@@ -285,6 +287,22 @@ test("an OOM event confirms the memory kill even when inspect stays unset", asyn
   const result = await run.result;
   assert.deepEqual([result.exitCode, result.oomKilled, result.timedOut], [137, true, false]);
   await cleanedUp(fake, run);
+});
+
+// Graphite review of #222: execute stopped the watch before Docker's event stream arrived, and the late
+// stream was never destroyed, so every such run left an open events connection against the Docker daemon.
+test("a run that ends before its event stream arrives still destroys that stream", async () => {
+  const fake = fakeDocker(["events"]);
+  const run = runCode(fake.docker, spin);
+  await fake.reached("start");
+  fake.exit(0);
+  assert.equal((await run.result).exitCode, 0);
+  await cleanedUp(fake, run);
+  assert.equal(fake.oomStream(), undefined, "Docker's event stream must still be on its way when the run ends");
+  fake.release("events");
+  await drain();
+  await drain();
+  assert.equal(fake.oomStream()?.destroyed, true, "the stream that arrives after stop is destroyed, not watched for the process's life");
 });
 
 // Codex review of #187: Stop after Docker confirmed a memory kill, while output was open, dropped the memory flag.

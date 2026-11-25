@@ -3,12 +3,12 @@ import test from "node:test";
 import Docker from "dockerode";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import type { Duplex, Writable } from "node:stream";
+import { PassThrough, type Duplex, type Writable } from "node:stream";
 import { format } from "node:util";
 import { eventually } from "../eventually.mjs";
 import { sandboxImages } from "./images";
 import { OWNER_LABEL, ownedSandboxFilter, parseSandboxOwner, sandboxLabels, sandboxOwner, type SandboxOwner } from "./owner.mjs";
-import { killedForMemory, runCode, runCodeToEnd } from "./run";
+import { killedForMemory, runCode, runCodeToEnd, watchOomEvents } from "./run";
 import { containerSpec, type RunCodeInput, type RunCodeOutput } from "./spec";
 import { removeStaleSandboxes } from "./sweep";
 
@@ -481,4 +481,19 @@ test("a memory kill is confirmed by re-reading Docker's OOM flag", async (t) => 
       await checking;
     }
   });
+});
+
+// Graphite review of #222: stop() ran before Docker answered the events request, and the stream that
+// arrived late was never destroyed, so every such run left an open events connection behind.
+test("an OOM event watch destroys a stream that arrives after stop", async () => {
+  const events = new PassThrough();
+  const pending = Promise.withResolvers<PassThrough>();
+  const docker = { getEvents: () => pending.promise } as unknown as Pick<Docker, "getEvents">;
+  const watch = watchOomEvents(docker, "late-container");
+  watch.stop();
+  pending.resolve(events);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(events.destroyed, true, "the stream that arrives after stop is destroyed, not watched for the process's life");
+  events.emit("data");
+  assert.equal(watch.confirmed(), false, "a stopped watch never confirms a memory kill");
 });
