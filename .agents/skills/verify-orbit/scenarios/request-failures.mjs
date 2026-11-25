@@ -81,7 +81,8 @@ export default async function requestFailures({ page, origin, step, shot }) {
   });
   await newChat.click();
   const sawPending = await disabled(newChat);
-  await page.goto(`${origin}/settings`);
+  // A full page.goto would destroy the app's JS context and the pending answer with it, so the step must navigate in-app.
+  await page.getByRole("link", { name: "Settings" }).click();
   await page.getByRole("button", { name: "Save", exact: true }).waitFor({ timeout: 10_000 });
   await Promise.all(heldCreates.splice(0).map((route) => route.continue().catch(() => {})));
   await page.unrouteAll({ behavior: "ignoreErrors" });
