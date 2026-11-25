@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import test, { after, before } from "node:test";
 import { startMockOllama } from "./ollama-harness";
 
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-memory-recall-"));
-process.env.ORBIT_DATA_DIR = dataDir;
 delete process.env.ORBIT_OLLAMA_URL;
 
 type RecallModule = typeof import("./recall");

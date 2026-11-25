@@ -2,17 +2,22 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { UnloadedRuns } from "@/components/chat/stopped-run-sync";
 import { settleInterruptedParts } from "@/lib/genui/spec";
 import { RunCard } from "./run-card";
 
 const finished = { stdout: "", stderr: "", exitCode: 0, durationMs: 20, timedOut: false, truncated: false };
 
-function render(overrides: Record<string, unknown>) {
+function card(overrides: Record<string, unknown>) {
   const props = {
     type: "tool-call", toolCallId: "t1", toolName: "run_code", args: { language: "python", code: "print(1)" }, argsText: "",
     result: undefined, isError: false, status: { type: "running" }, addResult() {}, resume() {}, ...overrides,
   };
-  return renderToStaticMarkup(<RunCard {...(props as unknown as ToolCallMessagePartProps)} />);
+  return <RunCard {...(props as unknown as ToolCallMessagePartProps)} />;
+}
+
+function render(overrides: Record<string, unknown>) {
+  return renderToStaticMarkup(card(overrides));
 }
 
 function header(html: string) {
@@ -37,6 +42,14 @@ test("a failed card keeps its language", () => {
 
 test("a cancelled card with no result keeps its language", () => {
   assert.equal(header(render({ status: { type: "complete" } })), "Run code|Python|Cancelled");
+});
+
+test("a stopped card whose saved result could not load says so", () => {
+  const unloaded = (overrides: Record<string, unknown>) =>
+    renderToStaticMarkup(<UnloadedRuns.Provider value={new Set(["t1"])}>{card(overrides)}</UnloadedRuns.Provider>).includes("Could not load output");
+  assert.equal(unloaded({ status: { type: "complete" } }), true);
+  assert.equal(unloaded({ status: { type: "complete" }, result: { ...finished, exitCode: null, cancelled: true } }), false);
+  assert.equal(render({ status: { type: "complete" } }).includes("Could not load output"), false);
 });
 
 test("a card whose tool input was rejected names no language", () => {

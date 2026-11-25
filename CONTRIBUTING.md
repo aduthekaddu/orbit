@@ -23,7 +23,7 @@ npm run build
 
 `npm run lint` checks the React hook rules in `src/`. It does not have to pass yet, because some findings predate it.
 
-Tests live next to the code as `*.test.ts` and `*.test.tsx`, and run with Node's test runner through `tsx`. Write a test that a user of the code would recognize: a return value, a stored row, a response status, or rendered text. Avoid tests that check which internal function ran.
+Tests live next to the code as `*.test.ts` and `*.test.tsx`, and run with Node's test runner through `tsx`. `npm test` gives each test file its own temporary data directory. To run one file, use `node --import tsx --import ./scripts/test-data-dir.mjs --test <file>`. Write a test that a user of the code would recognize: a return value, a stored row, a response status, or rendered text. Avoid tests that check which internal function ran.
 
 A change that users can see also needs a live check. The [verify-orbit skill](.agents/skills/verify-orbit/SKILL.md) starts a server with an empty database in `.verify/sandbox` and drives each feature through the same requests the pages send. Its `features/` folder has one recipe per feature.
 

@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { UIMessage } from "ai";
+import type { Redactor } from "./chat-errors";
 import { replaceTextPart, replaceTextParts } from "./chat-parts";
 import { db } from "./db";
 import { assistantHasVisiblePart } from "./genui/spec";
@@ -115,6 +116,7 @@ export function upsertMessage(
   message: { id: string; role: string; parts: unknown },
   replyTo?: string | null,
   expected?: ExpectedMessage,
+  redact?: Redactor,
 ) {
   if (message.role !== "user" && message.role !== "assistant") return true;
   if (message.role === "assistant" && !assistantHasVisiblePart(message.parts)) return true;
@@ -124,8 +126,10 @@ export function upsertMessage(
         .where(and(eq(messages.id, expected.id), eq(messages.chatId, chatId))).get();
       if (!current || current.content !== expected.content || current.parts !== expected.parts) return false;
     }
-    const content = searchTextFromParts(message.parts);
-    const parts = JSON.stringify(message.parts ?? []);
+    // The search text joins parts and strips terminal codes, which can spell a credential, so it is masked after.
+    const saved = redact ? redact.value(message.parts ?? []) : message.parts ?? [];
+    const content = redact ? redact.text(searchTextFromParts(saved)) : searchTextFromParts(saved);
+    const parts = JSON.stringify(saved);
     const existing = tx.select().from(messages).where(eq(messages.id, message.id)).get();
     if (existing) {
       if (existing.chatId !== chatId) return false;

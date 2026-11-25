@@ -3,16 +3,22 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
-import { CUSTOM_OPTION, NO_OPTION, selectedOptionIndex, showsModelInput, type ModelOption } from "@/lib/model-picker";
-import { appliedSave, connectionFromResponse, type Connection, type SettingsSnapshot } from "@/lib/settings-form";
+import { CUSTOM_OPTION, NO_OPTION, selectedOptionIndex, showsModelInput } from "@/lib/model-picker";
+import { requestJson, useLatestRequest, useLoaded } from "@/lib/request-json";
+import { appliedSave, connectionFrom, modelListBody, type Connection, type ModelList, type SettingsSnapshot } from "@/lib/settings-form";
 import { idleSubmit, submitTransition } from "@/lib/submit-state";
 import type { PublicSettings, ReasoningEffort } from "@/lib/settings";
+
+const savedBody = z.object({ keySet: z.boolean(), tavilyKeySet: z.boolean(), githubTokenSet: z.boolean() });
+const githubCheckBody = z.object({ ok: z.boolean(), login: z.string().optional(), error: z.string().optional() });
+const GITHUB_UNAVAILABLE = "GitHub is unavailable.";
 
 const EFFORTS: { value: ReasoningEffort; label: string }[] = [
   { value: "low", label: "Low" },
@@ -38,53 +44,36 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
   const [githubTokenSet, setGithubTokenSet] = useState(initial.githubTokenSet);
   const [githubMcpUrl, setGithubMcpUrl] = useState(initial.githubMcpUrl);
   const [githubCheck, setGithubCheck] = useState<GithubCheck>({ status: "idle" });
-  const githubCheckRequest = useRef(0);
+  const latestGithubCheck = useLatestRequest();
   const [keySet, setKeySet] = useState(initial.keySet);
   const hasKey = keySet || apiKey.trim().length > 0;
-  const [connection, setConnection] = useState<Connection>(() => canLoadStored(initial) ? { status: "checking" } : { status: "idle" });
+  const [modelList, requestModels] = useLoaded<ModelList>(canLoadStored(initial) ? { status: "pending" } : { status: "idle" });
+  const connection = connectionFrom(modelList);
   const [customMode, setCustomMode] = useState(false);
   const [save, dispatchSave] = useReducer(submitTransition, idleSubmit);
   const pending = save.status === "pending";
-  const modelLoad = useRef<{ id: number; controller: AbortController | null }>({ id: 0, controller: null });
   const formValues: SettingsSnapshot = { baseUrl, apiKey, model, effort, searxngUrl, tavilyApiKey, githubToken, githubMcpUrl };
   const latestValues = useRef(formValues);
   latestValues.current = formValues;
 
-  const loadModels = useCallback(async (nextBase: string, nextKey: string, nextHasKey: boolean) => {
-    const id = ++modelLoad.current.id;
-    modelLoad.current.controller?.abort();
-    const controller = new AbortController();
-    modelLoad.current.controller = controller;
-    setConnection({ status: "checking" });
-    try {
-      const response = await fetch("/api/models", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          baseUrl: nextBase || undefined,
-          apiKey: nextKey || undefined,
-        }),
-      });
-      if (id !== modelLoad.current.id) return;
-      const body = (await response.json().catch(() => ({}))) as { models?: ModelOption[] };
-      if (id !== modelLoad.current.id) return;
-      setConnection(connectionFromResponse(response, body, nextHasKey));
-    } catch (error) {
-      if (id !== modelLoad.current.id) return;
-      if (error instanceof Error && error.name === "AbortError") return;
-      setConnection({ status: "failed" });
-    }
-  }, []);
+  const loadModels = useCallback(
+    (nextBase: string, nextKey: string, nextHasKey: boolean) =>
+      requestModels(
+        "/api/models",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ baseUrl: nextBase || undefined, apiKey: nextKey || undefined }),
+        },
+        modelListBody(nextHasKey),
+      ),
+    [requestModels],
+  );
 
   useEffect(() => {
     if (canLoadStored({ baseUrl: initial.baseUrl, keySet: initial.keySet })) {
-      void loadModels(initial.baseUrl, "", initial.keySet);
+      loadModels(initial.baseUrl, "", initial.keySet);
     }
-    const load = modelLoad.current;
-    return () => {
-      load.controller?.abort();
-    };
   }, [initial.baseUrl, initial.keySet, loadModels]);
 
   useEffect(() => {
@@ -96,8 +85,9 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     dispatchSave({ type: "submit" });
-    try {
-      const response = await fetch("/api/settings", {
+    await requestJson(
+      "/api/settings",
+      {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -110,49 +100,48 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
           githubToken: formValues.githubToken === null ? null : formValues.githubToken || undefined,
           githubMcpUrl: formValues.githubMcpUrl.trim(),
         }),
-      });
-      const body = (await response.json()) as PublicSettings & { error?: string };
-      if (!response.ok) {
-        dispatchSave({ type: "fail", error: body.error ?? "Could not save" });
-        return;
-      }
-      // Pages that read settings on the server stay in the router cache, so Back would show them stale.
-      router.refresh();
-      const applied = appliedSave(formValues, latestValues.current);
-      if (applied.applyKeySet) setKeySet(body.keySet);
-      if (applied.clearKey) setApiKey("");
-      setTavilyKeySet(body.tavilyKeySet);
-      if (applied.clearTavilyKey) setTavilyApiKey("");
-      setGithubTokenSet(body.githubTokenSet);
-      if (applied.clearGithubToken) setGithubToken("");
-      dispatchSave({ type: "succeed" });
-      if (!applied.saved) dispatchSave({ type: "edit" });
-    } catch {
-      dispatchSave({ type: "fail", error: "Could not save" });
-    }
+      },
+      {
+        parse: savedBody,
+        onOk: (body) => {
+          // Pages that read settings on the server stay in the router cache, so Back would show them stale.
+          router.refresh();
+          const applied = appliedSave(formValues, latestValues.current);
+          if (applied.applyKeySet) setKeySet(body.keySet);
+          if (applied.clearKey) setApiKey("");
+          setTavilyKeySet(body.tavilyKeySet);
+          if (applied.clearTavilyKey) setTavilyApiKey("");
+          setGithubTokenSet(body.githubTokenSet);
+          if (applied.clearGithubToken) setGithubToken("");
+          dispatchSave({ type: "succeed" });
+          if (!applied.saved) dispatchSave({ type: "edit" });
+        },
+        onFailed: (failure) =>
+          dispatchSave({ type: "fail", error: (failure.kind === "http" && failure.error) || "Could not save" }),
+      },
+    );
   }
 
-  async function onCheckGithub() {
-    const id = ++githubCheckRequest.current;
+  function onCheckGithub() {
     setGithubCheck({ status: "checking" });
-    try {
-      const response = await fetch("/api/settings/github/check", {
+    void requestJson(
+      "/api/settings/github/check",
+      {
         method: "POST",
         headers: { "content-type": "application/json" },
+        signal: latestGithubCheck(),
         body: JSON.stringify({
           token: (githubToken ?? "").trim() || undefined,
           mcpUrl: githubMcpUrl.trim(),
         }),
-      });
-      if (id !== githubCheckRequest.current) return;
-      const body = (await response.json().catch(() => ({}))) as { ok?: boolean; login?: string; error?: string };
-      if (id !== githubCheckRequest.current) return;
-      if (body.ok && body.login) setGithubCheck({ status: "connected", login: body.login });
-      else setGithubCheck({ status: "failed", error: body.error || "GitHub is unavailable." });
-    } catch {
-      if (id !== githubCheckRequest.current) return;
-      setGithubCheck({ status: "failed", error: "GitHub is unavailable." });
-    }
+      },
+      {
+        parse: githubCheckBody,
+        onOk: (body) =>
+          setGithubCheck(body.ok && body.login ? { status: "connected", login: body.login } : { status: "failed", error: body.error || GITHUB_UNAVAILABLE }),
+        onFailed: (failure) => setGithubCheck({ status: "failed", error: (failure.kind === "http" && failure.error) || GITHUB_UNAVAILABLE }),
+      },
+    );
   }
 
   const models = connection.status === "connected" ? connection.models : [];
@@ -177,7 +166,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
                 dispatchSave({ type: "edit" });
                 setBaseUrl(event.target.value);
               }}
-              onBlur={() => void loadModels(baseUrl, apiKey, hasKey)}
+              onBlur={() => loadModels(baseUrl, apiKey, hasKey)}
               autoComplete="off"
               required
             />
@@ -192,7 +181,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
                 dispatchSave({ type: "edit" });
                 setApiKey(event.target.value);
               }}
-              onBlur={() => void loadModels(baseUrl, apiKey, hasKey)}
+              onBlur={() => loadModels(baseUrl, apiKey, hasKey)}
               autoComplete="off"
             />
           </Row>
@@ -298,7 +287,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
                   Remove
                 </Button>
               ) : null}
-              <Button type="button" variant="ghost" size="sm" disabled={githubCheck.status === "checking"} onClick={() => void onCheckGithub()}>
+              <Button type="button" variant="ghost" size="sm" disabled={githubCheck.status === "checking"} onClick={onCheckGithub}>
                 Check
               </Button>
             </div>

@@ -1,4 +1,4 @@
-import { testDataDir } from "../test-data-dir";
+import { dataDirectory } from "../paths";
 import assert from "node:assert/strict";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
@@ -25,7 +25,7 @@ test("run_code exists only when the server explicitly enables it", async () => {
 
 test("the tool registry opens its database in the test data directory", async () => {
   const { db } = await import("../db");
-  assert.equal(db.$client.name, path.join(testDataDir, "orbit.db"));
+  assert.equal(db.$client.name, path.join(dataDirectory(), "orbit.db"));
 });
 
 test("model input allows only the two languages and at most 20000 characters", () => {
