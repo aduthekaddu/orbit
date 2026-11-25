@@ -2,7 +2,7 @@ import { CheckIcon, CopyIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { z } from "zod";
 import { useCopy } from "@/components/chat/use-copy";
 import { ScrollFade } from "@/components/ui/scroll-fade";
-import { runCodeInputSchema, runCodeOutputSchema, type RunCodeOutput } from "@/lib/sandbox/spec";
+import { codeRunFailed, codeRunOutcome, runCodeInputSchema, runCodeOutputSchema, type CodeRunOutcome, type RunCodeOutput } from "@/lib/sandbox/spec";
 import { stripTerminalControls } from "@/lib/sandbox/terminal";
 
 const errorSchema = z.union([z.object({ ok: z.literal(false).optional(), error: z.string() }), z.string().min(1)]);
@@ -52,13 +52,19 @@ function formatDuration(durationMs: number) {
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
 }
 
+function outcomeLabel(outcome: CodeRunOutcome) {
+  switch (outcome.kind) {
+    case "stopped": return "Stopped";
+    case "timed-out": return "Timed out";
+    case "out-of-memory": return `Out of memory (exit ${outcome.exitCode})`;
+    case "killed": return "Killed";
+    case "exited": return `Exit ${outcome.exitCode}`;
+  }
+}
+
 function describeRun(output: RunCodeOutput) {
-  const duration = formatDuration(output.durationMs);
-  if (output.cancelled) return { primary: "Stopped", duration, failed: false };
-  if (output.timedOut) return { primary: "Timed out", duration, failed: true };
-  if (output.oomKilled) return { primary: `Out of memory (exit ${output.exitCode})`, duration, failed: true };
-  if (output.exitCode === null) return { primary: "Killed", duration, failed: true };
-  return { primary: `Exit ${output.exitCode}`, duration, failed: output.exitCode !== 0 };
+  const outcome = codeRunOutcome(output);
+  return { primary: outcomeLabel(outcome), duration: formatDuration(output.durationMs), failed: codeRunFailed(outcome) };
 }
 
 export function CodeRun({ input, output }: { input: unknown; output: unknown }) {

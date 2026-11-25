@@ -1,0 +1,60 @@
+Error: Invariant ShownTextKept is violated.
+State 1: Initial predicate
+/\ replyId = 1
+/\ replies = {}
+/\ beforeReplies = {}
+/\ stored = "none"
+/\ before = "none"
+/\ phase = "idle"
+/\ visible = FALSE
+/\ kind = "send"
+
+State 2: YouSend
+/\ replyId = 1
+/\ replies = {}
+/\ beforeReplies = {}
+/\ stored = "none"
+/\ before = "none"
+/\ phase = "streaming"
+/\ visible = FALSE
+/\ kind = "send"
+
+State 3: Interrupt
+/\ replyId = 1
+/\ replies = {}
+/\ beforeReplies = {}
+/\ stored = "none"
+/\ before = "none"
+/\ phase = "failed"
+/\ visible = FALSE
+/\ kind = "send"
+
+State 4: YouRetry
+/\ replyId = 2
+/\ replies = {}
+/\ beforeReplies = {}
+/\ stored = "none"
+/\ before = "none"
+/\ phase = "streaming"
+/\ visible = FALSE
+/\ kind = "regenerate"
+
+State 5: VisiblePartArrives
+/\ replyId = 2
+/\ replies = {}
+/\ beforeReplies = {}
+/\ stored = "none"
+/\ before = "none"
+/\ phase = "streaming"
+/\ visible = TRUE
+/\ kind = "regenerate"
+
+State 6: Interrupt
+/\ replyId = 2
+/\ replies = {}
+/\ beforeReplies = {}
+/\ stored = "none"
+/\ before = "none"
+/\ phase = "idle"
+/\ visible = TRUE
+/\ kind = "regenerate"

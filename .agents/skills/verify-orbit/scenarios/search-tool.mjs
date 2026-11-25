@@ -1,11 +1,11 @@
 import { eventually } from "../../../../src/lib/eventually.mjs";
 import { startMockSearxng, searchFixtures } from "../../../../scripts/qa/mock-searxng.mjs";
 
-export default async function searchTool({ page, origin, step, shot }) {
+export default async function searchTool({ page, origin, mockUrl, step, shot }) {
   const mock = await startMockSearxng();
   try {
     await page.request.put(`${origin}/api/settings`, {
-      data: { baseUrl: "http://127.0.0.1:3299/v1", apiKey: "test-key-not-real", model: "mock-genui", reasoningEffort: "low" },
+      data: { baseUrl: mockUrl, apiKey: "test-key-not-real", model: "mock-genui", reasoningEffort: "low" },
     });
     await page.goto(`${origin}/settings`);
     const field = page.getByLabel("SearXNG URL", { exact: true });

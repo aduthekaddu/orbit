@@ -2,9 +2,8 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const publicFields = ["baseUrl", "githubMcpUrl", "githubTokenSet", "keySet", "model", "reasoningEffort", "sandbox", "searxngUrl", "tavilyKeySet"];
-const provider = { baseUrl: "http://127.0.0.1:3299/v1", model: "mock-genui", reasoningEffort: "low" };
-
-export default async function settingsSandbox({ page, origin, step, shot }) {
+export default async function settingsSandbox({ page, origin, mockUrl, step, shot }) {
+  const provider = { baseUrl: mockUrl, model: "mock-genui", reasoningEffort: "low" };
   const state = JSON.parse(fs.readFileSync(fileURLToPath(new URL("../../../../.verify/server.json", import.meta.url)), "utf8"));
   const expected = state.sandboxEnabled === true;
   const label = expected ? "On" : "Off";

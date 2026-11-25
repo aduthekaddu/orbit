@@ -1,21 +1,21 @@
-import { z } from "zod";
 import { normalizeBaseUrl } from "@/lib/base-url";
 import { REASONING_EFFORTS, getSettings, saveSettings, toPublicSettings } from "@/lib/settings";
 import { githubMcpTarget } from "@/lib/tools/github";
 import { getSession, unauthorized } from "@/lib/session";
+import { LIMITS, r } from "@/lib/route-schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const putSchema = z.object({
-  baseUrl: z.string().trim().url(),
-  apiKey: z.string().optional(),
-  searxngUrl: z.union([z.literal(""), z.url({ protocol: /^https?$/ })]).optional(),
-  tavilyApiKey: z.string().nullable().optional(),
-  githubToken: z.string().nullable().optional(),
-  githubMcpUrl: z.string().optional().refine((value) => value === undefined || githubMcpTarget(value).ok),
-  model: z.string().trim().min(1).max(200),
-  reasoningEffort: z.enum(REASONING_EFFORTS),
+const putSchema = r.object({
+  baseUrl: r.text(LIMITS.url).trim().url(),
+  apiKey: r.text(LIMITS.secret).optional(),
+  searxngUrl: r.union([r.literal(""), r.url(LIMITS.url, { protocol: /^https?$/ })]).optional(),
+  tavilyApiKey: r.text(LIMITS.secret).nullable().optional(),
+  githubToken: r.text(LIMITS.secret).nullable().optional(),
+  githubMcpUrl: r.text(LIMITS.url).optional().refine((value) => value === undefined || githubMcpTarget(value).ok),
+  model: r.text(LIMITS.modelName).trim().min(1),
+  reasoningEffort: r.enum(REASONING_EFFORTS),
 });
 
 export async function GET() {

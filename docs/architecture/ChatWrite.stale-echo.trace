@@ -1,0 +1,33 @@
+Error: Invariant ReplyKeepsNewestText is violated.
+State 1: Initial predicate
+/\ seen = (a :> [prompt |-> 1, answer |-> 1] @@ b :> [prompt |-> 1, answer |-> 1])
+/\ newest = 1
+/\ prompt = 1
+/\ answer = 1
+/\ guard = (a :> {} @@ b :> {})
+/\ answered = {}
+/\ base = (a :> 0 @@ b :> 0)
+/\ turn = (a :> 0 @@ b :> 0)
+/\ saving = (a :> 0 @@ b :> 0)
+
+State 2: EditReply
+/\ seen = (a :> [prompt |-> 1, answer |-> 1] @@ b :> [prompt |-> 1, answer |-> 1])
+/\ newest = 2
+/\ prompt = 1
+/\ answer = 2
+/\ guard = (a :> {} @@ b :> {})
+/\ answered = {}
+/\ base = (a :> 0 @@ b :> 0)
+/\ turn = (a :> 0 @@ b :> 0)
+/\ saving = (a :> 2 @@ b :> 0)
+
+State 3: Send
+/\ seen = (a :> [prompt |-> 1, answer |-> 1] @@ b :> [prompt |-> 1, answer |-> 1])
+/\ newest = 2
+/\ prompt = 1
+/\ answer = 1
+/\ guard = (a :> {} @@ b :> {})
+/\ answered = {}
+/\ base = (a :> 0 @@ b :> 0)
+/\ turn = (a :> 0 @@ b :> 0)
+/\ saving = (a :> 2 @@ b :> 0)

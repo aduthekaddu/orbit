@@ -210,10 +210,10 @@ export default async function artifacts({ page, origin, step, shot }) {
     { type: "text", text: "```html\n<h1>Reply artifact</h1>\n```", state: "done" },
   ];
   execFileSync(process.execPath, ["--import", "tsx", "-e", `
-    const { upsertMessage } = require(${JSON.stringify(path.resolve("src/lib/messages.ts"))});
+    const { finishChatReply, planChatWrite } = require(${JSON.stringify(path.resolve("src/lib/messages.ts"))});
     const [id, parts] = process.argv.slice(1);
-    if (!upsertMessage(id, { id: id + "-prompt", role: "user", parts: [{ type: "text", text: "Draft, then answer" }] }) ||
-      !upsertMessage(id, { id: id + "-reply", role: "assistant", parts: JSON.parse(parts) })) throw new Error("reasoning fixture was not saved");
+    const plan = planChatWrite(id, [{ id: id + "-prompt", role: "user", parts: [{ type: "text", text: "Draft, then answer" }] }]);
+    if ("error" in plan || !finishChatReply(plan, JSON.parse(parts))) throw new Error("reasoning fixture was not saved");
   `, draftedId, JSON.stringify(draftedParts)], { cwd: path.resolve(".verify/sandbox"), env: { ...process.env, ORBIT_DATA_DIR: path.resolve(".verify/sandbox/data") }, stdio: "pipe" });
   await page.goto(`${origin}/c/${draftedId}`);
   const thought = reply.getByRole("button", { name: "Thought", exact: true });

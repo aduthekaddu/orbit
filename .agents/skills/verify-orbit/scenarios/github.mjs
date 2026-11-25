@@ -2,14 +2,12 @@ import { eventually } from "../../../../src/lib/eventually.mjs";
 import { startMockMcp } from "../../../../scripts/qa/mock-mcp.mjs";
 
 const ISSUE = "https://github.com/aduthekaddu/orbit/issues/7";
-const providerBase = process.env.ORBIT_QA_PROVIDER ?? "http://127.0.0.1:3299/v1";
-
-export default async function github({ page, origin, step, shot }) {
+export default async function github({ page, origin, mockUrl, step, shot }) {
   const mock = await startMockMcp();
   try {
     const saved = await page.request.put(`${origin}/api/settings`, {
       data: {
-        baseUrl: providerBase,
+        baseUrl: mockUrl,
         apiKey: "test-key-not-real",
         model: "mock-genui",
         reasoningEffort: "low",

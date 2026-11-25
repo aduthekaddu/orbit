@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- Each code sandbox container carries the label of the Orbit process that started it, and the sweep log line for a removed container names that owner, so two Orbit servers or test runs on one Docker host no longer count each other's containers as their own leftovers. (#184)
 - An artifact preview can no longer load another web page into its frame, so its code cannot send data out in that page's URL. (#132)
 - A chat turn without web search keeps its fifth and last model step for an answer. That step offers only `render_ui` and gets the earlier tool calls as JSON data, so a turn that calls tools on every step no longer ends with tool cards and no reply. (#126)
 - Tab reaches Copy, Edit and Regenerate on earlier messages too, not only on the last reply. With a mouse they still show on hover, and they also show when they take focus. (#125)
@@ -24,8 +25,17 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - `npm run lint` checks the React hook rules `rules-of-hooks` and `exhaustive-deps` in `src/` with oxlint. CI shows the findings but does not fail on them yet. (#145)
 - Unit tests check the dream claim, the chat head, and the branch and search migrations in the shipped code, not in the slice plans. Editing a plan no longer fails `npm test`. (#144)
 - A search hit on an older branch opens that branch through to its newest message, so the hit's reply and later turns stay on screen. Reloading with an artifact preview open keeps those turns visible. A prompt sent from there follows the end of the branch. (#128)
+- A saved Tavily key no longer appears in a chat error, a server log line, or a saved reply. The chat route's model errors are logged without the raw provider response, so a provider that repeats the API key does not put it in the log; the log line keeps the error name and HTTP status unless the error holds a stored key, and then keeps only its label. (#143)
+- New chat shows "Could not create chat" when the request fails, instead of doing nothing or opening `/c/undefined`.
+- Settings shows Failed when the model list answer cannot be read, instead of a green "0 models", and when the model list request is rejected, instead of "No key" or "Not checked".
+- A stopped code run whose saved result cannot be loaded shows "Could not load output" instead of an empty card.
+- A chat request that ends in a saved reply no longer undoes an edit made to that reply in another tab while the request streamed. The edit is kept, and the continued text is not saved. (#188)
+- A code run shows its result as soon as the program ends, without waiting for Docker to remove the container. Pressing Stop while that removal runs no longer turns a finished run into a stopped one, and a program that exited just before the 10 second limit is no longer reported as timed out or loses its out-of-memory mark. Output that the 10 second limit cut off after the program ended is marked truncated.
+- Sign in and Create account stay disabled after success until the next page opens, so a second click cannot send the form again. If navigation fails or stalls, the button re-enables so you can try again.
 - An interrupted generated view shows Stopped instead of an empty cancelled tool card.
 - Set `ORBIT_VERIFY_PORT` to run verify-orbit on another port when the deployment owns `3210`. The default stays `3210`.
+- The verify-orbit mock provider and the mock Ollama in `scripts/qa/ci-e2e.sh` take a free port from the OS, so two runs on one host no longer collide. Give each run its own `ORBIT_VERIFY_PORT`, outside the OS's automatic port range. verify-orbit refuses one inside it.
+- Cleanup of a leftover previous-format mock record that now names an unrelated process drops the record and still stops the sandbox server. It does not kill that process.
 - Override Drizzle tooling's `@esbuild-kit/core-utils` dependency to use patched `esbuild` 0.25.12, removing GHSA-67mh-4wv8-2f99. (#71)
 - Update Next.js from 16.4.3 to 16.4.6 to fix GHSA-mfr8-8qww-v76h, an information disclosure vulnerability.
 - The server log has an `auth miss` line for each request that reaches Orbit without a valid session. It says whether the browser sent a session cookie and the Access cookie, by name only.
@@ -38,6 +48,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ### Changed
 
+- A new chat message over 50,000 characters is refused with "Message is too long." Messages a chat already holds keep working at any length, and a request body over 32 MiB is refused. The composer shows a refusal as plain text. Settings, model list, and GitHub check fields have size limits too, and a refused request gets a 4xx.
 - A question like "Where do I host things?" now finds the memory "I deploy everything to Fly.io". Orbit puts the labels `nomic-embed-text` expects in front of each question and each saved memory, and a vector must be within L2 distance 0.97 of the question. Memory vectors made before this are cleared once and made again the next time the Memory page opens or a chat ends.
 - A saved memory sent with a later chat is quoted notes on the user message. It is not a system instruction. The remember card shows the saved text. A vector that is far from the question is left out. Forget runs only when it is given an id.
 - A full question can find a memory from one shared word when Ollama is down. Common words such as "is", "the", and "and" do not count, so an unrelated question no longer brings back unrelated memories.

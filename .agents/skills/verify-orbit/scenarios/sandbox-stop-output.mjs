@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { eventually } from "../../../../src/lib/eventually.mjs";
+import { ownedSandboxFilterArgs, sandboxOwner } from "../../../../src/lib/sandbox/owner.mjs";
 import { waitForSpinningProgram } from "../sandbox-program.mjs";
 
 const cases = [
@@ -7,7 +8,6 @@ const cases = [
   { scenario: "run-spin", printed: "" },
 ];
 
-const SANDBOX_LABEL_FILTER = "label=orbit.sandbox=true";
 const CONTAINER_FORMAT = "{{.ID}}\t{{.Status}}";
 const CLEANUP_TIMEOUT_MS = 10_000;
 
@@ -26,8 +26,12 @@ export function formatSandboxContainers(containers) {
   return containers.map(({ id, status }) => `${id} (${status})`).join(", ");
 }
 
-function listSandboxContainers() {
-  const args = ["ps", "-a", "--filter", SANDBOX_LABEL_FILTER, "--format", CONTAINER_FORMAT];
+function listSandboxContainers({ running = false } = {}) {
+  const args = ["ps"];
+  if (!running) args.push("-a");
+  args.push(...ownedSandboxFilterArgs(sandboxOwner()));
+  if (running) args.push("--filter", "status=running");
+  args.push("--format", CONTAINER_FORMAT);
   return parseSandboxContainers(execFileSync("docker", args, { encoding: "utf8" }));
 }
 
@@ -86,8 +90,8 @@ async function startAndStop(page, card, tag) {
   await card.locator('[data-tool-status="cancelled"]').waitFor({ timeout: 8_000 });
 }
 
-export default async function sandboxStopOutput({ page, origin, step, shot }) {
-  await page.request.put(`${origin}/api/settings`, { data: { baseUrl: "http://127.0.0.1:3299/v1", apiKey: "test-key-not-real", model: "mock-genui", reasoningEffort: "low" } });
+export default async function sandboxStopOutput({ page, origin, mockUrl, step, shot }) {
+  await page.request.put(`${origin}/api/settings`, { data: { baseUrl: mockUrl, apiKey: "test-key-not-real", model: "mock-genui", reasoningEffort: "low" } });
   const card = page.locator('[data-tool-name="run_code"]');
   for (const { scenario, printed } of cases) {
     const { id } = await (await page.request.post(`${origin}/api/chats`)).json();
@@ -211,4 +215,19 @@ export default async function sandboxStopOutput({ page, origin, step, shot }) {
   await card.scrollIntoViewIfNeeded();
   await shot("send-after-stop");
   await assertNoSandboxContainers(step, "a message sent right after Stop leaves no sandbox container");
+
+  // The page cannot read the saved reply. The card says so instead of waiting in silence, and a reload still shows the result.
+  const lost = (await (await page.request.post(`${origin}/api/chats`)).json()).id;
+  await page.goto(`${origin}/c/${lost}`);
+  await page.route((url) => url.pathname === `/api/chats/${lost}`, (route) => (route.request().method() === "GET" ? route.abort() : route.continue()));
+  await startAndStop(page, card, "run-timeout");
+  const unloaded = await card.getByText("Could not load output", { exact: true }).waitFor({ timeout: 15_000 }).then(() => true, () => false);
+  await card.scrollIntoViewIfNeeded();
+  await shot("saved-result-unreadable");
+  step("a stopped card whose saved result cannot be read shows Could not load output", unloaded, `card ${JSON.stringify(await inspect(card))}`);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await page.reload();
+  const recovered = await card.locator("span", { hasText: /^Stopped$/ }).first().waitFor({ timeout: 15_000 }).then(() => true, () => false);
+  step("after a reload that card shows its saved Stopped line", recovered && (await card.getByText("Could not load output").count()) === 0, `card ${JSON.stringify(await inspect(card))}`);
+  await assertNoSandboxContainers(step, "an unreadable saved result leaves no sandbox container");
 }

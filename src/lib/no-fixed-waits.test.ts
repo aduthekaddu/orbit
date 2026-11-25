@@ -3,7 +3,7 @@ import { existsSync, globSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 // A fixed delay stands in for "the thing has happened", so the check passes or fails with machine speed
-// (a15fc63: a 2.5 s sleep, then one `docker ps` after Stop). Wait with eventually() from ./eventually.mjs,
+// (a15fc63: a 2.5 s sleep, then one container listing after Stop). Wait with eventually() from ./eventually.mjs,
 // which reads until a predicate holds and fails with the last value read.
 
 const SCANNED = [
@@ -72,8 +72,12 @@ export function findFixedWaits(source: string): FixedWait[] {
 // `count` is the number of waits the file keeps. A file that gains or loses one fails until the entry is updated.
 // Add an entry only for a delay that is the behavior under test, or a wait for something that must not happen.
 const ALLOWED: { file: string; count: number; reason: string }[] = [
-  { file: "src/lib/sandbox/run.test.ts", count: 11, reason: "PR 187 rewrites this file without sleeps. Delete the entry when it merges." },
+  { file: "src/lib/sandbox/run.test.ts", count: 1, reason: "A 15 s setInterval guard races the container's own timeout so the test fails if the container keeps running after the parent is killed." },
   { file: "scripts/qa/genui-qa.cjs", count: 8, reason: "PR 181 rewrites this script. Delete the entry when it merges, and convert any wait it keeps." },
+  { file: ".agents/skills/verify-orbit/scenarios/auth-submit.mjs", count: 4, reason: "Three 200 ms pauses check that Sign in stays disabled after success and while a field is edited during pending navigation; one wait honors a 429 Retry-After before signing in again." },
+  { file: ".agents/skills/verify-orbit/scenarios/request-failures.mjs", count: 3, reason: "Two 500 ms pauses check that a failed or recovered New chat does not navigate further or show a leftover error; one 1.5 s route delay holds a POST so a double click and shortcut can fire while it is pending." },
+  { file: "src/lib/qa-harness.test.ts", count: 2, reason: "A 1 s cap observes whether a second verify launch waits on the first launch's lock; a 5 s timer rejects when a legacy mock never prints its ready line." },
+  { file: "src/lib/qa-mock-ports.test.ts", count: 1, reason: "A 5 s timer rejects when the mock process never prints a ready line." },
   { file: ".agents/skills/verify-orbit/scenarios/sandbox-real.mjs", count: 1, reason: "Its reply-saved loop must end in a failed step. sandbox-verification.test.ts drives it with a no-op waitForTimeout stub, and PR 181 changes that test. Convert both together." },
   { file: ".agents/skills/verify-orbit/scenarios/artifact-navigation.mjs", count: 1, reason: "Waits 1.5 s after blocked iframe navigation to verify no request reaches the probe and no frame navigates." },
   { file: ".agents/skills/verify-orbit/scenarios/sign-out.mjs", count: 1, reason: "Waits 500 ms after a failed sign-out request to verify the page does not navigate away." },
@@ -95,7 +99,7 @@ test("the scan reports the a15fc63 shape: a fixed sleep, then one read of Docker
     'import { execFileSync } from "node:child_process";',
     "await page.getByRole('button', { name: 'Stop' }).click();",
     "await page.waitForTimeout(2_500);",
-    'const left = execFileSync("docker", ["ps", "--filter", "label=orbit.sandbox=true"]);',
+    'const left = listOwnedSandboxes();',
     "await new Promise((resolve) => setTimeout(resolve, 2500));",
   ].join("\n");
   assert.deepEqual(findFixedWaits(replay), [

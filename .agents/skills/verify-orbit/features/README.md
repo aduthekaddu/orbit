@@ -5,6 +5,7 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 ## Baseline preconditions
 
 - The port set by `ORBIT_VERIFY_PORT` on `127.0.0.1` is free, default `3210`. Export another port if the deployment owns `3210`.
+- Parallel runs on one host, each in its own checkout, need only different `ORBIT_VERIFY_PORT` values. The mock provider and the mock Ollama pick free ports. verify-orbit refuses a port inside the range in `/proc/sys/net/ipv4/ip_local_port_range`, where the OS picks those free ports.
 - `npm run build` has produced `.next`.
 - Launch with `node .agents/skills/verify-orbit/verify.mjs launch` so the server cwd is `.verify/sandbox` and `data/orbit.db` is created there.
 - Run `node .agents/skills/verify-orbit/verify.mjs doctor` and require `doctor ok` plus the sandbox cwd.
@@ -34,7 +35,7 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 - [Sign in](./signin.md) returns that account to a chat.
 - [Settings](./settings.md) stores a provider without returning the key.
 - [Chat](./chat.md) streams one turn and reads it back from SQLite.
-- [Browse](./browse.md) drives Chrome for retry and stop, the palette, short-screen settings, the empty chat, sign out, and the thread map shortcut.
+- [Browse](./browse.md) drives Chrome for retry and stop, the palette, short-screen settings, failed requests, the empty chat, sign out, and the thread map shortcut.
 
 - [Branching](./branching.md) keeps edited prompts and regenerated answers, switches versions, and restores the last written branch.
 - [History search](./search.md) finds a message from the command palette and titles a new chat.

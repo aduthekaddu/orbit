@@ -1,7 +1,42 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { settleInterruptedParts } from "../genui/spec";
-import { toolCallRunStatus, toolRunStatus, type ToolRunPart, type ToolRunStatus } from "./run-status";
+import { STOP_MARKERS, toolCallRunEnd, toolRunEnd, type ToolRunPart, type ToolRunStatus } from "./run-status";
+
+const toolRunStatus = (...args: Parameters<typeof toolRunEnd>) => toolRunEnd(...args).status;
+const toolCallRunStatus = (props: Parameters<typeof toolCallRunEnd>[0]) => toolCallRunEnd(props).status;
+
+test("the stop texts saved chats hold keep their values", () => {
+  assert.deepEqual(STOP_MARKERS, {
+    stopped: "Stopped",
+    codeRunStopped: "Code run was stopped",
+    searchStopped: "Search was stopped",
+    cancelledOnSend: "User cancelled tool call by sending a new message.",
+  });
+});
+
+test("a stopped code run hands its saved output to the card", () => {
+  const output = { stdout: "before-stop\n", stderr: "", exitCode: null, durationMs: 1500, timedOut: false, truncated: false, cancelled: true };
+  assert.deepEqual(toolRunEnd({ state: "output-available", output }, false, "run_code"), { status: "cancelled", saved: output });
+  assert.deepEqual(toolRunEnd({ state: "output-error", errorText: "Code run was stopped" }, false, "run_code"), { status: "cancelled" });
+});
+
+test("a call that threw keeps its error text and a call that returned a failure has none", () => {
+  assert.deepEqual(toolRunEnd({ state: "output-error", errorText: "Invalid tool arguments" }, false, "render_ui"), { status: "failed", error: "Invalid tool arguments" });
+  assert.deepEqual(toolRunEnd({ state: "output-error" }, false, "render_ui"), { status: "failed", error: "" });
+  assert.deepEqual(toolRunEnd({ state: "output-available", output: { ok: false, error: "Unavailable" } }, false, "web_search"), { status: "failed" });
+});
+
+test("a consumer cannot decide the outcome from stored text", () => {
+  const end = toolCallRunEnd({ toolName: "render_ui", status: { type: "complete" }, result: { error: "Stopped" }, isError: true });
+  // @ts-expect-error The end has a status, not the stored errorText.
+  assert.equal(end.errorText, undefined);
+  // @ts-expect-error A cancelled end has no error text to match.
+  if (end.status === "cancelled") assert.equal(end.error, undefined);
+  // @ts-expect-error The status set is closed; there is no separate "stopped" status.
+  const stopped: ToolRunStatus = "stopped";
+  assert.ok(stopped);
+});
 
 const cases: Array<{ name: string; part: ToolRunPart; stopped?: boolean; expected: ToolRunStatus }> = [
   { name: "streaming input", part: { state: "input-streaming" }, expected: "running" },

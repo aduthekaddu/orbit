@@ -1,15 +1,12 @@
 import { db } from "../db";
 import { readEnv } from "../env";
-
-export type RunState = "running" | "done" | "failed";
+import type { MemoryRun } from "./run-state";
 
 export type Tonight = {
-  state: RunState;
+  state: MemoryRun["state"];
   startedAt: Date;
   leaseUntil: Date | null;
 };
-
-const LEASE_MS = 2 * 60 * 1000;
 
 export function systemTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -112,5 +109,3 @@ export function startDreamScheduler(): void {
     timer = undefined;
   });
 }
-
-export const DREAM_LEASE_MS = LEASE_MS;

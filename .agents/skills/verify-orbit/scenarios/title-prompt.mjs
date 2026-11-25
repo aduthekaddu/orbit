@@ -26,7 +26,7 @@ export default async function titlePrompt({ page, origin, step, shot }) {
   fs.writeFileSync(requestLog, "");
 
   const head = `[qa:plain] title source ${Date.now()} `;
-  const message = `${head}${"a".repeat(200_000 - head.length)}`;
+  const message = `${head}${"a".repeat(40_000 - head.length)}`;
   const created = await page.request.post(`${origin}/api/chats`);
   const { id } = await created.json();
   await page.goto(`${origin}/c/${id}`);
@@ -37,7 +37,7 @@ export default async function titlePrompt({ page, origin, step, shot }) {
     .getByText("pong", { exact: true })
     .waitFor({ timeout: 30_000 })
     .then(() => true, () => false);
-  step("first message of 200,000 characters gets a reply", replied);
+  step("first message of 40,000 characters gets a reply", replied);
 
   const titleRequest = await eventually(
     () =>

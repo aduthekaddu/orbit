@@ -1,6 +1,6 @@
 import { formatSpecIssues, validateSpec, type Spec } from "@json-render/core";
 import type { z } from "zod";
-import { STOPPED_ERROR } from "../tools/run-status";
+import { STOP_MARKERS } from "../tools/run-status";
 import { catalog } from "./catalog";
 
 export type RenderOutcome = { ok: true; spec: Spec } | { ok: false; error: string; raw: unknown };
@@ -84,6 +84,6 @@ export function settleInterruptedParts(parts: unknown, interrupted: boolean) {
     const type = typeof record.type === "string" ? record.type : "";
     const tool = type === "dynamic-tool" || type.startsWith("tool-");
     if (!tool || record.state === "output-available" || record.state === "output-error") return part;
-    return { ...record, state: "output-error", errorText: STOPPED_ERROR };
+    return { ...record, state: "output-error", errorText: STOP_MARKERS.stopped };
   });
 }

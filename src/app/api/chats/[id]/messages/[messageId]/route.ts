@@ -1,19 +1,26 @@
-import { z } from "zod";
 import { getChatForUser, touchChat, updateMessageText } from "@/lib/messages";
 import { getSession, unauthorized } from "@/lib/session";
+import { LIMITS, r } from "@/lib/route-schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const patchSchema = z.object({
-  text: z.string().max(200_000),
-  partIndex: z.number().int().nonnegative().optional(),
+const patchSchema = r.object({
+  text: r.text(LIMITS.assistantText),
+  partIndex: r.number().int().nonnegative().optional(),
+});
+
+const paramsSchema = r.object({
+  id: r.text(LIMITS.id).min(1),
+  messageId: r.text(LIMITS.id).min(1),
 });
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string; messageId: string }> }) {
   const session = await getSession();
   if (!session) return unauthorized();
-  const { id, messageId } = await context.params;
+  const params = paramsSchema.safeParse(await context.params);
+  if (!params.success) return Response.json({ error: "Not found" }, { status: 404 });
+  const { id, messageId } = params.data;
   const chat = getChatForUser(id, session.user.id);
   if (!chat) return Response.json({ error: "Not found" }, { status: 404 });
   const parsed = patchSchema.safeParse(await request.json().catch(() => null));

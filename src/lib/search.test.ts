@@ -27,6 +27,19 @@ function part(id: string, role: "user" | "assistant", text: string) {
   return { id, role, parts: [{ type: "text", text }] };
 }
 
+// The prompt a test reply with this id answers.
+function prompt(answerId: string) {
+  return part(`${answerId}-prompt`, "user", "ask");
+}
+
+// Saves an assistant reply after path, as POST /api/chat does for a request that ends in an unsaved
+// assistant message: the reply takes that message's id.
+function reply(chatId: string, path: { id: string; role: string; parts: unknown[] }[], answer: { id: string; parts: unknown[] }) {
+  const plan = messages.planChatWrite(chatId, [...path, { id: answer.id, role: "assistant", parts: [] }]);
+  if ("error" in plan) assert.fail(`write refused: ${plan.error}`);
+  return messages.finishChatReply(plan, answer.parts);
+}
+
 test("toOrMatchQuery keeps only content words", () => {
   assert.equal(search.toOrMatchQuery("Where do I deploy things?"), '"deploy" OR "things"');
   assert.equal(search.toOrMatchQuery("deploy Deploy DEPLOY"), '"deploy"');
@@ -75,7 +88,7 @@ test("toMatchQuery quotes every token and prefixes the last one", () => {
 });
 
 test("a stored word matches and the snippet marks it", () => {
-  assert.equal(messages.upsertMessage("c1", part("m-zebra", "assistant", "A zebracorn stood in the road."), null), true);
+  assert.equal(reply("c1", [prompt("m-zebra")], part("m-zebra", "assistant", "A zebracorn stood in the road.")), true);
   const hits = search.searchMessages("u1", "zebracorn");
   assert.equal(hits.length, 1);
   assert.equal(hits[0]?.messageId, "m-zebra");
@@ -117,14 +130,14 @@ test("a broken search index records a diagnostic without message or query text",
 test("deleting a chat drops its messages from search", () => {
   const now = new Date();
   db.insert(schema.chats).values({ id: "c-del", userId: "u1", title: "Gone", createdAt: now, updatedAt: now }).run();
-  messages.upsertMessage("c-del", part("m-del", "user", "please deletemeplease now"), null);
+  assert.equal(messages.persistIncoming("c-del", [part("m-del", "user", "please deletemeplease now")]), "ok");
   assert.ok(search.searchMessages("u1", "deletemeplease").some((hit) => hit.messageId === "m-del"));
   db.delete(schema.chats).where(eq(schema.chats.id, "c-del")).run();
   assert.equal(search.searchMessages("u1", "deletemeplease").length, 0);
 });
 
 test("an edited message is found by its new text only", () => {
-  messages.upsertMessage("c1", part("m-edit", "assistant", "oldlabeltoken stays"), "m-zebra");
+  assert.equal(reply("c1", [prompt("m-edit")], part("m-edit", "assistant", "oldlabeltoken stays")), true);
   assert.equal(messages.updateMessageText("c1", "m-edit", "newlabeltoken stays"), true);
   assert.ok(search.searchMessages("u1", "newlabeltoken").some((hit) => hit.messageId === "m-edit"));
   assert.equal(search.searchMessages("u1", "oldlabeltoken").length, 0);
@@ -135,7 +148,7 @@ test("another user's chat never matches", () => {
   const now = new Date();
   db.insert(schema.user).values({ id: "u2", name: "Two", email: "two@orbit.local" }).run();
   db.insert(schema.chats).values({ id: "c2", userId: "u2", title: "Secret", createdAt: now, updatedAt: now }).run();
-  messages.upsertMessage("c2", part("m-secret", "user", "onlyotherperson word"), null);
+  assert.equal(messages.persistIncoming("c2", [part("m-secret", "user", "onlyotherperson word")]), "ok");
   assert.equal(search.searchMessages("u1", "onlyotherperson").length, 0);
   assert.ok(search.searchMessages("u2", "onlyotherperson").some((hit) => hit.messageId === "m-secret"));
 });
@@ -143,9 +156,9 @@ test("another user's chat never matches", () => {
 test("a hit off the stored head opens that path and leaves the head", () => {
   const now = new Date();
   db.insert(schema.chats).values({ id: "c-branch", userId: "u1", title: "Branch", createdAt: now, updatedAt: now }).run();
-  messages.upsertMessage("c-branch", part("u-root", "user", "which way"), null);
-  messages.upsertMessage("c-branch", part("a-active", "assistant", "alpha leaf"), "u-root");
-  messages.upsertMessage("c-branch", part("a-side", "assistant", "zebrapath leaf"), "u-root");
+  const root = part("u-root", "user", "which way");
+  assert.equal(reply("c-branch", [root], part("a-active", "assistant", "alpha leaf")), true);
+  assert.equal(reply("c-branch", [root], part("a-side", "assistant", "zebrapath leaf")), true);
   db.update(schema.chats).set({ headId: "a-active" }).where(eq(schema.chats.id, "c-branch")).run();
   const path = search.openHitPath("u1", "c-branch", "a-side");
   const head = db.select().from(schema.chats).where(eq(schema.chats.id, "c-branch")).get();
@@ -156,14 +169,18 @@ test("a hit off the stored head opens that path and leaves the head", () => {
 test("a hit in the middle of a branch off the stored head opens the whole branch", () => {
   const now = new Date();
   db.insert(schema.chats).values({ id: "c-mid", userId: "u1", title: "Middle", createdAt: now, updatedAt: now }).run();
-  messages.upsertMessage("c-mid", part("m-u1", "user", "first question"), null);
-  messages.upsertMessage("c-mid", part("m-a1", "assistant", "first answer"), "m-u1");
-  messages.upsertMessage("c-mid", part("m-u2", "user", "second question"), "m-a1");
-  messages.upsertMessage("c-mid", part("m-a2", "assistant", "second answer"), "m-u2");
-  messages.upsertMessage("c-mid", part("m-u2b", "user", "middlehit question"), "m-a1");
-  messages.upsertMessage("c-mid", part("m-a2b", "assistant", "middlehit answer"), "m-u2b");
-  messages.upsertMessage("c-mid", part("m-u3b", "user", "later question"), "m-a2b");
-  messages.upsertMessage("c-mid", part("m-a3b", "assistant", "later answer"), "m-u3b");
+  const u1 = part("m-u1", "user", "first question");
+  const a1 = part("m-a1", "assistant", "first answer");
+  const u2 = part("m-u2", "user", "second question");
+  const a2 = part("m-a2", "assistant", "second answer");
+  const u2b = part("m-u2b", "user", "middlehit question");
+  const a2b = part("m-a2b", "assistant", "middlehit answer");
+  const u3b = part("m-u3b", "user", "later question");
+  const a3b = part("m-a3b", "assistant", "later answer");
+  assert.equal(reply("c-mid", [u1], a1), true);
+  assert.equal(reply("c-mid", [u1, a1, u2], a2), true);
+  assert.equal(reply("c-mid", [u1, a1, u2b], a2b), true);
+  assert.equal(reply("c-mid", [u1, a1, u2b, a2b, u3b], a3b), true);
   db.update(schema.chats).set({ headId: "m-a2" }).where(eq(schema.chats.id, "c-mid")).run();
   const path = search.openHitPath("u1", "c-mid", "m-u2b");
   const head = db.select().from(schema.chats).where(eq(schema.chats.id, "c-mid")).get();
@@ -189,7 +206,7 @@ function toolMessage(id: string, run: { stdout?: string; stderr?: string; code?:
 }
 
 test("text that only a code run printed is found, and the hit opens that message", () => {
-  assert.equal(messages.upsertMessage("c1", toolMessage("m-out", { stdout: "rainbow-" + "gizmo7\n" }), null), true);
+  assert.equal(reply("c1", [prompt("m-out")], toolMessage("m-out", { stdout: "rainbow-" + "gizmo7\n" })), true);
   const hits = search.searchMessages("u1", "rainbow-gizmo7");
   assert.equal(hits.length, 1);
   assert.equal(hits[0]?.messageId, "m-out");
@@ -198,20 +215,20 @@ test("text that only a code run printed is found, and the hit opens that message
 });
 
 test("standard error is found too", () => {
-  messages.upsertMessage("c1", toolMessage("m-err", { stderr: "Traceback: wobbly" + "kettle9 failed\n" }), "m-out");
+  assert.equal(reply("c1", [prompt("m-err")], toolMessage("m-err", { stderr: "Traceback: wobbly" + "kettle9 failed\n" })), true);
   const hits = search.searchMessages("u1", "wobblykettle9");
   assert.deepEqual(hits.map((hit) => hit.messageId), ["m-err"]);
 });
 
 test("a reply that repeats the output gives one hit for the message", () => {
-  messages.upsertMessage("c1", toolMessage("m-dup", { stdout: "echoedtoken42\n" }, "The program printed echoedtoken42."), "m-err");
+  assert.equal(reply("c1", [prompt("m-dup")], toolMessage("m-dup", { stdout: "echoedtoken42\n" }, "The program printed echoedtoken42.")), true);
   const hits = search.searchMessages("u1", "echoedtoken42");
   assert.equal(hits.length, 1);
   assert.equal(hits[0]?.messageId, "m-dup");
 });
 
 test("the source of a code run is found, and the hit opens that message", () => {
-  assert.equal(messages.upsertMessage("c1", toolMessage("m-src", { code: "secret_name = 'sourceonlytoken5'", stdout: "ok\n" }), "m-dup"), true);
+  assert.equal(reply("c1", [prompt("m-src")], toolMessage("m-src", { code: "secret_name = 'sourceonlytoken5'", stdout: "ok\n" })), true);
   const hits = search.searchMessages("u1", "sourceonlytoken5");
   assert.deepEqual(hits.map((hit) => hit.messageId), ["m-src"]);
   assert.equal(hits[0]?.role, "assistant");
@@ -226,7 +243,7 @@ test("the source of a run that was stopped is found", () => {
       { type: "tool-run_code", toolCallId: "call-stopped", state: "output-error", input: { language: "python", code: "while True: stoppedsourcetoken6()" }, errorText: "Code run was stopped" },
     ],
   };
-  assert.equal(messages.upsertMessage("c1", stopped, "m-src"), true);
+  assert.equal(reply("c1", [prompt(stopped.id)], stopped), true);
   assert.deepEqual(search.searchMessages("u1", "stoppedsourcetoken6").map((hit) => hit.messageId), ["m-stopped"]);
 });
 
@@ -234,7 +251,7 @@ test("a message with two runs finds the source of each run in one hit", () => {
   const first = toolMessage("m-two", { code: "alpharuntoken7()", stdout: "one\n" });
   const second = toolMessage("m-two", { code: "omegaruntoken8()", stdout: "two\n" });
   const both = { ...first, parts: [first.parts[0], second.parts[0], first.parts[1]] };
-  assert.equal(messages.upsertMessage("c1", both, "m-stopped"), true);
+  assert.equal(reply("c1", [prompt(both.id)], both), true);
   assert.deepEqual(search.searchMessages("u1", "alpharuntoken7").map((hit) => hit.messageId), ["m-two"]);
   assert.deepEqual(search.searchMessages("u1", "omegaruntoken8").map((hit) => hit.messageId), ["m-two"]);
 });
@@ -252,7 +269,7 @@ test("a run with blank source adds nothing, and the code of another tool is not 
 });
 
 test("colored output is found by its words and the snippet has no escape bytes", () => {
-  messages.upsertMessage("c1", toolMessage("m-ansi", { stdout: "\u001b[31mcrimsonword8\u001b[0m\n" }), "m-src");
+  assert.equal(reply("c1", [prompt("m-ansi")], toolMessage("m-ansi", { stdout: "\u001b[31mcrimsonword8\u001b[0m\n" })), true);
   const hits = search.searchMessages("u1", "crimsonword8");
   assert.equal(hits.length, 1);
   assert.doesNotMatch(hits[0]?.snippet ?? "", /\u001b|\[31m/);
@@ -260,6 +277,8 @@ test("colored output is found by its words and the snippet has no escape bytes",
 
 test("a reopened chat still finds output-only text after the message is saved again", () => {
   const again = toolMessage("m-out", { stdout: "rainbow-" + "gizmo7\n" });
-  assert.equal(messages.upsertMessage("c1", again, null), true);
+  const plan = messages.planChatWrite("c1", [prompt(again.id), again]);
+  if ("error" in plan) assert.fail(`write refused: ${plan.error}`);
+  assert.equal(messages.finishChatReply(plan, again.parts), true);
   assert.deepEqual(search.searchMessages("u1", "rainbow-gizmo7").map((hit) => hit.messageId), ["m-out"]);
 });
