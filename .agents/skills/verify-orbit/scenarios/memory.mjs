@@ -79,6 +79,36 @@ async function rowError(page, row, text) {
   return { ok: problems.length === 0, detail: `${problems.join(", ")}; ${where}` };
 }
 
+// These zones are 25 hours apart, so they never share a date and at least one differs from the server's zone.
+const READER_ZONES = ["Pacific/Kiritimati", "Pacific/Pago_Pago"];
+
+function readerDate(memory, timeZone) {
+  const format = (value) => new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone }).format(new Date(value));
+  return memory.lastUsedAt ? `Used ${format(memory.lastUsedAt)}` : format(memory.createdAt);
+}
+
+async function readerZoneDates(page, origin, step) {
+  const { memories } = await (await page.request.get(`${origin}/api/memories`)).json();
+  const saved = memories.find((item) => item.text === "I deploy to Fly.io");
+  if (!step("the saved memory is listed by the API", saved !== undefined, "no memory with that text")) return;
+  const cookies = await page.context().cookies();
+  for (const timezoneId of READER_ZONES) {
+    const context = await page.context().browser().newContext({ timezoneId, viewport: { width: 1280, height: 800 } });
+    await context.addCookies(cookies);
+    const view = await context.newPage();
+    const errors = [];
+    view.on("pageerror", (error) => errors.push(error.message.slice(0, 160)));
+    await view.goto(`${origin}/memory`);
+    const expected = readerDate(saved, timezoneId);
+    const row = view.locator("li").filter({ hasText: "I deploy to Fly.io" });
+    const shown = await row.getByText(expected, { exact: true }).waitFor({ timeout: 10_000 }).then(() => true, () => false);
+    const visible = await row.getByText(/^(Used )?[A-Z][a-z]{2} \d{1,2}, \d{4}$/).allInnerTexts();
+    await context.close();
+    step(`memory date in ${timezoneId} is the reader's date`, shown, `expected ${expected}, row shows ${JSON.stringify(visible)}`);
+    step(`memory dates in ${timezoneId} hydrate without a page error`, errors.length === 0, errors.join("; "));
+  }
+}
+
 export default async function memory({ page, origin, step, shot }) {
   fs.mkdirSync(path.dirname(requestLog), { recursive: true });
   fs.writeFileSync(requestLog, "");
@@ -166,6 +196,7 @@ export default async function memory({ page, origin, step, shot }) {
   );
   writeRequestProof("injected.jsonl");
   step("a new chat sends the memory as quoted notes", followed && injected, followed ? "request log has no quoted memory" : "no reply");
+  await readerZoneDates(page, origin, step);
 
   await page.goto(`${origin}/memory`);
   const savedRow = page.getByText("I deploy to Fly.io", { exact: true });
