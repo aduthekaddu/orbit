@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- verify-orbit reports ready only for the server that bound the requested port. Concurrent launches in one checkout share the sandbox server. (#193)
 - Signed-out requests to paths such as `/api/authors` now get the same sign-in check as other API requests. (#134)
 - A refreshed session cookie now reaches the browser on page and API responses, so daily use keeps a session rolling forward past 7 days without a forced sign-in. (#119)
 - The hook lint in CI is a required check. A failing `rules-of-hooks` or `exhaustive-deps` finding now fails the job. (#145)
