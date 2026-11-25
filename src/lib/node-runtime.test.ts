@@ -65,6 +65,18 @@ function runtimeProblems(files: RuntimeFiles) {
   return problems;
 }
 
+// npm 10 rewrites the lockfile without the libc marks, so npm ci on the glibc Docker image then
+// extracts the musl binaries too. npm 11 keeps them when it starts from a lock that still has them.
+const MUSL_FIX = `Restore the last lockfile that carries the marks and rewrite it with npm 11 or newer (#53).`;
+
+function muslProblems(source: string) {
+  const lock = JSON.parse(source) as { packages?: Record<string, { libc?: unknown }> };
+  return Object.entries(lock.packages ?? {})
+    .filter(([name]) => /-musl$|linuxmusl-/.test(name))
+    .filter(([, entry]) => JSON.stringify(entry.libc) !== JSON.stringify(["musl"]))
+    .map(([name]) => `package-lock.json: ${name} carries no libc ["musl"] mark, so npm ci on the glibc Docker image cannot exclude the musl binary. ${MUSL_FIX}`);
+}
+
 const SHIPPED: RuntimeFiles = {
   dockerfile: `FROM ${LINE}\n`,
   packageJson: `${JSON.stringify({ devDependencies: { "@types/node": "24.19.4" } })}\n`,
@@ -143,6 +155,26 @@ test("every problem names the fix", () => {
   assert.ok(problems.every((problem) => problem.endsWith(FIX)));
 });
 
+test("a lockfile that marks its musl binaries has no problems", () => {
+  assert.deepEqual(muslProblems(JSON.stringify({ packages: { "node_modules/@next/swc-linux-x64-musl": { libc: ["musl"] } } })), []);
+});
+
+test("a lockfile that drops the libc marks fails", () => {
+  assert.deepEqual(muslProblems(JSON.stringify({ packages: { "node_modules/@next/swc-linux-x64-musl": {} } })), [
+    `package-lock.json: node_modules/@next/swc-linux-x64-musl carries no libc ["musl"] mark, so npm ci on the glibc Docker image cannot exclude the musl binary. ${MUSL_FIX}`,
+  ]);
+});
+
+test("a musl binary whose upstream package has no libc field does not fail the mark check", () => {
+  assert.deepEqual(muslProblems(JSON.stringify({ packages: { "node_modules/@oxlint/binding-linux-arm-musleabihf": {} } })), []);
+});
+
+test("the sharp naming form, linuxmusl as an infix, is also guarded", () => {
+  assert.deepEqual(muslProblems(JSON.stringify({ packages: { "node_modules/@img/sharp-linuxmusl-x64": {} } })), [
+    `package-lock.json: node_modules/@img/sharp-linuxmusl-x64 carries no libc ["musl"] mark, so npm ci on the glibc Docker image cannot exclude the musl binary. ${MUSL_FIX}`,
+  ]);
+});
+
 test("this repository ships, types, and proposes one Node major, the 24 LTS line", () => {
   const read = (file: string) => fs.readFileSync(path.join(process.cwd(), file), "utf8");
   assert.deepEqual(runtimeProblems({
@@ -152,4 +184,9 @@ test("this repository ships, types, and proposes one Node major, the 24 LTS line
     dependabot: read(".github/dependabot.yml"),
     setupAction: read(".github/actions/setup-orbit/action.yml"),
   }), []);
+});
+
+test("this repository marks the lockfile's musl binaries so the glibc Docker image skips them", () => {
+  const lock = fs.readFileSync(path.join(process.cwd(), "package-lock.json"), "utf8");
+  assert.deepEqual(muslProblems(lock), []);
 });
