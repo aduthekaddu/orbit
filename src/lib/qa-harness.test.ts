@@ -7,8 +7,9 @@ import os from "node:os";
 import path from "node:path";
 import test, { after } from "node:test";
 
-// These tests copy verify.mjs, ci-e2e.sh and the mocks into a scratch checkout and run them. A stub app stands in for
-// Orbit, so no build is needed. Reverting any of those scripts to fixed ports turns a test here red.
+// These tests copy verify.mjs, ci-e2e.sh, the mocks and src/lib/sandbox/owner.mjs into a scratch checkout and run them.
+// A stub app stands in for Orbit, so no build is needed. Reverting any of those scripts to fixed ports turns a test here red.
+// verify.mjs imports owner.mjs, so a checkout that omits it fails every launch and cleanup that loads verify.mjs.
 
 const repo = process.cwd();
 
@@ -161,6 +162,7 @@ class Checkout {
       "scripts/qa/mock-provider.mjs",
       "scripts/qa/mock-ollama.mjs",
       "scripts/qa/ci-e2e.sh",
+      "src/lib/sandbox/owner.mjs",
     ]) {
       fs.mkdirSync(path.dirname(path.join(this.dir, file)), { recursive: true });
       fs.copyFileSync(path.join(repo, file), path.join(this.dir, file));
@@ -493,19 +495,22 @@ test("cleanup and launch --mock stop a live mock recorded in the previous pid-po
   assert.deepEqual(mockPids, [record.pid]);
 });
 
-test("cleanup refuses to kill a non-mock process recorded in the previous pid-port format", async () => {
+test("cleanup drops a foreign leftover mock record without killing the process, and still stops the server", async () => {
   const checkout = new Checkout();
+  const started = await checkout.verify(["launch"]);
   const decoy = run(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { cwd: checkout.dir, detached: true });
   assert.ok(decoy.child.pid);
   try {
-    fs.mkdirSync(path.join(checkout.dir, ".verify"), { recursive: true });
+    assert.equal(started.code, 0, started.out);
     fs.writeFileSync(path.join(checkout.dir, ".verify/mock.json"), JSON.stringify({ pid: decoy.child.pid, port: 3299 }));
-
-    const refused = await checkout.verify(["cleanup"]);
-    assert.equal(refused.code, 1, refused.out);
-    assert.match(refused.out, /not the mock provider/i);
+    const cleaned = await checkout.verify(["cleanup"]);
+    assert.equal(cleaned.code, 0, cleaned.out);
+    assert.match(cleaned.out, /not the mock provider/i);
+    assert.match(cleaned.out, /cleanup done/i);
     assert.notEqual(procStartTime(decoy.child.pid), "", "decoy process stays alive");
-    assert.equal(checkout.record()?.pid, decoy.child.pid, "record stays in place after refusal");
+    assert.equal(checkout.record(), null, "leftover record is dropped");
+    assert.equal(fs.existsSync(path.join(checkout.dir, ".verify/server.json")), false, "server record is removed");
+    assert.equal(fs.existsSync(path.join(checkout.dir, ".verify/sandbox")), false, "sandbox is removed");
   } finally {
     killPid(decoy.child.pid, true);
     await decoy.done;
