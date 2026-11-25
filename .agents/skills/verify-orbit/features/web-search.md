@@ -32,6 +32,7 @@ Require each printed check to pass.
 - The card fits at 390 by 844 without page overflow.
 - Stop changes an unfinished card to Cancelled. Reload preserves Cancelled.
 - A completed stopped-search result shows Cancelled and keeps that status after reload.
+- A search stopped and then followed by a new message before the saved result arrives stays Cancelled, not Failed.
 - A search failure shows Failed, and the model still answers.
 - Repeated searches use four tool steps and leave the fifth step for an answer with a source link.
 - The fifth step can render a requested card or artifact. Both survive reload.

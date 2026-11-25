@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
+import { startMockSearxng } from "../../../../scripts/qa/mock-searxng.mjs";
 
-export default async function searchStopped({ page, origin, step, shot }) {
+export default async function searchStopped({ page, origin, mockUrl, step, shot }) {
   const created = await page.request.post(`${origin}/api/chats`);
   assert.equal(created.status(), 201);
   const { id } = await created.json();
@@ -33,4 +34,37 @@ export default async function searchStopped({ page, origin, step, shot }) {
   const reloaded = await card.getByRole("status").innerText();
   step("the stopped output remains Cancelled after reload", reloaded === "Cancelled", `received ${reloaded}`);
   await shot("stopped-reloaded");
+  const mock = await startMockSearxng();
+  try {
+    const saved = await page.request.put(`${origin}/api/settings`, { data: {
+      baseUrl: mockUrl, model: "mock-genui", reasoningEffort: "low", searxngUrl: mock.url, tavilyApiKey: null,
+    } });
+    assert.equal(saved.status(), 200);
+    const { id: liveId } = await (await page.request.post(`${origin}/api/chats`)).json();
+    await page.goto(`${origin}/c/${liveId}`);
+    const held = [];
+    let holding = true;
+    await page.route((url) => url.pathname === `/api/chats/${liveId}`, (route) => {
+      if (holding && route.request().method() === "GET") held.push(route);
+      else route.continue();
+    });
+    const composer = page.getByPlaceholder("Ask anything");
+    const liveCard = page.locator('[data-tool-name="web_search"]');
+    await composer.fill("[qa:search] slow orbit");
+    await composer.press("Enter");
+    await liveCard.locator('[data-tool-status="running"]').waitFor({ timeout: 15_000 });
+    await composer.fill("sent right after Stop");
+    await page.getByRole("button", { name: "Stop", exact: true }).click();
+    await liveCard.locator('[data-tool-status="cancelled"]').waitFor({ timeout: 8_000 });
+    await composer.press("Enter");
+    await page.getByText("sent right after Stop", { exact: true }).waitFor({ timeout: 5_000 });
+    holding = false;
+    const heldCount = held.length;
+    await Promise.all(held.splice(0).map((route) => route.continue().catch(() => {})));
+    const statusAfterSend = await liveCard.getByRole("status").innerText();
+    step("a message sent right after Stop leaves the stopped search Cancelled, not Failed", statusAfterSend === "Cancelled", `header ${statusAfterSend}, held reads ${heldCount}`);
+    await shot("send-after-stop");
+  } finally {
+    await mock.close();
+  }
 }

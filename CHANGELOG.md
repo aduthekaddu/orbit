@@ -4,6 +4,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- A tool call closed by a follow-up message before its saved result arrives now shows Cancelled, not Failed, for every tool, not only a generated view. (#194)
+
 - Each code sandbox container carries the label of the Orbit process that started it, and the sweep log line for a removed container names that owner, so two Orbit servers or test runs on one Docker host no longer count each other's containers as their own leftovers. (#184)
 - A code run the memory limit kills no longer loses its Out of memory mark. Docker can record the kill after the run's exit event, and one read of the flag missed it, so the card sometimes said Exit 137 instead. (#66)
 - An artifact preview can no longer load another web page into its frame, so its code cannot send data out in that page's URL. (#132)
