@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
+import { ownerFromEnv, parseSandboxOwner } from "../../../src/lib/sandbox/owner.mjs";
 
 const PORT = parsePort(process.env.ORBIT_VERIFY_PORT);
 const ORIGIN = `http://127.0.0.1:${PORT}`;
@@ -210,6 +211,10 @@ async function launch({ mock }) {
     if ((state.publicUrl ?? "") !== publicUrlEnv()) {
       fail(`public url mismatch. Run node .agents/skills/verify-orbit/verify.mjs cleanup, then launch again.`);
     }
+    const owner = ownerFromEnv();
+    if (!state.sandboxOwner || owner && state.sandboxOwner !== owner) {
+      fail(`sandbox owner mismatch. Running=${state.sandboxOwner ?? "unknown"} requested=${owner ?? "any"}. Run node .agents/skills/verify-orbit/verify.mjs cleanup, then launch again.`);
+    }
     console.log(`already starting or running pid=${state.pid} origin=${ORIGIN}`);
   } else {
     await startServer();
@@ -234,6 +239,8 @@ async function startServer() {
   fs.mkdirSync(verifyDir, { recursive: true });
   const logFd = fs.openSync(logPath, "w");
   const sandboxEnabled = process.env.ORBIT_SANDBOX === "on";
+  // Scenarios and leftover checks find this server's sandbox containers by this owner.
+  const sandboxOwner = ownerFromEnv() ?? parseSandboxOwner(`verify-${crypto.randomUUID()}`);
   const child = spawn("npm", ["start", "--", "-p", String(PORT), "-H", "127.0.0.1"], {
     cwd: sandbox,
     env: {
@@ -246,6 +253,7 @@ async function startServer() {
       BETTER_AUTH_URL: ORIGIN,
       ORBIT_TRUSTED_ORIGINS: `${ORIGIN},http://localhost:${PORT}`,
       ORBIT_SANDBOX: sandboxEnabled ? "on" : "off",
+      ORBIT_SANDBOX_OWNER: sandboxOwner,
       ORBIT_GITHUB_MCP_FIXTURE: "1",
       DOCKER_HOST: process.env.DOCKER_HOST ?? "unix:///var/run/docker.sock",
       ...(process.env.ORBIT_OLLAMA_URL ? { ORBIT_OLLAMA_URL: process.env.ORBIT_OLLAMA_URL } : {}),
@@ -256,7 +264,7 @@ async function startServer() {
   });
   child.unref();
   fs.closeSync(logFd);
-  fs.writeFileSync(statePath, JSON.stringify({ pid: child.pid, port: PORT, sandbox, origin: ORIGIN, sandboxEnabled, ollamaUrl: process.env.ORBIT_OLLAMA_URL ?? "", publicUrl: publicUrlEnv() }, null, 2));
+  fs.writeFileSync(statePath, JSON.stringify({ pid: child.pid, port: PORT, sandbox, origin: ORIGIN, sandboxEnabled, sandboxOwner, ollamaUrl: process.env.ORBIT_OLLAMA_URL ?? "", publicUrl: publicUrlEnv() }, null, 2));
   try {
     const ready = await waitReady();
     console.log(`ready origin=${ORIGIN} pid=${child.pid} signupOpen=${ready.signupOpen ? "yes" : "no"}`);
@@ -674,6 +682,10 @@ async function browse(scenario) {
   if (!fs.existsSync(scenarioPath)) fail(`no scenario at ${scenarioPath}`);
   assertOurServer();
   await doctor();
+  // A scenario and the fixture processes it starts watch the server's own sandbox containers.
+  const { sandboxOwner } = readState();
+  if (!sandboxOwner) fail("server.json has no sandboxOwner. Run cleanup, then launch again.");
+  process.env.ORBIT_SANDBOX_OWNER = sandboxOwner;
   const cookies = await signInVerify();
   const { chromium } = await import("playwright");
   const browser = await chromium.launch({ executablePath: chromePath() });
