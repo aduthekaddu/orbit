@@ -1,6 +1,6 @@
 import { convertToModelMessages, createUIMessageStreamResponse, stepCountIs, streamText, toUIMessageStream, type UIMessage } from "ai";
 import { ARTIFACT_INSTRUCTIONS } from "@/lib/artifacts/detect";
-import { sanitize, streamErrorMessage } from "@/lib/chat-errors";
+import { logProviderError, Redactor, streamErrorMessage } from "@/lib/chat-errors";
 import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
 import { assistantHasVisiblePart, settleInterruptedParts } from "@/lib/genui/spec";
 import { embedPending } from "@/lib/memory/embed";
@@ -98,6 +98,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Add a base URL, API key, and model in Settings." }, { status: 400 });
   }
 
+  const redact = new Redactor(settings);
   const chat = ensureChat(parsed.data.id, session.user.id);
   if (!chat) return Response.json({ error: "Not found" }, { status: 404 });
 
@@ -130,7 +131,7 @@ export async function POST(request: Request) {
         model: settings.model,
         chatId: chat.id,
       }),
-      onError: (message) => console.error("chat title", sanitize(message, [settings.apiKey, settings.githubToken])),
+      onError: (message) => redact.logError("chat title", message),
     });
   }
 
@@ -155,7 +156,7 @@ export async function POST(request: Request) {
         await loaded.close();
       } catch (error) {
         const message = error instanceof Error ? error.message : "GitHub tools close failed";
-        console.error("github tools close", sanitize(message, [settings.apiKey, settings.githubToken]));
+        redact.logError("github tools close", message);
       }
     };
     const tools = loaded.tools;
@@ -184,6 +185,7 @@ export async function POST(request: Request) {
       prepareStep: answerStepFor(tools),
       abortSignal: request.signal,
       ...(allowReasoning ? reasoningOptions(settings.reasoningEffort) : {}),
+      onError: ({ error }) => logProviderError(error, redact),
     });
 
     // Send the response id so the client reuses it. Without it the client mints
@@ -193,7 +195,7 @@ export async function POST(request: Request) {
       tools,
       originalMessages: uiMessages,
       generateMessageId: () => write.responseId,
-      onError: (error) => streamErrorMessage(error, [settings.apiKey, settings.githubToken]),
+      onError: (error) => streamErrorMessage(error, redact),
       onEnd: async ({ responseMessage, isAborted, outcome }) => {
         void embedPending();
         try {
@@ -207,7 +209,7 @@ export async function POST(request: Request) {
                   .slice(0, 8)
               : [];
             const status = outcome && typeof outcome === "object" && "status" in outcome ? String(outcome.status) : "";
-            console.error("chat end without text", isAborted ? "aborted" : "finished", status, types.join(",") || "none");
+            redact.logError("chat end without text", isAborted ? "aborted" : "finished", status, types.join(",") || "none");
           }
           if (!shouldSaveReply({ regenerate: write.regenerate, interrupted, hadReply, visible })) return;
           upsertMessage(
@@ -219,6 +221,7 @@ export async function POST(request: Request) {
             },
             lastUser?.id,
             expected,
+            redact,
           );
           touchChat(chat.id);
         } finally {
@@ -231,7 +234,7 @@ export async function POST(request: Request) {
   } catch (error) {
     await closeTools();
     const message = error instanceof Error ? error.message : "The model request failed";
-    console.error("chat request error", sanitize(message, [settings.apiKey, settings.githubToken]));
+    redact.logError("chat request error", message);
     return Response.json({ error: "The model request failed" }, { status: 502 });
   }
 }

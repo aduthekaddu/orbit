@@ -1,4 +1,6 @@
+import { z } from "zod";
 import type { ModelOption } from "./model-picker";
+import type { Loaded } from "./request-json";
 import type { ReasoningEffort } from "./settings";
 
 export type Connection =
@@ -7,16 +9,29 @@ export type Connection =
   | { status: "connected"; models: ModelOption[] }
   | { status: "failed" };
 
-export function connectionFromResponse(
-  response: { ok: boolean; status: number },
-  body: { models?: ModelOption[] },
-  hasKey: boolean,
-): Connection {
-  if (response.status === 400) return { status: "idle" };
-  if (!response.ok) return { status: "failed" };
-  const models = body.models ?? [];
-  if (models.length === 0 && !hasKey) return { status: "idle" };
-  return { status: "connected", models };
+export type ModelList = { models: ModelOption[]; hasKey: boolean };
+
+// POST /api/models answers 400 with this error when it has no base URL or no key to use, which is "not checked", not a failure.
+export const MODELS_NOT_CONFIGURED = "Add a base URL and key.";
+
+// `hasKey` is the value when the request started, so typing a key before the answer does not relabel it.
+export function modelListBody(hasKey: boolean): z.ZodType<ModelList> {
+  return z
+    .object({ models: z.array(z.object({ id: z.string(), reasoning: z.boolean().nullable() })) })
+    .transform(({ models }) => ({ models, hasKey }));
+}
+
+export function connectionFrom(load: Loaded<ModelList>): Connection {
+  switch (load.status) {
+    case "idle":
+      return { status: "idle" };
+    case "pending":
+      return { status: "checking" };
+    case "failed":
+      return load.failure.kind === "http" && load.failure.status === 400 && load.failure.error === MODELS_NOT_CONFIGURED ? { status: "idle" } : { status: "failed" };
+    case "done":
+      return load.data.models.length === 0 && !load.data.hasKey ? { status: "idle" } : { status: "connected", models: load.data.models };
+  }
 }
 
 export type SettingsSnapshot = {

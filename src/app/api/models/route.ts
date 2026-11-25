@@ -1,5 +1,6 @@
 import { credentialsForModelList, listModels } from "@/lib/provider";
 import { getSettings } from "@/lib/settings";
+import { MODELS_NOT_CONFIGURED } from "@/lib/settings-form";
 import { getSession, unauthorized } from "@/lib/session";
 import { LIMITS, r } from "@/lib/route-schema";
 
@@ -16,7 +17,7 @@ export async function GET() {
   if (!session) return unauthorized();
   const settings = getSettings();
   if (!settings?.baseUrl || !settings.apiKey) {
-    return Response.json({ error: "Add a base URL and key.", models: [] }, { status: 400 });
+    return Response.json({ error: MODELS_NOT_CONFIGURED, models: [] }, { status: 400 });
   }
   const models = await listModels(settings.baseUrl, settings.apiKey);
   if (!models) return Response.json({ error: "Could not reach the provider.", models: [] }, { status: 502 });
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
     savedApiKey: settings?.apiKey,
   });
   if (!credentials) {
-    return Response.json({ error: "Add a base URL and key.", models: [] }, { status: 400 });
+    return Response.json({ error: MODELS_NOT_CONFIGURED, models: [] }, { status: 400 });
   }
   const models = await listModels(credentials.baseUrl, credentials.apiKey);
   if (!models) return Response.json({ error: "Could not reach the provider.", models: [] }, { status: 502 });
