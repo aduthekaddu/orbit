@@ -2,7 +2,7 @@ export const title = "One chat turn in Orbit";
 export function state(v) {
   if (v.phase === "streaming") {
     const verb = v.kind === "send" ? "Sending" : "Regenerating";
-    return v.shown ? `${verb}, text on screen` : `${verb}, waiting for text`;
+    return v.visible ? `${verb}, text on screen` : `${verb}, waiting for text`;
   }
   if (v.phase === "failed") return "Error shown";
   return v.stored === "none" ? "Idle, no reply saved" : "Idle, reply saved";
@@ -15,7 +15,7 @@ const labels = {
   YouSend: "you send a message",
   YouRegenerate: "you press regenerate",
   YouRetry: "you press retry",
-  TextArrives: "text starts to stream",
+  VisiblePartArrives: "text starts to stream",
   Finishes: "the model finishes",
 };
 export function step(action, from, to) {

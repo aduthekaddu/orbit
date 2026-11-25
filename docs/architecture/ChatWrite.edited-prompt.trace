@@ -1,0 +1,40 @@
+Error: Invariant ReplyAnswersItsPrompt is violated.
+State 1: Initial predicate
+/\ seen = (a :> [prompt |-> 1, answer |-> 0] @@ b :> [prompt |-> 1, answer |-> 0])
+/\ newest = 1
+/\ prompt = 1
+/\ answer = 0
+/\ guard = (a :> [row |-> "none", text |-> 0] @@ b :> [row |-> "none", text |-> 0])
+/\ answered = {}
+/\ turn = (a :> 0 @@ b :> 0)
+/\ saving = (a :> 0 @@ b :> 0)
+
+State 2: Plan
+/\ seen = (a :> [prompt |-> 1, answer |-> 0] @@ b :> [prompt |-> 1, answer |-> 0])
+/\ newest = 1
+/\ prompt = 1
+/\ answer = 0
+/\ guard = (a :> [row |-> "none", text |-> 0] @@ b :> [row |-> "none", text |-> 0])
+/\ answered = {}
+/\ turn = (a :> 1 @@ b :> 0)
+/\ saving = (a :> 0 @@ b :> 0)
+
+State 3: EditPromptInPlace
+/\ seen = (a :> [prompt |-> 1, answer |-> 0] @@ b :> [prompt |-> 2, answer |-> 0])
+/\ newest = 1
+/\ prompt = 2
+/\ answer = 0
+/\ guard = (a :> [row |-> "none", text |-> 0] @@ b :> [row |-> "none", text |-> 0])
+/\ answered = {}
+/\ turn = (a :> 1 @@ b :> 0)
+/\ saving = (a :> 0 @@ b :> 0)
+
+State 4: Finish
+/\ seen = (a :> [prompt |-> 1, answer |-> 0] @@ b :> [prompt |-> 2, answer |-> 0])
+/\ newest = 1
+/\ prompt = 2
+/\ answer = 0
+/\ guard = (a :> [row |-> "none", text |-> 0] @@ b :> [row |-> "none", text |-> 0])
+/\ answered = {1}
+/\ turn = (a :> 0 @@ b :> 0)
+/\ saving = (a :> 0 @@ b :> 0)

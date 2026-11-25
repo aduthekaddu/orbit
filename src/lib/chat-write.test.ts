@@ -68,6 +68,7 @@ before(async () => {
     "c-invisible-retry",
     "c-retry-edit",
     "c-head",
+    "c-prompt-changed",
   ]) {
     mods.db.insert(mods.schema.chats).values({ id, userId: "u1", title: id, createdAt: now, updatedAt: now }).run();
   }
@@ -132,21 +133,50 @@ test("a regenerate that stores nothing keeps the previous answer", () => {
   assert.deepEqual(ids("c-regen"), ["g1", "g2"]);
 });
 
-test("a stale tab cannot overwrite a regenerated answer", () => {
+test("a stale tab cannot overwrite an answer changed after it loaded", () => {
   write("c-echo", [message("e1", "user", "explain the bug")]);
-  answer("c-echo", "e2", "regenerated answer", "e1");
+  answer("c-echo", "e2", "old answer", "e1");
 
-  // Tab B loaded before the regeneration and still holds the old text under the same id.
+  assert.equal(mods.updateMessageText("c-echo", "e2", "edited answer"), true);
   write("c-echo", [
     message("e1", "user", "explain the bug"),
     message("e2", "assistant", "old answer"),
     message("e3", "user", "next question"),
   ]);
 
+  assert.deepEqual(ids("c-echo"), ["e1", "e2", "e3"]);
   assert.deepEqual(
     mods.listMessages("c-echo").find((entry) => entry.id === "e2")?.parts,
-    [{ type: "text", text: "regenerated answer" }],
+    [{ type: "text", text: "edited answer" }],
   );
+});
+
+// docs/architecture/ChatWrite.edited-prompt.trace, step by step.
+test("a retry's reply is refused after another tab edits its prompt in place", () => {
+  // State 1: P is saved, and its first reply stopped before any visible part, so no reply row exists.
+  write("c-prompt-changed", [message("pc1", "user", "before")]);
+  assert.equal(mods.upsertMessage("c-prompt-changed", { id: "pc-empty", role: "assistant", parts: [] }, "pc1"), true);
+  assert.deepEqual(ids("c-prompt-changed"), ["pc1"]);
+
+  // State 2, Plan: tab a presses Retry.
+  const responseId = write("c-prompt-changed", [message("pc1", "user", "before")], "regenerate-message");
+  const { expected } = mods.replyGuard("c-prompt-changed", true, responseId, "pc1");
+
+  // State 3, EditPromptInPlace: tab b edits P under its own id. The code refuses that edit now,
+  // so the test writes it the way planChatWrite did at fa399a2: delete P, then insert the new text under P's id.
+  assert.deepEqual(
+    mods.planChatWrite("c-prompt-changed", [message("pc1", "user", "after")], "submit-message", undefined, "pc1"),
+    { error: "invalid-edit" },
+  );
+  assert.deepEqual(mods.planChatWrite("c-prompt-changed", [message("pc1", "user", "after")]), { error: "stale" });
+  mods.db.$client.prepare("delete from messages where id = ?").run("pc1");
+  mods.db.$client
+    .prepare("insert into messages (id, chat_id, parent_id, role, content, parts, position, created_at) values (?, ?, null, 'user', ?, ?, 0, ?)")
+    .run("pc1", "c-prompt-changed", "after", JSON.stringify([{ type: "text", text: "after" }]), Date.now());
+
+  // State 4, Finish: tab a's reply ends. It must not be saved under the edited P.
+  assert.equal(mods.upsertMessage("c-prompt-changed", message(responseId, "assistant", "answer to before"), "pc1", expected), false);
+  assert.deepEqual(ids("c-prompt-changed"), ["pc1"]);
 });
 
 test("a successful regenerate keeps the old answer as a sibling", () => {
