@@ -23,8 +23,10 @@ function routeResponse(request: NextRequest, pathname: string, signedIn: boolean
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/api/auth") ||
+    pathname === "/_next" ||
+    pathname.startsWith("/_next/") ||
+    pathname === "/api/auth" ||
+    pathname.startsWith("/api/auth/") ||
     pathname === "/api/setup" ||
     pathname === "/favicon.ico"
   ) {
