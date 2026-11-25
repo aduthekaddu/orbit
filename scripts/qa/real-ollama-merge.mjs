@@ -149,7 +149,8 @@ async function main() {
       return response;
     };
 
-    const { db } = await import("../../src/lib/db/index.ts");
+    const { getDb } = await import("../../src/lib/db/index.ts");
+    const db = getDb();
     const schema = await import("../../src/lib/db/schema.ts");
     const { createChat, persistIncoming } = await import("../../src/lib/messages.ts");
     const { runDream } = await import("../../src/lib/memory/dream.ts");

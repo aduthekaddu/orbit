@@ -4,12 +4,12 @@
   "src/lib/chat-tree.ts isPath": "6079fdb2e7244ec44b62f930b2a810625f0f50ca50d255b313e6765874b30ca8",
   "src/lib/genui/spec.ts assistantHasVisiblePart": "63b6266e47c3e0ad37fab2719d8cdbbf669635f01defd0f3ae7b6822c74b00ae",
   "src/lib/genui/spec.ts settleInterruptedParts": "621627203d26c0dc23e1601106f8c15d93489c9e6e70a1b89fa615cf0f597284",
-  "src/lib/messages.ts finishChatReply": "ef415e7ce85c62866767c20d93aa6266f18d0647800150081b6dc122140a87e6",
-  "src/lib/messages.ts insertMessage": "a38ee58a221c30986f2044eaba20f88a93ec91edfad1bbdfed693482a7a7ff6b",
-  "src/lib/messages.ts messageRepository": "3ac6ef77a4d4d35e722bff32d2b75350c581a2e5b6d4432b7d5eebd4fecebaf5",
-  "src/lib/messages.ts persistIncoming": "c02d1096e944fbe622d7c710c6f2d1645a24ac054d3c438a3d5cc7818863991b",
-  "src/lib/messages.ts planChatWrite": "227a673a0f5ec991d6e09c3ebc62c0bec6f8b16978882484deb5153d22b975ef",
-  "src/lib/messages.ts savedText": "fa72e2dc39d4a482b2c08f9e18aa57ffe4a6cfd820ad16d2b0735cb7a7c2fc7e",
+  "src/lib/messages.ts finishChatReply": "0f20863352e7cd36b13f06bb69e48e0deec81da29fe684f0aa42517dec375aa8",
+  "src/lib/messages.ts insertMessage": "20a07264eeff296d477733e9899aa58cbb6838c27e0fd033c30534edcbd759aa",
+  "src/lib/messages.ts messageRepository": "872a9c3ed1b1a150027cb46b9e3b0c2364390eb4059dcd82e300ed92a62898f8",
+  "src/lib/messages.ts persistIncoming": "0710f582217c0e6764cbf6a17dac175dceed97b2b06d8a0691620e09fec57013",
+  "src/lib/messages.ts planChatWrite": "926b36447279e1aba28b138e39d3152bfadf8361610da69380dab09e01f56797",
+  "src/lib/messages.ts savedText": "19eb076594fd20202b80ca4e2cff0c1e63576d48b6917e35f34991799257c892",
   "src/lib/messages.ts unchanged": "eb0497aedcd5adf965c95e8c250effc5457117d249567cd96e0c8c0d14d6225f",
-  "src/lib/messages.ts updateMessageText": "55707967d6de26180badf6950d06bbd688948a01dd85748fcd81439ba41ebd4c"
+  "src/lib/messages.ts updateMessageText": "2d102518ed1f98b9948241621be80943ddf73232f5cada42cd123833b1b631fe"
 }

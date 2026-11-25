@@ -4,8 +4,14 @@ import fs from "node:fs";
 import path from "node:path";
 import test, { before, after } from "node:test";
 import Database from "better-sqlite3";
+import { getDb } from "../db";
+import * as schema from "../db/schema";
+import { createChat, finishChatReply, listMessages, persistIncoming, planChatWrite } from "../messages";
 import { dataDirectory } from "../paths";
+import * as dream from "./dream";
+import * as embed from "./embed";
 import { startMockOllama } from "./ollama-harness";
+import * as store from "./store";
 
 const dataDir = dataDirectory();
 const requestLog = path.join(dataDir, "mock-requests.jsonl");
@@ -15,10 +21,6 @@ delete process.env.ORBIT_BASE_URL;
 delete process.env.ORBIT_API_KEY;
 delete process.env.ORBIT_MODEL;
 
-type DreamModule = typeof import("./dream");
-
-let dream: DreamModule | undefined;
-let importError = "";
 let ollama: { url: string; stop: () => Promise<void> } | undefined;
 let provider: { url: string; stop: () => Promise<void> } | undefined;
 
@@ -52,66 +54,55 @@ function startMockProvider(): Promise<{ url: string; stop: () => Promise<void> }
 
 before(async () => {
   process.env.ORBIT_QA_TAGS = "1";
-  try {
-    ollama = await startMockOllama();
-    process.env.ORBIT_OLLAMA_URL = ollama.url;
-    provider = await startMockProvider();
-    dream = await import("./dream");
-    const { db } = await import("../db");
-    const schema = await import("../db/schema");
-    db.insert(schema.user).values({ id: "dream-user", name: "Dream", email: "dream@orbit.local", emailVerified: true }).run();
-    db.insert(schema.settings)
-      .values({
-        id: 1,
-        baseUrl: provider.url,
-        apiKey: "test-key-not-real",
-        model: "mock-genui",
-        reasoningEffort: "medium",
-        updatedAt: new Date(),
-      })
-      .run();
-  } catch (error) {
-    importError = error instanceof Error ? error.message : String(error);
-  }
+  ollama = await startMockOllama();
+  process.env.ORBIT_OLLAMA_URL = ollama.url;
+  provider = await startMockProvider();
+  const db = getDb();
+  db.insert(schema.user).values({ id: "dream-user", name: "Dream", email: "dream@orbit.local", emailVerified: true }).run();
+  db.insert(schema.settings)
+    .values({
+      id: 1,
+      baseUrl: provider.url,
+      apiKey: "test-key-not-real",
+      model: "mock-genui",
+      reasoningEffort: "medium",
+      updatedAt: new Date(),
+    })
+    .run();
 });
 
 after(async () => {
   await provider?.stop();
   await ollama?.stop();
+  getDb().$client.close();
 });
 
 function requireDream() {
-  assert.equal(importError, "", `dream run is missing: ${importError}`);
-  if (!dream || !provider) throw new Error("dream run is missing");
+  if (!provider) throw new Error("dream run is missing");
   return dream;
 }
 
-async function resetChats() {
-  const { db } = await import("../db");
-  db.$client.exec("DELETE FROM memories_vec; DELETE FROM memories; DELETE FROM memory_runs; DELETE FROM messages; DELETE FROM chats;");
+function resetChats() {
+  getDb().$client.exec("DELETE FROM memories_vec; DELETE FROM memories; DELETE FROM memory_runs; DELETE FROM messages; DELETE FROM chats;");
 }
 
-async function seedChat(text: string, createdAt: number) {
-  const { db } = await import("../db");
-  const { createChat, persistIncoming } = await import("../messages");
+function seedChat(text: string, createdAt: number) {
   const chat = createChat("dream-user");
   const messageId = crypto.randomUUID();
   assert.equal(persistIncoming(chat.id, [{ id: messageId, role: "user", parts: [{ type: "text", text }] }]), "ok");
-  db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(createdAt, messageId);
+  getDb().$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(createdAt, messageId);
   return { chatId: chat.id, messageId };
 }
 
 // Replies to the chat's one prompt. A request that ends in an unsaved assistant message streams the
 // reply under that message's id.
-async function seedReply(chatId: string, text: string, createdAt: number, messageId: string = crypto.randomUUID()) {
-  const { db } = await import("../db");
-  const { finishChatReply, listMessages, planChatWrite } = await import("../messages");
+function seedReply(chatId: string, text: string, createdAt: number, messageId: string = crypto.randomUUID()) {
   const prompt = listMessages(chatId).find((message) => message.role === "user");
   assert.ok(prompt, "chat has no prompt to reply to");
   const plan = planChatWrite(chatId, [prompt, { id: messageId, role: "assistant", parts: [] }]);
   if ("error" in plan) assert.fail(`write refused: ${plan.error}`);
   assert.equal(finishChatReply(plan, [{ type: "text", text }]), true);
-  db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(createdAt, messageId);
+  getDb().$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(createdAt, messageId);
   return messageId;
 }
 
@@ -183,7 +174,7 @@ test("a second run on the same date adds nothing", async () => {
 test("a run restarted after the first chat adds nothing twice", async () => {
   const api = requireDream();
   await resetChats();
-  const { db } = await import("../db");
+  const db = getDb();
   const date = "2099-04-04";
   const now = new Date(at(date, 16));
   const left = await seedChat("I keep a spare key with Ana", at(date, 12));
@@ -205,9 +196,7 @@ test("a run restarted after the first chat adds nothing twice", async () => {
 test("a near-duplicate candidate merges into the older memory", async () => {
   const api = requireDream();
   await resetChats();
-  const { db } = await import("../db");
-  const store = await import("./store");
-  const embed = await import("./embed");
+  const db = getDb();
   const saved = store.saveMemory({ text: "Deploy targets Fly.io", kind: "fact" });
   db.$client.prepare("UPDATE memories SET created_at = ? WHERE id = ?").run(Date.parse("2099-06-01T08:00:00Z"), saved.id);
   assert.equal((await embed.embedPending()).ok, true);
@@ -245,7 +234,7 @@ test("a failed chat leaves the night done and the next night retries that chat",
 test("a night that fails before its chats keeps them for the next night", async () => {
   const api = requireDream();
   await resetChats();
-  const { db } = await import("../db");
+  const db = getDb();
   const good = await seedChat("I swim before work", at("2099-08-01", 12));
   const bad = await seedChat("[qa:dream-fail] I live on Mars", at("2099-08-01", 13));
   const first = await api.runDream({ manual: true, date: "2099-08-01", now: new Date(at("2099-08-01", 16)) });
@@ -333,8 +322,7 @@ test("an Ollama outage skips model calls and recovery reads the newest 100 messa
     for (let offset = 1; offset < 100; offset++) {
       await seedReply(chatId, "Noted.", start + offset);
     }
-    const { db } = await import("../db");
-    const { persistIncoming } = await import("../messages");
+    const db = getDb();
     const newestId = crypto.randomUUID();
     assert.equal(persistIncoming(chatId, [{ id: newestId, role: "user", parts: [{ type: "text", text: "I live in Porto" }] }]), "ok");
     db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(start + 100, newestId);
@@ -364,7 +352,6 @@ test("a cached query embed failure does not fail a night with Ollama back", asyn
   const api = requireDream();
   await resetChats();
   assert.ok(ollama);
-  const embed = await import("./embed");
   const date = "2099-07-05";
   const { chatId } = await seedChat("I keep bees on the roof", at(date, 12));
   await fetch(`${ollama.url}/qa/fail`, { method: "POST" });
@@ -385,7 +372,6 @@ test("a cached query embed failure does not fail a night with Ollama back", asyn
 test("a failed final embed pass marks the run failed", async (t) => {
   const api = requireDream();
   await resetChats();
-  const store = await import("./store");
   const date = "2099-07-07";
   const unembedded = store.saveMemory({ text: "I keep a kayak in the garage", kind: "fact" });
   const { chatId } = await seedChat("I paddle on Sundays", at(date, 12));
@@ -409,7 +395,7 @@ test("a failed final embed pass marks the run failed", async (t) => {
 test("a worker that lost the lease writes nothing", async () => {
   const api = requireDream();
   await resetChats();
-  const { db } = await import("../db");
+  const db = getDb();
   const date = "2099-03-03";
   const now = new Date(at(date, 16));
   const chat = await seedChat("I water the lemon tree on Sundays", at(date, 12));
@@ -427,7 +413,7 @@ test("a worker that lost the lease writes nothing", async () => {
 test("a done or failed night is not claimed by another worker hours later", async () => {
   const api = requireDream();
   await resetChats();
-  const { db } = await import("../db");
+  const db = getDb();
   for (const [date, state] of [["2099-03-04", "done"], ["2099-03-05", "failed"]] as const) {
     const started = new Date(at(date, 1));
     assert.equal(api.tryClaim({ date, owner: "worker-a", now: started, chatIds: [] }), true);
@@ -444,7 +430,7 @@ test("a done or failed night is not claimed by another worker hours later", asyn
 test("a live lease keeps the night after its start time is three hours old", async () => {
   const api = requireDream();
   await resetChats();
-  const { db } = await import("../db");
+  const db = getDb();
   const date = "2099-03-06";
   const now = new Date(at(date, 4));
   assert.equal(api.tryClaim({ date, owner: "worker-a", now: new Date(at(date, 1)), chatIds: [] }), true);

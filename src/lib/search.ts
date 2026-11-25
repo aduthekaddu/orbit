@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { focusedHead } from "./chat-tree";
-import { db } from "./db";
+import { getDb } from "./db";
 import { getChatForUser, messageRepository } from "./messages";
 
 export type SearchHit = {
@@ -62,7 +62,7 @@ export function searchMessages(userId: string, q: string): SearchHit[] {
   const match = toMatchQuery(q);
   if (!match) return [];
   try {
-    const rows = db.$client
+    const rows = getDb().$client
       .prepare(
         `SELECT chats.id AS chatId,
                 chats.title AS chatTitle,

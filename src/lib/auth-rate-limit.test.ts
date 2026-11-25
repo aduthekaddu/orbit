@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test, { after, before } from "node:test";
+import { getDb, type OrbitDb } from "./db";
 
 const origin = "http://127.0.0.1:3210";
 const email = "owner@orbit.local";
@@ -11,16 +12,17 @@ const env: Record<string, string | undefined> = process.env;
 const originalNodeEnv = env.NODE_ENV;
 const originalDataDir = process.env.ORBIT_DATA_DIR;
 let dataDir = "";
-let auth: typeof import("./auth").auth;
-let db: typeof import("./db").db | undefined;
+let auth: ReturnType<typeof import("./auth").getAuth>;
+let db: OrbitDb | undefined;
 
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-auth-rate-limit-"));
   process.env.ORBIT_DATA_DIR = dataDir;
   // better-auth turns its rate limit on only when it sees NODE_ENV=production as it loads.
   env.NODE_ENV = "production";
-  ({ auth } = await import("./auth"));
-  ({ db } = await import("./db"));
+  const { getAuth } = await import("./auth");
+  auth = getAuth();
+  db = getDb();
   await auth.api.signUpEmail({ body: { name: "Owner", email, password: "right-password" } });
 });
 

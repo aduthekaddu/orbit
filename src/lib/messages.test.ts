@@ -4,16 +4,26 @@ import os from "node:os";
 import path from "node:path";
 import test, { before, after } from "node:test";
 import { Redactor } from "./chat-errors";
+import { getDb, type OrbitDb } from "./db";
+import * as schema from "./db/schema";
+import {
+  finishChatReply,
+  listMessages,
+  persistIncoming,
+  planChatWrite,
+  storedAssistantParts,
+  updateMessageText,
+} from "./messages";
 
 type Modules = {
-  db: typeof import("./db").db;
-  schema: typeof import("./db/schema");
-  persistIncoming: typeof import("./messages").persistIncoming;
-  listMessages: typeof import("./messages").listMessages;
-  storedAssistantParts: typeof import("./messages").storedAssistantParts;
-  planChatWrite: typeof import("./messages").planChatWrite;
-  finishChatReply: typeof import("./messages").finishChatReply;
-  updateMessageText: typeof import("./messages").updateMessageText;
+  db: OrbitDb;
+  schema: typeof schema;
+  persistIncoming: typeof persistIncoming;
+  listMessages: typeof listMessages;
+  storedAssistantParts: typeof storedAssistantParts;
+  planChatWrite: typeof planChatWrite;
+  finishChatReply: typeof finishChatReply;
+  updateMessageText: typeof updateMessageText;
 };
 
 let mods: Modules;
@@ -26,24 +36,21 @@ after(() => {
   if (sandbox) fs.rmSync(sandbox, { recursive: true, force: true });
 });
 
-before(async () => {
+before(() => {
   const repo = process.cwd();
   sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-messages-"));
   fs.cpSync(path.join(repo, "drizzle"), path.join(sandbox, "drizzle"), { recursive: true });
   process.chdir(sandbox);
 
-  const dbModule = await import("./db");
-  const schema = await import("./db/schema");
-  const messageModule = await import("./messages");
   mods = {
-    db: dbModule.db,
+    db: getDb(),
     schema,
-    persistIncoming: messageModule.persistIncoming,
-    listMessages: messageModule.listMessages,
-    storedAssistantParts: messageModule.storedAssistantParts,
-    planChatWrite: messageModule.planChatWrite,
-    finishChatReply: messageModule.finishChatReply,
-    updateMessageText: messageModule.updateMessageText,
+    persistIncoming,
+    listMessages,
+    storedAssistantParts,
+    planChatWrite,
+    finishChatReply,
+    updateMessageText,
   };
 
   const now = new Date();

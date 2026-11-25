@@ -1,25 +1,16 @@
 import assert from "node:assert/strict";
-import test, { before } from "node:test";
+import test, { after } from "node:test";
+import { getDb } from "../db";
+import * as schedule from "./schedule";
 
 delete process.env.ORBIT_OLLAMA_URL;
 delete process.env.ORBIT_DREAM_HOUR;
 
-type ScheduleModule = typeof import("./schedule");
-
-let schedule: ScheduleModule | undefined;
-let importError = "";
-
-before(async () => {
-  try {
-    schedule = await import("./schedule");
-  } catch (error) {
-    importError = error instanceof Error ? error.message : String(error);
-  }
+after(() => {
+  getDb().$client.close();
 });
 
 function requireSchedule() {
-  assert.equal(importError, "", `dream schedule is missing: ${importError}`);
-  if (!schedule) throw new Error("dream schedule is missing");
   return schedule;
 }
 
@@ -135,7 +126,7 @@ test("local midnight stays on that calendar date when the clocks change", () => 
   }
 });
 
-test("maybeDream reads tonight's row", async () => {
+test("maybeDream reads tonight's row", () => {
   const { maybeDream, localStamp } = requireSchedule();
   const now = new Date();
   now.setHours(3, 5, 0, 0);
@@ -143,9 +134,8 @@ test("maybeDream reads tonight's row", async () => {
   early.setHours(1, 5, 0, 0);
   assert.equal(maybeDream(early), false);
   assert.equal(maybeDream(now), true);
-  const { db } = await import("../db");
   const date = localStamp(now, Intl.DateTimeFormat().resolvedOptions().timeZone).date;
-  db.$client
+  getDb().$client
     .prepare(
       `INSERT INTO memory_runs (
          date, state, started_at, finished_at, owner, lease_until, chat_ids, done_chat_ids, retry_chat_ids, added, merged, error

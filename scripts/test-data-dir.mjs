@@ -1,6 +1,6 @@
 // Preloaded into each test file's own process by scripts/test.mjs, before the file
-// imports anything. src/lib/db opens ORBIT_DATA_DIR when it loads, so the directory
-// has to exist by then. A variable set once in the runner would be shared by every file.
+// imports anything, so every test file that calls getDb() or getAuth() gets its own
+// temporary directory. A variable set once in the runner would be shared by every file.
 // The directory goes inside the runner's ORBIT_TEST_ROOT, which the runner removes
 // even when this process is killed. Without the runner it goes in the OS temp directory.
 import fs from "node:fs";

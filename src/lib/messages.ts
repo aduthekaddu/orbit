@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { UIMessage } from "ai";
 import type { Redactor } from "./chat-errors";
 import { replaceTextPart, replaceTextParts } from "./chat-parts";
-import { db } from "./db";
+import { getDb } from "./db";
 import { assistantHasVisiblePart } from "./genui/spec";
 import { chats, messages } from "./db/schema";
 import { isPath, pathTo, toRepository, type StoredMessage } from "./chat-tree";
@@ -47,6 +47,7 @@ export function searchTextFromParts(parts: unknown): string {
 }
 
 export function ensureChat(id: string, userId: string) {
+  const db = getDb();
   const existing = db.select().from(chats).where(eq(chats.id, id)).get();
   if (existing) {
     if (existing.userId !== userId) return null;
@@ -75,6 +76,7 @@ export function chatTitle(text: string): string {
 }
 
 export function touchChat(id: string, title?: string) {
+  const db = getDb();
   const existing = db.select().from(chats).where(eq(chats.id, id)).get();
   if (!existing) return;
   const clean = title ? chatTitle(title) : "";
@@ -83,18 +85,18 @@ export function touchChat(id: string, title?: string) {
 }
 
 export function storedMessageCount(chatId: string): number {
-  const row = db.$client.prepare("select count(*) as n from messages where chat_id = ?").get(chatId) as { n: number };
+  const row = getDb().$client.prepare("select count(*) as n from messages where chat_id = ?").get(chatId) as { n: number };
   return row.n;
 }
 
 export function storedMessageIds(chatId: string): Set<string> {
-  const rows = db.select({ id: messages.id }).from(messages).where(eq(messages.chatId, chatId)).all();
+  const rows = getDb().select({ id: messages.id }).from(messages).where(eq(messages.chatId, chatId)).all();
   return new Set(rows.map((row) => row.id));
 }
 
 export function replaceFallbackTitle(chatId: string, fallback: string, title: string) {
   if (!title || title === fallback) return;
-  db.update(chats).set({ title }).where(and(eq(chats.id, chatId), eq(chats.title, fallback))).run();
+  getDb().update(chats).set({ title }).where(and(eq(chats.id, chatId), eq(chats.title, fallback))).run();
 }
 
 // The search text joins parts and strips terminal codes, which can spell a credential, so it is masked after.
@@ -111,6 +113,7 @@ function insertMessage(
   parentId: string | null,
   redact?: Redactor,
 ) {
+  const db = getDb();
   if (db.select().from(messages).where(eq(messages.id, message.id)).get()) return false;
   if (!db.select().from(chats).where(eq(chats.id, chatId)).get()) return false;
   const parent = parentId ? db.select().from(messages)
@@ -131,6 +134,7 @@ export type IncomingMessage = { id: string; role: string; parts?: unknown };
 export type WriteResult = "ok" | "cross-chat" | "stale";
 
 export function persistIncoming(chatId: string, incoming: IncomingMessage[]): WriteResult {
+  const db = getDb();
   return db.transaction(() => {
     const rows = db.select({
       id: messages.id,
@@ -180,7 +184,7 @@ export function persistIncoming(chatId: string, incoming: IncomingMessage[]): Wr
 type SavedText = { content: string; parts: string };
 
 function savedText(chatId: string, id: string): SavedText | undefined {
-  return db.select({ content: messages.content, parts: messages.parts }).from(messages)
+  return getDb().select({ content: messages.content, parts: messages.parts }).from(messages)
     .where(and(eq(messages.id, id), eq(messages.chatId, chatId))).get();
 }
 
@@ -206,6 +210,7 @@ export function planChatWrite(
   trigger?: string,
   editMessageId?: string,
 ): ChatWritePlan {
+  const db = getDb();
   return db.transaction(() => {
     if (editMessageId) {
       const tree = storedMessages(chatId);
@@ -241,6 +246,7 @@ function unchanged(row: SavedText | undefined, copy: SavedText) {
 /** Saves a reply with a visible part, unless a row its plan copied has changed. Returns whether it saved. */
 export function finishChatReply(plan: ReplyPlan, parts: unknown, redact?: Redactor): boolean {
   if (!assistantHasVisiblePart(parts)) return false;
+  const db = getDb();
   return db.transaction(() => {
     if (!unchanged(savedText(plan.chatId, plan.prompt.id), plan.prompt.saved)) return false;
     if (!plan.continues) return insertMessage(plan.chatId, { id: plan.id, role: "assistant", parts }, plan.prompt.id, redact);
@@ -253,6 +259,7 @@ export function finishChatReply(plan: ReplyPlan, parts: unknown, redact?: Redact
 
 export function updateMessageText(chatId: string, messageId: string, text: string, partIndex?: number) {
   if (text.trim() === "") return false;
+  const db = getDb();
   const row = db
     .select()
     .from(messages)
@@ -270,7 +277,7 @@ export function updateMessageText(chatId: string, messageId: string, text: strin
 }
 
 function storedMessages(chatId: string): StoredMessage[] {
-  const rows = db.select({
+  const rows = getDb().select({
     id: messages.id,
     parentId: messages.parentId,
     role: messages.role,
@@ -289,7 +296,7 @@ function storedMessages(chatId: string): StoredMessage[] {
 // The chat route replaces incoming assistant parts with these so a client copy cannot overwrite a saved reply.
 export function storedAssistantParts(chatId: string, ids: string[]): Map<string, UIMessage["parts"]> {
   if (ids.length === 0) return new Map();
-  const rows = db.select({ id: messages.id, parts: messages.parts })
+  const rows = getDb().select({ id: messages.id, parts: messages.parts })
     .from(messages)
     .where(and(eq(messages.chatId, chatId), eq(messages.role, "assistant"), inArray(messages.id, ids)))
     .all();
@@ -301,12 +308,12 @@ export function listMessages(chatId: string): UIMessage[] {
 }
 
 export function messageRepository(chatId: string) {
-  const chat = db.select().from(chats).where(eq(chats.id, chatId)).get();
+  const chat = getDb().select().from(chats).where(eq(chats.id, chatId)).get();
   return toRepository(storedMessages(chatId), chat?.headId ?? null);
 }
 
 export function listChats(userId: string) {
-  return db
+  return getDb()
     .select({ id: chats.id, title: chats.title, updatedAt: chats.updatedAt })
     .from(chats)
     .where(eq(chats.userId, userId))
@@ -320,7 +327,7 @@ export function listChats(userId: string) {
 }
 
 export function getChatForUser(id: string, userId: string) {
-  const chat = db.select().from(chats).where(eq(chats.id, id)).get();
+  const chat = getDb().select().from(chats).where(eq(chats.id, id)).get();
   if (!chat || chat.userId !== userId) return null;
   return chat;
 }
@@ -328,6 +335,6 @@ export function getChatForUser(id: string, userId: string) {
 export function createChat(userId: string) {
   const id = crypto.randomUUID();
   const now = new Date();
-  db.insert(chats).values({ id, userId, title: "New chat", createdAt: now, updatedAt: now }).run();
+  getDb().insert(chats).values({ id, userId, title: "New chat", createdAt: now, updatedAt: now }).run();
   return { id };
 }

@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { db } from "../db";
+import { getDb } from "../db";
 import { memories } from "../db/schema";
 import { toMatchQuery, toOrMatchQuery } from "../search";
 
@@ -82,7 +82,7 @@ export function cleanMemoryText(text: string): string {
 }
 
 export function memoryCount(): number {
-  return (db.$client.prepare("SELECT count(*) AS n FROM memories").get() as { n: number }).n;
+  return (getDb().$client.prepare("SELECT count(*) AS n FROM memories").get() as { n: number }).n;
 }
 
 export function memoryJson(memory: MemoryView) {
@@ -100,12 +100,13 @@ export function memoryJson(memory: MemoryView) {
 }
 
 export function getMemory(id: string): MemoryView | null {
-  const row = db.$client.prepare(`${memorySelect} WHERE memories.id = ?`).get(id) as MemoryRow | undefined;
+  const row = getDb().$client.prepare(`${memorySelect} WHERE memories.id = ?`).get(id) as MemoryRow | undefined;
   return row ? toMemory(row) : null;
 }
 
 export function listMemories(query = ""): MemoryView[] {
   const trimmed = query.trim();
+  const db = getDb();
   if (!trimmed) {
     return (db.$client.prepare(`${memorySelect} ORDER BY memories.created_at DESC`).all() as MemoryRow[]).map(toMemory);
   }
@@ -129,7 +130,7 @@ export function listMemories(query = ""): MemoryView[] {
 }
 
 export function listUnembedded(): { rowid: number; text: string }[] {
-  return db.$client
+  return getDb().$client
     .prepare(
       `SELECT memories.rowid AS rowid, memories.text AS text
        FROM memories
@@ -141,10 +142,11 @@ export function listUnembedded(): { rowid: number; text: string }[] {
 }
 
 export function writeVectors(rows: { rowid: number; text: string; vector: number[] }[]) {
-  const current = db.$client.prepare("SELECT text AS text FROM memories WHERE rowid = cast(? AS integer)");
-  const remove = db.$client.prepare("DELETE FROM memories_vec WHERE rowid = cast(? AS integer)");
-  const insert = db.$client.prepare("INSERT INTO memories_vec(rowid, embedding) VALUES (cast(? AS integer), ?)");
-  const run = db.$client.transaction((items: { rowid: number; text: string; vector: number[] }[]) => {
+  const client = getDb().$client;
+  const current = client.prepare("SELECT text AS text FROM memories WHERE rowid = cast(? AS integer)");
+  const remove = client.prepare("DELETE FROM memories_vec WHERE rowid = cast(? AS integer)");
+  const insert = client.prepare("INSERT INTO memories_vec(rowid, embedding) VALUES (cast(? AS integer), ?)");
+  const run = client.transaction((items: { rowid: number; text: string; vector: number[] }[]) => {
     for (const item of items) {
       const row = current.get(item.rowid) as { text: string } | undefined;
       if (!row || row.text !== item.text) continue;
@@ -160,7 +162,7 @@ export function textMatchIds(query: string, limit = 20): string[] {
   const match = toOrMatchQuery(query.trim());
   if (!match) return [];
   try {
-    const rows = db.$client
+    const rows = getDb().$client
       .prepare(
         `SELECT memories.id AS id
          FROM memories_fts
@@ -182,7 +184,7 @@ export const MAX_VECTOR_DISTANCE = 0.97;
 
 export function vectorMatchIds(vector: number[], limit = 20): string[] {
   const blob = Buffer.from(new Float32Array(vector).buffer);
-  const rows = db.$client
+  const rows = getDb().$client
     .prepare(
       `SELECT memories.id AS id, distance
        FROM memories_vec
@@ -197,8 +199,9 @@ export function vectorMatchIds(vector: number[], limit = 20): string[] {
 
 export function markUsed(ids: string[], at = new Date()) {
   if (ids.length === 0) return;
-  const update = db.$client.prepare("UPDATE memories SET last_used_at = ? WHERE id = ?");
-  const run = db.$client.transaction((memoryIds: string[]) => {
+  const client = getDb().$client;
+  const update = client.prepare("UPDATE memories SET last_used_at = ? WHERE id = ?");
+  const run = client.transaction((memoryIds: string[]) => {
     for (const id of memoryIds) update.run(at.getTime(), id);
   });
   run(ids);
@@ -213,6 +216,7 @@ export function saveMemory(input: {
   const text = cleanMemoryText(input.text);
   const kind = asKind(input.kind);
   const textNorm = text.toLowerCase();
+  const db = getDb();
   const existing = db.select({ id: memories.id }).from(memories).where(eq(memories.textNorm, textNorm)).get();
   if (existing) {
     const memory = getMemory(existing.id);
@@ -249,6 +253,7 @@ export function updateMemory(id: string, input: { text: string; kind: MemoryKind
   const text = cleanMemoryText(input.text);
   const kind = asKind(input.kind);
   const textNorm = text.toLowerCase();
+  const db = getDb();
   const current = db.$client.prepare("SELECT rowid AS rowid, text AS text FROM memories WHERE id = ?").get(id) as
     | { rowid: number; text: string }
     | undefined;
@@ -265,6 +270,7 @@ export function updateMemory(id: string, input: { text: string; kind: MemoryKind
 }
 
 export function deleteMemory(id: string): boolean {
+  const db = getDb();
   const located = db.$client.prepare("SELECT rowid AS rowid FROM memories WHERE id = ?").get(id) as { rowid: number } | undefined;
   if (!located) return false;
   const clear = db.$client.prepare("DELETE FROM memories_vec WHERE rowid = cast(? AS integer)");

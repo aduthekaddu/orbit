@@ -1,26 +1,22 @@
 import assert from "node:assert/strict";
-import test, { before } from "node:test";
+import test, { after, before } from "node:test";
 import { eq } from "drizzle-orm";
+import { getDb, type OrbitDb } from "./db";
+import * as schema from "./db/schema";
+import * as messages from "./messages";
+import * as search from "./search";
 
-type SearchModule = typeof import("./search");
-type MessageModule = typeof import("./messages");
-type DbModule = typeof import("./db");
-type SchemaModule = typeof import("./db/schema");
+let db: OrbitDb;
 
-let search: SearchModule;
-let messages: MessageModule;
-let db: DbModule["db"];
-let schema: SchemaModule;
-
-before(async () => {
-  const dbModule = await import("./db");
-  schema = await import("./db/schema");
-  messages = await import("./messages");
-  search = await import("./search");
-  db = dbModule.db;
+before(() => {
+  db = getDb();
   const now = new Date();
   db.insert(schema.user).values({ id: "u1", name: "One", email: "one@orbit.local" }).run();
   db.insert(schema.chats).values({ id: "c1", userId: "u1", title: "Notes", createdAt: now, updatedAt: now }).run();
+});
+
+after(() => {
+  db?.$client.close();
 });
 
 function part(id: string, role: "user" | "assistant", text: string) {

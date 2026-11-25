@@ -27,7 +27,11 @@ test("fifteen workers can open a fresh data directory without a locked database"
   dirs.push(dir);
   const source = `
 import("./src/lib/db/index.ts").then(
-  () => console.log("READY"),
+  (mod) => {
+    const getDb = mod.getDb ?? mod.default.getDb;
+    getDb();
+    console.log("READY");
+  },
   (error) => {
     console.error(error);
     process.exitCode = 1;

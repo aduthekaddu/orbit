@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { getDb } from "../db";
 import { readEnv } from "../env";
 import type { MemoryRun } from "./run-state";
 
@@ -64,7 +64,7 @@ export function shouldStartDream(input: { now: Date; hour: number; timeZone: str
 }
 
 function readTonight(date: string): Tonight | null {
-  const row = db.$client
+  const row = getDb().$client
     .prepare("SELECT state, started_at AS startedAt, lease_until AS leaseUntil FROM memory_runs WHERE date = ?")
     .get(date) as { state: string; startedAt: number; leaseUntil: number | null } | undefined;
   if (!row || (row.state !== "running" && row.state !== "done" && row.state !== "failed")) return null;

@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { normalizeBaseUrl } from "./base-url";
-import { db } from "./db";
+import { getDb } from "./db";
 import { sandboxEnabled } from "./sandbox/enabled";
 import { settings } from "./db/schema";
 import { resolveGithubMcpUrl } from "./tools/github";
@@ -37,7 +37,7 @@ function asEffort(value: string): ReasoningEffort {
 }
 
 export function getSettings(): SettingsRecord | null {
-  const row = db.select().from(settings).where(eq(settings.id, 1)).get();
+  const row = getDb().select().from(settings).where(eq(settings.id, 1)).get();
   if (!row) return null;
   return {
     baseUrl: row.baseUrl,
@@ -92,6 +92,6 @@ export function saveSettings(input: {
     reasoningEffort: input.reasoningEffort,
     updatedAt: new Date(),
   };
-  db.insert(settings).values(values).onConflictDoUpdate({ target: settings.id, set: values }).run();
+  getDb().insert(settings).values(values).onConflictDoUpdate({ target: settings.id, set: values }).run();
   return toPublicSettings(values);
 }

@@ -43,9 +43,13 @@ import("./src/lib/db/migration-lock.ts").then((mod) => {
 });
 `;
 
-const importDbSource = `
+const openDbSource = `
 import("./src/lib/db/index.ts").then(
-  () => console.log("READY"),
+  (mod) => {
+    const getDb = mod.getDb ?? mod.default.getDb;
+    getDb();
+    console.log("READY");
+  },
   (error) => {
     console.error(error);
     process.exitCode = 1;
@@ -175,11 +179,11 @@ test("a directory at the lock database path fails clearly", () => {
   assert.equal(entered, false);
 });
 
-test("an existing 0775 data dir becomes 0700 when the db module starts", { timeout: 30_000 }, async () => {
+test("an existing 0775 data dir becomes 0700 when the database opens", { timeout: 30_000 }, async () => {
   const dir = tempDir("mode");
   fs.chmodSync(dir, 0o775);
 
-  const child = start(importDbSource, { ORBIT_DATA_DIR: dir });
+  const child = start(openDbSource, { ORBIT_DATA_DIR: dir });
   const result = await child.done;
 
   assert.equal(result.code, 0, result.stderr);

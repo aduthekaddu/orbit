@@ -1,40 +1,27 @@
 import assert from "node:assert/strict";
+import http from "node:http";
 import test, { after, before } from "node:test";
+import { getDb } from "../db";
+import * as embed from "./embed";
 import { startMockOllama } from "./ollama-harness";
+import * as recall from "./recall";
+import * as store from "./store";
 
 delete process.env.ORBIT_OLLAMA_URL;
 
-type RecallModule = typeof import("./recall");
-type StoreModule = typeof import("./store");
-type EmbedModule = typeof import("./embed");
-
-let recall: RecallModule | undefined;
-let store: StoreModule | undefined;
-let embed: EmbedModule | undefined;
-let importError = "";
 let mock: { url: string; stop: () => Promise<void> } | undefined;
 
 before(async () => {
-  try {
-    recall = await import("./recall");
-    store = await import("./store");
-    embed = await import("./embed");
-  } catch (error) {
-    importError = error instanceof Error ? error.message : String(error);
-  }
-  if (recall && store && embed) {
-    mock = await startMockOllama();
-    process.env.ORBIT_OLLAMA_URL = mock.url;
-  }
+  mock = await startMockOllama();
+  process.env.ORBIT_OLLAMA_URL = mock.url;
 });
 
 after(async () => {
   await mock?.stop();
+  getDb().$client.close();
 });
 
 function modules() {
-  assert.equal(importError, "", `memory recall is missing: ${importError}`);
-  if (!recall || !store || !embed) throw new Error("memory recall is missing");
   return { recall, store, embed };
 }
 
@@ -118,7 +105,6 @@ test("an unrelated question that shares only common words recalls nothing when O
 
 test("recall does not wait out a hung Ollama when text search can answer", async () => {
   const { recall, store } = modules();
-  const http = await import("node:http");
   const saved = store.saveMemory({ text: "The hangrecall token is stored", kind: "fact" });
   const server = http.createServer(() => {});
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));

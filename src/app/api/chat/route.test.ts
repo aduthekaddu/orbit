@@ -8,6 +8,10 @@ import { format } from "node:util";
 import { pathToFileURL } from "node:url";
 import test, { after, before } from "node:test";
 import { startMockMcp, type MockMcp } from "../../../../scripts/qa/mock-mcp.mjs";
+import { getDb } from "@/lib/db";
+import * as schema from "@/lib/db/schema";
+import * as messages from "@/lib/messages";
+import { saveSettings } from "@/lib/settings";
 
 const PROVIDER_KEY = "made-up-provider-key-0001";
 const TAVILY_KEY = "made-up-tavily-key-0002";
@@ -42,10 +46,8 @@ const hooks = registerHooks({
 });
 
 type Route = typeof import("./route");
-type Messages = typeof import("@/lib/messages");
 
 let route: Route;
-let messages: Messages;
 let closeDb: () => void;
 let provider: http.Server;
 let github: MockMcp;
@@ -109,9 +111,7 @@ before(async () => {
   await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
   const port = (provider.address() as { port: number }).port;
 
-  const { db } = await import("@/lib/db");
-  const schema = await import("@/lib/db/schema");
-  const { saveSettings } = await import("@/lib/settings");
+  const db = getDb();
   closeDb = () => db.$client.close();
   const now = new Date();
   db.insert(schema.user).values({ id: USER_ID, name: "Route", email: "route@orbit.local", emailVerified: false, createdAt: now, updatedAt: now }).run();
@@ -124,7 +124,6 @@ before(async () => {
     model: "mock",
     reasoningEffort: "medium",
   });
-  messages = await import("@/lib/messages");
   route = await import("./route");
 });
 

@@ -1,35 +1,26 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import test, { after, before } from "node:test";
+import { getDb } from "../db";
+import * as embed from "./embed";
 import { startMockOllama } from "./ollama-harness";
+import * as store from "./store";
 
 delete process.env.ORBIT_OLLAMA_URL;
 
-type EmbedModule = typeof import("./embed");
-type StoreModule = typeof import("./store");
-
-let embed: EmbedModule | undefined;
-let store: StoreModule | undefined;
-let importError = "";
 let mock: { url: string; stop: () => Promise<void> } | undefined;
 
 before(async () => {
-  try {
-    embed = await import("./embed");
-    store = await import("./store");
-  } catch (error) {
-    importError = error instanceof Error ? error.message : String(error);
-  }
-  if (embed && store) mock = await startMockOllama();
+  mock = await startMockOllama();
 });
 
 after(async () => {
   await mock?.stop();
+  getDb().$client.close();
 });
 
 function modules() {
-  assert.equal(importError, "", `memory embed is missing: ${importError}`);
-  if (!embed || !store || !mock) throw new Error("memory embed is missing");
+  if (!mock) throw new Error("mock ollama is missing");
   return { embed, store, mock };
 }
 
