@@ -1,5 +1,5 @@
 {
-  "src/app/api/chat/route.ts POST": "f3d3cdf4b251276e6012c2bbd333de7bcf402d69a4ab24fd94de8312055bf27d",
+  "src/app/api/chat/route.ts POST": "137b21c2ab9963f82b4f003c88d0e611b451820597dae7c7f522614547a310c4",
   "src/lib/chat-parts.ts replaceTextParts": "065af95baa15a5abefb0ef7912537991ec768de615b08102da21958ca443b309",
   "src/lib/chat-tree.ts isPath": "6079fdb2e7244ec44b62f930b2a810625f0f50ca50d255b313e6765874b30ca8",
   "src/lib/genui/spec.ts assistantHasVisiblePart": "63b6266e47c3e0ad37fab2719d8cdbbf669635f01defd0f3ae7b6822c74b00ae",
@@ -10,5 +10,5 @@
   "src/lib/messages.ts replyGuard": "0293f2b608a551418ec7315249f0278c027997b1811ddb10981b5ccdd7aa7e75",
   "src/lib/messages.ts shouldSaveReply": "0d9652a67f8232b600d841806cd5e37db715e3a56f7a4afcb727d899b5ba1be3",
   "src/lib/messages.ts updateMessageText": "5c6ecaf2e4f4eb0d7cf1188e5b6d160c336b2a019c4fcc08cea177ed61b2ac33",
-  "src/lib/messages.ts upsertMessage": "a6209d0dd41bba4b8f31c6d0aa0a3a4b418809ef6251fe249b20eeb12f249d6d"
+  "src/lib/messages.ts upsertMessage": "ea721d885f361793ade063483ebc56c83c90788ca1b8776d09ae66f858cc9d62"
 }
