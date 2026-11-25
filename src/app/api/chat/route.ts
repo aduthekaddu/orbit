@@ -8,7 +8,7 @@ import { attachMemoryNotes, quotedMemoryNotes, recall, REMEMBER_INSTRUCTIONS } f
 import { toolsForTurn } from "@/lib/tools";
 import { answerStepFor, CHAT_STEP_LIMIT } from "@/lib/tools/answer-step";
 import { createStoppedRuns } from "@/lib/tools/stopped-runs";
-import { chatTitle, ensureChat, finishChatReply, listMessages, planChatWrite, storedMessageCount, storedMessageIds, textFromParts, touchChat } from "@/lib/messages";
+import { chatTitle, ensureChat, finishChatReply, planChatWrite, storedAssistantParts, storedMessageCount, storedMessageIds, textFromParts, touchChat } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { startChatTitle } from "@/lib/titles";
 import { getSettings } from "@/lib/settings";
@@ -138,11 +138,11 @@ export async function POST(request: Request) {
     });
   }
 
-  const stored = new Map(listMessages(chat.id).map((message) => [message.id, message]));
+  const stored = storedAssistantParts(chat.id, incoming.filter((message) => message.role === "assistant").map((message) => message.id));
   const uiMessages = incoming.map((message) => ({
     id: message.id,
     role: message.role,
-    parts: (message.role === "assistant" ? stored.get(message.id)?.parts ?? message.parts ?? [] : message.parts ?? []) as UIMessage["parts"],
+    parts: (message.role === "assistant" ? stored.get(message.id) ?? message.parts ?? [] : message.parts ?? []) as UIMessage["parts"],
   })) as UIMessage[];
 
   let closeTools = async () => {};
