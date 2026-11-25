@@ -1,0 +1,22 @@
+.agents/skills/verify-orbit/features/browse.md
+  h_9f68edf4527855 147,152,154
+.agents/skills/verify-orbit/scenarios/auth-submit.mjs
+  h_9f68edf4527855 20,22,33-36,38-55,68-81
+src/components/auth/auth-form.tsx
+  h_9f68edf4527855 8-9,17,21
+src/lib/auth-submit.test.ts
+  h_9f68edf4527855 3-4,9-10,18,35-40,44-57
+src/lib/auth-submit.ts
+  h_9f68edf4527855 1,6,10-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0e2029b987c8d9a48efd3733d74ff14f8a554cc7",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
