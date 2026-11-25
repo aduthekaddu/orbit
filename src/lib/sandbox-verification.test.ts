@@ -4,7 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
-const providerEnvironment = { ORBIT_API_KEY: "test-key-not-real", ORBIT_BASE_URL: "http://127.0.0.1:3299/v1", ORBIT_MODEL: "mock-genui" };
+const providerEnvironment = { ORBIT_API_KEY: "test-key-not-real", ORBIT_BASE_URL: "https://provider.invalid/v1", ORBIT_MODEL: "mock-genui" };
 const previousEnvironment = Object.fromEntries(Object.keys(providerEnvironment).map((key) => [key, process.env[key]]));
 test.before(() => Object.assign(process.env, providerEnvironment));
 test.after(() => {
@@ -46,7 +46,7 @@ async function checkHashScenario(program: Program, result: { exitCode?: number; 
     waitForFunction: async () => {},
   };
   const { default: sandboxReal } = await import(scenarioUrl);
-  await sandboxReal({ page, origin: "http://127.0.0.1:3210", step: (name: string, ok: boolean) => checks.set(name, ok), shot: async () => {} });
+  await sandboxReal({ page, origin: "http://orbit.invalid", step: (name: string, ok: boolean) => checks.set(name, ok), shot: async () => {} });
   return { prompt, checks };
 }
 

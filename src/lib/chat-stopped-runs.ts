@@ -1,5 +1,5 @@
 import type { UIMessage } from "ai";
-import { hasStoppedCodeOutput } from "./sandbox/spec";
+import { toolRunEnd } from "./tools/run-status";
 
 type RunPart = { type: "tool-run_code"; toolCallId?: string; state?: string; output?: unknown };
 
@@ -29,7 +29,9 @@ export function restoreStoppedRuns(live: UIMessage[], saved: UIMessage): UIMessa
   const results = new Map<string, unknown>();
   for (const part of saved.parts) {
     const run = asRunPart(part);
-    if (run?.toolCallId && run.state === "output-available" && hasStoppedCodeOutput(run.output)) results.set(run.toolCallId, run.output);
+    if (!run?.toolCallId || run.state !== "output-available") continue;
+    const end = toolRunEnd({ state: "output-available", output: run.output }, true, "run_code");
+    if (end.status === "cancelled" && end.saved !== undefined) results.set(run.toolCallId, end.saved);
   }
   if (results.size === 0) return live;
   let changed = false;

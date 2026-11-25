@@ -41,7 +41,7 @@ node .agents/skills/verify-orbit/verify.mjs browse sandbox-unicode
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
-`sandbox-stopped` saves the runner's stopped error through `upsertMessage` and checks Cancelled before and after reload. `sandbox-tool-error` saves a framework validation error and checks that its reason survives reload.
+`sandbox-stopped` saves the runner's stopped error through `planChatWrite` and `finishChatReply` and checks Cancelled before and after reload. `sandbox-tool-error` saves a framework validation error and checks that its reason survives reload.
 
 `sandbox-scroll` saves real Docker output near the output limit. Require bounded source, stdout, stderr, and error areas with their last lines reachable by scrolling. It checks keyboard access, horizontal scrolling, and page width on desktop and at 390 pixels.
 

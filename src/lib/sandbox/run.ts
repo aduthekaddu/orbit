@@ -4,6 +4,7 @@ import { StringDecoder } from "node:string_decoder";
 import { z } from "zod";
 import { sandboxOwner } from "./owner.mjs";
 import { containerSpec, RUN_TIMEOUT_SECONDS, type RunCodeInput, type RunCodeOutput } from "./spec";
+import { STOP_MARKERS } from "../tools/run-status";
 
 const OUTPUT_LIMIT = 65_536;
 const RUN_TIMEOUT_MS = RUN_TIMEOUT_SECONDS * 1000;
@@ -52,7 +53,7 @@ export class RunStopped extends Error {
   readonly output: RunCodeOutput;
 
   constructor(output: RunCodeOutput) {
-    super("Code run was stopped");
+    super(STOP_MARKERS.codeRunStopped);
     this.name = "AbortError";
     this.output = output;
   }

@@ -6,10 +6,10 @@ export default async function sandboxToolError({ page, origin, step, shot }) {
   const { id } = await (await page.request.post(`${origin}/api/chats`)).json();
   const repo = fileURLToPath(new URL("../../../..", import.meta.url));
   const saved = spawnSync(process.execPath, ["--require", "tsx/cjs", "-e", `
-    const { upsertMessage } = require(${JSON.stringify(`${repo}/src/lib/messages.ts`)});
+    const { finishChatReply, planChatWrite } = require(${JSON.stringify(`${repo}/src/lib/messages.ts`)});
     const chat = process.argv[1];
-    upsertMessage(chat, { id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: "Run Ruby code." }] });
-    if (!upsertMessage(chat, { id: crypto.randomUUID(), role: "assistant", parts: [{ type: "tool-run_code", toolCallId: "invalid-code", state: "output-error", input: { language: "ruby", code: "puts 1" }, errorText: "Unsupported language. Use Python or JavaScript." }] })) process.exit(1);
+    const plan = planChatWrite(chat, [{ id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: "Run Ruby code." }] }]);
+    if ("error" in plan || !finishChatReply(plan, [{ type: "tool-run_code", toolCallId: "invalid-code", state: "output-error", input: { language: "ruby", code: "puts 1" }, errorText: "Unsupported language. Use Python or JavaScript." }])) process.exit(1);
   `, id], fixtureProcessOptions(repo));
   if (saved.status !== 0) throw new Error("could not save the framework error fixture");
   await page.goto(`${origin}/c/${id}`);

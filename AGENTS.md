@@ -13,7 +13,7 @@ Orbit is a self-hosted chat app for one user: Next.js App Router, the AI SDK, as
 - Secrets stay on the server. Pass keys through the environment. Never print, log, or commit one. `GET /api/settings` returns `keySet` and never a key.
 - Routes parse request bodies, queries, and path parameters with zod schemas built from `r` in `src/lib/route-schema.ts`. A route never imports `zod`, and every string and list has a limit. A chat route also caps the body size before it parses. Messages a chat already stores keep working: only content a request adds is held to the message limits. Code behind a route trusts its types.
 - Browser code sends requests with `requestJson` in `src/lib/request-json.ts`, which needs an `onFailed` handler. Each failure shows on screen.
-- Message writes go through `planChatWrite` and `upsertMessage` in `src/lib/messages.ts`.
+- Message writes go through `planChatWrite` and `finishChatReply` in `src/lib/messages.ts`. A reply is saved only with the `ReplyPlan` that `planChatWrite` returned.
 - For a schema change, edit `src/lib/db/schema.ts`, then run `npm run db:generate`. FTS5 and `vec0` tables need `npx drizzle-kit generate --custom`.
 - Colors and sizes come from the tokens in `src/app/globals.css`. UI copy has no taglines, helper text, or secondary labels.
 - verify-orbit owns the port set by `ORBIT_VERIFY_PORT` on `127.0.0.1` during a drive, default `3210`. Stop only processes you started.
