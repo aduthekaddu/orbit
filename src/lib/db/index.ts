@@ -19,10 +19,10 @@ fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 fs.chmodSync(dataDir, 0o700);
 
 const dbPath = path.join(dataDir, "orbit.db");
-const sqlite = new Database(dbPath);
+const sqlite = new Database(dbPath, { timeout: 5000 });
+sqlite.pragma("busy_timeout = 5000");
 sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("foreign_keys = ON");
-sqlite.pragma("busy_timeout = 5000");
 sqliteVec.load(sqlite);
 // Migration 0004 calls this to clean saved code output the way new saves do.
 sqlite.function("orbit_clean_output", { deterministic: true }, (text) => (typeof text === "string" ? stripTerminalControls(text) : null));

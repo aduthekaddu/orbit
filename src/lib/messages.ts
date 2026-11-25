@@ -132,22 +132,41 @@ export type WriteResult = "ok" | "cross-chat" | "stale";
 
 export function persistIncoming(chatId: string, incoming: IncomingMessage[]): WriteResult {
   return db.transaction(() => {
-    const rows = db.select().from(messages).where(eq(messages.chatId, chatId)).all();
+    const rows = db.select({
+      id: messages.id,
+      parentId: messages.parentId,
+      role: messages.role,
+    }).from(messages).where(eq(messages.chatId, chatId)).all();
     const byId = new Map(rows.map((row) => [row.id, row]));
     const ids = incoming.map((message) => message.id);
-    const referenced = ids.length ? db.select().from(messages).where(inArray(messages.id, ids)).all() : [];
+    const referenced = ids.length
+      ? db.select({ id: messages.id, chatId: messages.chatId }).from(messages).where(inArray(messages.id, ids)).all()
+      : [];
     if (referenced.some((row) => row.chatId !== chatId)) return "cross-chat";
     const path = incoming.filter((message) => byId.has(message.id) ||
       message.role !== "assistant" || assistantHasVisiblePart(message.parts));
     const tail = path.at(-1);
     const prefix = tail && !byId.has(tail.id) && tail.role === "user" ? path.slice(0, -1) : path;
     if (!isPath(rows, prefix)) return "stale";
+    const userIds = path.flatMap((message) => {
+      const saved = byId.get(message.id);
+      return saved?.role === "user" ? [message.id] : [];
+    });
+    const bodies = userIds.length
+      ? db.select({ id: messages.id, content: messages.content, parts: messages.parts })
+        .from(messages)
+        .where(and(eq(messages.chatId, chatId), inArray(messages.id, userIds)))
+        .all()
+      : [];
+    const bodyById = new Map(bodies.map((row) => [row.id, row]));
     for (const message of path) {
       const saved = byId.get(message.id);
       if (!saved) {
         if (message !== tail || message.role !== "user" || !Array.isArray(message.parts)) return "stale";
-      } else if (saved.role !== message.role || (saved.role === "user" && message.parts &&
-        (saved.content !== searchTextFromParts(message.parts) || saved.parts !== JSON.stringify(message.parts)))) {
+      } else if (saved.role !== message.role || (saved.role === "user" && message.parts && (() => {
+        const body = bodyById.get(message.id);
+        return !body || body.content !== searchTextFromParts(message.parts) || body.parts !== JSON.stringify(message.parts);
+      })())) {
         return "stale";
       }
     }
@@ -251,7 +270,12 @@ export function updateMessageText(chatId: string, messageId: string, text: strin
 }
 
 function storedMessages(chatId: string): StoredMessage[] {
-  const rows = db.select().from(messages).where(eq(messages.chatId, chatId))
+  const rows = db.select({
+    id: messages.id,
+    parentId: messages.parentId,
+    role: messages.role,
+    parts: messages.parts,
+  }).from(messages).where(eq(messages.chatId, chatId))
     .orderBy(asc(messages.createdAt), sql`rowid`).all();
   return rows.map((row) => ({
     id: row.id,
@@ -259,6 +283,17 @@ function storedMessages(chatId: string): StoredMessage[] {
     role: row.role as "user" | "assistant",
     parts: JSON.parse(row.parts) as UIMessage["parts"],
   }));
+}
+
+// Parts of stored assistant messages in this chat whose ids were sent on this turn.
+// The chat route replaces incoming assistant parts with these so a client copy cannot overwrite a saved reply.
+export function storedAssistantParts(chatId: string, ids: string[]): Map<string, UIMessage["parts"]> {
+  if (ids.length === 0) return new Map();
+  const rows = db.select({ id: messages.id, parts: messages.parts })
+    .from(messages)
+    .where(and(eq(messages.chatId, chatId), eq(messages.role, "assistant"), inArray(messages.id, ids)))
+    .all();
+  return new Map(rows.map((row) => [row.id, JSON.parse(row.parts) as UIMessage["parts"]]));
 }
 
 export function listMessages(chatId: string): UIMessage[] {

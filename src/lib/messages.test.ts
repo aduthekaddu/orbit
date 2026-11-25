@@ -10,6 +10,7 @@ type Modules = {
   schema: typeof import("./db/schema");
   persistIncoming: typeof import("./messages").persistIncoming;
   listMessages: typeof import("./messages").listMessages;
+  storedAssistantParts: typeof import("./messages").storedAssistantParts;
   planChatWrite: typeof import("./messages").planChatWrite;
   finishChatReply: typeof import("./messages").finishChatReply;
   updateMessageText: typeof import("./messages").updateMessageText;
@@ -39,6 +40,7 @@ before(async () => {
     schema,
     persistIncoming: messageModule.persistIncoming,
     listMessages: messageModule.listMessages,
+    storedAssistantParts: messageModule.storedAssistantParts,
     planChatWrite: messageModule.planChatWrite,
     finishChatReply: messageModule.finishChatReply,
     updateMessageText: messageModule.updateMessageText,
@@ -222,4 +224,15 @@ test("a continued reply's parts and search text also carry no stored credential"
     { type: "text", text: key.slice(9) },
     { type: "text", text: " and [redacted]" },
   ]);
+});
+
+test("storedAssistantParts returns the stored parts for incoming assistant ids in that chat", () => {
+  const user = message("ap-u", "user", "run this");
+  const assistant = message("ap-a", "assistant", "result");
+  reply("c2", [user], assistant);
+  const all = mods.listMessages("c2");
+  const expected = new Map(all.filter((row) => row.role === "assistant" && row.id === "ap-a").map((row) => [row.id, row.parts]));
+  assert.deepEqual(mods.storedAssistantParts("c2", ["ap-a", "missing"]), expected);
+  assert.deepEqual(mods.storedAssistantParts("c1", ["ap-a"]), new Map());
+  assert.deepEqual(mods.storedAssistantParts("c2", []), new Map());
 });
