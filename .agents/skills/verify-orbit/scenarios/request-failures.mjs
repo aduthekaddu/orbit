@@ -1,5 +1,11 @@
+import { eventually } from "../../../../src/lib/eventually.mjs";
+
 // Fails each browser request with page.route and checks what the screen shows.
+
 const shows = (locator, timeout = 5_000) => locator.waitFor({ timeout }).then(() => true, () => false);
+// locator.waitFor only accepts attached, detached, visible, or hidden. Wait for isDisabled().
+const disabled = (locator, timeoutMs = 5_000) =>
+  eventually(() => locator.isDisabled(), (isDisabled) => isDisabled, { timeoutMs, what: "the control to be disabled" }).then(() => true, () => false);
 
 export default async function requestFailures({ page, origin, step, shot }) {
   const pageErrors = [];
@@ -74,7 +80,7 @@ export default async function requestFailures({ page, origin, step, shot }) {
     else route.continue();
   });
   await newChat.click();
-  const sawPending = await newChat.waitFor({ state: "disabled", timeout: 5_000 }).then(() => true, () => false);
+  const sawPending = await disabled(newChat);
   await page.goto(`${origin}/settings`);
   await page.getByRole("button", { name: "Save", exact: true }).waitFor({ timeout: 10_000 });
   await Promise.all(heldCreates.splice(0).map((route) => route.continue().catch(() => {})));
@@ -121,7 +127,7 @@ export default async function requestFailures({ page, origin, step, shot }) {
   });
   const saveButton = page.getByRole("button", { name: "Save", exact: true });
   await saveButton.click();
-  const savePending = await saveButton.waitFor({ state: "disabled", timeout: 5_000 }).then(() => true, () => false);
+  const savePending = await disabled(saveButton);
   await page.locator("form").first().evaluate((form) => form.requestSubmit());
   const saveRequests = heldSaves.length;
   await Promise.all(heldSaves.splice(0).map((route) => route.continue().catch(() => {})));
