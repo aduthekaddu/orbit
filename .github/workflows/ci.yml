@@ -28,6 +28,9 @@ jobs:
       fail-fast: false
       matrix:
         node: ["22", "24"]
+    # A self-hosted runner can share one Docker daemon between jobs, so the leftover check sees only this job's containers.
+    env:
+      ORBIT_SANDBOX_OWNER: ci-${{ github.run_id }}-${{ github.run_attempt }}-node${{ matrix.node }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -43,13 +46,16 @@ jobs:
         # in a later change so lint is a required check (part of #145).
         continue-on-error: true
         run: npm run lint -- --format github
+      - name: Check the TLA+ models
+        if: matrix.node == '22'
+        run: scripts/ci/tlc.sh
       - name: Pull the pinned sandbox images
         run: |
           grep -oE '[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[a-f0-9]{64}' src/lib/sandbox/images.ts | sort -u | xargs -n1 docker pull
       - name: Test
         run: scripts/ci/test-with-ollama.sh
       - name: Check that no sandbox container remains
-        run: test -z "$(docker ps -aq --filter label=orbit.sandbox)"
+        run: node scripts/qa/sandbox-leftovers.mjs
       - name: Build
         run: npm run build
 

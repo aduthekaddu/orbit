@@ -76,6 +76,33 @@ PASS clicking Save shows Saved
 
 Screenshot: `save-visible.png`.
 
+### request-failures
+
+Fails each browser request with `page.route`: New chat (HTTP 500, network, a body with no id, an HTTP 500 from the open drawer at 390 pixels, then a held answer with a double click and the shortcut), the settings model list (not JSON, a JSON 400, an HTML 400, network, then real), settings Save and the GitHub check on the network, a GitHub check 400, and a reply edit on the network.
+
+Pass lines:
+
+```
+PASS New chat that gets a 500 shows Could not create chat
+PASS New chat that fails on the network shows Could not create chat
+PASS New chat that gets a body with no id shows Could not create chat and stays put
+PASS New chat that fails from the open mobile drawer shows Could not create chat to screen readers
+PASS a double click and the shortcut during one pending New chat send one request, then open the chat
+PASS a model list that is not JSON shows Failed, not 0 models
+PASS a model list 400 from a bad request shows Failed, not Not checked
+PASS a model list 400 from a proxy shows Failed, not Not checked
+PASS a model list that fails on the network shows Failed
+PASS a model list that loads shows its count
+PASS a settings save that fails on the network shows Could not save
+PASS a GitHub check that fails on the network says GitHub is unavailable.
+PASS a GitHub check that gets a 400 shows the server's error
+PASS the chat has a reply to edit
+PASS a reply edit that fails on the network shows Could not save and keeps the editor
+PASS no failed request raised a page error
+```
+
+Screenshots: `new-chat-500.png`, `new-chat-drawer-500.png`, `new-chat-recovered.png`, `models-unreadable.png`, `settings-save-offline.png`, `github-check-400.png`, `reply-edit-offline.png`.
+
 ### empty-chat
 
 Opens a new chat. Checks the sidebar and palette labels, the placeholder, and the four starters. Clicks **Make a table**. Then it opens the same chat on a 390×844 touch screen and checks the header label.
@@ -114,6 +141,22 @@ PASS session ends after Sign out
 ```
 
 Screenshots: `network-error.png`, `http-error.png`, `signed-out.png`.
+
+### auth-submit
+
+Clears cookies, opens `/login`, fails one sign-in to check that editing clears the error, then stalls navigation to `/` and checks that **Sign in** stays disabled right after success even if a field is edited while navigation is pending, and re-enables when navigation stalls past the reset timeout. Then clears the intercepts and signs in to open a chat.
+
+Pass lines:
+
+```
+PASS editing a field clears a sign-in error
+PASS Sign in stays disabled after success while navigation is pending
+PASS editing a field while navigation is pending keeps Sign in disabled
+PASS Sign in re-enables when navigation stalls
+PASS real sign-in opens a chat
+```
+
+Screenshots: `stalled-disabled.png`, `stalled-recovered.png`, `signed-in.png`.
 
 ### thread-map
 

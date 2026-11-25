@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import test, { before } from "node:test";
-
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-run-source-migration-"));
-process.env.ORBIT_DATA_DIR = dataDir;
 
 type DbModule = typeof import("./index");
 type SchemaModule = typeof import("./schema");

@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- Each code sandbox container carries the label of the Orbit process that started it, and the sweep log line for a removed container names that owner, so two Orbit servers or test runs on one Docker host no longer count each other's containers as their own leftovers. (#184)
 - An artifact preview can no longer load another web page into its frame, so its code cannot send data out in that page's URL. (#132)
 - A chat turn without web search keeps its fifth and last model step for an answer. That step offers only `render_ui` and gets the earlier tool calls as JSON data, so a turn that calls tools on every step no longer ends with tool cards and no reply. (#126)
 - Tab reaches Copy, Edit and Regenerate on earlier messages too, not only on the last reply. With a mouse they still show on hover, and they also show when they take focus. (#125)
@@ -14,6 +15,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - A chat message with a long run of letters no longer blocks Orbit for seconds while it looks up memories. (#115)
 - A memory search no longer waits for an Ollama check. It answers from SQLite alone. The embeddings line on the Memory page updates when the page loads and after a save or delete. (#141)
 - When the sign-out request fails, Sign out stays on the page and shows "Could not sign out". It no longer leaves the chat while the session may still be valid, or fails with no message. (#139)
+- A new chat's title request sends only the first 2,000 characters of the first message, not the whole message. A long paste is no longer sent to the model a second time. (#135)
 - A turn that calls no GitHub tool no longer connects to GitHub, so that reply no longer waits up to 10 seconds for a connection when GitHub is slow or down. A turn that already opened a client still waits for the close. The close request itself still has no deadline. (#136)
 - When Ollama is down, the nightly dream no longer sends chats to the model. The night fails with the Ollama error on `/memory`, and the next night retries those chats. (#121)
 - Markdown images in chat replies and reasoning appear as links that open on click. (#114)
@@ -21,6 +23,14 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - An HTML, SVG or React block in a reply's Thought no longer takes over the reply's Preview, and closing Thought keeps the reply's Preview working. Blocks in Thought have no Preview button. (#137)
 - The command palette says Could not search when a message search fails. It no longer says No results while the search is still running. (#138)
 - `npm run lint` checks the React hook rules `rules-of-hooks` and `exhaustive-deps` in `src/` with oxlint. CI shows the findings but does not fail on them yet. (#145)
+- Unit tests check the dream claim, the chat head, and the branch and search migrations in the shipped code, not in the slice plans. Editing a plan no longer fails `npm test`. (#144)
+- A search hit on an older branch opens that branch through to its newest message, so the hit's reply and later turns stay on screen. Reloading with an artifact preview open keeps those turns visible. A prompt sent from there follows the end of the branch. (#128)
+- A saved Tavily key no longer appears in a chat error, a server log line, or a saved reply. The chat route's model errors are logged without the raw provider response, so a provider that repeats the API key does not put it in the log; the log line keeps the error name and HTTP status unless the error holds a stored key, and then keeps only its label. (#143)
+- New chat shows "Could not create chat" when the request fails, instead of doing nothing or opening `/c/undefined`.
+- Settings shows Failed when the model list answer cannot be read, instead of a green "0 models", and when the model list request is rejected, instead of "No key" or "Not checked".
+- A stopped code run whose saved result cannot be loaded shows "Could not load output" instead of an empty card.
+- A code run shows its result as soon as the program ends, without waiting for Docker to remove the container. Pressing Stop while that removal runs no longer turns a finished run into a stopped one, and a program that exited just before the 10 second limit is no longer reported as timed out or loses its out-of-memory mark. Output that the 10 second limit cut off after the program ended is marked truncated.
+- Sign in and Create account stay disabled after success until the next page opens, so a second click cannot send the form again. If navigation fails or stalls, the button re-enables so you can try again.
 - An interrupted generated view shows Stopped instead of an empty cancelled tool card.
 - Set `ORBIT_VERIFY_PORT` to run verify-orbit on another port when the deployment owns `3210`. The default stays `3210`.
 - Override Drizzle tooling's `@esbuild-kit/core-utils` dependency to use patched `esbuild` 0.25.12, removing GHSA-67mh-4wv8-2f99. (#71)

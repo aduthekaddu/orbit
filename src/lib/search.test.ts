@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import test, { before } from "node:test";
 import { eq } from "drizzle-orm";
-
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-search-"));
-process.env.ORBIT_DATA_DIR = dataDir;
 
 type SearchModule = typeof import("./search");
 type MessageModule = typeof import("./messages");
@@ -157,6 +151,24 @@ test("a hit off the stored head opens that path and leaves the head", () => {
   const head = db.select().from(schema.chats).where(eq(schema.chats.id, "c-branch")).get();
   assert.deepEqual(path, ["u-root", "a-side"]);
   assert.equal(head?.headId, "a-active");
+});
+
+test("a hit in the middle of a branch off the stored head opens the whole branch", () => {
+  const now = new Date();
+  db.insert(schema.chats).values({ id: "c-mid", userId: "u1", title: "Middle", createdAt: now, updatedAt: now }).run();
+  messages.upsertMessage("c-mid", part("m-u1", "user", "first question"), null);
+  messages.upsertMessage("c-mid", part("m-a1", "assistant", "first answer"), "m-u1");
+  messages.upsertMessage("c-mid", part("m-u2", "user", "second question"), "m-a1");
+  messages.upsertMessage("c-mid", part("m-a2", "assistant", "second answer"), "m-u2");
+  messages.upsertMessage("c-mid", part("m-u2b", "user", "middlehit question"), "m-a1");
+  messages.upsertMessage("c-mid", part("m-a2b", "assistant", "middlehit answer"), "m-u2b");
+  messages.upsertMessage("c-mid", part("m-u3b", "user", "later question"), "m-a2b");
+  messages.upsertMessage("c-mid", part("m-a3b", "assistant", "later answer"), "m-u3b");
+  db.update(schema.chats).set({ headId: "m-a2" }).where(eq(schema.chats.id, "c-mid")).run();
+  const path = search.openHitPath("u1", "c-mid", "m-u2b");
+  const head = db.select().from(schema.chats).where(eq(schema.chats.id, "c-mid")).get();
+  assert.deepEqual(path, ["m-u1", "m-a1", "m-u2b", "m-a2b", "m-u3b", "m-a3b"]);
+  assert.equal(head?.headId, "m-a2");
 });
 
 function toolMessage(id: string, run: { stdout?: string; stderr?: string; code?: string }, reply = "Ran it.") {
