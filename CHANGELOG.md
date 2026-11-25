@@ -34,6 +34,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - An interrupted generated view shows Stopped instead of an empty cancelled tool card.
 - Set `ORBIT_VERIFY_PORT` to run verify-orbit on another port when the deployment owns `3210`. The default stays `3210`.
 - The verify-orbit mock provider and the mock Ollama in `scripts/qa/ci-e2e.sh` take a free port from the OS, so two runs on one host no longer collide. Give each run its own `ORBIT_VERIFY_PORT`, outside the OS's automatic port range. verify-orbit refuses one inside it.
+- Cleanup of a leftover previous-format mock record that now names an unrelated process drops the record and still stops the sandbox server. It does not kill that process.
 - Override Drizzle tooling's `@esbuild-kit/core-utils` dependency to use patched `esbuild` 0.25.12, removing GHSA-67mh-4wv8-2f99. (#71)
 - Update Next.js from 16.4.3 to 16.4.6 to fix GHSA-mfr8-8qww-v76h, an information disclosure vulnerability.
 - The server log has an `auth miss` line for each request that reaches Orbit without a valid session. It says whether the browser sent a session cookie and the Access cookie, by name only.

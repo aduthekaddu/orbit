@@ -524,9 +524,10 @@ async function stopMock() {
       } else {
         const legacy = legacyMock(state);
         if (legacy.status === "foreign") {
-          throw new Error(`pid ${legacy.pid} is not the mock provider. Not killing it.`);
-        }
-        if (legacy.status === "running") {
+          // A leftover previous-format record can name a recycled pid. Do not kill that process.
+          // Drop the record so cleanup can still stop the server and sandbox.
+          console.log(`pid ${legacy.pid} is not the mock provider. Not killing it. Dropping the leftover mock record.`);
+        } else if (legacy.status === "running") {
           await stopRunningMock(legacy.mock);
         }
       }
