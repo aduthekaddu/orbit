@@ -4,6 +4,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- A tool call closed by a follow-up message before its saved result arrives now shows Cancelled, not Failed, for every tool, not only a generated view. (#194)
+
 - Settings treats a 200 model list whose JSON is not a model list as a failed connection, not as a green "0 models". A real empty list is still an empty list. (#200)
 
 - A New chat request that finishes after the person has already opened another page no longer navigates them away. A second Settings Save while one is pending is ignored, and the full-reply editor and an inline code-block save for the same message share one lock so an older save cannot overwrite a newer one. (#201)

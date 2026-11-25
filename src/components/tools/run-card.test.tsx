@@ -121,7 +121,7 @@ test("a generated view with a null result keeps header status and body consisten
   assert.doesNotMatch(running, /data-genui-fallback|Stopped/);
 });
 
-test("a rejected generated view keeps Failed, a valid generated view succeeds, and other tools keep Failed on send cancellation", () => {
+test("a rejected generated view keeps Failed, a valid generated view succeeds, and a search closed by a follow-up message is Cancelled", () => {
   const rejected = render({
     toolName: "render_ui",
     args: { root: "card" },
@@ -156,7 +156,7 @@ test("a rejected generated view keeps Failed, a valid generated view succeeds, a
     isError: true,
     status: { type: "complete" },
   });
-  assert.equal(header(otherTool), "Web search|Failed");
+  assert.equal(header(otherTool), "Web search|Cancelled");
 });
 
 test("a GitHub card links an issue and does not render its body", () => {
