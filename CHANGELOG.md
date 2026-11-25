@@ -4,6 +4,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- A New chat request that finishes after the person has already opened another page no longer navigates them away. A second Settings Save while one is pending is ignored, and the full-reply editor and an inline code-block save for the same message share one lock so an older save cannot overwrite a newer one. (#201)
+
 - Saving an empty reply edit is refused, and Save stays disabled while the editor is blank, so a reply cannot be stored with no text. (#189)
 - Memory search, a memory save or delete, and the command palette's message search go through the same request helper as the rest of the app, so a failed request cannot be treated as an empty result. (#185)
 - A memory save or delete during a search keeps the found memories on screen while the search runs again, instead of the list going blank until the new results arrive. (#185)
