@@ -1,0 +1,22 @@
+.agents/skills/verify-orbit/scenarios/memory.mjs
+  h_9f68edf4527855 3,107-112,115-128,130-142
+src/components/memory/memory-list.tsx
+  h_9f68edf4527855 10,129,136-149,151
+src/components/memory/visible-memories.test.ts
+  h_9f68edf4527855 3,13-23
+src/components/memory/visible-memories.ts
+  h_9f68edf4527855 1-5
+src/lib/memory-search-scenario.test.ts
+  h_9f68edf4527855 1-203
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "737de124002e6fbe1d65d166d947026a0b386fd5",
+  "prompts": {},
+  "humans": {
+    "h_9f68edf4527855": {
+      "author": "aduthekaddu <138025602+aduthekaddu@users.noreply.github.com>"
+    }
+  }
+}
