@@ -3,16 +3,16 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test, { before, after } from "node:test";
+import { toUIMessageStream, type UIMessage } from "ai";
 
 type Modules = {
   db: typeof import("./db").db;
   schema: typeof import("./db/schema");
   planChatWrite: typeof import("./messages").planChatWrite;
+  finishChatReply: typeof import("./messages").finishChatReply;
   listMessages: typeof import("./messages").listMessages;
-  upsertMessage: typeof import("./messages").upsertMessage;
-  persistIncoming: typeof import("./messages").persistIncoming;
+  messageRepository: typeof import("./messages").messageRepository;
   updateMessageText: typeof import("./messages").updateMessageText;
-  replyGuard: typeof import("./messages").replyGuard;
 };
 
 let mods: Modules;
@@ -38,11 +38,10 @@ before(async () => {
     db: dbModule.db,
     schema,
     planChatWrite: messageModule.planChatWrite,
+    finishChatReply: messageModule.finishChatReply,
     listMessages: messageModule.listMessages,
-    upsertMessage: messageModule.upsertMessage,
-    persistIncoming: messageModule.persistIncoming,
+    messageRepository: messageModule.messageRepository,
     updateMessageText: messageModule.updateMessageText,
-    replyGuard: messageModule.replyGuard,
   };
 
   const now = new Date();
@@ -61,14 +60,17 @@ before(async () => {
     "c-deleted",
     "c-expected",
     "c-restore",
-    "c-answer-edit",
     "c-reasons",
     "c-stale-reasons",
     "c-invisible",
     "c-invisible-retry",
     "c-retry-edit",
-    "c-head",
     "c-prompt-changed",
+    "c-continued",
+    "c-continued-ok",
+    "c-sdk-id",
+    "c-no-prompt",
+    "c-head",
   ]) {
     mods.db.insert(mods.schema.chats).values({ id, userId: "u1", title: id, createdAt: now, updatedAt: now }).run();
   }
@@ -81,18 +83,40 @@ function message(id: string, role: "user" | "assistant", text: string): Incoming
   return { id, role, parts: [{ type: "text", text }] };
 }
 
-function write(chatId: string, incoming: Incoming[], trigger: Trigger = "submit-message", messageId?: string) {
-  const plan = mods.planChatWrite(chatId, incoming, trigger, messageId);
-  if (!plan || "error" in plan) assert.fail(`write refused: ${plan?.error ?? "null"}`);
-  return plan.responseId;
+function write(chatId: string, incoming: Incoming[], trigger: Trigger = "submit-message") {
+  const plan = mods.planChatWrite(chatId, incoming, trigger);
+  if ("error" in plan) assert.fail(`write refused: ${plan.error}`);
+  return plan;
 }
 
+function finish(plan: ReturnType<typeof write>, text: string) {
+  assert.equal(mods.finishChatReply(plan, [{ type: "text", text }]), true);
+}
+
+// Saves a reply under the stored message replyTo, as POST /api/chat does for a request that sends
+// the path to replyTo and ends in an unsaved assistant message: the reply takes that message's id.
 function answer(chatId: string, id: string, text: string, replyTo: string) {
-  assert.equal(mods.upsertMessage(chatId, message(id, "assistant", text), replyTo), true);
+  const byId = new Map(mods.messageRepository(chatId).messages.map((entry) => [entry.message.id, entry]));
+  const path: Incoming[] = [];
+  for (let at = byId.get(replyTo); at; at = at.parentId ? byId.get(at.parentId) : undefined) path.unshift(at.message);
+  finish(write(chatId, [...path, { id, role: "assistant", parts: [] }]), text);
+}
+
+// The id toUIMessageStream gives the reply when POST /api/chat passes it these messages and plan.
+async function streamedId(incoming: Incoming[], plan: ReturnType<typeof write>) {
+  const stream = new ReadableStream({ start: (controller) => { controller.enqueue({ type: "start" }); controller.close(); } });
+  const originalMessages = incoming.map((entry) => ({ ...entry, parts: entry.parts ?? [] })) as UIMessage[];
+  for await (const chunk of toUIMessageStream({ stream, originalMessages, generateMessageId: () => plan.id })) {
+    if (chunk.type === "start") return chunk.messageId;
+  }
 }
 
 function ids(chatId: string) {
   return mods.listMessages(chatId).map((entry) => entry.id);
+}
+
+function head(chatId: string) {
+  return mods.messageRepository(chatId).headId;
 }
 
 test("a stale tab's prefix keeps newer stored turns", () => {
@@ -129,7 +153,7 @@ test("a regenerate that stores nothing keeps the previous answer", () => {
   write("c-regen", [message("g1", "user", "explain the bug")]);
   answer("c-regen", "g2", "the first answer", "g1");
 
-  assert.notEqual(write("c-regen", [message("g1", "user", "explain the bug")], "regenerate-message"), "g2");
+  assert.notEqual(write("c-regen", [message("g1", "user", "explain the bug")], "regenerate-message").id, "g2");
   assert.deepEqual(ids("c-regen"), ["g1", "g2"]);
 });
 
@@ -154,18 +178,16 @@ test("a stale tab cannot overwrite an answer changed after it loaded", () => {
 // docs/architecture/ChatWrite.edited-prompt.trace, step by step.
 test("a retry's reply is refused after another tab edits its prompt in place", () => {
   // State 1: P is saved, and its first reply stopped before any visible part, so no reply row exists.
-  write("c-prompt-changed", [message("pc1", "user", "before")]);
-  assert.equal(mods.upsertMessage("c-prompt-changed", { id: "pc-empty", role: "assistant", parts: [] }, "pc1"), true);
+  assert.equal(mods.finishChatReply(write("c-prompt-changed", [message("pc1", "user", "before")]), []), false);
   assert.deepEqual(ids("c-prompt-changed"), ["pc1"]);
 
   // State 2, Plan: tab a presses Retry.
-  const responseId = write("c-prompt-changed", [message("pc1", "user", "before")], "regenerate-message");
-  const { expected } = mods.replyGuard("c-prompt-changed", true, responseId, "pc1");
+  const plan = write("c-prompt-changed", [message("pc1", "user", "before")], "regenerate-message");
 
   // State 3, EditPromptInPlace: tab b edits P under its own id. The code refuses that edit now,
   // so the test writes it the way planChatWrite did at fa399a2: delete P, then insert the new text under P's id.
   assert.deepEqual(
-    mods.planChatWrite("c-prompt-changed", [message("pc1", "user", "after")], "submit-message", undefined, "pc1"),
+    mods.planChatWrite("c-prompt-changed", [message("pc1", "user", "after")], "submit-message", "pc1"),
     { error: "invalid-edit" },
   );
   assert.deepEqual(mods.planChatWrite("c-prompt-changed", [message("pc1", "user", "after")]), { error: "stale" });
@@ -175,22 +197,80 @@ test("a retry's reply is refused after another tab edits its prompt in place", (
     .run("pc1", "c-prompt-changed", "after", JSON.stringify([{ type: "text", text: "after" }]), Date.now());
 
   // State 4, Finish: tab a's reply ends. It must not be saved under the edited P.
-  assert.equal(mods.upsertMessage("c-prompt-changed", message(responseId, "assistant", "answer to before"), "pc1", expected), false);
+  assert.equal(mods.finishChatReply(plan, [{ type: "text", text: "answer to before" }]), false);
   assert.deepEqual(ids("c-prompt-changed"), ["pc1"]);
+});
+
+// docs/architecture/ChatWrite.continued-reply.trace, step by step.
+test("a request that continues a saved reply cannot undo an edit made in another tab", () => {
+  // State 1: P and its reply R are saved, and both tabs show them.
+  write("c-continued", [message("cr1", "user", "explain the bug")]);
+  answer("c-continued", "cr2", "first answer", "cr1");
+
+  // State 2, Plan: tab a sends a request that ends in its copy of R. The AI SDK streams the reply
+  // under R's id and appends to R's saved parts.
+  const plan = write("c-continued", [message("cr1", "user", "explain the bug"), message("cr2", "assistant", "first answer")]);
+  assert.equal(plan.id, "cr2");
+
+  // State 3, EditReply: tab b saves an edit of R.
+  assert.equal(mods.updateMessageText("c-continued", "cr2", "edited in tab b"), true);
+
+  // State 4, Finish: tab a's reply ends. It must not replace tab b's edit.
+  mods.finishChatReply(plan, [{ type: "text", text: "first answer" }, { type: "text", text: " and more" }]);
+  assert.deepEqual(mods.listMessages("c-continued").find((entry) => entry.id === "cr2")?.parts, [{ type: "text", text: "edited in tab b" }]);
+  assert.equal(head("c-continued"), "cr2");
+});
+
+test("a request that continues an unchanged saved reply saves the longer reply", () => {
+  write("c-continued-ok", [message("co1", "user", "explain the bug")]);
+  answer("c-continued-ok", "co2", "first answer", "co1");
+
+  const plan = write("c-continued-ok", [message("co1", "user", "explain the bug"), message("co2", "assistant", "first answer")]);
+  assert.equal(mods.finishChatReply(plan, [{ type: "text", text: "first answer" }, { type: "text", text: " and more" }]), true);
+
+  assert.deepEqual(mods.listMessages("c-continued-ok"), [
+    { id: "co1", role: "user", parts: [{ type: "text", text: "explain the bug" }] },
+    { id: "co2", role: "assistant", parts: [{ type: "text", text: "first answer" }, { type: "text", text: " and more" }] },
+  ]);
+  assert.equal(head("c-continued-ok"), "co2");
+});
+
+test("a request with no user message is refused and writes nothing", () => {
+  write("c-no-prompt", [message("np1", "user", "ask")]);
+  answer("c-no-prompt", "np2", "answer", "np1");
+  const before = mods.messageRepository("c-no-prompt");
+
+  assert.deepEqual(mods.planChatWrite("c-no-prompt", [{ id: "np3", role: "assistant", parts: [] }]), { error: "no-prompt" });
+  assert.deepEqual(mods.messageRepository("c-no-prompt"), before);
+});
+
+test("a reply is saved under the id the AI SDK streams it under", async () => {
+  const prompt = message("sid1", "user", "ask");
+  const send = write("c-sdk-id", [prompt]);
+  assert.equal(await streamedId([prompt], send), send.id);
+  finish(send, "answer");
+
+  const saved = message(send.id, "assistant", "answer");
+  assert.equal(await streamedId([prompt, saved], write("c-sdk-id", [prompt, saved])), send.id);
+
+  const unsaved: Incoming = { id: "sid-failed", role: "assistant", parts: [{ type: "reasoning", text: "thinking" }] };
+  const retry = write("c-sdk-id", [prompt, unsaved], "regenerate-message");
+  assert.equal(await streamedId([prompt, unsaved], retry), "sid-failed");
+  assert.equal(retry.id, "sid-failed");
 });
 
 test("a successful regenerate keeps the old answer as a sibling", () => {
   write("c-regen-ok", [message("r1", "user", "one question")]);
   answer("c-regen-ok", "r2", "first answer", "r1");
 
-  const responseId = write("c-regen-ok", [message("r1", "user", "one question")], "regenerate-message", "r2");
-  assert.notEqual(responseId, "r2");
-  answer("c-regen-ok", responseId, "second answer", "r1");
+  const plan = write("c-regen-ok", [message("r1", "user", "one question")], "regenerate-message");
+  assert.notEqual(plan.id, "r2");
+  finish(plan, "second answer");
 
   assert.deepEqual(mods.listMessages("c-regen-ok"), [
     { id: "r1", role: "user", parts: [{ type: "text", text: "one question" }] },
     { id: "r2", role: "assistant", parts: [{ type: "text", text: "first answer" }] },
-    { id: responseId, role: "assistant", parts: [{ type: "text", text: "second answer" }] },
+    { id: plan.id, role: "assistant", parts: [{ type: "text", text: "second answer" }] },
   ]);
 });
 
@@ -204,11 +284,11 @@ test("a regenerate targeted at an earlier answer keeps the later turns", () => {
   ]);
   answer("c-target", "t4", "answer two", "t3");
 
-  const responseId = write("c-target", [message("t1", "user", "one")], "regenerate-message", "t2");
-  assert.notEqual(responseId, "t2");
-  answer("c-target", responseId, "new answer one", "t1");
+  const plan = write("c-target", [message("t1", "user", "one")], "regenerate-message");
+  assert.notEqual(plan.id, "t2");
+  finish(plan, "new answer one");
 
-  assert.deepEqual(ids("c-target").sort(), ["t1", "t2", "t3", "t4", responseId].sort());
+  assert.deepEqual(ids("c-target").sort(), ["t1", "t2", "t3", "t4", plan.id].sort());
   assert.deepEqual(mods.listMessages("c-target")[1], {
     id: "t2",
     role: "assistant",
@@ -257,15 +337,15 @@ test("edit validation names the reason it refused", () => {
     .run();
 
   assert.deepEqual(
-    mods.planChatWrite("c-reasons", [message("q2", "assistant", "bad")], "submit-message", undefined, "q2"),
+    mods.planChatWrite("c-reasons", [message("q2", "assistant", "bad")], "submit-message", "q2"),
     { error: "invalid-edit" },
   );
   assert.deepEqual(
-    mods.planChatWrite("c-reasons", [message("q3", "user", "x")], "submit-message", undefined, "missing"),
+    mods.planChatWrite("c-reasons", [message("q3", "user", "x")], "submit-message", "missing"),
     { error: "invalid-edit" },
   );
   assert.deepEqual(
-    mods.planChatWrite("c-reasons", [message("q3", "user", "x")], "submit-message", undefined, "q3"),
+    mods.planChatWrite("c-reasons", [message("q3", "user", "x")], "submit-message", "q3"),
     { error: "invalid-edit" },
   );
   assert.deepEqual(
@@ -273,7 +353,6 @@ test("edit validation names the reason it refused", () => {
       "c-reasons",
       [message("q1", "user", "one"), message("q2", "assistant", "two"), message("o2", "user", "x")],
       "submit-message",
-      undefined,
       "q3",
     ),
     { error: "cross-chat" },
@@ -283,11 +362,11 @@ test("edit validation names the reason it refused", () => {
 test("an edit keeps the old prompt, reply and later turns", () => {
   write("c-deleted", [message("d1", "user", "first")]);
   answer("c-deleted", "d2", "first answer", "d1");
-  write("c-deleted", [message("d1", "user", "first"), message("d2", "assistant", "first answer"), message("d3", "user", "later")]);
-  const edit = mods.planChatWrite("c-deleted", [message("d-new", "user", "edited")], "submit-message", undefined, "d1");
+  const late = write("c-deleted", [message("d1", "user", "first"), message("d2", "assistant", "first answer"), message("d3", "user", "later")]);
+  const edit = mods.planChatWrite("c-deleted", [message("d-new", "user", "edited")], "submit-message", "d1");
   assert.ok(!("error" in edit));
   assert.deepEqual(ids("c-deleted").sort(), ["d1", "d2", "d3", "d-new"].sort());
-  assert.equal(mods.upsertMessage("c-deleted", message("d4", "assistant", "late answer"), "d3"), true);
+  finish(late, "late answer");
 });
 
 test("a path with a missing parent is stale and writes nothing", () => {
@@ -296,21 +375,6 @@ test("a path with a missing parent is stale and writes nothing", () => {
   write("c-expected", [message("y1", "user", "ask"), message("y2", "assistant", "answer"), message("y3", "user", "next")]);
   assert.deepEqual(mods.planChatWrite("c-expected", [message("y1", "user", "ask"), message("y3", "user", "next"), message("y4", "user", "stale")]), { error: "stale" });
   assert.deepEqual(ids("c-expected"), ["y1", "y2", "y3"]);
-});
-
-test("a stale regenerate cannot overwrite a newer answer edit", () => {
-  write("c-answer-edit", [message("z1", "user", "ask")]);
-  answer("c-answer-edit", "z2", "first answer", "z1");
-  const expected = {
-    id: "z2",
-    content: "first answer",
-    parts: JSON.stringify([{ type: "text", text: "first answer" }]),
-  };
-  assert.equal(mods.upsertMessage("c-answer-edit", message("z2", "assistant", "first answer"), "z1", expected), true);
-  assert.equal(mods.updateMessageText("c-answer-edit", "z2", "edited answer"), true);
-
-  assert.equal(mods.upsertMessage("c-answer-edit", message("z2", "assistant", "regenerated"), "z1", expected), false);
-  assert.deepEqual(mods.listMessages("c-answer-edit")[1].parts, [{ type: "text", text: "edited answer" }]);
 });
 
 test("an unsaved assistant reply does not block the next prompt", () => {
@@ -346,8 +410,7 @@ test("a retry of an unsaved assistant reply is accepted", () => {
 
 test("provider failure and stop before visible text leave the saved prompt as head", () => {
   for (const [chatId, promptId] of [["c-restore", "pf1"], ["c-retry-edit", "stop1"]]) {
-    write(chatId, [message(promptId, "user", "before")]);
-    assert.equal(mods.upsertMessage(chatId, { id: `${promptId}-empty`, role: "assistant", parts: [] }, promptId), true);
+    assert.equal(mods.finishChatReply(write(chatId, [message(promptId, "user", "before")]), []), false);
     const row = mods.db.$client.prepare("select head_id from chats where id = ?").get(chatId);
     assert.deepEqual(row, { head_id: promptId });
     assert.deepEqual(ids(chatId), [promptId]);

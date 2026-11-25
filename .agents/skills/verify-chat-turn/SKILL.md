@@ -1,6 +1,6 @@
 ---
 name: verify-chat-turn
-description: Model-check how Orbit writes chat messages, with TLC on the TLA+ models in docs/architecture. Use when a change touches POST /api/chat, planChatWrite, persistIncoming, replyGuard, upsertMessage, shouldSaveReply, updateMessageText, messageRepository, assistantHasVisiblePart, settleInterruptedParts, isPath or replaceTextParts, when src/lib/model-sync.test.ts fails, or to check a new order of sends, regenerates, edits and stops across tabs.
+description: Model-check how Orbit writes chat messages, with TLC on the TLA+ models in docs/architecture. Use when a change touches POST /api/chat, planChatWrite, persistIncoming, finishChatReply, insertMessage, savedText, unchanged, updateMessageText, messageRepository, assistantHasVisiblePart, settleInterruptedParts, isPath or replaceTextParts, when src/lib/model-sync.test.ts fails, or to check a new order of sends, regenerates, edits and stops across tabs.
 ---
 
 # Verify the chat turn
@@ -9,16 +9,16 @@ TLC, the TLA+ model checker, tries every order of the steps in a model, within s
 
 - `docs/architecture/ChatTurn.tla`: one tab sends, regenerates, retries, stops, or meets a provider failure. Its four rules are in `ARCHITECTURE.md` under "The rules of a turn". Bound: three reply attempts per prompt.
 - `docs/architecture/ChatWrite.tla`: two tabs share a prompt P and its reply R, which may be unsaved at the start. Bound: two tabs, three versions of each text.
-  - `ReplyKeepsNewestText`: a saved reply keeps the last text written to it. If this breaks, an edit made in one tab is undone when a stale tab sends.
+  - `ReplyKeepsNewestText`: a saved reply keeps the last text written to it. If this breaks, an edit made in one tab is undone when a stale tab sends, or when a request that continues the reply ends.
   - `ReplyAnswersItsPrompt`: every reply saved under a prompt answers the prompt's current text. If this breaks, an answer appears under a prompt it did not answer.
 
-At this repo's code, `ReplyAnswersItsPrompt` holds because no writer changes a prompt row: an edit is a new sibling. The prompt row compare in `upsertMessage`, with the copy `replyGuard` reads, is a second layer. `ChatWrite.in-place-edit.cfg` checks that layer alone.
+At this repo's code, `ReplyAnswersItsPrompt` holds because no writer changes a prompt row: an edit is a new sibling. The prompt row compare in `finishChatReply`, with the copy in the `ReplyPlan`, is a second layer. `ChatWrite.in-place-edit.cfg` checks that layer alone.
 
 ## What each step assumes
 
 Each action is one step that no other step can split. Three actions join a server effect with a later one:
 
-- `ChatWrite.Plan` joins `planChatWrite` and `replyGuard`. No `await` separates them in `POST`, so in one Node process no other request runs between them. Orbit runs one server process on one SQLite file, in one container. With two processes another request could edit P between the two calls: a version of the model with `Plan` split breaks `ReplyAnswersItsPrompt` in `ChatWrite.in-place-edit.cfg`, though not at HEAD, where no edit changes P. If a change adds an `await` between the calls, or Orbit runs more than one server process, split `Plan`.
+- `ChatWrite.Plan` joins `planChatWrite` with the `listMessages` call in `POST` that reads the saved reply a request continues. `planChatWrite` checks P and copies P and R in one transaction. No `await` separates it from `listMessages`, so in one Node process no other request runs between them. Orbit runs one server process on one SQLite file, in one container. With two processes another request could edit R between the two calls. The stream would then continue the edited R, and `finishChatReply` would refuse the reply because R no longer matches its copy. If a change adds an `await` between the calls, or Orbit runs more than one server process, split `Plan`.
 - `ChatWrite.Load` joins the server's read of the rows with the browser showing them. The tab cannot send or edit until it shows them, and no other action reads its copy. A split version found nothing new in any config.
 - `ChatTurn` joins each write with the status the browser shows, though provider setup, `stopped.apply` and tool cleanup are awaited around the write.
 
@@ -32,8 +32,7 @@ These past bugs and gaps are outside both models. A pass says nothing about them
 - Rejection of a request built on replaced or stale history (f3da71c, c435e64). The models check the text of P, not the shape of the path.
 - A retry blocked by an unsaved assistant message in the history (889e201).
 - A Send or Regenerate right after Stop, before the stopped run's output arrives (8f9a580, 9d72c39).
-- The selected head: an off-branch search hit becomes the head even when it has later turns (`src/lib/chat-tree.ts` `focusedHead`, 02f59af).
-- A request whose last message is a saved assistant reply: the SDK reuses that reply's id and `upsertMessage` updates it after comparing only the prompt row. Issue #188.
+- The selected head: an off-branch search hit becomes the head even when it has later turns (`src/lib/chat-tree.ts` `focusedHead`, fixed by open PR #171).
 - Tool calls, the new prompt's own turn after `Send`, and which reply text a regenerate wrote.
 
 The `ChatTurn` rules can miss some wrong behavior even where they apply. Only `ShownTextKept` has a mutant (`ChatTurn.stopped-retry.cfg`). `NothingSavedWithoutText` misses an invisible insert while `stored` stays `full`. `RegenerateKeepsOldReply` passes when a regenerate adds no sibling, and tracks no text. `StoppedSendKeepsText` and `ShownTextKept` check a status, so they miss truncated text and a wrong head after reload. `ChatTurnRegression` checks the count after one finished regenerate.

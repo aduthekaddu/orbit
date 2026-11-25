@@ -9,7 +9,7 @@ import { attachMemoryNotes, quotedMemoryNotes, recall, REMEMBER_INSTRUCTIONS } f
 import { toolsForTurn } from "@/lib/tools";
 import { answerStepFor, CHAT_STEP_LIMIT } from "@/lib/tools/answer-step";
 import { createStoppedRuns } from "@/lib/tools/stopped-runs";
-import { chatTitle, ensureChat, listMessages, planChatWrite, replyGuard, shouldSaveReply, storedMessageCount, textFromParts, touchChat, upsertMessage } from "@/lib/messages";
+import { chatTitle, ensureChat, finishChatReply, listMessages, planChatWrite, storedMessageCount, textFromParts, touchChat } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { startChatTitle } from "@/lib/titles";
 import { getSettings } from "@/lib/settings";
@@ -30,7 +30,6 @@ const bodySchema = z.object({
   messages: z.array(messageSchema).min(1),
   trigger: z.enum(["submit-message", "regenerate-message", "resume-stream"]).optional(),
   editMessageId: z.string().min(1).max(100).optional(),
-  messageId: z.string().min(1).max(100).optional(),
 });
 
 export async function POST(request: Request) {
@@ -54,10 +53,13 @@ export async function POST(request: Request) {
 
   const incoming = parsed.data.messages;
   const messagesBeforeTurn = storedMessageCount(chat.id);
-  const write = planChatWrite(chat.id, incoming, parsed.data.trigger, parsed.data.messageId, parsed.data.editMessageId);
+  const write = planChatWrite(chat.id, incoming, parsed.data.trigger, parsed.data.editMessageId);
   if ("error" in write) {
     if (write.error === "invalid-edit") {
       return Response.json({ error: "Invalid edit request" }, { status: 400 });
+    }
+    if (write.error === "no-prompt") {
+      return Response.json({ error: "A chat request needs a user message." }, { status: 400 });
     }
     if (write.error === "cross-chat") {
       return Response.json({ error: "A message id belongs to a different chat." }, { status: 409 });
@@ -86,7 +88,6 @@ export async function POST(request: Request) {
   }
 
   const stored = new Map(listMessages(chat.id).map((message) => [message.id, message]));
-  const { hadReply, expected } = replyGuard(chat.id, write.regenerate, write.responseId, lastUser?.id);
   const uiMessages = incoming.map((message) => ({
     id: message.id,
     role: message.role,
@@ -144,15 +145,14 @@ export async function POST(request: Request) {
       stream: result.stream,
       tools,
       originalMessages: uiMessages,
-      generateMessageId: () => write.responseId,
+      generateMessageId: () => write.id,
       onError: (error) => streamErrorMessage(error, redact),
       onEnd: async ({ responseMessage, isAborted, outcome }) => {
         void embedPending();
         try {
           const interrupted = isAborted || outcome.status !== "completed";
           const parts = settleInterruptedParts(interrupted ? await stopped.apply(responseMessage.parts) : responseMessage.parts, interrupted);
-          const visible = assistantHasVisiblePart(parts);
-          if (!visible) {
+          if (!assistantHasVisiblePart(parts)) {
             const types = Array.isArray(responseMessage.parts)
               ? responseMessage.parts
                   .map((part) => (part && typeof part === "object" && "type" in part ? String(part.type) : "?"))
@@ -160,19 +160,9 @@ export async function POST(request: Request) {
               : [];
             const status = outcome && typeof outcome === "object" && "status" in outcome ? String(outcome.status) : "";
             redact.logError("chat end without text", isAborted ? "aborted" : "finished", status, types.join(",") || "none");
+            return;
           }
-          if (!shouldSaveReply({ regenerate: write.regenerate, interrupted, hadReply, visible })) return;
-          upsertMessage(
-            chat.id,
-            {
-              id: responseMessage.id || write.responseId,
-              role: "assistant",
-              parts,
-            },
-            lastUser?.id,
-            expected,
-            redact,
-          );
+          finishChatReply(write, parts, redact);
           touchChat(chat.id);
         } finally {
           await closeTools();

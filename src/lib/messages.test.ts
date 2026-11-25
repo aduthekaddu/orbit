@@ -11,9 +11,8 @@ type Modules = {
   persistIncoming: typeof import("./messages").persistIncoming;
   listMessages: typeof import("./messages").listMessages;
   planChatWrite: typeof import("./messages").planChatWrite;
+  finishChatReply: typeof import("./messages").finishChatReply;
   updateMessageText: typeof import("./messages").updateMessageText;
-  upsertMessage: typeof import("./messages").upsertMessage;
-  shouldSaveReply: typeof import("./messages").shouldSaveReply;
 };
 
 let mods: Modules;
@@ -40,10 +39,9 @@ before(async () => {
     schema,
     persistIncoming: messageModule.persistIncoming,
     listMessages: messageModule.listMessages,
-    upsertMessage: messageModule.upsertMessage,
     planChatWrite: messageModule.planChatWrite,
+    finishChatReply: messageModule.finishChatReply,
     updateMessageText: messageModule.updateMessageText,
-    shouldSaveReply: messageModule.shouldSaveReply,
   };
 
   const now = new Date();
@@ -60,15 +58,24 @@ function message(id: string, role: "user" | "assistant", text: string) {
   return { id, role, parts: [{ type: "text", text }] };
 }
 
+// A request that ends in an unsaved assistant message streams the reply under that message's id.
+function pending(id: string) {
+  return { id, role: "assistant", parts: [] };
+}
+
+function reply(chatId: string, path: { id: string; role: string; parts: unknown[] }[], answer: { id: string; parts: unknown[] }) {
+  const plan = mods.planChatWrite(chatId, [...path, pending(answer.id)]);
+  if ("error" in plan) assert.fail(`write refused: ${plan.error}`);
+  assert.equal(mods.finishChatReply(plan, answer.parts), true);
+}
+
 test("resending a full history writes nothing", () => {
   const history = [
     message("m1", "user", "one"),
     message("m2", "assistant", "two"),
     message("m3", "user", "three"),
   ];
-  mods.upsertMessage("c1", history[0]);
-  mods.upsertMessage("c1", history[1], "m1");
-  mods.upsertMessage("c1", history[2]);
+  reply("c1", [history[0]], history[1]);
   assert.equal(mods.persistIncoming("c1", history), "ok");
   const before = changes();
   assert.equal(mods.persistIncoming("c1", history), "ok");
@@ -93,14 +100,12 @@ test("a message id from another chat is rejected", () => {
 test("a reply keeps its prompt's place when two requests finish out of order", () => {
   const now = new Date();
   mods.db.insert(mods.schema.chats).values({ id: "c3", userId: "u1", title: "Three", createdAt: now, updatedAt: now }).run();
-  assert.equal(mods.persistIncoming("c3", [message("p-a", "user", "prompt a")]), "ok");
-  assert.equal(
-    mods.persistIncoming("c3", [message("p-a", "user", "prompt a"), message("p-b", "user", "prompt b")]),
-    "ok",
-  );
+  const a = mods.planChatWrite("c3", [message("p-a", "user", "prompt a"), pending("r-a")]);
+  const b = mods.planChatWrite("c3", [message("p-a", "user", "prompt a"), message("p-b", "user", "prompt b"), pending("r-b")]);
+  if ("error" in a || "error" in b) assert.fail("write refused");
 
-  assert.equal(mods.upsertMessage("c3", message("r-b", "assistant", "reply b"), "p-b"), true);
-  assert.equal(mods.upsertMessage("c3", message("r-a", "assistant", "reply a"), "p-a"), true);
+  assert.equal(mods.finishChatReply(b, message("r-b", "assistant", "reply b").parts), true);
+  assert.equal(mods.finishChatReply(a, message("r-a", "assistant", "reply a").parts), true);
 
   assert.deepEqual(
     mods.db.$client.prepare("select id, parent_id from messages where chat_id = ? order by id").all("c3"),
@@ -113,22 +118,21 @@ test("explicit user editing keeps later turns and invalid targets leave history 
   const chat = "edit-chat";
   mods.db.insert(mods.schema.chats).values({ id: chat, userId: "u1", title: "Edit", createdAt: new Date(), updatedAt: new Date() }).run();
   const history = [message("eu", "user", "old"), message("ea", "assistant", "answer"), message("eu2", "user", "later")];
-  mods.upsertMessage(chat, history[0]);
-  mods.upsertMessage(chat, history[1], "eu");
-  mods.upsertMessage(chat, history[2]);
-  assert.deepEqual(mods.planChatWrite(chat, [message("new", "assistant", "bad")], "submit-message", undefined, "eu"), {
+  reply(chat, [history[0]], history[1]);
+  assert.equal(mods.persistIncoming(chat, history), "ok");
+  assert.deepEqual(mods.planChatWrite(chat, [message("new", "assistant", "bad")], "submit-message", "eu"), {
     error: "invalid-edit",
   });
   assert.equal(mods.listMessages(chat).length, 3);
-  assert.ok(mods.planChatWrite(chat, [message("new", "user", "edited")], "submit-message", undefined, "eu"));
+  assert.ok(mods.planChatWrite(chat, [message("new", "user", "edited")], "submit-message", "eu"));
   assert.deepEqual(mods.listMessages(chat).map((row) => row.id).sort(), ["eu", "ea", "eu2", "new"].sort());
 });
 
 test("reply text editing keeps tool parts and stale echoes cannot overwrite it", () => {
   const parts = [{ type: "text", text: "before" }, { type: "tool-render_ui", toolCallId: "t1", state: "output-available", input: {}, output: { ok: true } }];
-  mods.upsertMessage("c2", { id: "edited-answer", role: "assistant", parts });
+  reply("c2", [message("edited-prompt", "user", "ask")], { id: "edited-answer", parts });
   assert.equal(mods.updateMessageText("c2", "edited-answer", "after"), true);
-  mods.persistIncoming("c2", [{ id: "edited-answer", role: "assistant", parts }]);
+  mods.persistIncoming("c2", [message("edited-prompt", "user", "ask"), { id: "edited-answer", role: "assistant", parts }]);
   const saved = mods.listMessages("c2").find((row) => row.id === "edited-answer")!;
   assert.deepEqual(saved.parts, [{ type: "text", text: "after" }, parts[1]]);
 });
@@ -139,8 +143,7 @@ test("a user prompt cannot be rewritten in place", () => {
     .insert(mods.schema.chats)
     .values({ id: chat, userId: "u1", title: "Prompt", createdAt: new Date(), updatedAt: new Date() })
     .run();
-  mods.upsertMessage(chat, message("pp1", "user", "ask"));
-  mods.upsertMessage(chat, message("pp2", "assistant", "answer"), "pp1");
+  reply(chat, [message("pp1", "user", "ask")], message("pp2", "assistant", "answer"));
 
   assert.equal(mods.updateMessageText(chat, "pp1", "rewritten"), false);
   assert.deepEqual(mods.listMessages(chat), [
@@ -156,30 +159,13 @@ test("editing one text part by index keeps the reply's parts in order", () => {
     { type: "text", text: "old code" },
     { type: "text", text: "after" },
   ];
-  mods.upsertMessage("c2", { id: "indexed-answer", role: "assistant", parts });
+  reply("c2", [message("indexed-prompt", "user", "ask")], { id: "indexed-answer", parts });
   assert.equal(mods.updateMessageText("c2", "indexed-answer", "new code", 2), true);
   const saved = mods.listMessages("c2").find((row) => row.id === "indexed-answer")!;
   assert.deepEqual(saved.parts, [parts[0], parts[1], { type: "text", text: "new code" }, parts[3]]);
   const stored = mods.db.$client.prepare("select content from messages where id = ?").get("indexed-answer") as { content: string };
   assert.equal(stored.content, parts[0].text + "new code" + parts[3].text);
 });
-
-test("a stopped retry with no older reply saves what streamed", () => {
-  assert.equal(mods.shouldSaveReply({ regenerate: true, interrupted: true, hadReply: false, visible: true }), true);
-});
-
-test("a stopped regenerate saves visible text as a new sibling", () => {
-  assert.equal(mods.shouldSaveReply({ regenerate: true, interrupted: true, hadReply: true, visible: true }), true);
-});
-
-test("a finished regenerate saves its new reply", () => {
-  assert.equal(mods.shouldSaveReply({ regenerate: true, interrupted: false, hadReply: true, visible: true }), true);
-});
-
-test("a reply with nothing visible is not saved", () => {
-  assert.equal(mods.shouldSaveReply({ regenerate: false, interrupted: false, hadReply: false, visible: false }), false);
-});
-
 test("a saved reply's search text carries no credential that joining parts or stripping terminal codes rebuilds", () => {
   const key = "made-up-provider-key";
   const redact = new Redactor({ apiKey: key, tavilyApiKey: "", githubToken: "" });
@@ -191,7 +177,9 @@ test("a saved reply's search text carries no credential that joining parts or st
     output: { stdout: `${key.slice(0, 7)}\u001b[31m${key.slice(7)}`, stderr: "", exitCode: 0, durationMs: 1, timedOut: false, truncated: false },
   };
   const parts = [{ type: "text", text: key.slice(0, 9) }, { type: "text", text: key.slice(9) }, run];
-  assert.equal(mods.upsertMessage("c1", { id: "joined-reply", role: "assistant", parts }, null, undefined, redact), true);
+  const plan = mods.planChatWrite("c1", [message("joined-prompt", "user", "ask"), pending("joined-reply")]);
+  if ("error" in plan) assert.fail(`write refused: ${plan.error}`);
+  assert.equal(mods.finishChatReply(plan, parts, redact), true);
   const row = mods.db.$client.prepare("select content from messages where id = ?").get("joined-reply") as { content: string };
   assert.equal(row.content, "[redacted]\n[redacted]\nprint(1)");
 });
@@ -200,8 +188,30 @@ test("a saved reply's parts and search text carry no credential that a part hold
   const key = "made-up-provider-key";
   const redact = new Redactor({ apiKey: key, tavilyApiKey: "", githubToken: "" });
   const parts = [{ type: "text", text: `the key is ${key}` }];
-  assert.equal(mods.upsertMessage("c1", { id: "whole-reply", role: "assistant", parts }, null, undefined, redact), true);
+  const plan = mods.planChatWrite("c1", [message("whole-prompt", "user", "ask"), pending("whole-reply")]);
+  if ("error" in plan) assert.fail(`write refused: ${plan.error}`);
+  assert.equal(mods.finishChatReply(plan, parts, redact), true);
   const row = mods.db.$client.prepare("select content, parts from messages where id = ?").get("whole-reply") as { content: string; parts: string };
   assert.equal(row.content, "the key is [redacted]");
   assert.deepEqual(JSON.parse(row.parts), [{ type: "text", text: "the key is [redacted]" }]);
+});
+
+test("a continued reply's parts and search text also carry no stored credential", () => {
+  const key = "made-up-provider-key";
+  const redact = new Redactor({ apiKey: key, tavilyApiKey: "", githubToken: "" });
+  const prompt = message("continued-redact-prompt", "user", "ask");
+  const initial = message("continued-redact-reply", "assistant", "first");
+  reply("c1", [prompt], initial);
+  const plan = mods.planChatWrite("c1", [prompt, initial]);
+  if ("error" in plan) assert.fail(`write refused: ${plan.error}`);
+  const continued = [{ type: "text", text: "first " }, { type: "text", text: key.slice(0, 9) }, { type: "text", text: key.slice(9) }, { type: "text", text: ` and ${key}` }];
+  assert.equal(mods.finishChatReply(plan, continued, redact), true);
+  const row = mods.db.$client.prepare("select content, parts from messages where id = ?").get("continued-redact-reply") as { content: string; parts: string };
+  assert.equal(row.content, "first [redacted] and [redacted]");
+  assert.deepEqual(JSON.parse(row.parts), [
+    { type: "text", text: "first " },
+    { type: "text", text: key.slice(0, 9) },
+    { type: "text", text: key.slice(9) },
+    { type: "text", text: " and [redacted]" },
+  ]);
 });

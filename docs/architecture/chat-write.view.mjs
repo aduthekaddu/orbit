@@ -3,7 +3,7 @@ const tabs = (v) => Object.keys(v.turn).sort();
 export function state(v) {
   const prompt = v.prompt === 1 ? "Prompt as sent" : "Prompt edited";
   const reply = v.answer === 0 ? "no reply saved" : v.answer === 1 ? "reply as answered" : "reply edited";
-  const busy = tabs(v).filter((t) => v.turn[t] !== 0).map((t) => `tab ${t} regenerating`);
+  const busy = tabs(v).filter((t) => v.turn[t] !== 0).map((t) => (v.base[t] !== 0 ? `tab ${t} continuing the reply` : `tab ${t} regenerating`));
   const saving = tabs(v).filter((t) => v.saving[t] !== 0).map((t) => `tab ${t} waiting for its edit to show`);
   const misfiled = v.answered.some((text) => text !== v.prompt) ? ["a reply to the old prompt saved"] : [];
   return [prompt, reply, ...busy, ...saving, ...misfiled].join(", ");
@@ -18,11 +18,12 @@ const labels = {
   ShowReplyEdit: "tab {t} shows the saved edit",
   Send: "you send a new prompt from tab {t}",
   Plan: "you press regenerate or retry in tab {t}",
-  Finish: "tab {t}'s regenerated reply ends",
+  Finish: "tab {t}'s reply ends",
   EditPromptInPlace: "you edit the prompt in tab {t}",
 };
 export function step(action, from, to) {
   const changed = (t) => JSON.stringify(from.seen[t]) !== JSON.stringify(to.seen[t]) || from.turn[t] !== to.turn[t] || from.saving[t] !== to.saving[t];
   const tab = tabs(from).find(changed) ?? tabs(from).find((t) => from.seen[t].answer === to.answer) ?? "?";
-  return (labels[action] ?? action).replace("{t}", tab);
+  const label = action === "Plan" && to.base[tab] !== 0 ? "tab {t} sends a request that ends in the saved reply" : labels[action] ?? action;
+  return label.replace("{t}", tab);
 }

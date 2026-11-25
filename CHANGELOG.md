@@ -29,6 +29,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - New chat shows "Could not create chat" when the request fails, instead of doing nothing or opening `/c/undefined`.
 - Settings shows Failed when the model list answer cannot be read, instead of a green "0 models", and when the model list request is rejected, instead of "No key" or "Not checked".
 - A stopped code run whose saved result cannot be loaded shows "Could not load output" instead of an empty card.
+- A chat request that ends in a saved reply no longer undoes an edit made to that reply in another tab while the request streamed. The edit is kept, and the continued text is not saved. (#188)
 - A code run shows its result as soon as the program ends, without waiting for Docker to remove the container. Pressing Stop while that removal runs no longer turns a finished run into a stopped one, and a program that exited just before the 10 second limit is no longer reported as timed out or loses its out-of-memory mark. Output that the 10 second limit cut off after the program ended is marked truncated.
 - Sign in and Create account stay disabled after success until the next page opens, so a second click cannot send the form again. If navigation fails or stalls, the button re-enables so you can try again.
 - An interrupted generated view shows Stopped instead of an empty cancelled tool card.
