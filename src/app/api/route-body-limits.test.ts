@@ -46,10 +46,12 @@ let modelsRoute: typeof import("./models/route");
 let getSettings: typeof import("@/lib/settings").getSettings;
 let chatStore: typeof import("@/lib/messages");
 let closeDb: () => void;
+let dbPath = "";
 let provider: http.Server;
 let providerRequests = 0;
 const originalCwd = process.cwd();
-const originalEnv = Object.fromEntries(["ORBIT_DATA_DIR", "ORBIT_OLLAMA_URL", ...SEEDED_ENV].map((name) => [name, process.env[name]]));
+const runnerDataDir = process.env.ORBIT_DATA_DIR;
+const originalEnv = Object.fromEntries(["ORBIT_OLLAMA_URL", ...SEEDED_ENV].map((name) => [name, process.env[name]]));
 
 function sse(res: http.ServerResponse) {
   res.writeHead(200, { "content-type": "text/event-stream" });
@@ -62,7 +64,6 @@ function sse(res: http.ServerResponse) {
 
 before(async () => {
   for (const name of SEEDED_ENV) delete process.env[name];
-  process.env.ORBIT_DATA_DIR = path.join(sandbox, "data");
   process.env.ORBIT_OLLAMA_URL = "http://127.0.0.1:9";
   fs.cpSync(path.join(originalCwd, "drizzle"), path.join(sandbox, "drizzle"), { recursive: true });
   process.chdir(sandbox);
@@ -85,6 +86,7 @@ before(async () => {
   const schema = await import("@/lib/db/schema");
   const settings = await import("@/lib/settings");
   getSettings = settings.getSettings;
+  dbPath = db.$client.name;
   closeDb = () => db.$client.close();
   const now = new Date();
   db.insert(schema.user).values({ id: USER_ID, name: "Limits", email: "limits@orbit.local", emailVerified: false, createdAt: now, updatedAt: now }).run();
@@ -331,4 +333,11 @@ test("an 80,000 letter API key is refused by the model list before any provider 
   const response = await modelsRoute.POST(postJson("/api/models", "POST", { apiKey: EIGHTY_THOUSAND_LETTERS }));
   assert.equal(response.status, 400);
   assert.equal(providerRequests, before);
+});
+
+test("the test database stays in the runner-managed ORBIT_DATA_DIR", () => {
+  assert.ok(runnerDataDir, "expected scripts/test-data-dir.mjs to set ORBIT_DATA_DIR");
+  assert.equal(process.env.ORBIT_DATA_DIR, runnerDataDir);
+  assert.equal(dbPath, path.join(runnerDataDir, "orbit.db"));
+  assert.equal(fs.existsSync(path.join(sandbox, "data")), false);
 });
