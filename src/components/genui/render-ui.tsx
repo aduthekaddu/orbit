@@ -6,7 +6,7 @@ import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { Component, useMemo, type ReactNode } from "react";
 import { registry } from "@/components/genui/registry";
 import { parseRenderSpec, type RenderOutcome } from "@/lib/genui/spec";
-import { isStoppedRenderUiError } from "@/lib/tools/run-status";
+import { toolCallRunEnd } from "@/lib/tools/run-status";
 
 function pretty(value: unknown) {
   if (typeof value === "string") return value;
@@ -63,25 +63,13 @@ function readOutcome(result: unknown): RenderOutcome | null {
   return null;
 }
 
-function errorText(result: unknown) {
-  if (result && typeof result === "object" && "error" in result && typeof result.error === "string" && result.error.trim()) {
-    return result.error;
-  }
-  return "The spec was rejected";
-}
-
-export function RenderUiPart({ result, args, argsText, status, isError, toolCallId }: ToolCallMessagePartProps) {
-  if (status.type === "running" && result == null && !isError) {
-    return <p className="text-sm text-muted-foreground">Building</p>;
-  }
-
-  if (status.type !== "running" && result == null && !isError) {
-    return <StoppedFallback />;
-  }
-
-  if (isError) {
-    const error = errorText(result);
-    return isStoppedRenderUiError(error) ? <StoppedFallback /> : <Fallback error={error} raw={argsText || args} />;
+export function RenderUiPart(props: ToolCallMessagePartProps) {
+  const { result, args, argsText, status, toolCallId } = props;
+  const end = toolCallRunEnd(props);
+  if (end.status === "running") return <p className="text-sm text-muted-foreground">Building</p>;
+  if (end.status === "cancelled") return <StoppedFallback />;
+  if (end.status === "failed" && end.error !== undefined) {
+    return <Fallback error={end.error.trim() ? end.error : "The spec was rejected"} raw={argsText || args} />;
   }
 
   const outcome = readOutcome(result);

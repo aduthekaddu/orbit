@@ -4,9 +4,9 @@ import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { useRunResultUnloaded } from "@/components/chat/stopped-run-sync";
 import { OrbitMark } from "@/components/orbit-mark";
 import { RenderUiPart } from "@/components/genui/render-ui";
-import { hasStoppedCodeOutput, runCodeInputSchema } from "@/lib/sandbox/spec";
+import { runCodeInputSchema } from "@/lib/sandbox/spec";
 import { cardFor } from "@/lib/tools/metadata";
-import { toolCallRunStatus, type ToolRunStatus } from "@/lib/tools/run-status";
+import { toolCallRunEnd, type ToolRunStatus } from "@/lib/tools/run-status";
 import { SearchResults } from "./search-results";
 import { GenericOutput } from "./generic-output";
 import { GithubOutput } from "./github-output";
@@ -35,12 +35,13 @@ function rememberedText(args: unknown, result: unknown): string {
 }
 
 export function RunCard(props: ToolCallMessagePartProps) {
-  const status = toolCallRunStatus(props);
+  const end = toolCallRunEnd(props);
+  const status = end.status;
   const kind = cardFor(props.toolName);
   const savedText = props.toolName === "remember" && status !== "failed" ? rememberedText(props.args, props.result) : "";
   const language = kind === "code" ? runCodeInputSchema.safeParse(props.args).data?.language : undefined;
   const unloaded = useRunResultUnloaded(props.toolCallId);
-  const codeOutput = status === "cancelled" && !hasStoppedCodeOutput(props.result) ? (unloaded ? RESULT_UNLOADED : undefined) : props.result;
+  const codeOutput = end.status === "cancelled" ? (end.saved ?? (unloaded ? RESULT_UNLOADED : undefined)) : props.result;
   return (
     <section data-tool-name={props.toolName} className="my-3 min-w-0 max-w-widget rounded-lg border bg-card shadow-card">
       <div className="flex min-w-0 items-center gap-2 border-b px-3 py-2.5 text-xs">
