@@ -151,9 +151,10 @@ function listedModel(item: unknown): ListedModel | null {
   return { id, reasoning: reasoningFlag(record) };
 }
 
-function modelsFromPayload(payload: unknown): ListedModel[] {
+function modelsFromPayload(payload: unknown): ListedModel[] | null {
   const record = asRecord(payload);
-  const raw = Array.isArray(payload) ? payload : Array.isArray(record?.data) ? record.data : Array.isArray(record?.models) ? record.models : [];
+  const raw = Array.isArray(payload) ? payload : Array.isArray(record?.data) ? record.data : Array.isArray(record?.models) ? record.models : null;
+  if (!raw) return null;
   const models = new Map<string, ListedModel>();
   for (const item of raw) {
     const model = listedModel(item);

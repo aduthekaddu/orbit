@@ -45,6 +45,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
   const [githubMcpUrl, setGithubMcpUrl] = useState(initial.githubMcpUrl);
   const [githubCheck, setGithubCheck] = useState<GithubCheck>({ status: "idle" });
   const latestGithubCheck = useLatestRequest();
+  const latestSave = useLatestRequest();
   const [keySet, setKeySet] = useState(initial.keySet);
   const hasKey = keySet || apiKey.trim().length > 0;
   const [modelList, requestModels] = useLoaded<ModelList>(canLoadStored(initial) ? { status: "pending" } : { status: "idle" });
@@ -84,11 +85,13 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (pending) return;
     dispatchSave({ type: "submit" });
     await requestJson(
       "/api/settings",
       {
         method: "PUT",
+        signal: latestSave(),
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           baseUrl: formValues.baseUrl,

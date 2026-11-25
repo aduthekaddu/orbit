@@ -8,11 +8,13 @@ export function EditorFooter({
   saving,
   onCancel,
   onSave,
+  saveDisabled,
 }: {
   error?: string;
   saving?: boolean;
   onCancel: () => void;
   onSave: () => void;
+  saveDisabled?: boolean;
 }) {
   return (
     <div className="flex items-center justify-end gap-1 border-t px-2 py-1.5">
@@ -25,7 +27,7 @@ export function EditorFooter({
       <Button type="button" variant="ghost" size="xs" onClick={onCancel} disabled={saving}>
         Cancel
       </Button>
-      <Button type="button" size="xs" onClick={onSave} disabled={saving}>
+      <Button type="button" size="xs" onClick={onSave} disabled={saving || saveDisabled}>
         Save
       </Button>
     </div>

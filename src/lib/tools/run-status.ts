@@ -78,8 +78,8 @@ export function toolRunEnd(part: ToolRunPart, stopped = false, toolName?: string
       return outputEnd(part.output, stopped, toolName);
     case "output-error": {
       const marker = stopMarker(part.errorText);
-      // assistant-ui closes every open call with the same text; only render_ui reads it as stopped. https://github.com/aduthekaddu/orbit/issues/194
-      const cancelled = marker === "cancelledOnSend" ? toolName === "render_ui" : marker !== undefined;
+      // assistant-ui closes every open call with the same text; treat it as cancelled for every tool. https://github.com/aduthekaddu/orbit/issues/194
+      const cancelled = marker !== undefined;
       return cancelled ? { status: "cancelled" } : { status: "failed", error: part.errorText ?? "" };
     }
     case "input-streaming":

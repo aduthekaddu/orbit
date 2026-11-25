@@ -133,16 +133,14 @@ test("a remember or forget result with an error is failed, and one without is su
   assert.equal(toolCallRunStatus({ toolName: "forget", status: done, result: { id: "mem-1" }, isError: false }), "succeeded");
 });
 
-test("a render_ui call cancelled by a follow-up message stays cancelled without changing other tools or real errors", () => {
+test("a tool call cancelled by a follow-up message stays cancelled, and a real error stays failed", () => {
   const cancelledOnSend = "User cancelled tool call by sending a new message.";
   const done = { type: "complete" } as const;
-  assert.equal(toolRunStatus({ state: "output-error", errorText: cancelledOnSend }, false, "render_ui"), "cancelled");
-  assert.equal(toolCallRunStatus({ toolName: "render_ui", status: done, result: { error: cancelledOnSend }, isError: true }), "cancelled");
-  assert.equal(toolCallRunStatus({ toolName: "render_ui", status: done, result: { error: "Invalid tool arguments" }, isError: true }), "failed");
-  for (const toolName of [undefined, "web_search", "run_code", "github_list_issues", "remember"] as const) {
-    assert.equal(toolRunStatus({ state: "output-error", errorText: cancelledOnSend }, false, toolName), "failed");
-    assert.equal(toolCallRunStatus({ toolName, status: done, result: { error: cancelledOnSend }, isError: true }), "failed");
+  for (const toolName of [undefined, "render_ui", "web_search", "run_code", "github_list_issues", "remember"] as const) {
+    assert.equal(toolRunStatus({ state: "output-error", errorText: cancelledOnSend }, false, toolName), "cancelled");
+    assert.equal(toolCallRunStatus({ toolName, status: done, result: { error: cancelledOnSend }, isError: true }), "cancelled");
   }
+  assert.equal(toolCallRunStatus({ toolName: "render_ui", status: done, result: { error: "Invalid tool arguments" }, isError: true }), "failed");
 });
 
 test("a missing or null render_ui result matches its stopped or running state without changing other tools", () => {

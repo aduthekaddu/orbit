@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { memoryWriteError } from "./save-error";
 import { isMemorySearchPending, visibleMemories } from "./visible-memories";
+import { requestJson, useLoaded } from "@/lib/request-json";
 
 type MemoryKind = "fact" | "preference" | "summary";
 
@@ -28,6 +30,25 @@ const KIND_LABEL: Record<MemoryKind, string> = {
   preference: "Preference",
   summary: "Summary",
 };
+
+const memoryItemSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["fact", "preference", "summary"]),
+  text: z.string(),
+  sourceChatId: z.string().nullable(),
+  sourceMessageId: z.string().nullable(),
+  sourceTitle: z.string().nullable(),
+  createdAt: z.string(),
+  lastUsedAt: z.string().nullable(),
+  embedded: z.boolean(),
+});
+
+function memorySearchBody(query: string) {
+  return z.object({ memories: z.array(memoryItemSchema) }).transform((body) => ({ query, rows: body.memories }));
+}
+
+const savedMemory = z.object({ memory: memoryItemSchema });
+const deletedMemory = z.object({ id: z.string() });
 
 function formatWhen(value: string) {
   return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(value));
@@ -50,83 +71,91 @@ export function MemoryList({
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const [fetched, setFetched] = useState<{ query: string; rows: MemoryItem[] } | null>(null);
+  const [search, loadSearch, reloadSearch, resetSearch] = useLoaded<{ query: string; rows: MemoryItem[] }>({ status: "idle" });
+  const requested = useRef("");
+  const searchedQuery = useRef("");
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [kind, setKind] = useState<MemoryKind>("fact");
   const [pending, setPending] = useState(false);
-  const [searchFailed, setSearchFailed] = useState(false);
   const [writeError, setWriteError] = useState<{ id: string; text: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<MemoryItem | null>(null);
 
   useEffect(() => {
     const trimmed = query.trim();
-    if (!trimmed) return;
-    const controller = new AbortController();
+    searchedQuery.current = trimmed;
+    if (!trimmed) {
+      requested.current = "";
+      resetSearch();
+      return;
+    }
+    resetSearch({ status: "pending" });
     const timer = window.setTimeout(() => {
-      fetch(`/api/memories?q=${encodeURIComponent(trimmed)}`, { signal: controller.signal })
-        .then((response) => (response.ok ? response.json() : null))
-        .then((payload: { memories?: MemoryItem[] } | null) => {
-          if (controller.signal.aborted) return;
-          if (!payload || !Array.isArray(payload.memories)) {
-            setFetched({ query: trimmed, rows: [] });
-            setSearchFailed(true);
-            return;
-          }
-          setFetched({ query: trimmed, rows: payload.memories });
-          setSearchFailed(false);
-        })
-        .catch(() => {
-          if (controller.signal.aborted) return;
-          setFetched({ query: trimmed, rows: [] });
-          setSearchFailed(true);
-        });
+      requested.current = trimmed;
+      loadSearch(`/api/memories?q=${encodeURIComponent(trimmed)}`, {}, memorySearchBody(trimmed));
     }, 150);
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [query, initial]);
+    return () => window.clearTimeout(timer);
+  }, [query, loadSearch, resetSearch]);
 
-  async function save(id: string) {
+  // A finished write makes the filtered view stale, so it reloads the search the user still sees. The query comes from
+  // the ref, not this closure, so a query typed while the write was in flight is the one that reloads.
+  function refreshSearch() {
+    const trimmed = searchedQuery.current;
+    if (!trimmed) return;
+    reloadSearch(`/api/memories?q=${encodeURIComponent(trimmed)}`, {}, memorySearchBody(trimmed));
+  }
+
+  function save(id: string) {
     setPending(true);
     setWriteError(null);
-    try {
-      const response = await fetch(`/api/memories/${id}`, {
+    void requestJson(
+      `/api/memories/${id}`,
+      {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ text: draft, kind }),
-      }).catch(() => null);
-      if (!response?.ok) {
-        setWriteError({ id, text: memoryWriteError(await response?.json().catch(() => null)) });
-        return;
-      }
-      setEditing(null);
-      router.refresh();
-    } finally {
-      setPending(false);
-    }
+      },
+      {
+        parse: savedMemory,
+        onOk: () => {
+          setEditing(null);
+          router.refresh();
+          setPending(false);
+          refreshSearch();
+        },
+        onFailed: (failure) => {
+          setWriteError({ id, text: (failure.kind === "http" && failure.error) || memoryWriteError(null) });
+          setPending(false);
+        },
+      },
+    );
   }
 
-  async function remove(id: string) {
+  function remove(id: string) {
     setPending(true);
     setWriteError(null);
-    try {
-      const response = await fetch(`/api/memories/${id}`, { method: "DELETE" }).catch(() => null);
-      if (!response?.ok) {
+    void requestJson(`/api/memories/${id}`, { method: "DELETE" }, {
+      parse: deletedMemory,
+      onOk: () => {
+        setEditing(null);
+        setPendingDelete(null);
+        setPending(false);
+        router.refresh();
+        refreshSearch();
+      },
+      onFailed: () => {
         setWriteError({ id, text: "Could not delete" });
-        return;
-      }
-      setEditing(null);
-      router.refresh();
-    } finally {
-      setPendingDelete(null);
-      setPending(false);
-    }
+        setPendingDelete(null);
+        setPending(false);
+      },
+    });
   }
 
+  const trimmed = query.trim();
+  const searchFailed = search.status === "failed" && requested.current === trimmed;
+  const fetched = search.status === "done" || search.status === "revalidating" ? search.data : searchFailed ? { query: trimmed, rows: [] } : null;
   const visible = visibleMemories(query, initial, fetched);
-  const searching = isMemorySearchPending(query, fetched);
+  const searching = search.status === "revalidating" || isMemorySearchPending(query, fetched);
 
   return (
     <div className="mx-auto w-full max-w-widget px-6 py-10">
@@ -137,14 +166,7 @@ export function MemoryList({
         aria-label="Search"
         placeholder="Search"
         value={query}
-        onChange={(event) => {
-          const next = event.target.value;
-          setQuery(next);
-          if (!next.trim()) {
-            setFetched(null);
-            setSearchFailed(false);
-          }
-        }}
+        onChange={(event) => setQuery(event.target.value)}
         className="mb-4"
       />
       {searchFailed && <p className="mb-3 text-sm text-destructive">Could not search</p>}

@@ -168,6 +168,61 @@ export default async function memory({ page, origin, step, shot }) {
   step("a new chat sends the memory as quoted notes", followed && injected, followed ? "request log has no quoted memory" : "no reply");
 
   await page.goto(`${origin}/memory`);
+  const savedRow = page.getByText("I deploy to Fly.io", { exact: true });
+  await savedRow.waitFor({ timeout: 10_000 });
+  const editSearch = await runSearch("Fly");
+  step("search before an edit finds the memory", editSearch.settled && (await savedRow.isVisible()), editSearch.ok ? undefined : "search response missing or failed");
+  // The re-search the save triggers is held here, so a list that blanks cannot hide behind a fast response.
+  const searchRoute = /\/api\/memories\?q=/;
+  let held = null;
+  await page.route(searchRoute, (route) => {
+    held = route;
+  });
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("textbox", { name: "Memory" }).fill("Prefers Fly.io for deploys");
+  await page.getByRole("button", { name: "Save" }).click();
+  const heldRoute = await eventually(
+    () => held,
+    (route) => route !== null,
+    { timeoutMs: 10_000, what: "the save to re-run the active search" },
+  );
+  step("a save during a search keeps the found memory visible", await savedRow.isVisible(), "the list blanks while the re-search is pending");
+  await heldRoute.fulfill({ response: await heldRoute.fetch() });
+  const reshowed = await page.getByText("Prefers Fly.io for deploys", { exact: true }).waitFor({ timeout: 10_000 }).then(() => true, () => false);
+  await page.unroute(searchRoute);
+  step("the re-run search shows the saved text", reshowed);
+  // A write that lands while a different query is on screen must reload the query on screen, not the one the write began with.
+  const writeRoute = /\/api\/memories\/[^/?]+$/;
+  let heldWrite = null;
+  await page.route(writeRoute, (route) => {
+    heldWrite = route;
+  });
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("textbox", { name: "Memory" }).fill("Prefers Fly.io for deploys today");
+  await page.getByRole("button", { name: "Save" }).click();
+  const heldPatch = await eventually(
+    () => heldWrite,
+    (route) => route !== null,
+    { timeoutMs: 10_000, what: "the save request to be held" },
+  );
+  const typedDuringSave = await runSearch("nomatchtoken");
+  step("a query typed during a pending save searches normally", typedDuringSave.settled, typedDuringSave.ok ? undefined : "search response missing or failed");
+  await heldPatch.fulfill({ response: await heldPatch.fetch() });
+  const settled = await eventually(
+    () => list.getAttribute("aria-busy"),
+    (busy) => busy === "false",
+    { timeoutMs: 10_000, what: "the finished save to reload the query on screen" },
+  ).then(() => true, () => false);
+  await page.unroute(writeRoute);
+  step("a save that lands after the query changed keeps the list settled", settled && (await page.getByText("Could not search", { exact: true }).count()) === 0);
+  const refly = await runSearch("Fly");
+  const todayRow = page.getByText("Prefers Fly.io for deploys today", { exact: true });
+  step("the doubly saved text is found by the search again", refly.settled && (await todayRow.waitFor({ timeout: 10_000 }).then(() => true, () => false)));
+  await search.fill("");
+  const unfiltered = await page.getByText("Prefers Fly.io for deploys today", { exact: true }).waitFor({ timeout: 10_000 }).then(() => true, () => false);
+  step("clearing the search lists the edited memory", unfiltered);
+
+  await page.goto(`${origin}/memory`);
   await page.getByRole("button", { name: "Edit" }).click();
   const editor = page.getByRole("textbox", { name: "Memory" });
   await editor.fill("a".repeat(501));
@@ -215,11 +270,33 @@ export default async function memory({ page, origin, step, shot }) {
     step("the page shows the Ollama error", false, "ORBIT_OLLAMA_URL is unset");
   }
 
+  const deleteSearch = await runSearch("Render");
+  step(
+    "search before a delete finds the memory",
+    deleteSearch.settled && (await page.getByText("I ship to Render", { exact: true }).isVisible()),
+    deleteSearch.ok ? undefined : "search response missing or failed",
+  );
+  let heldRemove = null;
+  await page.route(searchRoute, (route) => {
+    heldRemove = route;
+  });
   await page.getByRole("button", { name: "Delete" }).click();
   const confirm = page.getByRole("dialog", { name: "Delete this memory?" });
   await confirm.waitFor({ timeout: 5_000 });
   await confirm.getByRole("button", { name: "Delete" }).click();
+  const heldRerun = await eventually(
+    () => heldRemove,
+    (route) => route !== null,
+    { timeoutMs: 10_000, what: "the delete to re-run the active search" },
+  );
+  step(
+    "a delete during a search keeps the found memory visible",
+    await page.getByText("I ship to Render", { exact: true }).isVisible(),
+    "the list blanks while the re-search is pending",
+  );
+  await heldRerun.fulfill({ response: await heldRerun.fetch() });
   const gone = await page.getByText("I ship to Render", { exact: true }).waitFor({ state: "hidden", timeout: 10_000 }).then(() => true, () => false);
+  await page.unroute(searchRoute);
   step("delete removes the memory", gone);
 
   fs.writeFileSync(requestLog, "");
