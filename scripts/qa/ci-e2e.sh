@@ -16,6 +16,9 @@ set -uo pipefail
 cd "$(dirname "$0")/../.." || exit 1
 
 export ORBIT_VERIFY_PORT="${ORBIT_VERIFY_PORT:-3210}"
+# Every server and fixture this suite starts labels its sandbox containers with this owner, so the
+# leftover check at the end sees only this suite's containers.
+export ORBIT_SANDBOX_OWNER="${ORBIT_SANDBOX_OWNER:-ci-e2e-$(node -p 'crypto.randomUUID()')}"
 
 suite=${1:-}
 scenarios_dir=.agents/skills/verify-orbit/scenarios
@@ -153,8 +156,9 @@ case $suite in
     done
     check node scripts/qa/sandbox-fixture-isolation.mjs
     # The sweep removes a container a run leaked once it is a minute old, before the leftover check
-    # below can see it. A removal in this server's log is that leak.
-    if grep "Sandbox sweep removed a stale container" .verify/server.log; then
+    # below can see it. A removal for this suite's owner in this server's log is that leak;
+    # removals of another process's stale containers are ignored.
+    if ! scripts/qa/sandbox-sweep-log.sh .verify/server.log; then
       echo "::error title=verify-orbit::the sandbox sweep removed a leftover container during the suite"
       failures+=("the sandbox sweep removed a leftover container")
     fi
@@ -162,9 +166,6 @@ case $suite in
     ORBIT_SANDBOX=on DOCKER_HOST=tcp://not-the-local-proxy:2375 verify launch --mock || die "launch with an invalid Docker endpoint"
     check verify browse sandbox-failure
     cleanup_server
-    if [ -n "$(docker ps -aq --filter label=orbit.sandbox)" ]; then
-      echo "::error title=verify-orbit::sandbox containers remain after the suite"
-      failures+=("sandbox containers remain")
-    fi
+    check node scripts/qa/sandbox-leftovers.mjs
     ;;
 esac

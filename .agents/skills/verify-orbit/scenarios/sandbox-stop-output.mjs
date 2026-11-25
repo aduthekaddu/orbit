@@ -1,11 +1,11 @@
 import { execFileSync } from "node:child_process";
+import { ownedSandboxFilterArgs, sandboxOwner } from "../../../../src/lib/sandbox/owner.mjs";
 
 const cases = [
   { scenario: "run-timeout", printed: "before-timeout\n" },
   { scenario: "run-spin", printed: "" },
 ];
 
-const SANDBOX_LABEL_FILTER = "label=orbit.sandbox=true";
 const CONTAINER_FORMAT = "{{.ID}}\t{{.Status}}";
 const CLEANUP_TIMEOUT_MS = 10_000;
 const CLEANUP_POLL_MS = 250;
@@ -28,7 +28,7 @@ export function formatSandboxContainers(containers) {
 function listSandboxContainers({ running = false } = {}) {
   const args = ["ps"];
   if (!running) args.push("-a");
-  args.push("--filter", SANDBOX_LABEL_FILTER);
+  args.push(...ownedSandboxFilterArgs(sandboxOwner()));
   if (running) args.push("--filter", "status=running");
   args.push("--format", CONTAINER_FORMAT);
   return parseSandboxContainers(execFileSync("docker", args, { encoding: "utf8" }));
@@ -251,4 +251,19 @@ export default async function sandboxStopOutput({ page, origin, mockUrl, step, s
   await card.scrollIntoViewIfNeeded();
   await shot("send-after-stop");
   await assertNoSandboxContainers(step, "a message sent right after Stop leaves no sandbox container", page);
+
+  // The page cannot read the saved reply. The card says so instead of waiting in silence, and a reload still shows the result.
+  const lost = (await (await page.request.post(`${origin}/api/chats`)).json()).id;
+  await page.goto(`${origin}/c/${lost}`);
+  await page.route((url) => url.pathname === `/api/chats/${lost}`, (route) => (route.request().method() === "GET" ? route.abort() : route.continue()));
+  await startAndStop(page, card, "run-timeout");
+  const unloaded = await card.getByText("Could not load output", { exact: true }).waitFor({ timeout: 15_000 }).then(() => true, () => false);
+  await card.scrollIntoViewIfNeeded();
+  await shot("saved-result-unreadable");
+  step("a stopped card whose saved result cannot be read shows Could not load output", unloaded, `card ${JSON.stringify(await inspect(card))}`);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await page.reload();
+  const recovered = await card.locator("span", { hasText: /^Stopped$/ }).first().waitFor({ timeout: 15_000 }).then(() => true, () => false);
+  step("after a reload that card shows its saved Stopped line", recovered && (await card.getByText("Could not load output").count()) === 0, `card ${JSON.stringify(await inspect(card))}`);
+  await assertNoSandboxContainers(step, "an unreadable saved result leaves no sandbox container", page);
 }

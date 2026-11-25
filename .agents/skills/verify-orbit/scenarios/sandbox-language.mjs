@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
+import { ownedSandboxFilterArgs, sandboxOwner } from "../../../../src/lib/sandbox/owner.mjs";
 
-const containerRunning = () => execFileSync("docker", ["ps", "--filter", "label=orbit.sandbox=true", "--filter", "status=running", "--format", "{{.ID}}"], { encoding: "utf8" }).trim() !== "";
+const containerRunning = () => execFileSync("docker", ["ps", ...ownedSandboxFilterArgs(sandboxOwner()), "--filter", "status=running", "--format", "{{.ID}}"], { encoding: "utf8" }).trim() !== "";
 
 const runs = [
   { tag: "run-python", name: "a Python run", language: "Python", status: "succeeded" },
