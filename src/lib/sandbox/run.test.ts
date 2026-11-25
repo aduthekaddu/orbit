@@ -10,6 +10,8 @@ import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } fr
 import { MockLanguageModelV4 } from "ai/test";
 import { createRunCodeTool } from "../tools/run-code";
 import { createStoppedRuns } from "../tools/stopped-runs";
+import { sandboxImages } from "./images";
+import { OWNER_LABEL, ownedSandboxFilter, parseSandboxOwner, sandboxLabels, sandboxOwner, type SandboxOwner } from "./owner.mjs";
 import { runCode } from "./run";
 import { removeStaleSandboxes } from "./sweep";
 import { waitForRunningSandbox } from "./wait-for-running";
@@ -66,10 +68,16 @@ function isNotFound(error: unknown) {
   return error !== null && typeof error === "object" && "statusCode" in error && error.statusCode === 404;
 }
 
-async function waitForNoContainers(docker: Docker) {
-  const deadline = performance.now() + 2000;
+const owner = sandboxOwner();
+
+function isDockerStatus(error: unknown, status: number) {
+  return typeof error === "object" && error !== null && "statusCode" in error && error.statusCode === status;
+}
+
+async function waitForNoContainers(docker: Docker, timeoutMs = 2000) {
+  const deadline = performance.now() + timeoutMs;
   while (true) {
-    const containers = await docker.listContainers({ all: true, filters: JSON.stringify({ label: ["orbit.sandbox"] }) });
+    const containers = await docker.listContainers({ all: true, filters: ownedSandboxFilter(owner) });
     if (containers.length === 0 || performance.now() >= deadline) {
       assert.deepEqual(containers, []);
       return;
@@ -81,13 +89,54 @@ async function waitForNoContainers(docker: Docker) {
 test("sandbox programs run inside real isolated containers", { timeout: 90_000 }, async (t) => {
   const docker = new Docker();
   try {
-    await docker.listContainers();
+    await docker.ping();
   } catch (error) {
     if (!(error && typeof error === "object" && "code" in error && ["ECONNREFUSED", "ENOENT", "EACCES", "ENOTFOUND", "EHOSTUNREACH"].includes(String(error.code)))) throw error;
     t.skip("Docker is unreachable. Start a local Docker daemon to run the sandbox escape checks.");
     return;
   }
   const runPython = (code: string) => runCode(docker, { language: "python", code });
+  // Code without owner filters sees a planted container, so each one lives only inside its own subtest.
+  const withPlantedContainer = async (planted: SandboxOwner, check: (container: Docker.Container) => Promise<void>) => {
+    const container = await docker.createContainer({
+      Image: sandboxImages.python.image,
+      Cmd: ["sleep", "30"],
+      Labels: { ...sandboxLabels(planted), "orbit.proof": "step-17" },
+      HostConfig: { AutoRemove: true, NetworkMode: "none" },
+    });
+    try {
+      await container.start();
+      await check(container);
+    } finally {
+      // AutoRemove can delete the container first (404), or be deleting it as this call arrives (409).
+      await container.remove({ force: true }).catch((error: unknown) => {
+        if (!isDockerStatus(error, 404) && !isDockerStatus(error, 409)) throw error;
+      });
+    }
+  };
+  // A name no other run can take, so a planted container is never another run's own.
+  const foreign = parseSandboxOwner(randomUUID());
+  await t.test("a planted container that is already gone does not fail the check", () => withPlantedContainer(foreign, async (container) => {
+    await container.kill();
+    while (true) {
+      try {
+        await container.inspect();
+      } catch (error) {
+        if (isDockerStatus(error, 404)) return;
+        throw error;
+      }
+      await delay(50);
+    }
+  }));
+  await t.test("another run's running container is not taken for this run's start", () => withPlantedContainer(foreign, async () => {
+    await assert.rejects(waitForRunningSandbox(docker, owner, 500), /no sandbox container started/);
+  }));
+  await t.test("another run's container does not fail this run's leftover check", () => withPlantedContainer(foreign, async () => {
+    await waitForNoContainers(docker);
+  }));
+  await t.test("a container this run left behind fails the leftover check", () => withPlantedContainer(owner, async () => {
+    await assert.rejects(waitForNoContainers(docker, 0), { code: "ERR_ASSERTION" });
+  }));
   await t.test("Python print(1+1) prints 2 and exits 0", async () => {
     const result = await runPython("print(1+1)");
     assert.equal(result.stdout, "2\n");
@@ -151,7 +200,7 @@ finally:
     assert.match(result.stdout, /Resource temporarily unavailable/);
     assert.equal(result.timedOut, false);
     assert.equal(result.exitCode, 0);
-    assert.ok(Array.isArray(await docker.listContainers()));
+    assert.equal(String(await docker.ping()), "OK");
   });
   await t.test("an infinite loop times out within 12 seconds", async () => {
     const started = performance.now();
@@ -216,7 +265,7 @@ finally:
     await t.test(name, async () => {
       const controller = new AbortController();
       const running = runCode(docker, { language: "python", code }, controller.signal);
-      const stopped = waitForRunningSandbox(docker).then(() => delay(1000)).then(() => controller.abort());
+      const stopped = waitForRunningSandbox(docker, owner).then(() => delay(1000)).then(() => controller.abort());
       try {
         await assert.rejects(running, (error: unknown) => {
           assert.ok(error instanceof Error && error.name === "AbortError");
@@ -268,7 +317,7 @@ finally:
         saved = await stopped.apply(responseMessage.parts);
       },
     });
-    const stopAfterStart = waitForRunningSandbox(docker).then(() => delay(1000)).then(() => controller.abort());
+    const stopAfterStart = waitForRunningSandbox(docker, owner).then(() => delay(1000)).then(() => controller.abort());
     try {
       for await (const chunk of stream as unknown as AsyncIterable<unknown>) void chunk;
     } finally {
@@ -571,14 +620,13 @@ finally:
   });
   await t.test("the sweep keeps sandbox containers younger than a minute and removes older ones in any state", async (t) => {
     // Other Orbit servers can share this Docker host, so every listing is narrowed to the containers this test makes.
-    const owner = randomUUID();
+    const sweepOwner = parseSandboxOwner(randomUUID());
     const list = docker.listContainers.bind(docker);
     t.mock.method(docker, "listContainers", (options: { filters: { label: string[] } }) =>
-      list({ ...options, filters: { ...options.filters, label: [...options.filters.label, `orbit.test=${owner}`] } }));
+      list({ ...options, filters: { ...options.filters, label: [...options.filters.label, `${OWNER_LABEL}=${sweepOwner}`] } }));
     const removals: string[] = [];
     t.mock.method(console, "warn", (...args: unknown[]) => { removals.push(format(...args)); });
-    const spec = containerSpec({ language: "python", code: "" });
-    const labels = { ...spec.Labels, "orbit.test": owner };
+    const spec = containerSpec({ language: "python", code: "" }, sweepOwner);
     const made: Record<string, Docker.Container> = {};
     const states = async () => Object.fromEntries(await Promise.all(Object.entries(made).map(async ([name, container]) => {
       try {
@@ -589,10 +637,10 @@ finally:
       }
     })));
     try {
-      made.created = await docker.createContainer({ ...spec, Labels: labels });
-      made.exited = await docker.createContainer({ ...spec, Labels: labels, Cmd: ["true"] });
-      made.running = await docker.createContainer({ ...spec, Labels: labels, Cmd: ["sleep", "60"] });
-      made.unlabeled = await docker.createContainer({ Image: spec.Image, Cmd: ["true"], Labels: { "orbit.test": owner } });
+      made.created = await docker.createContainer(spec);
+      made.exited = await docker.createContainer({ ...spec, Cmd: ["true"] });
+      made.running = await docker.createContainer({ ...spec, Cmd: ["sleep", "60"] });
+      made.unlabeled = await docker.createContainer({ Image: spec.Image, Cmd: ["true"], Labels: { [OWNER_LABEL]: sweepOwner } });
       await made.exited.start();
       await made.exited.wait();
       await made.running.start();
@@ -603,7 +651,7 @@ finally:
       assert.deepEqual(await states(), { created: "removed", exited: "removed", running: "removed", unlabeled: "created" });
       assert.deepEqual(
         [...removals].sort(),
-        ["created", "exited", "running"].map((state) => `Sandbox sweep removed a stale container id=${made[state]!.id} state=${state}`).sort(),
+        ["created", "exited", "running"].map((state) => `Sandbox sweep removed a stale container id=${made[state]!.id} state=${state} owner=${sweepOwner}`).sort(),
       );
     } finally {
       for (const container of Object.values(made)) {
