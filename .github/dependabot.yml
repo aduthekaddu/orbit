@@ -15,7 +15,7 @@ updates:
         patterns: ["*"]
     ignore:
       - dependency-name: "@types/node"
-        versions: [">=23"]
+        versions: [">=25"]
 
   - package-ecosystem: github-actions
     directories:
@@ -42,7 +42,7 @@ updates:
       prefix: "chore(docker)"
     ignore:
       - dependency-name: node
-        versions: [">=23"]
+        versions: [">=25"]
 
   - package-ecosystem: docker-compose
     directory: /
