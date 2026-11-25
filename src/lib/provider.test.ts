@@ -159,6 +159,9 @@ const payloads = [
   { shape: "plain string ids", body: ["plain-id"], models: [{ id: "plain-id", reasoning: null }] },
   { shape: "a name in place of an id", body: [{ name: "named" }], models: [{ id: "named", reasoning: null }] },
   { shape: "an empty { data } body", body: { data: [] }, models: [] },
+  { shape: "an empty top-level array", body: [], models: [] },
+  { shape: "JSON that is not a model list", body: { object: "error", message: "upstream changed" }, models: null },
+  { shape: "an object with no model array", body: { object: "list" }, models: null },
 ];
 
 for (const [index, { shape, body, models }] of payloads.entries()) {

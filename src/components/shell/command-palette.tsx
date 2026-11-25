@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { z } from "zod";
 import { Command, defaultFilter } from "cmdk";
 import { BrainIcon, ChatCircleIcon, GearSixIcon, MagnifyingGlassIcon, NotePencilIcon } from "@phosphor-icons/react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ScrollFade } from "@/components/ui/scroll-fade";
 import { chatLabel, type ChatSummary } from "@/components/chat/sidebar";
 import { ShortcutKbd } from "./shortcuts";
+import { useLoaded } from "@/lib/request-json";
+import { paletteSearchNotice } from "./palette-search";
 
 const itemClass =
   "flex h-9 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-sm text-muted-foreground select-none data-[selected=true]:bg-accent data-[selected=true]:text-foreground";
@@ -19,7 +22,22 @@ function filter(value: string, search: string, keywords?: string[]) {
 }
 
 type MessageHit = { chatId: string; chatTitle: string; messageId: string; snippet: string };
-type MessageSearch = { status: "idle" } | { status: "searching" } | { status: "failed" } | { status: "done"; hits: MessageHit[] };
+
+const searchHits = z.object({ hits: z.array(z.unknown()) }).transform(({ hits }) =>
+  hits.flatMap((hit) => {
+    if (!hit || typeof hit !== "object") return [];
+    const row = hit as Record<string, unknown>;
+    if (
+      typeof row.chatId !== "string" ||
+      typeof row.chatTitle !== "string" ||
+      typeof row.messageId !== "string" ||
+      typeof row.snippet !== "string"
+    ) {
+      return [];
+    }
+    return [{ chatId: row.chatId, chatTitle: row.chatTitle, messageId: row.messageId, snippet: row.snippet } satisfies MessageHit];
+  }),
+);
 
 export function CommandPalette({
   open,
@@ -36,57 +54,27 @@ export function CommandPalette({
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [messageSearch, setMessageSearch] = useState<MessageSearch>({ status: "idle" });
-  const hits = messageSearch.status === "done" ? messageSearch.hits : [];
+  const [messageSearch, loadSearch, , resetSearch] = useLoaded<MessageHit[]>({ status: "idle" });
+  const hits = messageSearch.status === "done" ? messageSearch.data : [];
+  const notice = paletteSearchNotice(messageSearch.status);
 
   useEffect(() => {
     if (!open) {
       setSearch("");
-      setMessageSearch({ status: "idle" });
+      resetSearch();
       return;
     }
     const query = search.trim();
     if (!query) {
-      setMessageSearch({ status: "idle" });
+      resetSearch();
       return;
     }
-    setMessageSearch({ status: "searching" });
-    const controller = new AbortController();
+    resetSearch({ status: "pending" });
     const timer = window.setTimeout(() => {
-      fetch(`/api/search?q=${encodeURIComponent(query)}`, { signal: controller.signal })
-        .then((response) => (response.ok ? response.json() : null))
-        .then((payload: { hits?: unknown } | null) => {
-          if (controller.signal.aborted) return;
-          if (!payload || !Array.isArray(payload.hits)) {
-            setMessageSearch({ status: "failed" });
-            return;
-          }
-          setMessageSearch({
-            status: "done",
-            hits: payload.hits.flatMap((hit) => {
-              if (!hit || typeof hit !== "object") return [];
-              const row = hit as Record<string, unknown>;
-              if (
-                typeof row.chatId !== "string" ||
-                typeof row.chatTitle !== "string" ||
-                typeof row.messageId !== "string" ||
-                typeof row.snippet !== "string"
-              ) {
-                return [];
-              }
-              return [{ chatId: row.chatId, chatTitle: row.chatTitle, messageId: row.messageId, snippet: row.snippet }];
-            }),
-          });
-        })
-        .catch(() => {
-          if (!controller.signal.aborted) setMessageSearch({ status: "failed" });
-        });
+      loadSearch(`/api/search?q=${encodeURIComponent(query)}`, {}, searchHits);
     }, 150);
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [open, search]);
+    return () => window.clearTimeout(timer);
+  }, [open, search, loadSearch, resetSearch]);
 
   function run(action: () => void) {
     onOpenChange(false);
@@ -109,7 +97,7 @@ export function CommandPalette({
           </div>
           <ScrollFade axis="y" fade="var(--popover)" scrollerClassName="max-h-[min(24rem,60vh)]">
             <Command.List className="p-1.5">
-              {(messageSearch.status === "idle" || messageSearch.status === "done") && (
+              {(notice === "empty") && (
                 <Command.Empty className="py-8 text-center text-sm text-muted-foreground">No results</Command.Empty>
               )}
               <Command.Group className={groupClass}>
@@ -162,7 +150,7 @@ export function CommandPalette({
                   ))}
                 </Command.Group>
               )}
-              {messageSearch.status === "failed" && <p className="py-8 text-center text-sm text-destructive">Could not search</p>}
+              {notice === "failed" && <p className="py-8 text-center text-sm text-destructive">Could not search</p>}
             </Command.List>
           </ScrollFade>
         </Command>

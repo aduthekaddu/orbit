@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { z } from "zod";
-import { requestJson, useLatestRequest, type RequestFailure } from "./request-json";
+import { nextReload, requestJson, useLatestRequest, type Loaded, type RequestFailure } from "./request-json";
 
 const realFetch = globalThis.fetch;
 test.afterEach(() => {
@@ -121,6 +121,17 @@ test("a newer request from useLatestRequest makes the older answer drop", async 
   answers[0]();
   await Promise.all([first, second]);
   assert.deepEqual(shown, ["newer"]);
+});
+
+test("a reload keeps the answer it already holds visible, and starts blank with nothing held", () => {
+  const rows = [{ id: "m1" }];
+  const held: Loaded<{ rows: { id: string }[] }> = { status: "done", data: { rows } };
+  const again: Loaded<{ rows: { id: string }[] }> = { status: "revalidating", data: { rows } };
+  assert.deepEqual(nextReload(held), { status: "revalidating", data: { rows } });
+  assert.deepEqual(nextReload(again), { status: "revalidating", data: { rows } });
+  assert.deepEqual(nextReload({ status: "idle" }), { status: "pending" });
+  assert.deepEqual(nextReload({ status: "pending" }), { status: "pending" });
+  assert.deepEqual(nextReload({ status: "failed", failure: { kind: "network" } }), { status: "pending" });
 });
 
 // The PR 159 shape: a delete with a success branch and no failure branch. It must not compile.

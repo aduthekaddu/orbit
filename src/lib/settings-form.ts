@@ -27,6 +27,8 @@ export function connectionFrom(load: Loaded<ModelList>): Connection {
       return { status: "idle" };
     case "pending":
       return { status: "checking" };
+    case "revalidating":
+      return { status: "checking" };
     case "failed":
       return load.failure.kind === "http" && load.failure.status === 400 && load.failure.error === MODELS_NOT_CONFIGURED ? { status: "idle" } : { status: "failed" };
     case "done":

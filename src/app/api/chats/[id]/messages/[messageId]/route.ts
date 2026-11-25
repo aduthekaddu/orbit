@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const patchSchema = r.object({
-  text: r.text(LIMITS.assistantText),
+  text: r.requiredText(LIMITS.assistantText),
   partIndex: r.number().int().nonnegative().optional(),
 });
 

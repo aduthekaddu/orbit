@@ -71,6 +71,7 @@ before(async () => {
     "c-sdk-id",
     "c-no-prompt",
     "c-head",
+    "c-user-text",
   ]) {
     mods.db.insert(mods.schema.chats).values({ id, userId: "u1", title: id, createdAt: now, updatedAt: now }).run();
   }
@@ -155,6 +156,15 @@ test("a regenerate that stores nothing keeps the previous answer", () => {
 
   assert.notEqual(write("c-regen", [message("g1", "user", "explain the bug")], "regenerate-message").id, "g2");
   assert.deepEqual(ids("c-regen"), ["g1", "g2"]);
+});
+
+test("a stored user message resent with different text is stale", () => {
+  write("c-user-text", [message("ut1", "user", "original")]);
+  assert.deepEqual(
+    mods.planChatWrite("c-user-text", [message("ut1", "user", "changed")]),
+    { error: "stale" },
+  );
+  assert.deepEqual(ids("c-user-text"), ["ut1"]);
 });
 
 test("a stale tab cannot overwrite an answer changed after it loaded", () => {
