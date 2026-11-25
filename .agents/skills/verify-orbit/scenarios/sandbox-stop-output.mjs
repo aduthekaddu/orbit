@@ -1,11 +1,11 @@
 import { execFileSync } from "node:child_process";
+import { ownedSandboxFilterArgs, sandboxOwner } from "../../../../src/lib/sandbox/owner.mjs";
 
 const cases = [
   { scenario: "run-timeout", printed: "before-timeout\n" },
   { scenario: "run-spin", printed: "" },
 ];
 
-const SANDBOX_LABEL_FILTER = "label=orbit.sandbox=true";
 const CONTAINER_FORMAT = "{{.ID}}\t{{.Status}}";
 const CLEANUP_TIMEOUT_MS = 10_000;
 const CLEANUP_POLL_MS = 250;
@@ -28,7 +28,7 @@ export function formatSandboxContainers(containers) {
 function listSandboxContainers({ running = false } = {}) {
   const args = ["ps"];
   if (!running) args.push("-a");
-  args.push("--filter", SANDBOX_LABEL_FILTER);
+  args.push(...ownedSandboxFilterArgs(sandboxOwner()));
   if (running) args.push("--filter", "status=running");
   args.push("--format", CONTAINER_FORMAT);
   return parseSandboxContainers(execFileSync("docker", args, { encoding: "utf8" }));
