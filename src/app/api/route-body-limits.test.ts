@@ -211,8 +211,12 @@ test("a stored multi-part message over the limit does not block the next short t
     { type: "text", text: "a".repeat(40_000) },
   ];
   assert.ok(chatStore.ensureChat("c-stored-split", USER_ID));
-  assert.equal(chatStore.upsertMessage("c-stored-split", { id: "sp-u1", role: "user", parts }), true);
-  assert.equal(chatStore.upsertMessage("c-stored-split", { id: "sp-a1", role: "assistant", parts: [{ type: "text", text: "ok" }] }), true);
+  const storedUser = { id: "sp-u1", role: "user" as const, parts };
+  const plannedUser = chatStore.planChatWrite("c-stored-split", [storedUser]);
+  assert.ok(!("error" in plannedUser), "error" in plannedUser ? plannedUser.error : "");
+  const plannedReply = chatStore.planChatWrite("c-stored-split", [storedUser, { id: "sp-a1", role: "assistant", parts: [] }]);
+  assert.ok(!("error" in plannedReply), "error" in plannedReply ? plannedReply.error : "");
+  assert.equal(chatStore.finishChatReply(plannedReply, [{ type: "text", text: "ok" }]), true);
   const { status, text } = await post({
     id: "c-stored-split",
     trigger: "submit-message",
@@ -237,8 +241,20 @@ type SeedMessage = { id: string; role: "user" | "assistant"; text: string };
 // A chat as an older Orbit stored it: no limit applied when these were written.
 function seedChat(chatId: string, history: SeedMessage[]) {
   assert.ok(chatStore.ensureChat(chatId, USER_ID));
+  const incoming: { id: string; role: "user" | "assistant"; parts: unknown }[] = [];
   for (const message of history) {
-    assert.equal(chatStore.upsertMessage(chatId, { id: message.id, role: message.role, parts: [{ type: "text", text: message.text }] }), true);
+    const parts = [{ type: "text", text: message.text }];
+    if (message.role === "user") {
+      incoming.push({ id: message.id, role: "user", parts });
+      const planned = chatStore.planChatWrite(chatId, incoming);
+      assert.ok(!("error" in planned), "error" in planned ? planned.error : "");
+    } else {
+      const planned = chatStore.planChatWrite(chatId, [...incoming, { id: message.id, role: "assistant", parts: [] }]);
+      assert.ok(!("error" in planned), "error" in planned ? planned.error : "");
+      assert.equal(planned.id, message.id);
+      assert.equal(chatStore.finishChatReply(planned, parts), true);
+      incoming.push({ id: message.id, role: "assistant", parts });
+    }
   }
 }
 
