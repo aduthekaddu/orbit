@@ -97,6 +97,7 @@ PASS a settings save that fails on the network shows Could not save
 PASS a GitHub check that fails on the network says GitHub is unavailable.
 PASS a GitHub check that gets a 400 shows the server's error
 PASS the chat has a reply to edit
+PASS Save is disabled while the reply is blank
 PASS a reply edit that fails on the network shows Could not save and keeps the editor
 PASS no failed request raised a page error
 ```

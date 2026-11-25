@@ -252,6 +252,7 @@ export function finishChatReply(plan: ReplyPlan, parts: unknown, redact?: Redact
 }
 
 export function updateMessageText(chatId: string, messageId: string, text: string, partIndex?: number) {
+  if (text.trim() === "") return false;
   const row = db
     .select()
     .from(messages)

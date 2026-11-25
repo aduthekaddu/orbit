@@ -51,6 +51,7 @@ Load(t) ==
 \* code: src/lib/messages.ts updateMessageText
 \* code: src/lib/chat-parts.ts replaceTextParts
 \* PATCH /api/chats/[id]/messages/[messageId] saves an edit of R's text. It compares nothing.
+\* Blank or whitespace-only text is refused and is not this action.
 \* src/components/chat/use-save-message.ts refuses a second save while one is pending. A tab whose
 \* own request streams shows no reply Edit button (src/components/chat/messages.tsx hideWhenRunning)
 \* and no code Edit on the streaming reply (src/components/chat/markdown-text.tsx).

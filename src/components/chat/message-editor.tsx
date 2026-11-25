@@ -19,7 +19,7 @@ export function MessageTextEditor({
   const [text, setText] = useState(initialText);
 
   async function commit() {
-    if (saving) return;
+    if (saving || text.trim() === "") return;
     if (text === initialText) {
       onClose();
       return;
@@ -47,7 +47,7 @@ export function MessageTextEditor({
         }}
         className="block max-h-[60vh] min-h-24 w-full resize-none bg-transparent px-4 py-3 text-sm leading-6 outline-none field-sizing-content scrollbar-thin"
       />
-      <EditorFooter error={error} saving={saving} onCancel={onClose} onSave={() => void commit()} />
+      <EditorFooter error={error} saving={saving} saveDisabled={text.trim() === ""} onCancel={onClose} onSave={() => void commit()} />
     </div>
   );
 }

@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- Saving an empty reply edit is refused, and Save stays disabled while the editor is blank, so a reply cannot be stored with no text. (#189)
 - Memory search, a memory save or delete, and the command palette's message search go through the same request helper as the rest of the app, so a failed request cannot be treated as an empty result. (#185)
 - A memory save or delete during a search keeps the found memories on screen while the search runs again, instead of the list going blank until the new results arrive. (#185)
 - A chat turn no longer reads every stored message body three times on the server before the model starts. It still checks the path and refuses a stale prompt or a cross-chat id. (#142)
