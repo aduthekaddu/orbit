@@ -456,3 +456,26 @@ test("a live lease keeps the night after its start time is three hours old", asy
   assert.equal(api.tryClaim({ date, owner: "worker-b", now, chatIds: [] }), false);
   assert.deepEqual(api.getRun(date), before);
 });
+
+test("dream masks stored credentials before embedding and saving memories", async () => {
+  const api = requireDream();
+  await resetChats();
+  assert.ok(ollama);
+  const { db } = await import("../db");
+  const store = await import("./store");
+  const secret = "test-key-not-real";
+  const date = "2099-05-09";
+  // Seed a pre-redaction user message directly (as rows saved before #202 can look) so the mock dream model echoes the key.
+  await seedChat(`My provider credential is ${secret} in production`, at(date, 12));
+  const row = await api.runDream({ manual: true, date, now: new Date(at(date, 16)) });
+  assert.ok(row);
+  assert.equal(row.state, "done");
+  assert.equal(row.added, 1);
+  const saved = memoryTexts();
+  assert.deepEqual(saved, ["My provider credential is [redacted] in production"]);
+  assert.equal(store.listMemories().some((memory) => memory.text.includes(secret)), false);
+  const received = (await (await fetch(`${ollama.url}/qa/received`)).json()) as string[];
+  assert.equal(received.some((entry) => entry.includes(secret)), false, `Ollama received unmasked key: ${JSON.stringify(received)}`);
+  assert.equal(db.$client.prepare("SELECT count(*) AS n FROM memories_vec").get() !== undefined, true);
+  assert.equal(store.listMemories()[0]?.embedded, true);
+});

@@ -324,3 +324,64 @@ test("a key that overlaps its own next copy is masked to the end of that copy", 
   const key = "made-up-made-up-made-up";
   assert.equal(only({ apiKey: key }).text(`${key}-made-up`), REDACTED);
 });
+
+test("percent-encoded forms of a stored credential are masked in text and withheld in diagnostics", () => {
+  const key = "made+up/provider=key&01";
+  const redactor = only({ apiKey: key });
+  const encoded = encodeURIComponent(key);
+  const partial = "made%2bup%2fprovider=key&01";
+  assert.equal(redactor.text(`url?k=${encoded}`), "url?k=[redacted]");
+  assert.equal(redactor.text(`url?k=${partial}`), "url?k=[redacted]");
+  assert.equal(redactor.diagnostic(`failed ${encoded}`), REDACTED);
+  assert.equal(redactor.diagnostic(`failed ${partial}`), REDACTED);
+  const hyphen = "made-up-provider-key";
+  const partialHyphen = "made%2dup-provider-key";
+  assert.equal(only({ apiKey: hyphen }).text(partialHyphen), REDACTED);
+});
+
+test("base64 and Basic-auth base64 forms of a stored credential are masked in text and withheld in diagnostics", () => {
+  const key = "made-up-provider-key";
+  const redactor = only({ apiKey: key });
+  const plainB64 = Buffer.from(key).toString("base64");
+  const urlB64 = Buffer.from(key).toString("base64url");
+  assert.equal(redactor.text(`token=${plainB64}`), "token=[redacted]");
+  assert.equal(redactor.text(`token=${urlB64}`), "token=[redacted]");
+  assert.equal(redactor.diagnostic(`Authorization: Bearer ${plainB64}`), REDACTED);
+  for (const user of ["", "a", "ab", "abc", "user"]) {
+    const basic = Buffer.from(`${user}:${key}`).toString("base64");
+    const masked = redactor.text(`Authorization: Basic ${basic}`);
+    assert.equal(masked.includes(basic), false, `Basic auth for ${user} was not masked: ${masked}`);
+    assert.match(masked, /\[redacted\]/);
+    const leftover = masked.replace("Authorization: Basic ", "").replace("[redacted]", "");
+    assert.equal(Buffer.from(leftover, "base64").toString("utf8").includes("made"), false);
+    assert.equal(redactor.diagnostic(`Authorization: Basic ${basic}`), REDACTED);
+  }
+});
+
+test("JSON unicode escapes and nested-JSON quote escapes of a stored credential are masked", () => {
+  const key = "made-up-provider-key";
+  const redactor = only({ apiKey: key });
+  const unicodeEscaped = `\\u006dade-up\\u002dprovider-key`;
+  const doubleUnicodeEscaped = `\\\\u006dade-up\\\\u002dprovider-key`;
+  assert.equal(redactor.text(`{"k":"${unicodeEscaped}"}`), `{"k":"[redacted]"}`);
+  assert.equal(redactor.text(`{\\"k\\":\\"${doubleUnicodeEscaped}\\"}`), `{\\"k\\":\\"[redacted]\\"}`);
+  assert.equal(redactor.diagnostic(`failed ${unicodeEscaped}`), REDACTED);
+
+  const quotedKey = 'made-up"provider"key';
+  const quotedRedactor = only({ apiKey: quotedKey });
+  const innerJson = JSON.stringify({ secret: quotedKey });
+  const nestedJson = JSON.stringify({ body: innerJson });
+  const maskedInner = quotedRedactor.text(innerJson);
+  const maskedNested = quotedRedactor.text(nestedJson);
+  assert.equal(maskedInner, '{"secret":"[redacted]"}');
+  assert.equal(JSON.parse(maskedNested).body, '{"secret":"[redacted]"}');
+  assert.equal(quotedRedactor.diagnostic(nestedJson), REDACTED);
+});
+
+test("a stored credential split by terminal escape codes is masked", () => {
+  const key = "made-up-provider-key";
+  const redactor = only({ apiKey: key });
+  const colored = "before made-up\u001b[31m-provider-key after";
+  assert.equal(redactor.text(colored), "before [redacted] after");
+  assert.equal(redactor.diagnostic(colored), REDACTED);
+});

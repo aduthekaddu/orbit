@@ -123,3 +123,186 @@ test("an aborted code run is rethrown without a failure log", async (t) => {
   await assert.rejects(executeCode(controller.signal), { name: "AbortError" });
   assert.deepEqual(logs, []);
 });
+
+function dockerFrame(streamType: 1 | 2, data: string | Buffer): Buffer {
+  const payload = typeof data === "string" ? Buffer.from(data, "utf8") : data;
+  const header = Buffer.alloc(8);
+  header[0] = streamType;
+  header.writeUInt32BE(payload.length, 4);
+  return Buffer.concat([header, payload]);
+}
+
+async function startFakeDockerHttp(
+  t: TestContext,
+  handler: (emit: (type: 1 | 2, data: string | Buffer) => void, finish: (code?: number) => void, waiting: Promise<void>) => void,
+) {
+  let socket: import("node:stream").Duplex | undefined;
+  let waitResolve: ((code: number) => void) | undefined;
+  let waitCode: number | undefined;
+  let started = false;
+  const waiting = Promise.withResolvers<void>();
+  const removed = Promise.withResolvers<void>();
+  const server = http.createServer((request, response) => {
+    const url = request.url ?? "";
+    if (request.method === "POST" && url.includes("/containers/create")) {
+      response.writeHead(201, { "content-type": "application/json" });
+      response.end(JSON.stringify({ Id: "fake-c1" }));
+      return;
+    }
+    if (request.method === "GET" && url.includes("/events")) {
+      response.writeHead(200, { "content-type": "application/json" });
+      return;
+    }
+    if (request.method === "POST" && url.includes("/start")) {
+      started = true;
+      const emit = (type: 1 | 2, data: string | Buffer) => {
+        socket?.write(dockerFrame(type, data));
+      };
+      const finish = (code = 0) => {
+        socket?.end();
+        waitCode = code;
+        waitResolve?.(code);
+      };
+      handler(emit, finish, waiting.promise);
+      response.writeHead(204).end();
+      return;
+    }
+    if (request.method === "POST" && url.includes("/wait")) {
+      waiting.resolve();
+      const reply = (code: number) => {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ StatusCode: code }));
+      };
+      if (waitCode !== undefined) reply(waitCode);
+      else waitResolve = reply;
+      return;
+    }
+    if (request.method === "POST" && url.includes("/kill")) {
+      response.writeHead(started ? 204 : 409).end();
+      return;
+    }
+    if (request.method === "DELETE" && url.includes("/containers/")) {
+      response.writeHead(204).end();
+      removed.resolve();
+      return;
+    }
+    response.writeHead(200, { "content-type": "application/json" }).end("{}");
+  });
+  server.on("upgrade", (_request, sock) => {
+    socket = sock;
+    sock.resume();
+    sock.write("HTTP/1.1 101 UPGRADED\r\nContent-Type: application/vnd.docker.raw-stream\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(async () => {
+    await removed.promise;
+    socket?.destroy();
+    await new Promise<void>((resolve) => {
+      server.closeAllConnections();
+      server.close(() => resolve());
+    });
+  });
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  setDockerHost(t, `http://127.0.0.1:${address.port}`);
+}
+
+function sandboxSettings() {
+  return {
+    baseUrl: "http://127.0.0.1:9/v1",
+    apiKey: "made-up-provider-key-0001",
+    model: "mock",
+    reasoningEffort: "low" as const,
+    searxngUrl: "",
+    tavilyApiKey: "made-up-tavily-key-0002",
+    githubToken: "made-up-github-token-0003",
+    githubMcpUrl: "",
+  };
+}
+
+function enableSandbox(t: TestContext) {
+  const originalSandbox = process.env.ORBIT_SANDBOX;
+  process.env.ORBIT_SANDBOX = "on";
+  t.after(() => {
+    if (originalSandbox === undefined) delete process.env.ORBIT_SANDBOX;
+    else process.env.ORBIT_SANDBOX = originalSandbox;
+  });
+}
+
+test("run_code masks stored credentials in stdout, stderr, and ANSI-split output", async (t) => {
+  enableSandbox(t);
+  const settings = sandboxSettings();
+  await startFakeDockerHttp(t, (emit, finish) => {
+    emit(1, `out ${settings.apiKey} and made-up\u001b[31m-github-token-0003\n`);
+    emit(2, `err ${settings.tavilyApiKey}\n`);
+    finish(0);
+  });
+  const { toolsFor } = await import("./index");
+  const tool = toolsFor(settings).run_code;
+  assert.ok(tool?.execute);
+  const output = (await tool.execute({ language: "python", code: "print(1)" }, { toolCallId: "rc1", messages: [], context: {} })) as {
+    stdout: string;
+    stderr: string;
+  };
+  assert.equal(output.stdout, "out [redacted] and [redacted]\n");
+  assert.equal(output.stderr, "err [redacted]\n");
+});
+
+test("run_code masks a stored credential that straddles the 64 KiB output cap without leaving a prefix", async (t) => {
+  enableSandbox(t);
+  const settings = sandboxSettings();
+  await startFakeDockerHttp(t, (emit, finish) => {
+    emit(1, "a".repeat(65_530) + settings.apiKey + "tail");
+    finish(0);
+  });
+  const { toolsFor } = await import("./index");
+  const tool = toolsFor(settings).run_code;
+  assert.ok(tool?.execute);
+  const output = (await tool.execute({ language: "python", code: "print(1)" }, { toolCallId: "rc2", messages: [], context: {} })) as {
+    stdout: string;
+    truncated: boolean;
+  };
+  assert.equal(output.truncated, true);
+  assert.equal(output.stdout.includes("made-u"), false, `clipped prefix leaked: ${output.stdout.slice(-30)}`);
+  assert.ok(Buffer.byteLength(output.stdout) <= 65_536);
+});
+
+test("run_code masks stored credentials collected before a stopped run is cancelled", async (t) => {
+  enableSandbox(t);
+  const settings = sandboxSettings();
+  const controller = new AbortController();
+  const readyToStop = Promise.withResolvers<void>();
+  await startFakeDockerHttp(t, (emit, _finish, waiting) => {
+    emit(1, `partial ${settings.apiKey}\n`);
+    void waiting.then(() => readyToStop.resolve());
+  });
+  const { toolsFor } = await import("./index");
+  const { createStoppedRuns } = await import("./stopped-runs");
+  const stopped = createStoppedRuns();
+  const tool = toolsFor(settings, stopped).run_code;
+  assert.ok(tool?.execute);
+  const pending = Promise.resolve(tool.execute({ language: "python", code: "while True: pass" }, { toolCallId: "rc3", messages: [], abortSignal: controller.signal, context: {} }));
+  await readyToStop.promise;
+  controller.abort();
+  const caught = await pending.then(() => assert.fail("expected RunStopped"), (error: unknown) => error as { output?: { stdout?: string } });
+  assert.equal(caught.output?.stdout?.includes(settings.apiKey), false, `stopped stdout leaked key: ${caught.output?.stdout}`);
+  assert.equal(caught.output?.stdout, "partial [redacted]\n");
+});
+
+test("render_ui masks stored credentials in its returned spec output", async () => {
+  const settings = sandboxSettings();
+  const { toolsFor } = await import("./index");
+  const tool = toolsFor(settings).render_ui;
+  assert.ok(tool?.execute);
+  const result = await tool.execute(
+    {
+      root: "card",
+      elements: {
+        card: { type: "Card", props: { title: `Key ${settings.apiKey}`, description: null }, children: [] },
+      },
+    },
+    { toolCallId: "ui1", messages: [], context: {} },
+  );
+  assert.equal(JSON.stringify(result).includes(settings.apiKey), false, `render_ui leaked key: ${JSON.stringify(result)}`);
+});
