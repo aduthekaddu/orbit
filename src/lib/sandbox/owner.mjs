@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 // processes' containers, so only code that acts on every Orbit container on the host may do that.
 const SANDBOX_LABEL = "orbit.sandbox";
 // The process that created the container: one Orbit server, one test file, or one QA script.
-const OWNER_LABEL = "orbit.owner";
+export const OWNER_LABEL = "orbit.owner";
 const OWNER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
 
 export function parseSandboxOwner(value) {
@@ -35,15 +35,15 @@ export function sandboxLabels(owner) {
   return { [SANDBOX_LABEL]: "true", [OWNER_LABEL]: owner };
 }
 
+export function ownerFromLabels(labels) {
+  const value = labels?.[OWNER_LABEL];
+  return typeof value === "string" && OWNER_PATTERN.test(value) ? value : undefined;
+}
+
 export function ownedSandboxFilter(owner) {
   return { label: [`${SANDBOX_LABEL}=true`, `${OWNER_LABEL}=${owner}`] };
 }
 
 export function ownedSandboxFilterArgs(owner) {
   return ownedSandboxFilter(owner).label.flatMap((label) => ["--filter", `label=${label}`]);
-}
-
-// For code whose job is to act on every Orbit container on the host, such as the stale-container sweep.
-export function allSandboxesFilter() {
-  return { label: [`${SANDBOX_LABEL}=true`] };
 }

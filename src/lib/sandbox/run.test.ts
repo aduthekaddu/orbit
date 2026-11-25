@@ -7,7 +7,7 @@ import type { Duplex, Writable } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
 import { format } from "node:util";
 import { sandboxImages } from "./images";
-import { ownedSandboxFilter, parseSandboxOwner, sandboxLabels, sandboxOwner, type SandboxOwner } from "./owner.mjs";
+import { OWNER_LABEL, ownedSandboxFilter, parseSandboxOwner, sandboxLabels, sandboxOwner, type SandboxOwner } from "./owner.mjs";
 import { runCode, runCodeToEnd } from "./run";
 import { containerSpec, type RunCodeInput, type RunCodeOutput } from "./spec";
 import { removeStaleSandboxes } from "./sweep";
@@ -357,11 +357,10 @@ finally:
     const sweepOwner = parseSandboxOwner(randomUUID());
     const list = docker.listContainers.bind(docker);
     t.mock.method(docker, "listContainers", (options: { filters: { label: string[] } }) =>
-      list({ ...options, filters: { ...options.filters, label: [...options.filters.label, `orbit.test=${sweepOwner}`] } }));
+      list({ ...options, filters: { ...options.filters, label: [...options.filters.label, `${OWNER_LABEL}=${sweepOwner}`] } }));
     const removals: string[] = [];
     t.mock.method(console, "warn", (...args: unknown[]) => { removals.push(format(...args)); });
     const spec = containerSpec({ language: "python", code: "" }, sweepOwner);
-    const labels = { ...spec.Labels, "orbit.test": sweepOwner };
     const made: Record<string, Docker.Container> = {};
     const states = async () => Object.fromEntries(await Promise.all(Object.entries(made).map(async ([name, container]) => {
       try {
@@ -372,10 +371,10 @@ finally:
       }
     })));
     try {
-      made.created = await docker.createContainer({ ...spec, Labels: labels });
-      made.exited = await docker.createContainer({ ...spec, Labels: labels, Cmd: ["true"] });
-      made.running = await docker.createContainer({ ...spec, Labels: labels, Cmd: ["sleep", "60"] });
-      made.unlabeled = await docker.createContainer({ Image: spec.Image, Cmd: ["true"], Labels: { "orbit.test": sweepOwner } });
+      made.created = await docker.createContainer(spec);
+      made.exited = await docker.createContainer({ ...spec, Cmd: ["true"] });
+      made.running = await docker.createContainer({ ...spec, Cmd: ["sleep", "60"] });
+      made.unlabeled = await docker.createContainer({ Image: spec.Image, Cmd: ["true"], Labels: { [OWNER_LABEL]: sweepOwner } });
       await made.exited.start();
       await made.exited.wait();
       await made.running.start();
@@ -386,7 +385,7 @@ finally:
       assert.deepEqual(await states(), { created: "removed", exited: "removed", running: "removed", unlabeled: "created" });
       assert.deepEqual(
         [...removals].sort(),
-        ["created", "exited", "running"].map((state) => `Sandbox sweep removed a stale container id=${made[state]!.id} state=${state}`).sort(),
+        ["created", "exited", "running"].map((state) => `Sandbox sweep removed a stale container id=${made[state]!.id} state=${state} owner=${sweepOwner}`).sort(),
       );
     } finally {
       for (const container of Object.values(made)) {
