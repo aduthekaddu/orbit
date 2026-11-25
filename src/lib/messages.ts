@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { UIMessage } from "ai";
+import type { Redactor } from "./chat-errors";
 import { replaceTextPart, replaceTextParts } from "./chat-parts";
 import { db } from "./db";
 import { assistantHasVisiblePart } from "./genui/spec";
@@ -91,16 +92,29 @@ export function replaceFallbackTitle(chatId: string, fallback: string, title: st
   db.update(chats).set({ title }).where(and(eq(chats.id, chatId), eq(chats.title, fallback))).run();
 }
 
+// The search text joins parts and strips terminal codes, which can spell a credential, so it is masked after.
+function messageBody(parts: unknown, redact?: Redactor) {
+  const saved = redact ? redact.value(parts) : parts;
+  const content = redact ? redact.text(searchTextFromParts(saved)) : searchTextFromParts(saved);
+  return { content, parts: JSON.stringify(saved) };
+}
+
 // Callers hold the transaction.
-function insertMessage(chatId: string, message: { id: string; role: "user" | "assistant"; parts: unknown }, parentId: string | null) {
+function insertMessage(
+  chatId: string,
+  message: { id: string; role: "user" | "assistant"; parts: unknown },
+  parentId: string | null,
+  redact?: Redactor,
+) {
   if (db.select().from(messages).where(eq(messages.id, message.id)).get()) return false;
   if (!db.select().from(chats).where(eq(chats.id, chatId)).get()) return false;
   const parent = parentId ? db.select().from(messages)
     .where(and(eq(messages.id, parentId), eq(messages.chatId, chatId))).get() : undefined;
   if (parentId && !parent) return false;
+  const body = messageBody(message.parts, redact);
   db.insert(messages).values({
     id: message.id, chatId, parentId,
-    role: message.role, content: searchTextFromParts(message.parts), parts: JSON.stringify(message.parts),
+    role: message.role, content: body.content, parts: body.parts,
     position: parent ? parent.position + 1 : 0,
     createdAt: new Date(),
   }).run();
@@ -201,13 +215,13 @@ function unchanged(row: SavedText | undefined, copy: SavedText) {
 }
 
 /** Saves a reply with a visible part, unless a row its plan copied has changed. Returns whether it saved. */
-export function finishChatReply(plan: ReplyPlan, parts: unknown): boolean {
+export function finishChatReply(plan: ReplyPlan, parts: unknown, redact?: Redactor): boolean {
   if (!assistantHasVisiblePart(parts)) return false;
   return db.transaction(() => {
     if (!unchanged(savedText(plan.chatId, plan.prompt.id), plan.prompt.saved)) return false;
-    if (!plan.continues) return insertMessage(plan.chatId, { id: plan.id, role: "assistant", parts }, plan.prompt.id);
+    if (!plan.continues) return insertMessage(plan.chatId, { id: plan.id, role: "assistant", parts }, plan.prompt.id, redact);
     if (!unchanged(savedText(plan.chatId, plan.id), plan.continues)) return false;
-    db.update(messages).set({ content: searchTextFromParts(parts), parts: JSON.stringify(parts) })
+    db.update(messages).set(messageBody(parts, redact))
       .where(eq(messages.id, plan.id)).run();
     return true;
   });

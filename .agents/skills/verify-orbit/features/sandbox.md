@@ -97,7 +97,7 @@ node .agents/skills/verify-orbit/verify.mjs browse sandbox-stop-output
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
-`[qa:run-timeout]` prints `before-timeout` and then loops. `[qa:run-spin]` prints nothing. The scenario waits two seconds and clicks Stop in Chrome, then types a draft in the composer before the saved result arrives. Require the live card, with no reload, to show Cancelled, a `Stopped` line with its duration, and the output printed before Stop. Require the draft, the messages on screen, and the branch to stay as they were, and no branch picker to appear. Require the saved part to be a completed result with `cancelled` set and the output printed before Stop, and require the reopened card to show the same header, result line, and output as the live card. The check also requires that no sandbox container remains.
+`[qa:run-timeout]` prints `before-timeout` and then loops. `[qa:run-spin]` prints nothing. The scenario waits two seconds and clicks Stop in Chrome, then types a draft in the composer before the saved result arrives. Require the live card, with no reload, to show Cancelled, a `Stopped` line with its duration, and the output printed before Stop. Require the draft, the messages on screen, and the branch to stay as they were, and no branch picker to appear. Require the saved part to be a completed result with `cancelled` set and the output printed before Stop, and require the reopened card to show the same header, result line, and output as the live card. The check also requires that no sandbox container remains. Last, the scenario fails every read of the saved chat, stops a run, and requires the live card to show `Could not load output`, then reloads and requires the saved `Stopped` line.
 
 The scenario then regenerates a stopped run and stops it again. Require the 2 / 2 picker, a `Stopped` line on the second card, and a `Stopped` line on both cards when Previous and Next switch between the versions.
 
@@ -216,8 +216,8 @@ Run `node scripts/qa/sandbox-native-build.mjs`. It uses the optional SSH addon i
 
 ## Isolation and timing
 
-Run `node --import tsx --test src/lib/sandbox/run.test.ts`. It skips with a reason only if Docker is unreachable. A skipped run is not isolation proof. Require every escape case to run and no sandbox containers to remain.
+Run `node --import tsx --import ./scripts/test-data-dir.mjs --test src/lib/sandbox/run.test.ts`. It skips with a reason only if Docker is unreachable. A skipped run is not isolation proof. Require every escape case to run and no sandbox containers to remain.
 
 Run `npx tsx scripts/qa/sandbox-timing.ts` with both images already pulled. It runs ten Python containers, validates each result, and reports p50 and p95 for start through result. The p95 budget is under 1,500 ms.
 
-Finally, run `docker ps -a --filter label=orbit.sandbox`. It must list no containers.
+Both commands fail if a container they made remains. They look only at their own containers, so another Orbit process's containers on the same Docker host do not fail them. `scripts/qa/ci-e2e.sh sandbox` makes the same check for the verify server with `node scripts/qa/sandbox-leftovers.mjs`.

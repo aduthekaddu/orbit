@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test, { before, after } from "node:test";
+import { Redactor } from "./chat-errors";
 
 type Modules = {
   db: typeof import("./db").db;
@@ -27,8 +28,6 @@ after(() => {
 before(async () => {
   const repo = process.cwd();
   sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-messages-"));
-  process.env.ORBIT_DATA_DIR = path.join(sandbox, "data");
-  fs.mkdirSync(process.env.ORBIT_DATA_DIR);
   fs.cpSync(path.join(repo, "drizzle"), path.join(sandbox, "drizzle"), { recursive: true });
   process.chdir(sandbox);
 
@@ -166,4 +165,53 @@ test("editing one text part by index keeps the reply's parts in order", () => {
   assert.deepEqual(saved.parts, [parts[0], parts[1], { type: "text", text: "new code" }, parts[3]]);
   const stored = mods.db.$client.prepare("select content from messages where id = ?").get("indexed-answer") as { content: string };
   assert.equal(stored.content, parts[0].text + "new code" + parts[3].text);
+});
+test("a saved reply's search text carries no credential that joining parts or stripping terminal codes rebuilds", () => {
+  const key = "made-up-provider-key";
+  const redact = new Redactor({ apiKey: key, tavilyApiKey: "", githubToken: "" });
+  const run = {
+    type: "tool-run_code",
+    toolCallId: "run-1",
+    state: "output-available",
+    input: { language: "python", code: "print(1)" },
+    output: { stdout: `${key.slice(0, 7)}\u001b[31m${key.slice(7)}`, stderr: "", exitCode: 0, durationMs: 1, timedOut: false, truncated: false },
+  };
+  const parts = [{ type: "text", text: key.slice(0, 9) }, { type: "text", text: key.slice(9) }, run];
+  const plan = mods.planChatWrite("c1", [message("joined-prompt", "user", "ask"), pending("joined-reply")]);
+  if ("error" in plan) assert.fail(`write refused: ${plan.error}`);
+  assert.equal(mods.finishChatReply(plan, parts, redact), true);
+  const row = mods.db.$client.prepare("select content from messages where id = ?").get("joined-reply") as { content: string };
+  assert.equal(row.content, "[redacted]\n[redacted]\nprint(1)");
+});
+
+test("a saved reply's parts and search text carry no credential that a part holds whole", () => {
+  const key = "made-up-provider-key";
+  const redact = new Redactor({ apiKey: key, tavilyApiKey: "", githubToken: "" });
+  const parts = [{ type: "text", text: `the key is ${key}` }];
+  const plan = mods.planChatWrite("c1", [message("whole-prompt", "user", "ask"), pending("whole-reply")]);
+  if ("error" in plan) assert.fail(`write refused: ${plan.error}`);
+  assert.equal(mods.finishChatReply(plan, parts, redact), true);
+  const row = mods.db.$client.prepare("select content, parts from messages where id = ?").get("whole-reply") as { content: string; parts: string };
+  assert.equal(row.content, "the key is [redacted]");
+  assert.deepEqual(JSON.parse(row.parts), [{ type: "text", text: "the key is [redacted]" }]);
+});
+
+test("a continued reply's parts and search text also carry no stored credential", () => {
+  const key = "made-up-provider-key";
+  const redact = new Redactor({ apiKey: key, tavilyApiKey: "", githubToken: "" });
+  const prompt = message("continued-redact-prompt", "user", "ask");
+  const initial = message("continued-redact-reply", "assistant", "first");
+  reply("c1", [prompt], initial);
+  const plan = mods.planChatWrite("c1", [prompt, initial]);
+  if ("error" in plan) assert.fail(`write refused: ${plan.error}`);
+  const continued = [{ type: "text", text: "first " }, { type: "text", text: key.slice(0, 9) }, { type: "text", text: key.slice(9) }, { type: "text", text: ` and ${key}` }];
+  assert.equal(mods.finishChatReply(plan, continued, redact), true);
+  const row = mods.db.$client.prepare("select content, parts from messages where id = ?").get("continued-redact-reply") as { content: string; parts: string };
+  assert.equal(row.content, "first [redacted] and [redacted]");
+  assert.deepEqual(JSON.parse(row.parts), [
+    { type: "text", text: "first " },
+    { type: "text", text: key.slice(0, 9) },
+    { type: "text", text: key.slice(9) },
+    { type: "text", text: " and [redacted]" },
+  ]);
 });

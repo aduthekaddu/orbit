@@ -5,7 +5,7 @@ import path from "node:path";
 import test, { before, after } from "node:test";
 
 const originalCwd = process.cwd();
-const envNames = ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL", "ORBIT_DATA_DIR", "ORBIT_SEARXNG_URL", "ORBIT_TAVILY_API_KEY", "ORBIT_GITHUB_TOKEN", "ORBIT_SANDBOX"];
+const envNames = ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL", "ORBIT_SEARXNG_URL", "ORBIT_TAVILY_API_KEY", "ORBIT_GITHUB_TOKEN", "ORBIT_SANDBOX"];
 const originalEnv = Object.fromEntries(envNames.map((name) => [name, process.env[name]]));
 let sandbox: string;
 let settings: typeof import("./settings");
@@ -83,7 +83,9 @@ test("an explicit GitHub token removal clears the stored token", async () => {
   assert.equal(settings.getSettings()?.githubToken, "");
   assert.equal(JSON.stringify(removed).includes("good-token"), false);
   const { openGithubTurn } = await import("./tools/github");
-  const opened = await openGithubTurn({ githubToken: settings.getSettings()?.githubToken ?? "", githubMcpUrl: "https://api.githubcopilot.com/mcp/" });
+  const stored = settings.getSettings();
+  assert.ok(stored);
+  const opened = await openGithubTurn({ ...stored, githubMcpUrl: "https://api.githubcopilot.com/mcp/" });
   assert.deepEqual(Object.keys(opened.tools), []);
   await opened.close();
 });
