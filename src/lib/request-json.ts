@@ -107,5 +107,10 @@ export function useLoaded<T>(initial: Loaded<T>) {
     },
     [latest],
   );
-  return [state, load] as const;
+  // Aborts an in-flight load. Pass `{ status: "pending" }` to start a new search before the request is sent, so a debounce cannot show "No results".
+  const reset = useCallback((next: Loaded<T> = { status: "idle" }) => {
+    latest();
+    setState(next);
+  }, [latest]);
+  return [state, load, reset] as const;
 }
