@@ -26,6 +26,9 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 - Unit tests check the dream claim, the chat head, and the branch and search migrations in the shipped code, not in the slice plans. Editing a plan no longer fails `npm test`. (#144)
 - A search hit on an older branch opens that branch through to its newest message, so the hit's reply and later turns stay on screen. Reloading with an artifact preview open keeps those turns visible. A prompt sent from there follows the end of the branch. (#128)
 - A saved Tavily key no longer appears in a chat error, a server log line, or a saved reply. The chat route's model errors are logged without the raw provider response, so a provider that repeats the API key does not put it in the log; the log line keeps the error name and HTTP status unless the error holds a stored key, and then keeps only its label. (#143)
+- New chat shows "Could not create chat" when the request fails, instead of doing nothing or opening `/c/undefined`.
+- Settings shows Failed when the model list answer cannot be read, instead of a green "0 models", and when the model list request is rejected, instead of "No key" or "Not checked".
+- A stopped code run whose saved result cannot be loaded shows "Could not load output" instead of an empty card.
 - A code run shows its result as soon as the program ends, without waiting for Docker to remove the container. Pressing Stop while that removal runs no longer turns a finished run into a stopped one, and a program that exited just before the 10 second limit is no longer reported as timed out or loses its out-of-memory mark. Output that the 10 second limit cut off after the program ended is marked truncated.
 - An interrupted generated view shows Stopped instead of an empty cancelled tool card.
 - Set `ORBIT_VERIFY_PORT` to run verify-orbit on another port when the deployment owns `3210`. The default stays `3210`.
