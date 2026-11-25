@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- The hook lint in CI is a required check. A failing `rules-of-hooks` or `exhaustive-deps` finding now fails the job. (#145)
 - A tool call closed by a follow-up message before its saved result arrives now shows Cancelled, not Failed, for every tool, not only a generated view. (#194)
 
 - Settings treats a 200 model list whose JSON is not a model list as a failed connection, not as a green "0 models". A real empty list is still an empty list. (#200)

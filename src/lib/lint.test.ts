@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test, { after, before } from "node:test";
+import { parse } from "yaml";
 
 const oxlint = path.join(process.cwd(), "node_modules/.bin/oxlint");
 const config = path.join(process.cwd(), ".oxlintrc.json");
@@ -73,4 +74,14 @@ export function Jumps({ turns }: { turns: string[] }) {
 }
 `);
   assert.deepEqual(findings, []);
+});
+
+test("CI runs the hook lint as a required check", () => {
+  type Step = { name?: string; run?: string; "continue-on-error"?: boolean };
+  type Workflow = { jobs?: Record<string, { steps?: Step[] }> };
+  const workflow = parse(fs.readFileSync(path.join(process.cwd(), ".github/workflows/ci.yml"), "utf8")) as Workflow;
+  const step = workflow.jobs?.checks?.steps?.find((item) => item.name === "Lint the React hooks");
+  assert.ok(step, "the checks job must include Lint the React hooks");
+  assert.equal(step.run, "npm run lint -- --format github");
+  assert.equal(step["continue-on-error"], undefined);
 });
