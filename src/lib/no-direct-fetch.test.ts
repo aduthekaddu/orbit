@@ -7,11 +7,6 @@ import test from "node:test";
 // (src/lib/chat-transport.ts) hands a stream to the AI SDK and is neither, so it is not scanned.
 const HELPER = "src/lib/request-json.ts";
 
-// Open PRs rewrite these files by hand. https://github.com/aduthekaddu/orbit/issues/185 tracks moving them to requestJson.
-const ALLOWED = new Map([
-  ["src/components/memory/memory-list.tsx", "PR #159, PR #166"],
-  ["src/components/shell/command-palette.tsx", "PR #167"],]);
-
 // Also catches fetch?.(, ["fetch"](, XMLHttpRequest, EventSource and sendBeacon. It misses an alias such as
 // `const get = fetch`, a call split across lines, and a module without "use client" outside the scanned trees.
 const REQUEST_CALL = /\bfetch\s*(\?\.\s*)?\(|\[\s*["'`]fetch["'`]\s*\]\s*(\?\.\s*)?\(|\bnew\s+(XMLHttpRequest|EventSource)\b|\bsendBeacon\s*\(/;
@@ -33,14 +28,6 @@ function fetchCalls(file: string) {
 }
 
 test("browser code sends requests through requestJson, not fetch", () => {
-  const calls = browserFiles()
-    .filter((file) => !ALLOWED.has(file))
-    .flatMap(fetchCalls);
+  const calls = browserFiles().flatMap(fetchCalls);
   assert.deepEqual(calls, [], `Call requestJson from ${HELPER} instead of fetch, XMLHttpRequest, EventSource or sendBeacon, so the request names what happens when it fails:\n${calls.join("\n")}`);
-});
-
-test("every allowlisted file still calls fetch", () => {
-  const files = new Set(browserFiles());
-  const stale = [...ALLOWED.keys()].filter((file) => !files.has(file) || fetchCalls(file).length === 0);
-  assert.deepEqual(stale, [], `Remove these from ALLOWED, they no longer call fetch:\n${stale.join("\n")}`);
 });

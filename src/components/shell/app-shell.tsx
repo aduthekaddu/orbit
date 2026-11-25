@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { NotePencilIcon, SidebarSimpleIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { z } from "zod";
-import { requestJson } from "@/lib/request-json";
+import { requestJson, useLatestRequest } from "@/lib/request-json";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogOverlay, DialogPortal, DialogTitle } from "@/components/ui/dialog";
@@ -39,6 +39,7 @@ export function AppShell({
   const paletteReturnFocus = useRef<HTMLElement | null>(null);
   const [newChatState, setNewChatState] = useState<"idle" | "pending" | "failed">("idle");
   const newChatPending = newChatState === "pending";
+  const latestNewChat = useLatestRequest();
 
   useEffect(() => {
     setDrawerOpen(false);
@@ -95,10 +96,18 @@ export function AppShell({
     else setDrawerOpen((open) => !open);
   }
 
+  useEffect(() => {
+    return () => {
+      latestNewChat();
+      setNewChatState((state) => (state === "pending" ? "idle" : state));
+    };
+  }, [pathname, latestNewChat]);
+
   async function newChat() {
     if (newChatState === "pending") return;
     setNewChatState("pending");
-    await requestJson("/api/chats", { method: "POST" }, {
+    const signal = latestNewChat();
+    await requestJson("/api/chats", { method: "POST", signal }, {
       parse: createdChat,
       onOk: ({ id }) => {
         setNewChatState("idle");

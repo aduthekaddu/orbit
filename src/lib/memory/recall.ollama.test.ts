@@ -25,9 +25,13 @@ before(async () => {
   assert.equal(filled.ok, true, filled.ok ? undefined : `every labeled memory must embed: ${filled.error}`);
 });
 
+// The recall tests check ranking quality, not latency. The product's one-second query deadline is
+// shorter than a loaded host's or CI runner's real Ollama answer time (#103), so this file waits longer.
+const RECALL_EMBED_TIMEOUT_MS = 5_000;
+
 async function nearIds(question: string): Promise<string[]> {
   assert.ok(embed && store);
-  const embedded = await embed.embedQuery(question);
+  const embedded = await embed.embedQuery(question, RECALL_EMBED_TIMEOUT_MS);
   assert.equal(embedded.ok, true, embedded.ok ? undefined : `embed "${question}": ${embedded.error}`);
   if (!embedded.ok || !embedded.vectors[0]) return [];
   return store.vectorMatchIds(embedded.vectors[0], 50);

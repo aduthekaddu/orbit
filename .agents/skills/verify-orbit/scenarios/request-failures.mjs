@@ -1,5 +1,11 @@
+import { eventually } from "../../../../src/lib/eventually.mjs";
+
 // Fails each browser request with page.route and checks what the screen shows.
+
 const shows = (locator, timeout = 5_000) => locator.waitFor({ timeout }).then(() => true, () => false);
+// locator.waitFor only accepts attached, detached, visible, or hidden. Wait for isDisabled().
+const disabled = (locator, timeoutMs = 5_000) =>
+  eventually(() => locator.isDisabled(), (isDisabled) => isDisabled, { timeoutMs, what: "the control to be disabled" }).then(() => true, () => false);
 
 export default async function requestFailures({ page, origin, step, shot }) {
   const pageErrors = [];
@@ -68,6 +74,22 @@ export default async function requestFailures({ page, origin, step, shot }) {
   step("a double click and the shortcut during one pending New chat send one request, then open the chat", moved && posts === 1 && !(await newChatError.isVisible()), `moved ${moved}, ${posts} POSTs`);
   await page.unrouteAll({ behavior: "ignoreErrors" });
 
+  const heldCreates = [];
+  await page.route("**/api/chats", (route) => {
+    if (route.request().method() === "POST") heldCreates.push(route);
+    else route.continue();
+  });
+  await newChat.click();
+  const sawPending = await disabled(newChat);
+  // A full page.goto would destroy the app's JS context and the pending answer with it, so the step must navigate in-app.
+  await page.getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).waitFor({ timeout: 10_000 });
+  await Promise.all(heldCreates.splice(0).map((route) => route.continue().catch(() => {})));
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  const leftSettings = await page.waitForURL((url) => !url.pathname.startsWith("/settings"), { timeout: 2_000 }).then(() => true, () => false);
+  step("a New chat answer that arrives after opening Settings leaves Settings open", sawPending && !leftSettings, `pending ${sawPending}, left ${leftSettings}, url ${page.url()}`);
+  await shot("new-chat-after-leave");
+
   const status = page.locator("form").first();
   const failedLabel = status.getByText("Failed", { exact: true });
   const zeroModels = status.getByText(/^\s*0\s+models?\s*$/);
@@ -98,6 +120,21 @@ export default async function requestFailures({ page, origin, step, shot }) {
   await page.reload();
   const listed = await shows(someModels, 10_000);
   step("a model list that loads shows its count", listed && !(await failedLabel.isVisible()), listed ? "Failed is visible" : "no model count");
+
+  const heldSaves = [];
+  await page.route("**/api/settings", (route) => {
+    if (route.request().method() !== "PUT") return route.continue();
+    heldSaves.push(route);
+  });
+  const saveButton = page.getByRole("button", { name: "Save", exact: true });
+  await saveButton.click();
+  const savePending = await disabled(saveButton);
+  await page.locator("form").first().evaluate((form) => form.requestSubmit());
+  const saveRequests = heldSaves.length;
+  await Promise.all(heldSaves.splice(0).map((route) => route.continue().catch(() => {})));
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  step("a second Settings Save while one is pending does not start another request", savePending && saveRequests === 1, `pending ${savePending}, PUTs ${saveRequests}`);
+  await shot("settings-save-held");
 
   await page.route("**/api/settings", (route) => (route.request().method() === "PUT" ? route.abort() : route.continue()));
   await page.getByRole("button", { name: "Save", exact: true }).click();
@@ -131,6 +168,9 @@ export default async function requestFailures({ page, origin, step, shot }) {
   await reply.hover();
   await page.getByRole("button", { name: "Edit reply" }).last().click();
   const editor = page.getByRole("textbox", { name: "Edit reply" });
+  await editor.fill("");
+  const save = page.getByRole("button", { name: "Save", exact: true });
+  step("Save is disabled while the reply is blank", await save.isDisabled(), "Save is enabled");
   await editor.fill("pong, edited");
   await page.route("**/api/chats/*/messages/*", (route) => route.abort());
   await page.getByRole("button", { name: "Save", exact: true }).click();

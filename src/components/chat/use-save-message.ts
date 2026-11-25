@@ -5,7 +5,7 @@ import { useAISDKChat } from "@assistant-ui/react-ai-sdk";
 import { z } from "zod";
 import { replaceTextPart, replaceTextParts, type MessageParts } from "@/lib/chat-parts";
 import { requestJson } from "@/lib/request-json";
-import { createSaveLock } from "@/lib/save-lock";
+import { saveLockFor } from "@/lib/save-lock";
 import { useChatId } from "./chat-id";
 
 const savedMessage = z.object({ ok: z.literal(true) });
@@ -15,10 +15,9 @@ export function useSaveMessageText() {
   const chat = useAISDKChat();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [lock] = useState(createSaveLock);
 
   function save(messageId: string, text: string, partIndex?: number) {
-    return lock(async () => {
+    return saveLockFor(messageId)(async () => {
       if (!chatId || !messageId) {
         setError("Could not save");
         return false;
