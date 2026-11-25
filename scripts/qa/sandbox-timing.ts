@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { cpus, loadavg } from "node:os";
 import Docker from "dockerode";
 import { ownedSandboxFilter, sandboxOwner } from "../../src/lib/sandbox/owner.mjs";
-import { runCode } from "../../src/lib/sandbox/run";
+import { runCodeToEnd } from "../../src/lib/sandbox/run";
 
 async function main() {
   const docker = new Docker();
@@ -11,8 +11,9 @@ async function main() {
   const times: number[] = [];
   for (let index = 0; index < 10; index += 1) {
     const started = performance.now();
-    const result = await runCode(docker, { language: "python", code: "print(1)" });
+    const { output: result, cleanup } = await runCodeToEnd(docker, { language: "python", code: "print(1)" });
     const elapsed = performance.now() - started;
+    assert.equal(cleanup, "removed");
     assert.equal(result.stdout, "1\n");
     assert.equal(result.stderr, "");
     assert.equal(result.exitCode, 0);

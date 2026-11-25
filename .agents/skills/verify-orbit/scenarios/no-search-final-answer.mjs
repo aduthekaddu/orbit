@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 
 const answer = "Answered after four notes.";
 
-export default async function noSearchFinalAnswer({ page, origin, step, shot }) {
+export default async function noSearchFinalAnswer({ page, origin, mockUrl, step, shot }) {
   const saved = await page.request.put(`${origin}/api/settings`, { data: {
-    baseUrl: "http://127.0.0.1:3299/v1", model: "mock-genui", reasoningEffort: "low", searxngUrl: "", tavilyApiKey: null,
+    baseUrl: mockUrl, model: "mock-genui", reasoningEffort: "low", searxngUrl: "", tavilyApiKey: null,
   } });
   assert.equal(saved.status(), 200);
   const settings = await (await page.request.get(`${origin}/api/settings`)).json();

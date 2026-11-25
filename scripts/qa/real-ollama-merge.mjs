@@ -49,7 +49,6 @@ async function embedDirect(texts) {
 
 function startMockProvider() {
   const child = spawn(process.execPath, [path.join(process.cwd(), "scripts/qa/mock-provider.mjs")], {
-    env: { ...process.env, MOCK_PORT: "0" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   return new Promise((resolve, reject) => {

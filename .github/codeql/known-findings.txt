@@ -11,3 +11,6 @@ js/file-system-race src/lib/auth.ts 97210662956d1e9f:1
 
 # The native build probe checks for an addon file and then creates it. It only runs in development and CI.
 js/file-system-race scripts/qa/sandbox-native-build.mjs 35a0931e370156b:1
+
+# genui-qa reads the mock provider port that verify.mjs wrote to .verify/mock.json and probes 127.0.0.1 on it. The file is the harness's own state, not user input.
+js/file-access-to-http scripts/qa/genui-qa.cjs 387998e6a7d61201:1

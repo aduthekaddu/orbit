@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 
-export default async function settingsSearchRoute({ page, origin, step }) {
-  const provider = { baseUrl: "http://127.0.0.1:3299/v1", model: "mock-genui", reasoningEffort: "low" };
+export default async function settingsSearchRoute({ page, origin, mockUrl, step }) {
+  const provider = { baseUrl: mockUrl, model: "mock-genui", reasoningEffort: "low" };
   const save = async (input) => {
     const response = await page.request.put(`${origin}/api/settings`, { data: { ...provider, ...input } });
     assert.equal(response.status(), 200);
