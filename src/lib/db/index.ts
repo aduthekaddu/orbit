@@ -8,6 +8,7 @@ import { eq } from "drizzle-orm";
 import { readEnv } from "../env";
 import { dataDirectory } from "../paths";
 import { stripTerminalControls } from "../sandbox/terminal";
+import { encryptSecret } from "../secrets";
 import { withMigrationLock } from "./migration-lock";
 import * as schema from "./schema";
 
@@ -22,27 +23,33 @@ function restrictDbFile(dataDir: string, name: "orbit.db" | "orbit.db-wal" | "or
 function seedSettings(db: ReturnType<typeof drizzle<typeof schema>>) {
   const existing = db.select({ id: schema.settings.id }).from(schema.settings).where(eq(schema.settings.id, 1)).get();
   if (existing) return;
-  const baseUrl = readEnv("ORBIT_BASE_URL") ?? "";
-  const apiKey = readEnv("ORBIT_API_KEY") ?? "";
-  const model = readEnv("ORBIT_MODEL") ?? "";
   const searxngUrl = readEnv("ORBIT_SEARXNG_URL") ?? "";
   const tavilyApiKey = readEnv("ORBIT_TAVILY_API_KEY") ?? "";
   const githubToken = readEnv("ORBIT_GITHUB_TOKEN") ?? "";
-  if (!baseUrl && !apiKey && !model && !searxngUrl && !tavilyApiKey && !githubToken) return;
-  db.insert(schema.settings)
-    .values({
-      id: 1,
-      baseUrl,
-      apiKey,
-      searxngUrl,
-      tavilyApiKey,
-      githubToken,
-      githubMcpUrl: "",
-      model,
-      reasoningEffort: "medium",
-      updatedAt: new Date(),
-    })
-    .run();
+  if (!searxngUrl && !tavilyApiKey && !githubToken) return;
+  db.insert(schema.settings).values({ id: 1, searxngUrl, tavilyApiKey, githubToken, githubMcpUrl: "", updatedAt: new Date() }).run();
+}
+
+/** The label of a provider moved out of settings. It never throws, so a saved URL that does not parse cannot block the upgrade. */
+export function urlHostLabel(raw: unknown): string {
+  try {
+    return (typeof raw === "string" && new URL(raw).host) || "Provider";
+  } catch {
+    return "Provider";
+  }
+}
+
+function hasProviderColumns(sqlite: Database.Database) {
+  return sqlite.prepare("select 1 from pragma_table_info('settings') where name = 'api_key'").get() !== undefined;
+}
+
+// Migration 0015 drops the plain key with its column, but SQLite leaves the old bytes in free pages and the WAL.
+function migrateAndScrub(db: ReturnType<typeof drizzle<typeof schema>>, sqlite: Database.Database, migrationsFolder: string) {
+  const heldProvider = hasProviderColumns(sqlite);
+  migrate(db, { migrationsFolder });
+  if (!heldProvider || hasProviderColumns(sqlite)) return;
+  sqlite.exec("VACUUM");
+  sqlite.pragma("wal_checkpoint(TRUNCATE)");
 }
 
 function openDb() {
@@ -62,6 +69,9 @@ function openDb() {
     sqliteVec.load(sqlite);
     // Migration 0004 calls this to clean saved code output the way new saves do.
     sqlite.function("orbit_clean_output", { deterministic: true }, (text) => (typeof text === "string" ? stripTerminalControls(text) : null));
+    // Migration 0014 calls these to move the provider key out of settings, encrypted.
+    sqlite.function("orbit_encrypt_secret", (text) => (typeof text === "string" ? encryptSecret(text) : null));
+    sqlite.function("orbit_url_host", { deterministic: true }, urlHostLabel);
 
     restrictDbFile(dataDir, "orbit.db");
     restrictDbFile(dataDir, "orbit.db-wal");
@@ -71,7 +81,7 @@ function openDb() {
     const migrationsFolder = path.join(process.cwd(), "drizzle");
 
     if (fs.existsSync(migrationsFolder)) {
-      withMigrationLock(() => migrate(db, { migrationsFolder }), { dir: dataDir });
+      withMigrationLock(() => migrateAndScrub(db, sqlite, migrationsFolder), { dir: dataDir });
     }
 
     sqlite.exec(`

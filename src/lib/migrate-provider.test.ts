@@ -169,7 +169,11 @@ test("provider_connections needs a base URL for openai-compatible and forbids on
 
 test("an install nobody signed up to keeps its provider in pending_connection until the first account takes it", () => {
   const key = "sk-made-up-pending-key-0001";
-  const install = preSliceInstall("pending", { ORBIT_BASE_URL: "http://127.0.0.1:9/v1", ORBIT_API_KEY: key, ORBIT_MODEL: "mock-genui" });
+  const install = preSliceInstall("pending");
+  // The row a pre-slice server seeded from ORBIT_BASE_URL, ORBIT_API_KEY, and ORBIT_MODEL. The current seedSettings no longer reads them.
+  withDb(install, (db) => {
+    db.prepare("insert into settings (id, base_url, api_key, model, reasoning_effort, updated_at) values (1, 'http://127.0.0.1:9/v1', ?, 'mock-genui', 'medium', 0)").run(key);
+  });
   assert.notDeepEqual(holdsKey(install, key), [], "the pre-slice server seeded the key from the environment in plain text");
 
   upgrade(install);
