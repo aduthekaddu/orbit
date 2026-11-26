@@ -265,6 +265,8 @@ test("an unreadable key's error does not name the connection", async () => {
     const listed = await modelsOf("conn-unreadable");
     assert.equal(listed.status, 400, listed.text);
     assert.equal(listed.text.includes(LABEL), false, listed.text);
+    const readable = Object.fromEntries((await list()).map((connection) => [connection.id, (connection as Connection & { keyReadable?: boolean }).keyReadable]));
+    assert.deepEqual(readable, { [openaiId]: true, [anthropicId]: true, "conn-unreadable": false }, "the list marks the key that cannot be read");
   } finally {
     getDb().$client.prepare("delete from provider_connections where id = 'conn-unreadable'").run();
   }

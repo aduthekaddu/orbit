@@ -100,7 +100,7 @@ A chat whose model choice does not resolve and that has no messages shows the fi
 The composer chip is a `button` (`data-model-chip`) in `font-mono text-meta`, reading `model · Effort`, such as `claude-opus-5-5 · High`, or the model alone when the model takes no effort. It truncates at the end and never pushes Send out of the row. It opens the picker: a `Popover` anchored above the chip on desktop (`w-picker`, at most `max-h-picker-height` or the room above the chip, `shadow-float`), and a `Sheet` under 48rem. Both hold the same panel:
 
 - Models grouped under each connection's label, hidden models left out. A search field shows when the lists hold more than 8 rows. Each row shows the model id, its badges, and a check on the current one. Rows are at least 44px tall in the sheet.
-- A model list that is still loading shows skeleton rows. One that failed shows its error and **Retry** inside its group. A loaded list with nothing to show says `No models`.
+- A model list that is still loading shows skeleton rows. One that failed shows its error and **Retry** inside its group. A loaded list with nothing to show says `No models`. With no connection at all, the list holds one **Add connection** link to `/settings#connections`, so a chat with history reaches setup too.
 - Under the list, the effort grid: 3 by 2, `None` to `Max`. Levels the model does not take are disabled, and all six are when it takes none. Picking a model that does not take the current effort moves it to the nearest level it takes. The selected level is a raised surface.
 - **Manage** goes to `/settings#models`.
 
@@ -112,7 +112,7 @@ The choice is the chat's own until the next send pins it. Picking a model keeps 
 
 ### Model settings
 
-After Appearance, Settings has three cards. **Connections** lists each connection's label with its kind and host under it, and **Edit** and **Delete** on the row. **Add** opens a dialog that asks the kind first; an Anthropic connection has no base URL field. **Delete** asks once in a dialog. Errors show inside the dialog. **Default model** holds the connection select, the model select with a **Custom** option for typing an id (a text field alone when the list is empty or failed), the effort grid, and **Save**. **Models** (`#models`) lists every model of each connection with its badges and a show or hide `Switch`. Each connection's heading shows its list status: `Checking`, `N models`, or `Failed`.
+After Appearance, Settings has three cards. **Connections** lists each connection's label with its kind and host under it, then `Key unreadable` in `text-destructive` when this server cannot open the saved key, and **Edit** and **Delete** on the row. **Add** opens a dialog that asks the kind first; an Anthropic connection has no base URL field. **Delete** asks once in a dialog. Errors show inside the dialog. **Default model** holds the connection select, the model select with a **Custom** option for typing an id (a text field alone when the list is empty or failed), the effort grid, and **Save**. **Models** (`#models`) lists every model of each connection with its badges and a show or hide `Switch`. Each connection's heading shows its list status: `Checking`, `N models`, or `Failed`.
 
 `ScrollFade` (`src/components/ui/scroll-fade.tsx`) wraps anything that scrolls on one axis and fades the edge that has more content behind it. Pass `fade` as the color of the surface behind the content. Code blocks, markdown tables, and the command palette use it. A cut line or row without a fade reads as a layout bug.
 

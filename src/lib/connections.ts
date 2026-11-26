@@ -16,9 +16,10 @@ export type ProviderConnection =
   | { id: string; userId: string; kind: "openai-compatible"; label: string; baseUrl: string; createdAt: Date }
   | { id: string; userId: string; kind: "anthropic"; label: string; createdAt: Date };
 
+// keyReadable is false when this server's secret key cannot open the saved key, so Settings can say which one to re-enter.
 export type PublicConnection =
-  | { id: string; kind: "openai-compatible"; label: string; baseUrl: string; createdAt: Date; keySet: true }
-  | { id: string; kind: "anthropic"; label: string; createdAt: Date; keySet: true };
+  | { id: string; kind: "openai-compatible"; label: string; baseUrl: string; createdAt: Date; keySet: true; keyReadable: boolean }
+  | { id: string; kind: "anthropic"; label: string; createdAt: Date; keySet: true; keyReadable: boolean };
 
 /** The decrypted secrets of one connection. The Redactor masks them in everything Orbit stores, streams, or logs. */
 export type ConnectionSecrets = { apiKey: string; baseUrl?: string };
@@ -90,8 +91,9 @@ export function installRedactionSecrets(): ConnectionSecrets[] {
 }
 
 export function toPublicConnection(connection: ProviderConnection, redact: Redactor): PublicConnection {
-  if (connection.kind === "anthropic") return { id: connection.id, kind: connection.kind, label: redact.text(connection.label), createdAt: connection.createdAt, keySet: true };
-  return { id: connection.id, kind: connection.kind, label: redact.text(connection.label), baseUrl: redactUrl(connection.baseUrl, redact), createdAt: connection.createdAt, keySet: true };
+  const shared = { id: connection.id, label: redact.text(connection.label), createdAt: connection.createdAt, keySet: true, keyReadable: connectionApiKeyOrEmpty(connection.userId, connection.id) !== "" } as const;
+  if (connection.kind === "anthropic") return { ...shared, kind: connection.kind };
+  return { ...shared, kind: connection.kind, baseUrl: redactUrl(connection.baseUrl, redact) };
 }
 
 export function publicConnections(userId: string): PublicConnection[] {

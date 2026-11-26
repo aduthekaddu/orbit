@@ -147,6 +147,13 @@ function PickerPanel({ layout }: { layout: Layout }) {
         </div>
       ) : null}
       <div className="min-h-0 flex-1 overflow-y-auto p-1.5 scrollbar-thin">
+        {connections.length === 0 ? (
+          <div className="flex justify-center p-3">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/settings#connections">Add connection</Link>
+            </Button>
+          </div>
+        ) : null}
         {connections.map((connection) => (
           <ConnectionGroup
             key={connection.id}

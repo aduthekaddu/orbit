@@ -40,8 +40,8 @@ export const modelListBody: z.ZodType<ModelList> = z.object({
 });
 
 export const publicConnectionBody: z.ZodType<PublicConnection> = z.discriminatedUnion("kind", [
-  z.object({ id: z.string(), kind: z.literal("openai-compatible"), label: z.string(), baseUrl: z.string(), createdAt: z.coerce.date(), keySet: z.literal(true) }),
-  z.object({ id: z.string(), kind: z.literal("anthropic"), label: z.string(), createdAt: z.coerce.date(), keySet: z.literal(true) }),
+  z.object({ id: z.string(), kind: z.literal("openai-compatible"), label: z.string(), baseUrl: z.string(), createdAt: z.coerce.date(), keySet: z.literal(true), keyReadable: z.boolean() }),
+  z.object({ id: z.string(), kind: z.literal("anthropic"), label: z.string(), createdAt: z.coerce.date(), keySet: z.literal(true), keyReadable: z.boolean() }),
 ]);
 
 export const modelDefaultsBody: z.ZodType<ModelDefaults> = z.object({

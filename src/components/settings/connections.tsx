@@ -48,7 +48,7 @@ export function ConnectionSettings({
   const [open, setOpen] = useState<Open>({ kind: "closed" });
   const close = () => setOpen({ kind: "closed" });
   return (
-    <section aria-labelledby="connections-heading" className="rounded-xl border bg-card shadow-card">
+    <section id="connections" aria-labelledby="connections-heading" className="scroll-mt-6 rounded-xl border bg-card shadow-card">
       <div className="flex items-center justify-between gap-3 border-b px-5 py-2.5">
         <h2 id="connections-heading" className="text-sm font-medium">
           Connections
@@ -67,6 +67,12 @@ export function ConnectionSettings({
                 {KIND_LABELS[connection.kind]}
                 {connection.kind === "openai-compatible" ? ` · ${hostOf(connection.baseUrl)}` : null}
               </p>
+              {connection.keyReadable ? null : (
+                <p className="flex items-center gap-1.5 text-meta text-destructive">
+                  <WarningCircleIcon weight="regular" aria-hidden className="size-3.5 shrink-0" />
+                  Key unreadable
+                </p>
+              )}
             </div>
             <Button variant="ghost" size="xs" aria-label={`Edit ${connection.label}`} onClick={() => setOpen({ kind: "edit", connection })}>
               Edit

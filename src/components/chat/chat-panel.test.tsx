@@ -15,7 +15,7 @@ const saved: StoredMessage[] = [
   { id: "a1", parentId: "u1", role: "assistant", parts: [{ type: "text", text: "pong" }] },
 ];
 
-const connections: PublicConnection[] = [{ id: "conn-1", kind: "anthropic", label: "Anthropic", createdAt: new Date(0), keySet: true }];
+const connections: PublicConnection[] = [{ id: "conn-1", kind: "anthropic", label: "Anthropic", createdAt: new Date(0), keySet: true, keyReadable: true }];
 
 function firstPaint(messages: StoredMessage[], liveReplyId?: string, choice: ModelChoice | null = { connectionId: "conn-1", model: "claude-opus-5-5", effort: "high" }) {
   return renderToString(
