@@ -171,6 +171,30 @@ test("None is disabled for claude-opus-5-5, whose list entry says thinking canno
   assert.equal(effortLevels("anthropic", byId(models, "claude-opus-5").caps)?.includes("none"), true);
 });
 
+test("an Anthropic entry that names its effort levels but not whether thinking can be turned off keeps those levels without None", async (t) => {
+  const level = (supported: boolean) => ({ supported });
+  mockFetch(t, () =>
+    json({
+      data: [
+        {
+          id: "claude-silent-on-disabled",
+          capabilities: {
+            thinking: { supported: true, types: { adaptive: { supported: true } } },
+            effort: { supported: true, low: level(true), medium: level(true), high: level(true), xhigh: level(false), max: level(true) },
+          },
+        },
+        { id: "claude-no-effort", capabilities: { thinking: { supported: true, types: { disabled: { supported: true } } } } },
+      ],
+      has_more: false,
+    }),
+  );
+  const models = await listModels(anthropic("conn-claude-partial-caps"), ANTHROPIC_KEY, NO_REDACTOR);
+  const silent = byId(models, "claude-silent-on-disabled");
+  assert.deepEqual(inEffortOrder(silent.caps.efforts), ["low", "medium", "high", "max"]);
+  assert.deepEqual(inEffortOrder(effortLevels("anthropic", silent.caps)), ["low", "medium", "high", "max"]);
+  assert.equal(byId(models, "claude-no-effort").caps.efforts, null, "with no effort capabilities the levels are unknown");
+});
+
 test("an OpenRouter-style entry gets its badges, and a capability the list does not name stays unknown", async () => {
   const from = seen.length;
   const models = await listModels(openai("conn-router"), "router-key", NO_REDACTOR);

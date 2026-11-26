@@ -51,14 +51,14 @@ const anthropicPage = z.object({
 
 type AnthropicEntry = z.infer<typeof anthropicPage>["data"][number];
 
-// The Models API names each effort level, and whether thinking can be turned off, which is the None level. When either
-// is missing the levels are unknown, so the route sends the chosen effort and reports what the provider did with it.
+// The Models API names each effort level, and whether thinking can be turned off, which is the None level. None is
+// offered only when the entry says so. Without effort capabilities the levels are unknown, so the route sends the
+// chosen effort and reports what the provider did with it.
 function anthropicEfforts(capabilities: AnthropicEntry["capabilities"]): Effort[] | null {
   const effort = capabilities?.effort;
-  const canDisable = capabilities?.thinking?.types?.disabled?.supported;
-  if (!effort || canDisable === undefined) return null;
+  if (!effort) return null;
   const levels = EFFORTS.filter((level) => level !== "none" && supported.parse(effort[level])?.supported === true);
-  return canDisable ? ["none", ...levels] : levels;
+  return capabilities?.thinking?.types?.disabled?.supported === true ? ["none", ...levels] : levels;
 }
 
 function anthropicModel(entry: AnthropicEntry): ListedModel {
