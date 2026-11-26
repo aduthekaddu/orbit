@@ -1,3 +1,4 @@
+import { redactionSecrets } from "@/lib/connections";
 import { Redactor } from "@/lib/chat-errors";
 import { cleanMemoryText, deleteMemory, memoryJson, MemoryRejected, updateMemory } from "@/lib/memory/store";
 import { getSettings } from "@/lib/settings";
@@ -25,7 +26,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) return Response.json({ error: "Invalid memory" }, { status: 400 });
   try {
-    const redact = new Redactor(getSettings());
+    const redact = new Redactor(getSettings(), ...redactionSecrets(session.user.id));
     const text = redact.text(cleanMemoryText(redact.text(parsed.data.text)));
     const memory = updateMemory(params.data.id, { ...parsed.data, text, source: "user" });
     if (!memory) return Response.json({ error: "Not found" }, { status: 404 });

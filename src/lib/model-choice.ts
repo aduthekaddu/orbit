@@ -7,7 +7,8 @@ import { EFFORTS, type Effort, type EffortOutcome } from "./effort";
 import { SecretUnreadable } from "./secrets";
 
 export type ModelChoice = { connectionId: string; model: string; effort: Effort };
-export type ReplyRecord = { connectionId: string; model: string; effort: Effort | null; effortOutcome: EffortOutcome | null };
+// connectionId goes null on a saved reply when its connection is deleted. The model and effort stay for the label.
+export type ReplyRecord = { connectionId: string | null; model: string; effort: Effort | null; effortOutcome: EffortOutcome | null };
 
 export type ResolvedChoice =
   | { ok: true; choice: ModelChoice; connection: ProviderConnection }

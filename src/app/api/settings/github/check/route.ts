@@ -1,3 +1,4 @@
+import { redactionSecrets } from "@/lib/connections";
 import { getSettings } from "@/lib/settings";
 import { checkGithub, githubMcpTarget } from "@/lib/tools/github";
 import { getSession, unauthorized } from "@/lib/session";
@@ -18,9 +19,8 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return Response.json({ ok: false, error: "Check the GitHub URL." }, { status: 400 });
   }
-  const stored = getSettings() ?? { apiKey: "", tavilyApiKey: "", githubToken: "", githubMcpUrl: "" };
   try {
-    return Response.json(await checkGithub(stored, parsed.data, request.signal));
+    return Response.json(await checkGithub(getSettings(), parsed.data, request.signal, redactionSecrets(session.user.id)));
   } catch (error) {
     if (request.signal.aborted) return new Response(null, { status: 499 });
     throw error;

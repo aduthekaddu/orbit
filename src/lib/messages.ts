@@ -6,6 +6,8 @@ import { getDb } from "./db";
 import { assistantHasVisiblePart } from "./genui/spec";
 import { chats, messages } from "./db/schema";
 import { isPath, pathTo, toRepository, type StoredMessage } from "./chat-tree";
+import { EFFORT_OUTCOMES, isEffort, type EffortOutcome } from "./effort";
+import type { ReplyRecord } from "./model-choice";
 import { runCodeOutputSchema } from "./sandbox/spec";
 import { stripTerminalControls } from "./sandbox/terminal";
 
@@ -145,6 +147,7 @@ function insertMessage(
   message: { id: string; role: "user" | "assistant"; parts: unknown },
   parentId: string | null,
   redact: Redactor,
+  reply?: ReplyRecord,
 ) {
   const db = getDb();
   if (db.select().from(messages).where(eq(messages.id, message.id)).get()) return false;
@@ -158,6 +161,7 @@ function insertMessage(
     role: message.role, content: body.content, parts: body.parts,
     position: parent ? parent.position + 1 : 0,
     createdAt: new Date(),
+    ...replyColumns(reply),
   }).run();
   db.update(chats).set({ headId: message.id }).where(eq(chats.id, chatId)).run();
   return true;
@@ -282,15 +286,20 @@ function unchanged(row: SavedText | undefined, copy: SavedText) {
   return row !== undefined && row.content === copy.content && row.parts === copy.parts;
 }
 
+function replyColumns(reply: ReplyRecord | undefined) {
+  if (!reply) return {};
+  return { connectionId: reply.connectionId, model: reply.model, reasoningEffort: reply.effort, effortOutcome: reply.effortOutcome };
+}
+
 /** Saves a reply with a visible part, unless a row its plan copied has changed. Returns whether it saved. */
-export function finishChatReply(plan: ReplyPlan, parts: unknown, redact: Redactor): boolean {
+export function finishChatReply(plan: ReplyPlan, parts: unknown, redact: Redactor, reply?: ReplyRecord): boolean {
   if (!assistantHasVisiblePart(parts)) return false;
   const db = getDb();
   return db.transaction(() => {
     if (!unchanged(savedText(plan.chatId, plan.prompt.id), plan.prompt.saved)) return false;
-    if (!plan.continues) return insertMessage(plan.chatId, { id: plan.id, role: "assistant", parts }, plan.prompt.id, redact);
+    if (!plan.continues) return insertMessage(plan.chatId, { id: plan.id, role: "assistant", parts }, plan.prompt.id, redact, reply);
     if (!unchanged(savedText(plan.chatId, plan.id), plan.continues)) return false;
-    db.update(messages).set(messageBody(parts, redact))
+    db.update(messages).set({ ...messageBody(parts, redact), ...replyColumns(reply) })
       .where(eq(messages.id, plan.id)).run();
     return true;
   });
@@ -315,20 +324,37 @@ export function updateMessageText(chatId: string, messageId: string, text: strin
   return true;
 }
 
+type ReplyRow = { connectionId: string | null; model: string | null; reasoningEffort: string | null; effortOutcome: string | null };
+
+// Replies saved before slice 17 have no model and show no label. A deleted connection leaves connectionId null.
+function storedReply(row: ReplyRow): ReplyRecord | null {
+  if (!row.model) return null;
+  const outcome = EFFORT_OUTCOMES.find((value): value is EffortOutcome => value === row.effortOutcome) ?? null;
+  return { connectionId: row.connectionId, model: row.model, effort: isEffort(row.reasoningEffort) ? row.reasoningEffort : null, effortOutcome: outcome };
+}
+
 function storedMessages(chatId: string): StoredMessage[] {
   const rows = getDb().select({
     id: messages.id,
     parentId: messages.parentId,
     role: messages.role,
     parts: messages.parts,
+    connectionId: messages.connectionId,
+    model: messages.model,
+    reasoningEffort: messages.reasoningEffort,
+    effortOutcome: messages.effortOutcome,
   }).from(messages).where(eq(messages.chatId, chatId))
     .orderBy(asc(messages.createdAt), sql`rowid`).all();
-  return rows.map((row) => ({
-    id: row.id,
-    parentId: row.parentId,
-    role: row.role as "user" | "assistant",
-    parts: JSON.parse(row.parts) as UIMessage["parts"],
-  }));
+  return rows.map((row) => {
+    const reply = storedReply(row);
+    return {
+      id: row.id,
+      parentId: row.parentId,
+      role: row.role as "user" | "assistant",
+      parts: JSON.parse(row.parts) as UIMessage["parts"],
+      ...(reply ? { metadata: { reply } } : {}),
+    };
+  });
 }
 
 // Parts of stored assistant messages in this chat whose ids were sent on this turn.

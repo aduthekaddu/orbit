@@ -1,49 +1,12 @@
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { normalizeBaseUrl } from "./base-url";
-import { Redactor } from "./chat-errors";
-import type { ReasoningEffort } from "./settings";
+import { anthropicBaseUrl, normalizeBaseUrl } from "./base-url";
+import type { ProviderConnection } from "./connections";
 
 export const OPENCODE_GO_BASE_URL = "https://opencode.ai/inference/go/openai/v1";
 export const OPENCODE_GO_MODELS_URL = "https://opencode.ai/zen/go/v1/models";
 
 export { normalizeBaseUrl };
-
-export type ListedModel = {
-  id: string;
-  reasoning: boolean | null;
-};
-
-function nonempty(value: string | undefined) {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : undefined;
-}
-
-export function credentialsForModelList(input: {
-  requestedBaseUrl?: string;
-  requestedApiKey?: string;
-  savedBaseUrl?: string;
-  savedPublicBaseUrl?: string;
-  savedApiKey?: string;
-}): { baseUrl: string; apiKey: string } | null {
-  const requestedBaseUrl = nonempty(input.requestedBaseUrl);
-  const requestedApiKey = nonempty(input.requestedApiKey);
-  const savedBaseUrl = nonempty(input.savedBaseUrl);
-  const savedPublicBaseUrl = nonempty(input.savedPublicBaseUrl);
-  const savedApiKey = nonempty(input.savedApiKey);
-  const baseUrl = requestedBaseUrl ?? savedBaseUrl;
-  if (!baseUrl) return null;
-  const normalized = normalizeBaseUrl(baseUrl);
-  const matchesMaskedSaved =
-    requestedBaseUrl !== undefined &&
-    savedBaseUrl !== undefined &&
-    savedPublicBaseUrl !== undefined &&
-    normalized === normalizeBaseUrl(savedPublicBaseUrl);
-  const sameSavedBase =
-    (savedBaseUrl !== undefined && normalized === normalizeBaseUrl(savedBaseUrl)) || matchesMaskedSaved;
-  const apiKey = requestedApiKey ?? (sameSavedBase ? savedApiKey : undefined);
-  if (!apiKey) return null;
-  return { baseUrl: matchesMaskedSaved ? savedBaseUrl! : baseUrl, apiKey };
-}
 
 export function openCodeSessionHeader(baseUrl: string, chatId: string): Record<string, string> | undefined {
   if (normalizeBaseUrl(baseUrl) !== OPENCODE_GO_BASE_URL) return undefined;
@@ -57,7 +20,9 @@ function withoutReasoning(body: string) {
   return JSON.stringify(parsed);
 }
 
-function fetchWithReasoningFallback(baseFetch: typeof fetch): typeof fetch {
+// A provider that rejects reasoning_effort gets the request again without it, and onDropped reports that, so the
+// reply can say its effort was ignored.
+function fetchWithReasoningFallback(baseFetch: typeof fetch, onDropped: () => void): typeof fetch {
   return async (input, init) => {
     const response = await baseFetch(input, init);
     if (response.ok) return response;
@@ -66,6 +31,7 @@ function fetchWithReasoningFallback(baseFetch: typeof fetch): typeof fetch {
     const copy = response.clone();
     const text = await copy.text();
     if (response.status < 400 || !/reasoning/i.test(text)) return response;
+    onDropped();
     return baseFetch(input, { ...init, body: withoutReasoning(body) });
   };
 }
@@ -86,6 +52,7 @@ export function orbitModel(options: {
   model: string;
   chatId: string;
   fetch?: typeof fetch;
+  onDropped?: () => void;
 }) {
   const baseURL = normalizeBaseUrl(options.baseUrl);
   const baseFetch = options.fetch ?? globalThis.fetch;
@@ -94,9 +61,23 @@ export function orbitModel(options: {
     baseURL,
     apiKey: options.apiKey,
     headers: openCodeSessionHeader(baseURL, options.chatId),
-    fetch: sessionFetch(baseURL, options.chatId, fetchWithReasoningFallback(baseFetch)),
+    fetch: sessionFetch(baseURL, options.chatId, fetchWithReasoningFallback(baseFetch, options.onDropped ?? (() => {}))),
   });
   return provider(options.model);
+}
+
+/** The model client for one connection. Only this function and listModels receive the plain key. */
+export function languageModelFor(options: {
+  connection: ProviderConnection;
+  apiKey: string;
+  model: string;
+  chatId: string;
+  onDropped?: () => void;
+  fetch?: typeof fetch;
+}) {
+  const { connection, apiKey, model, chatId } = options;
+  if (connection.kind === "anthropic") return createAnthropic({ apiKey, baseURL: anthropicBaseUrl(), fetch: options.fetch })(model);
+  return orbitModel({ baseUrl: connection.baseUrl, apiKey, model, chatId, fetch: options.fetch, onDropped: options.onDropped });
 }
 
 export async function outboundSessionHeader(baseUrl: string, chatId: string): Promise<string | null> {
@@ -123,15 +104,6 @@ export async function outboundSessionHeader(baseUrl: string, chatId: string): Pr
   return seen;
 }
 
-export function reasoningOptions(effort: ReasoningEffort) {
-  return {
-    reasoning: effort,
-    providerOptions: {
-      orbit: { reasoningEffort: effort },
-    },
-  } as const;
-}
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -150,120 +122,4 @@ function reasoningFlag(metadata: unknown): boolean | null {
 
 export function reasoningAllowed(metadata: unknown): boolean {
   return reasoningFlag(metadata) !== false;
-}
-
-function listedModel(item: unknown): ListedModel | null {
-  if (typeof item === "string" && item.length > 0) return { id: item, reasoning: null };
-  const record = asRecord(item);
-  if (!record) return null;
-  const id = typeof record.id === "string" ? record.id : typeof record.name === "string" ? record.name : "";
-  if (!id) return null;
-  return { id, reasoning: reasoningFlag(record) };
-}
-
-function modelsFromPayload(payload: unknown): ListedModel[] | null {
-  const record = asRecord(payload);
-  const raw = Array.isArray(payload) ? payload : Array.isArray(record?.data) ? record.data : Array.isArray(record?.models) ? record.models : null;
-  if (!raw) return null;
-  const models = new Map<string, ListedModel>();
-  for (const item of raw) {
-    const model = listedModel(item);
-    if (model) models.set(model.id, model);
-  }
-  return [...models.values()].sort((a, b) => a.id.localeCompare(b.id));
-}
-
-async function fetchModels(url: string, apiKey: string, extraHeaders?: Record<string, string>): Promise<ListedModel[] | null> {
-  try {
-    const response = await fetch(url, {
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        accept: "application/json",
-        "user-agent": "orbit/0.1",
-        ...extraHeaders,
-      },
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (!response.ok) return null;
-    return modelsFromPayload(await response.json());
-  } catch {
-    return null;
-  }
-}
-
-export const MODEL_META_TTL_MS = 5 * 60 * 1000;
-
-type ModelMeta = { reasoning: boolean | null; expiresAt: number };
-
-const modelMeta = new Map<string, ModelMeta>();
-
-function metaKey(baseUrl: string, modelId: string) {
-  return `${normalizeBaseUrl(baseUrl)}\0${modelId}`;
-}
-
-function rememberModels(baseUrl: string, models: ListedModel[], now = Date.now()) {
-  const prefix = `${normalizeBaseUrl(baseUrl)}\0`;
-  for (const key of modelMeta.keys()) {
-    if (key.startsWith(prefix)) modelMeta.delete(key);
-  }
-  const expiresAt = now + MODEL_META_TTL_MS;
-  for (const model of models) {
-    modelMeta.set(metaKey(baseUrl, model.id), { reasoning: model.reasoning, expiresAt });
-  }
-}
-
-function redactModels(models: ListedModel[], redact: Redactor): ListedModel[] {
-  const unique = new Map<string, ListedModel>();
-  for (const model of models) {
-    const id = redact.text(model.id);
-    if (!unique.has(id)) unique.set(id, { ...model, id });
-  }
-  return [...unique.values()].sort((a, b) => a.id.localeCompare(b.id));
-}
-
-function modelsEndpoint(baseUrl: string): string {
-  const url = new URL(baseUrl);
-  url.pathname = `${url.pathname.replace(/\/+$/, "")}/models`;
-  url.username = "";
-  url.password = "";
-  return url.toString();
-}
-
-/** Null means no endpoint answered. An empty array means the provider has no models. */
-export async function listModels(baseUrl: string, apiKey: string, redact?: Redactor): Promise<ListedModel[] | null> {
-  const base = normalizeBaseUrl(baseUrl);
-  const mask = redact ?? new Redactor({ apiKey, tavilyApiKey: "", githubToken: "", baseUrl });
-  const session = openCodeSessionHeader(base, "models");
-  let primary: ListedModel[] | null = null;
-  try {
-    primary = await fetchModels(modelsEndpoint(base), apiKey, session);
-  } catch {
-    primary = null;
-  }
-  if (primary && primary.length > 0) {
-    rememberModels(base, primary);
-    return redactModels(primary, mask);
-  }
-  if (base === OPENCODE_GO_BASE_URL) {
-    const fallback = await fetchModels(OPENCODE_GO_MODELS_URL, apiKey, { "x-opencode-session": "models" });
-    if (fallback) {
-      rememberModels(base, fallback);
-      return redactModels(fallback, mask);
-    }
-  }
-  if (primary) {
-    rememberModels(base, primary);
-    return redactModels(primary, mask);
-  }
-  return null;
-}
-
-export function modelAllowsReasoning(baseUrl: string, modelId: string, now = Date.now()): boolean {
-  const key = metaKey(baseUrl, modelId);
-  const hit = modelMeta.get(key);
-  if (!hit || hit.expiresAt <= now) {
-    if (hit) modelMeta.delete(key);
-    return true;
-  }
-  return hit.reasoning !== false;
 }

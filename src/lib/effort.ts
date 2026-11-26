@@ -1,4 +1,5 @@
 import type { AnthropicLanguageModelOptions } from "@ai-sdk/anthropic";
+import type { JSONValue } from "ai";
 import type { ConnectionKind } from "./connections";
 import type { ModelCaps } from "./model-list";
 
@@ -20,9 +21,11 @@ export function isEffort(value: unknown): value is Effort {
   return typeof value === "string" && (EFFORTS as readonly string[]).includes(value);
 }
 
+type JsonOptions = { [key: string]: JSONValue };
+
 export type EffortCallOptions = {
   reasoning?: Effort;
-  providerOptions?: { anthropic: AnthropicLanguageModelOptions };
+  providerOptions?: { anthropic: JsonOptions };
 };
 
 /** The levels a model takes, or null when its list entry does not say. */
@@ -52,13 +55,13 @@ function sentEffort(requested: Effort, levels: readonly Effort[] | null): Effort
   return levels.includes(requested) ? requested : nearest(requested, levels);
 }
 
-function anthropicOptions(sent: Effort | null): AnthropicLanguageModelOptions {
+function anthropicOptions(sent: Effort | null): JsonOptions {
   const cacheControl = { type: "ephemeral" } as const;
-  if (sent === null) return { cacheControl };
-  if (sent === "none") return { cacheControl, thinking: { type: "disabled" } };
+  if (sent === null) return { cacheControl } satisfies AnthropicLanguageModelOptions;
+  if (sent === "none") return { cacheControl, thinking: { type: "disabled" } } satisfies AnthropicLanguageModelOptions;
   // Current Claude models omit thinking text unless asked, which reads as a long pause. Edit reply rewrites an earlier
   // assistant turn, so a replayed thinking block can stop matching its prefix, and drop_block keeps that from failing.
-  return { cacheControl, effort: sent, thinking: { type: "adaptive", display: "summarized", blockBinding: { prefixMismatchBehavior: "drop_block" } } };
+  return { cacheControl, effort: sent, thinking: { type: "adaptive", display: "summarized", blockBinding: { prefixMismatchBehavior: "drop_block" } } } satisfies AnthropicLanguageModelOptions;
 }
 
 export function effortCallOptions(kind: ConnectionKind, requested: Effort, levels: Effort[] | null): { sent: Effort | null; options: EffortCallOptions } {
@@ -82,4 +85,14 @@ export function effortOutcome(input: {
   if (input.sent !== input.requested) return "adjusted";
   if (input.warnings.some((warning) => warning.feature !== undefined && EFFORT_WARNING_FEATURES.has(warning.feature))) return "adjusted";
   return "applied";
+}
+
+const TITLE_TOKENS = 24;
+const TITLE_TOKENS_WITH_THINKING = 2048;
+
+/** A title needs no thinking. A Claude model that cannot turn it off gets its lowest level, and room for it in the cap. */
+export function titleCallOptions(kind: ConnectionKind, levels: Effort[] | null): { options: EffortCallOptions; maxOutputTokens: number } {
+  if (kind === "openai-compatible") return { options: {}, maxOutputTokens: TITLE_TOKENS };
+  const lowest: Effort | null = levels === null ? "low" : levels.includes("none") ? "none" : (levels[0] ?? null);
+  return { options: { providerOptions: { anthropic: anthropicOptions(lowest) } }, maxOutputTokens: lowest === "none" ? TITLE_TOKENS : TITLE_TOKENS_WITH_THINKING };
 }

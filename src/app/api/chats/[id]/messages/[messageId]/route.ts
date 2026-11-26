@@ -1,3 +1,4 @@
+import { redactionSecrets } from "@/lib/connections";
 import { Redactor } from "@/lib/chat-errors";
 import { getChatForUser, touchChat, updateMessageText } from "@/lib/messages";
 import { LIMITS, r } from "@/lib/route-schema";
@@ -27,7 +28,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (!chat) return Response.json({ error: "Not found" }, { status: 404 });
   const parsed = patchSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid message text" }, { status: 400 });
-  const redact = new Redactor(getSettings());
+  const redact = new Redactor(getSettings(), ...redactionSecrets(session.user.id));
   if (!updateMessageText(chat.id, messageId, parsed.data.text, redact, parsed.data.partIndex)) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }

@@ -1,6 +1,7 @@
 import { generateText, type LanguageModel } from "ai";
 import { after } from "next/server";
 import type { Redactor } from "./chat-errors";
+import type { EffortCallOptions } from "./effort";
 import { chatTitle, replaceFallbackTitle } from "./messages";
 
 export const TITLE_ASK = "Write a title of at most six words.";
@@ -26,6 +27,7 @@ export function startChatTitle(input: {
   firstMessage: string;
   fallbackTitle: string;
   model: LanguageModel;
+  call: { options: EffortCallOptions; maxOutputTokens: number };
   redact: Redactor;
   onError: (message: string) => void;
 }): void {
@@ -40,6 +42,7 @@ async function saveTitle(
     chatId: string;
     fallbackTitle: string;
     model: LanguageModel;
+    call: { options: EffortCallOptions; maxOutputTokens: number };
     redact: Redactor;
     onError: (message: string) => void;
   },
@@ -49,7 +52,8 @@ async function saveTitle(
     const result = await generateText({
       model: input.model,
       prompt: titlePrompt(firstMessage),
-      maxOutputTokens: 24,
+      ...input.call.options,
+      maxOutputTokens: input.call.maxOutputTokens,
       timeout: 10_000,
       maxRetries: 0,
     });
