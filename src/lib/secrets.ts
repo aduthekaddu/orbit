@@ -57,7 +57,7 @@ function createdKey() {
 export function encryptSecret(plain: string): string {
   const key = existingKey() ?? createdKey();
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const cipher = createCipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
   cipher.setAAD(ASSOCIATED_DATA);
   const ciphertext = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
   return [VERSION, iv, cipher.getAuthTag(), ciphertext].map((part) => (typeof part === "string" ? part : part.toString("base64url"))).join(".");
@@ -71,7 +71,7 @@ export function decryptSecret(stored: string): string {
   const key = existingKey();
   if (!key) throw new SecretUnreadable();
   try {
-    const decipher = createDecipheriv("aes-256-gcm", key, iv);
+    const decipher = createDecipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
     decipher.setAAD(ASSOCIATED_DATA);
     decipher.setAuthTag(tag);
     return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");

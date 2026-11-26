@@ -32,7 +32,7 @@ const b64url = (bytes: Buffer) => bytes.toString("base64url");
 
 function seal(plain: string, key: Buffer, aad: string) {
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const cipher = createCipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
   cipher.setAAD(Buffer.from(aad, "utf8"));
   const ciphertext = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
   return ["v1", b64url(iv), b64url(cipher.getAuthTag()), b64url(ciphertext)].join(".");
@@ -40,7 +40,7 @@ function seal(plain: string, key: Buffer, aad: string) {
 
 function open(stored: string, key: Buffer, aad: string) {
   const [, iv, tag, ciphertext] = stored.split(".");
-  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(iv, "base64url"));
+  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(iv, "base64url"), { authTagLength: 16 });
   decipher.setAAD(Buffer.from(aad, "utf8"));
   decipher.setAuthTag(Buffer.from(tag, "base64url"));
   return Buffer.concat([decipher.update(Buffer.from(ciphertext, "base64url")), decipher.final()]).toString("utf8");
@@ -111,6 +111,12 @@ test("a changed byte in the IV, the tag, or the ciphertext throws SecretUnreadab
     const changed = parts.map((part, at) => (at === index ? changeFirstChar(part) : part)).join(".");
     assert.throws(() => secrets.decryptSecret(changed), secrets.SecretUnreadable, `part ${index} changed`);
   }
+});
+
+test("a tag cut to 12 bytes throws SecretUnreadable", () => {
+  const [version, iv, tag, ciphertext] = secrets.encryptSecret(PLAIN).split(".");
+  const short = Buffer.from(tag, "base64url").subarray(0, 12).toString("base64url");
+  assert.throws(() => secrets.decryptSecret([version, iv, short, ciphertext].join(".")), secrets.SecretUnreadable);
 });
 
 test("a value sealed with other associated data throws SecretUnreadable", () => {
