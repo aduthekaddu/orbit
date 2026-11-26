@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- The README, ARCHITECTURE.md, and `.env.example` describe the shipped GitHub tools, memory, the nightly dream, and the Cloudflare deploy. The stack diagram draws SearXNG, Tavily, the code sandbox, Ollama, GitHub MCP, and Cloudflare as optional services instead of planned ones. `.env.example` also lists `ORBIT_TRUSTED_ORIGINS` for runs from source. (#130)
 - The Memory page formats each memory's date only in the browser, in the reader's time zone, so a reader in a different zone from the server no longer gets React hydration error #418. (#140)
 - Signed-out requests to paths such as `/api/authors` now get the same sign-in check as other API requests. (#134)
 - A refreshed session cookie now reaches the browser on page and API responses, so daily use keeps a session rolling forward past 7 days without a forced sign-in. (#119)
