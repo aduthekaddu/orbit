@@ -238,8 +238,9 @@ async function main() {
         if (!afterClick.includes("Saved from the generated button.")) {
           finding("high", "button", "all: the note did not appear after a click", ".verify/evidence/genui-qa/genui-all-desktop.png");
         }
-        if (afterClick.split("Saved from the generated button.").length < 3) {
-          finding("medium", "button", "all: the callout watching /note did not pick up the button note", ".verify/evidence/genui-qa/genui-all-desktop.png");
+        const noteShown = afterClick.split("Saved from the generated button.").length - 1;
+        if (noteShown !== 1) {
+          finding("medium", "button", `all: the note shows ${noteShown} times, expected once, in the callout that watches /note`, ".verify/evidence/genui-qa/genui-all-desktop.png");
         }
 
         await button.focus();
