@@ -20,8 +20,8 @@ function withoutReasoning(body: string) {
   return JSON.stringify(parsed);
 }
 
-// A provider that rejects reasoning_effort gets the request again without it, and onDropped reports that, so the
-// reply can say its effort was ignored.
+// A provider that rejects reasoning_effort gets the request again without it. onDropped reports that only when the
+// retry succeeds, so the reply can say its effort was ignored. A failed retry leaves the SDK to retry with the effort.
 function fetchWithReasoningFallback(baseFetch: typeof fetch, onDropped: () => void): typeof fetch {
   return async (input, init) => {
     const response = await baseFetch(input, init);
@@ -31,8 +31,9 @@ function fetchWithReasoningFallback(baseFetch: typeof fetch, onDropped: () => vo
     const copy = response.clone();
     const text = await copy.text();
     if (response.status < 400 || !/reasoning/i.test(text)) return response;
-    onDropped();
-    return baseFetch(input, { ...init, body: withoutReasoning(body) });
+    const retried = await baseFetch(input, { ...init, body: withoutReasoning(body) });
+    if (retried.ok) onDropped();
+    return retried;
   };
 }
 

@@ -70,7 +70,19 @@ test("a provider that rejects reasoning_effort gets the request again without it
   assert.equal(bodies.length, 2);
   assert.equal(bodies[0].reasoning_effort, "high");
   assert.equal("reasoning_effort" in bodies[1], false);
-  assert.deepEqual(drops, [1]);
+  assert.deepEqual(drops, [2], "the drop is reported once, after the retry succeeded");
+});
+
+test("a retry without reasoning_effort that fails reports no drop, so the SDK's later retry with the effort reads as applied", async () => {
+  const { model, bodies, drops } = recordingModel("https://flaky-reasoning.example/v1", (attempt) => {
+    if (attempt === 1) return json({ error: { message: "reasoning_effort is not supported" } }, 400);
+    if (attempt === 2) return new Response(JSON.stringify({ error: { message: "upstream busy" } }), { status: 503, headers: { "content-type": "application/json", "retry-after-ms": "0" } });
+    return chatReply();
+  });
+  const result = await generateText({ model, prompt: "ping", maxRetries: 1, ...effort("high") });
+  assert.equal(result.text, "ok");
+  assert.deepEqual(bodies.map((body) => body.reasoning_effort ?? null), ["high", null, "high"]);
+  assert.deepEqual(drops, []);
 });
 
 test("an error unrelated to reasoning is not sent again", async () => {
