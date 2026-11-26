@@ -5,15 +5,13 @@ import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { BookmarkSimpleIcon, CaretRightIcon, GithubLogoIcon, MagnifyingGlassIcon, WarningCircleIcon, WrenchIcon, type Icon } from "@phosphor-icons/react";
 import { disclosureBody, disclosureTrigger } from "@/components/chat/disclosure";
 import { OrbitMark } from "@/components/orbit-mark";
-import { cardFor, summaryFor, type ToolCardKind } from "@/lib/tools/metadata";
+import { summaryFor, type LineKind } from "@/lib/tools/metadata";
 import type { ToolRunEnd } from "@/lib/tools/run-status";
-import { searchSources } from "@/lib/tools/search-output";
+import { parseSearchRun, type SearchRun } from "@/lib/tools/search-output";
 import { cn } from "@/lib/utils";
 import { GenericOutput } from "./generic-output";
 import { GithubOutput } from "./github-output";
 import { DomainTile, SearchResults } from "./search-results";
-
-type LineKind = Exclude<ToolCardKind, "genui" | "code">;
 
 const icons: Record<LineKind, Icon> = {
   search: MagnifyingGlassIcon,
@@ -34,12 +32,12 @@ function Failure({ text }: { text: string }) {
   return <p className="text-sm break-words text-destructive">{text}</p>;
 }
 
-function bodyFor(kind: LineKind, props: ToolCallMessagePartProps, end: ToolRunEnd): ReactNode {
+function bodyFor(kind: LineKind, props: ToolCallMessagePartProps, end: ToolRunEnd, search: SearchRun): ReactNode {
   if (end.status === "running" || end.status === "cancelled") return null;
   if (end.status === "failed" && end.error !== undefined) return <Failure text={end.error.trim() || "The tool failed"} />;
   switch (kind) {
     case "search":
-      return end.status === "succeeded" && searchSources(props.result).length === 0 ? null : <SearchResults output={props.result} />;
+      return end.status === "succeeded" && search.state === "found" && search.results.length === 0 ? null : <SearchResults run={search} />;
     case "github":
       return <GithubOutput output={props.result} input={props.args} />;
     case "memory": {
@@ -58,13 +56,13 @@ function detailFor(props: ToolCallMessagePartProps, end: ToolRunEnd) {
 }
 
 /** A tool call as one line that says what happened. It opens on tap when there is more to read, and a failure starts open. */
-export function ToolLine({ props, end }: { props: ToolCallMessagePartProps; end: ToolRunEnd }) {
-  const kind = cardFor(props.toolName) as LineKind;
+export function ToolLine({ kind, props, end }: { kind: LineKind; props: ToolCallMessagePartProps; end: ToolRunEnd }) {
   const summary = summaryFor(props.toolName, { status: end.status, input: props.args, output: props.result });
   const failed = end.status === "failed";
-  const body = bodyFor(kind, props, end);
+  const search = parseSearchRun(kind === "search" ? props.result : undefined);
+  const body = bodyFor(kind, props, end, search);
   const detail = detailFor(props, end);
-  const sources = end.status === "succeeded" && kind === "search" ? searchSources(props.result).slice(0, MAX_TILES) : [];
+  const sources = end.status === "succeeded" && search.state === "found" ? search.results.slice(0, MAX_TILES) : [];
   const KindIcon = failed ? WarningCircleIcon : icons[kind];
 
   const line = (

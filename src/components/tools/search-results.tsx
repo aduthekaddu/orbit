@@ -1,5 +1,5 @@
 import { domainTile } from "@/lib/tools/domain-tile";
-import { searchOutputSchema } from "@/lib/tools/search-output";
+import type { SearchRun } from "@/lib/tools/search-output";
 import { cn } from "@/lib/utils";
 
 /** A domain's letter on its own chart color. Computed locally, so nothing is fetched from the site. */
@@ -11,7 +11,7 @@ export function DomainTile({ url, className }: { url: string; className?: string
       aria-hidden
       style={{ "--tile": `var(--chart-${tone})` } as React.CSSProperties}
       className={cn(
-        "flex shrink-0 items-center justify-center bg-[color-mix(in_oklab,var(--tile)_20%,var(--background))] font-semibold text-(color:--tile)",
+        "flex shrink-0 items-center justify-center bg-[color-mix(in_oklab,var(--tile)_20%,var(--background))] font-semibold text-[color-mix(in_oklab,var(--tile)_65%,var(--foreground))]",
         className,
       )}
     >
@@ -20,14 +20,12 @@ export function DomainTile({ url, className }: { url: string; className?: string
   );
 }
 
-export function SearchResults({ output }: { output: unknown }) {
-  const parsed = searchOutputSchema.safeParse(output);
-  if (!parsed.success) return <p className="text-sm text-destructive">Search returned an invalid result</p>;
-  const search = parsed.data;
-  if (!search.ok) return <p className="text-sm text-destructive">{search.error}</p>;
+export function SearchResults({ run }: { run: SearchRun }) {
+  if (run.state === "invalid") return <p className="text-sm text-destructive">Search returned an invalid result</p>;
+  if (run.state === "failed") return <p className="text-sm text-destructive">{run.error}</p>;
   return (
     <ul className="space-y-3">
-      {search.results.map((result) => {
+      {run.results.map((result) => {
         const domain = new URL(result.url).hostname.replace(/^www\./, "");
         return (
           <li key={result.url} className="flex min-w-0 gap-3">

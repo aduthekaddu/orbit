@@ -1,25 +1,16 @@
 import { githubLinks } from "./github-links";
 import type { ToolRunStatus } from "./run-status";
-import { searchSources } from "./search-output";
+import { parseSearchRun } from "./search-output";
 
 export type ToolCardKind = "genui" | "search" | "code" | "github" | "memory" | "generic";
 
-/** inline: no frame. line: one line that opens on tap. card: always a full card. */
-export type ToolCardLayout = "inline" | "line" | "card";
+/** The kinds that render as a line: one pill that opens on tap. `genui` renders inline with no frame and `code` as a full card. */
+export type LineKind = Exclude<ToolCardKind, "genui" | "code">;
 
 export type ToolRun = { status: ToolRunStatus; input: unknown; output: unknown };
 
 type Phrase = string | ((run: ToolRun) => string);
 type ToolCardDefinition = { card: ToolCardKind; title: string; said?: Record<ToolRunStatus, Phrase> };
-
-const layouts: Record<ToolCardKind, ToolCardLayout> = {
-  genui: "inline",
-  code: "card",
-  search: "line",
-  github: "line",
-  memory: "line",
-  generic: "line",
-};
 
 function counted(count: number, one: string, many: string) {
   return `${count} ${count === 1 ? one : many}`;
@@ -32,7 +23,10 @@ export const toolCards = {
     title: "Web search",
     said: {
       running: "Searching the web",
-      succeeded: (run) => `Searched the web, ${counted(searchSources(run.output).length, "source", "sources")}`,
+      succeeded: (run) => {
+        const search = parseSearchRun(run.output);
+        return search.state === "found" ? `Searched the web, ${counted(search.results.length, "source", "sources")}` : "Searched the web";
+      },
       failed: "Search failed",
       cancelled: "Search stopped",
     },
@@ -86,10 +80,6 @@ function definitionFor(name: string): ToolCardDefinition {
 
 export function cardFor(name: string): ToolCardKind {
   return definitionFor(name).card;
-}
-
-export function layoutFor(name: string): ToolCardLayout {
-  return layouts[cardFor(name)];
 }
 
 export function titleFor(name: string): string {

@@ -7,7 +7,7 @@ import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { ScrollFade } from "@/components/ui/scroll-fade";
 import { catalog } from "@/lib/genui/catalog";
-import { TABLE_ROW_CAP, changeToneOf, formatChange, formatValue, numericColumns, type Cell, type ChangeFormat, type ChangeTone } from "@/lib/genui/format";
+import { TABLE_ROW_CAP, changeDirection, changeToneOf, formatChange, formatValue, numericColumns, type Cell, type ChangeFormat, type ChangeTone } from "@/lib/genui/format";
 import { cn } from "@/lib/utils";
 
 const changeText: Record<ChangeTone, string> = {
@@ -79,7 +79,8 @@ function MetricView({
 }) {
   const moved = typeof change === "number";
   const tone = moved ? changeToneOf(change, changeTone) : "neutral";
-  const Arrow = moved && change > 0 ? ArrowUpIcon : moved && change < 0 ? ArrowDownIcon : null;
+  const direction = moved ? changeDirection(change) : "flat";
+  const Arrow = direction === "up" ? ArrowUpIcon : direction === "down" ? ArrowDownIcon : null;
   return (
     <div data-metric>
       <p className="text-meta text-muted-foreground">{label}</p>
@@ -88,7 +89,7 @@ function MetricView({
         <p className="mt-1 flex flex-wrap items-center gap-x-2 text-meta">
           {moved ? (
             <span data-change data-tone={tone} className={cn("inline-flex items-center gap-0.5 font-medium tabular-nums", changeText[tone])}>
-              {Arrow ? <Arrow data-arrow={change > 0 ? "up" : "down"} weight="bold" aria-hidden className="size-3" /> : null}
+              {Arrow ? <Arrow data-arrow={direction} weight="bold" aria-hidden className="size-3" /> : null}
               {formatChange(change, changeFormat ?? "number")}
             </span>
           ) : null}
@@ -193,7 +194,7 @@ function EditableText({
         "outline-none",
         code
           ? "w-max min-w-full p-3 pr-9 font-mono text-code whitespace-pre"
-          : "peer rounded-md border border-dashed border-border-strong px-2.5 py-1.5 pr-9 text-prose whitespace-pre-wrap break-words transition-colors duration-150 ease-orbit hover:border-solid focus:border-solid focus:border-ring",
+          : "rounded-md border border-dashed border-border-strong px-2.5 py-1.5 pr-9 text-prose whitespace-pre-wrap break-words transition-colors duration-150 ease-orbit hover:border-solid focus:border-solid focus:border-ring",
       )}
       contentEditable
       role="textbox"
@@ -215,7 +216,7 @@ function EditableText({
           <ScrollFade
             axis="x"
             fade="var(--surface-sunken)"
-            className="peer rounded-md border border-dashed border-border-strong bg-surface-sunken transition-colors duration-150 ease-orbit hover:border-solid has-focus:border-solid has-focus:border-ring"
+            className="rounded-md border border-dashed border-border-strong bg-surface-sunken transition-colors duration-150 ease-orbit hover:border-solid has-focus:border-solid has-focus:border-ring"
           >
             {editable}
           </ScrollFade>

@@ -5,7 +5,7 @@ import { useRunResultUnloaded } from "@/components/chat/stopped-run-sync";
 import { OrbitMark } from "@/components/orbit-mark";
 import { RenderUiPart } from "@/components/genui/render-ui";
 import { runCodeInputSchema } from "@/lib/sandbox/spec";
-import { layoutFor, titleFor } from "@/lib/tools/metadata";
+import { cardFor, titleFor } from "@/lib/tools/metadata";
 import { toolCallRunEnd, type ToolRunEnd, type ToolRunStatus } from "@/lib/tools/run-status";
 import { CodeRun } from "./code-run";
 import { ToolLine } from "./tool-line";
@@ -27,7 +27,7 @@ function CodeCard({ props, end }: { props: ToolCallMessagePartProps; end: ToolRu
   const unloaded = useRunResultUnloaded(props.toolCallId);
   const output = end.status === "cancelled" ? (end.saved ?? (unloaded ? RESULT_UNLOADED : undefined)) : props.result;
   return (
-    <section data-tool-name={props.toolName} className="my-3 min-w-0 max-w-chat rounded-lg border bg-card shadow-card">
+    <section data-tool-name={props.toolName} className="my-3 min-w-0 max-w-chat rounded-lg border bg-card shadow-card first:mt-0">
       <div className="flex min-w-0 items-center gap-2 border-b px-3 py-2.5 text-meta">
         {status === "running" && <OrbitMark busy tone="mono" className="size-4 shrink-0" />}
         <span className="min-w-0 truncate font-medium">{titleFor(props.toolName)}</span>
@@ -43,12 +43,13 @@ function CodeCard({ props, end }: { props: ToolCallMessagePartProps; end: ToolRu
 
 export function RunCard(props: ToolCallMessagePartProps) {
   const end = toolCallRunEnd(props);
-  switch (layoutFor(props.toolName)) {
-    case "inline":
+  const kind = cardFor(props.toolName);
+  switch (kind) {
+    case "genui":
       return <RenderUiPart {...props} />;
-    case "line":
-      return <ToolLine props={props} end={end} />;
-    case "card":
+    case "code":
       return <CodeCard props={props} end={end} />;
+    default:
+      return <ToolLine kind={kind} props={props} end={end} />;
   }
 }

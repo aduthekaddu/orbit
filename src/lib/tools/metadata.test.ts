@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { layoutFor, summaryFor, titleFor, type ToolRun } from "./metadata";
+import { cardFor, summaryFor, titleFor, type ToolRun } from "./metadata";
 
 const results = (count: number) => ({
   ok: true,
@@ -13,10 +13,14 @@ const issues = (count: number) => ({
 
 const run = (status: ToolRun["status"], output?: unknown, input: unknown = {}): ToolRun => ({ status, input, output });
 
-test("each tool has one layout", () => {
-  assert.equal(layoutFor("render_ui"), "inline");
-  assert.equal(layoutFor("run_code"), "card");
-  for (const name of ["web_search", "remember", "forget", "github_list_issues", "do_thing"]) assert.equal(layoutFor(name), "line", name);
+test("each tool has one card kind", () => {
+  assert.equal(cardFor("render_ui"), "genui");
+  assert.equal(cardFor("run_code"), "code");
+  assert.equal(cardFor("web_search"), "search");
+  assert.equal(cardFor("remember"), "memory");
+  assert.equal(cardFor("forget"), "memory");
+  assert.equal(cardFor("github_list_issues"), "github");
+  assert.equal(cardFor("do_thing"), "generic");
 });
 
 test("titles are plain names", () => {
@@ -34,6 +38,8 @@ const table: Array<[string, ToolRun, string]> = [
   ["web_search", run("running"), "Searching the web"],
   ["web_search", run("succeeded", results(3)), "Searched the web, 3 sources"],
   ["web_search", run("succeeded", results(1)), "Searched the web, 1 source"],
+  ["web_search", run("succeeded", results(0)), "Searched the web, 0 sources"],
+  ["web_search", run("succeeded", { ok: true, query: "orbit", results: "nope" }), "Searched the web"],
   ["web_search", run("failed", { ok: false, query: "orbit", error: "Unavailable" }), "Search failed"],
   ["web_search", run("cancelled"), "Search stopped"],
   ["remember", run("running"), "Saving to memory"],
