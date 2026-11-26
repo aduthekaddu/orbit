@@ -629,3 +629,58 @@ test("start and message-metadata chunks do not overtake held text in the stream 
   const meta = out.find((c) => c.type === "message-metadata");
   assert.deepEqual(meta?.messageMetadata, { note: "ref [redacted]" });
 });
+
+test("reasoning-delta and text-delta providerMetadata survive POST /api/chat SSE with secrets masked", async () => {
+  const { readUIMessageStream } = await import("ai");
+  const model = new MockLanguageModelV4({
+    doGenerate: generateTitle("Clean title"),
+    doStream: async () => ({
+      stream: simulateReadableStream({
+        chunks: [
+          { type: "stream-start" as const, warnings: [] },
+          { type: "reasoning-start" as const, id: "r1" },
+          {
+            type: "reasoning-delta" as const,
+            id: "r1",
+            delta: `checking ${PROVIDER_KEY} now`,
+            providerMetadata: { anthropic: { signature: "sig-e2e-1", debug: `key=${TAVILY_KEY}` } } as Record<string, Record<string, string>>,
+          },
+          {
+            type: "reasoning-delta" as const,
+            id: "r1",
+            delta: "",
+            providerMetadata: { anthropic: { signature: "sig-e2e-final", debug: `key=${TAVILY_KEY}` } } as Record<string, Record<string, string>>,
+          },
+          { type: "reasoning-end" as const, id: "r1" },
+          { type: "text-start" as const, id: "t1" },
+          {
+            type: "text-delta" as const,
+            id: "t1",
+            delta: "Answer ready.",
+            providerMetadata: { openai: { itemId: "msg-e2e-1", note: `tok=${GITHUB_TOKEN}` } } as Record<string, Record<string, string>>,
+          },
+          { type: "text-end" as const, id: "t1" },
+          finishChunk(),
+        ],
+      }),
+    }),
+  });
+  const { raw, chunks } = await sendChat("c-delta-provider-metadata", "think", model);
+  assert.equal(raw.includes(PROVIDER_KEY), false, `SSE leaked provider key: ${raw}`);
+  assert.equal(raw.includes(TAVILY_KEY), false, `SSE leaked tavily key: ${raw}`);
+  assert.equal(raw.includes(GITHUB_TOKEN), false, `SSE leaked github token: ${raw}`);
+
+  let latest;
+  for await (const msg of readUIMessageStream({ stream: simulateReadableStream({ chunks: chunks as never[] }) })) {
+    latest = msg;
+  }
+  assert.ok(latest);
+  const reasoning = latest.parts.find((p) => p.type === "reasoning");
+  const text = latest.parts.find((p) => p.type === "text");
+  assert.ok(reasoning && reasoning.type === "reasoning");
+  assert.ok(text && text.type === "text");
+  assert.equal(reasoning.text, "checking [redacted] now");
+  assert.deepEqual(reasoning.providerMetadata, { anthropic: { signature: "sig-e2e-final", debug: "key=[redacted]" } });
+  assert.equal(text.text, "Answer ready.");
+  assert.deepEqual(text.providerMetadata, { openai: { itemId: "msg-e2e-1", note: "tok=[redacted]" } });
+});
