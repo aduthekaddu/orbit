@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test, { after, before } from "node:test";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { getDb, type OrbitDb } from "@/lib/db";
@@ -137,7 +138,7 @@ async function sendChat(chatId: string, text: string, model: MockLanguageModelV4
     await Promise.allSettled(afterTasks.splice(0));
     const saved = messages.listMessages(chatId);
     const titleRow = getDb().$client.prepare<[string], { title: string }>("select title from chats where id = ?").get(chatId);
-    return { raw, chunks: parseSse(raw), saved, title: titleRow?.title ?? "" };
+    return { raw, chunks: parseSse(raw), saved, title: titleRow?.title ?? "", replyId: response.headers.get("x-resumable-stream-id") };
   } finally {
     console.error = originalError;
   }
@@ -818,4 +819,65 @@ test("stopping during reasoning saves its duration and streams the stopped marke
     await reader.cancel();
     await Promise.allSettled(afterTasks.splice(0));
   }
+});
+
+
+test("a provider error during reasoning sends the same duration live, on replay, and after reload", async () => {
+  const chatId = "durable-error-thinking";
+  const reasoning = "Work out the answer.";
+  const model = new MockLanguageModelV4({
+    doGenerate: generateTitle("Provider error during reasoning"),
+    doStream: async () => ({
+      stream: simulateReadableStream({
+        chunks: [
+          { type: "stream-start", warnings: [] },
+          { type: "reasoning-start", id: "r" },
+          { type: "reasoning-delta", id: "r", delta: reasoning, providerMetadata: { mock: { signature: "test" } } },
+          { type: "error", error: new Error("The provider stopped during reasoning.") },
+        ],
+      }),
+    }),
+  });
+  const { chunks, saved, replyId } = await sendChat(chatId, "Think about the answer.", model);
+  const parts = saved.find((row) => row.role === "assistant")?.parts;
+  const stored = parts?.find((part) => part.type === "reasoning");
+  assert.equal(stored?.text, reasoning);
+  assert.ok(replyId);
+  const url = `http://127.0.0.1/api/chats/${chatId}/stream?replyId=${replyId}`;
+  const replayed = await replay(new Request(url), { params: Promise.resolve({ id: chatId }) });
+  assert.equal(replayed.status, 200);
+  assert.deepEqual(parseSse(await replayed.text()), chunks);
+  const endIndex = chunks.findIndex((chunk) => chunk.type === "reasoning-end");
+  assert.ok(endIndex >= 0, "live and replay streams must close reasoning before the error");
+  assert.ok(endIndex < chunks.findIndex((chunk) => chunk.type === "error"));
+  assert.equal(typeof stored?.providerMetadata?.orbitTiming.thoughtMs, "number");
+  assert.deepEqual(chunks[endIndex].providerMetadata, stored?.providerMetadata);
+  assert.deepEqual(parts?.at(-1), { type: "data-reply-end", data: { reason: "failed" } });
+});
+
+
+test("an OpenAI-compatible stream without a finish reason is saved and streamed as interrupted", async () => {
+  const upstream = createOpenAICompatible({
+    name: "mock",
+    baseURL: "http://mock.invalid/v1",
+    fetch: async () => new Response(
+      'data: {"choices":[{"delta":{"content":"Partial answer."}}]}\n\n',
+      { headers: { "content-type": "text/event-stream" } },
+    ),
+  }).chatModel("mock");
+  const model = new MockLanguageModelV4({
+    doGenerate: generateTitle("Partial answer"),
+    doStream: (options) => upstream.doStream(options),
+  });
+  const { chunks, saved } = await sendChat("durable-missing-finish", "Send the answer.", model);
+  const parts = saved.find((row) => row.role === "assistant")?.parts;
+  assert.deepEqual({
+    text: parts && messages.textFromParts(parts),
+    savedEnd: parts?.at(-1),
+    wireEnding: chunks.filter((chunk) => chunk.type === "finish" || chunk.type === "error" || chunk.type === "data-reply-end").map((chunk) => chunk.type),
+  }, {
+    text: "Partial answer.",
+    savedEnd: { type: "data-reply-end", data: { reason: "failed" } },
+    wireEnding: ["data-reply-end", "error"],
+  });
 });

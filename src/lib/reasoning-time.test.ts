@@ -41,3 +41,23 @@ test("an interrupted reasoning part gets a duration and only provider metadata i
   }]);
   assert.equal(history[0].parts[0], reasoning);
 });
+
+test("reasoning that reaches EOF without an end chunk receives its elapsed time", async () => {
+  let time = 500;
+  const transform = stampReasoningTimes(() => time);
+  const writer = transform.writable.getWriter();
+  const chunks: TextStreamPart<ToolSet>[] = [];
+  const read = (async () => {
+    for await (const chunk of transform.readable) chunks.push(chunk);
+  })();
+  await writer.write({ type: "reasoning-start", id: "r" });
+  await writer.write({ type: "error", error: new Error("Provider error.") });
+  const metadata = { anthropic: { signature: "signature" } };
+  await writer.write({ type: "reasoning-delta", id: "r", text: "thinking", providerMetadata: metadata });
+  time = 900;
+  await writer.close();
+  await read;
+  assert.deepEqual(chunks.at(-1), {
+    type: "reasoning-end", id: "r", providerMetadata: { ...metadata, orbitTiming: { startedAt: 500, thoughtMs: 400 } },
+  });
+});

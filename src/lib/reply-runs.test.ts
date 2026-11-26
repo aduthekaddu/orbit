@@ -98,3 +98,61 @@ test("a discarded reply drains before removal and sends the saved marker before 
   assert.deepEqual(await listener, [{ type: "data-reply-end", data: { reason: "failed" } }, terminal]);
   assert.equal(findReplyRun("chat", "user", "reply-chat"), null);
 });
+
+test("a run that closes without a terminal chunk tells live and replay listeners it was interrupted", async () => {
+  const run = await reserve();
+  const start = { type: "start", messageId: "reply-chat" } as const;
+  startReplyRun(run, new ReadableStream({
+    start(controller) {
+      controller.enqueue(start);
+      controller.close();
+    },
+  }), () => null);
+  const expected = [start, { type: "error", errorText: "The reply was interrupted." }];
+  const live = await readAll(watchReply(run));
+  const replay = findReplyRun("chat", "user", "reply-chat");
+  assert.ok(replay);
+  assert.deepEqual({ live, replay: await readAll(watchReply(replay.run)) }, { live: expected, replay: expected });
+});
+
+test("a stopped run that closes without an abort chunk sends the saved marker and abort", async () => {
+  const run = await reserve();
+  startReplyRun(run, new ReadableStream({
+    start(controller) {
+      run.controller.signal.addEventListener("abort", () => controller.close(), { once: true });
+    },
+  }), () => "stopped");
+  const live = readAll(watchReply(run));
+  assert.equal(stopReplyRun("chat", "user"), true);
+  assert.deepEqual(await live, [
+    { type: "data-reply-end", data: { reason: "stopped" } }, { type: "abort" },
+  ]);
+});
+
+test("a provider error followed by finish sends the saved marker before the error", async () => {
+  const run = await reserve();
+  const error = { type: "error", errorText: "Response stream ended without a finish reason." } as const;
+  startReplyRun(run, new ReadableStream({
+    start(controller) {
+      controller.enqueue(error);
+      controller.enqueue({ type: "finish", finishReason: "error" });
+      controller.close();
+    },
+  }), () => "failed");
+  assert.deepEqual(await readAll(watchReply(run)), [
+    { type: "data-reply-end", data: { reason: "failed" } }, error,
+  ]);
+});
+
+test("a read failure after finish still ends the reply with an error", async () => {
+  const run = await reserve();
+  startReplyRun(run, new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: "finish", finishReason: "stop" });
+    },
+    pull(controller) {
+      controller.error(new Error("Stream cleanup failed."));
+    },
+  }), () => null);
+  assert.deepEqual(await readAll(watchReply(run)), [{ type: "error", errorText: "The reply was interrupted." }]);
+});
