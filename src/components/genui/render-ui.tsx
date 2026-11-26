@@ -3,10 +3,15 @@
 import { JSONUIProvider, Renderer, createStateStore } from "@json-render/react";
 import type { Spec } from "@json-render/core";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
+import { CaretRightIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { Component, useMemo, type ReactNode } from "react";
+import { disclosureBody, disclosureTrigger } from "@/components/chat/disclosure";
 import { registry } from "@/components/genui/registry";
+import { ScrollFade } from "@/components/ui/scroll-fade";
+import { Skeleton } from "@/components/ui/skeleton";
 import { parseRenderSpec, type RenderOutcome } from "@/lib/genui/spec";
-import { toolCallRunEnd } from "@/lib/tools/run-status";
+import { toolCallRunEnd, type ToolRunEnd } from "@/lib/tools/run-status";
+import { cn } from "@/lib/utils";
 
 function pretty(value: unknown) {
   if (typeof value === "string") return value;
@@ -21,12 +26,39 @@ function StoppedFallback() {
   return <p data-genui-fallback className="text-sm text-muted-foreground">Stopped</p>;
 }
 
+/** A spec that cannot be drawn: one line, with the error and the raw JSON one tap away. */
 function Fallback({ error, raw }: { error: string; raw: unknown }) {
   const text = pretty(raw);
   return (
-    <div data-genui-fallback className="rounded-xl border border-destructive/40 bg-card p-3 text-sm text-card-foreground">
-      <p className="whitespace-pre-wrap text-destructive">{error}</p>
-      {text ? <pre className="mt-2 overflow-x-auto font-mono text-code">{text}</pre> : null}
+    <details data-genui-fallback className="group/line min-w-0">
+      <summary className={cn(disclosureTrigger, "w-fit text-destructive hover:text-destructive")}>
+        <WarningCircleIcon weight="regular" className="size-3.5 shrink-0" />
+        <span className="truncate">Could not show this view</span>
+        <span className="text-muted-foreground">Details</span>
+        <CaretRightIcon weight="regular" className="size-3 shrink-0 text-muted-foreground transition-transform duration-200 ease-orbit group-open/line:rotate-90" />
+      </summary>
+      <div className={disclosureBody}>
+        <p className="text-meta whitespace-pre-wrap break-words text-destructive">{error}</p>
+        {text ? (
+          <ScrollFade axis="y" fade="var(--surface-sunken)" className="mt-2 rounded-md bg-surface-sunken" scrollerClassName="max-h-tool-content" scrollerLabel="Spec">
+            <pre className="p-3 font-mono text-code whitespace-pre-wrap break-words text-foreground">{text}</pre>
+          </ScrollFade>
+        ) : null}
+      </div>
+    </details>
+  );
+}
+
+const surface = "rounded-xl border bg-card p-4 text-card-foreground shadow-card max-sm:p-3";
+
+function Building() {
+  return (
+    <div data-genui className={surface}>
+      <span role="status" className="sr-only">Building view</span>
+      <Skeleton className="h-5 w-2/5" />
+      <Skeleton className="mt-4 h-3.5 w-full" />
+      <Skeleton className="mt-2.5 h-3.5 w-11/12" />
+      <Skeleton className="mt-2.5 h-3.5 w-3/5" />
     </div>
   );
 }
@@ -63,10 +95,19 @@ function readOutcome(result: unknown): RenderOutcome | null {
   return null;
 }
 
+/** A generated view renders in the reply itself: one surface, no run frame, no status word. */
 export function RenderUiPart(props: ToolCallMessagePartProps) {
-  const { result, args, argsText, status, toolCallId } = props;
   const end = toolCallRunEnd(props);
-  if (end.status === "running") return <p className="text-sm text-muted-foreground">Building</p>;
+  return (
+    <div data-tool-name={props.toolName} data-tool-status={end.status} className="my-3 min-w-0 max-w-chat">
+      <View props={props} end={end} />
+    </div>
+  );
+}
+
+function View({ props, end }: { props: ToolCallMessagePartProps; end: ToolRunEnd }) {
+  const { result, args, argsText, status, toolCallId } = props;
+  if (end.status === "running") return <Building />;
   if (end.status === "cancelled") return <StoppedFallback />;
   if (end.status === "failed" && end.error !== undefined) {
     return <Fallback error={end.error.trim() ? end.error : "The spec was rejected"} raw={argsText || args} />;
@@ -83,7 +124,9 @@ export function RenderUiPart(props: ToolCallMessagePartProps) {
     if (checked.ok) {
       return (
         <RenderBoundary key={toolCallId} raw={checked.spec}>
-          <SpecView spec={checked.spec} />
+          <div data-genui className={surface}>
+            <SpecView spec={checked.spec} />
+          </div>
         </RenderBoundary>
       );
     }

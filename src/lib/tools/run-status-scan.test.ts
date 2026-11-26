@@ -13,6 +13,7 @@ const stored = ["Stopped", "Code run was stopped", "Search was stopped", "User c
 const allowed = [
   { file: "src/components/tools/code-run.tsx", text: "Stopped", why: "the label of a stopped run's outcome" },
   { file: "src/components/chat/reply-end.tsx", text: "Stopped", why: "the label of a stopped reply" },
+  { file: "src/lib/tools/metadata.ts", text: "Stopped", why: "the summary line of a stopped memory call" },
 ];
 
 const receiver = String.raw`(?:\berrorText|\b(?:output|result)\??\.error\b)`;

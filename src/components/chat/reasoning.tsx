@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { readOrbitTiming, thinkingLabel, thoughtLabel } from "@/lib/thought-time";
 import { MarkdownText } from "./markdown-text";
 import { useReplyLink } from "./reply-link";
+import { disclosureBody, disclosureTrigger } from "./disclosure";
 
 export const Reasoning: ReasoningMessagePartComponent = ({ status, providerMetadata }) => {
   const { clockOffsetMs } = useReplyLink();
@@ -28,7 +29,7 @@ export const Reasoning: ReasoningMessagePartComponent = ({ status, providerMetad
   const duration = thoughtMs !== undefined ? thoughtLabel(thoughtMs) : running && startedAt !== undefined ? thinkingLabel(elapsedMs) : null;
   return (
     <Collapsible.Root className="group/reasoning my-3 first:mt-0">
-      <Collapsible.Trigger className="flex h-7 items-center gap-1.5 rounded-full border bg-surface-sunken pr-2 pl-2.5 text-meta text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:border-border-strong hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 group-data-[state=open]/reasoning:text-foreground">
+      <Collapsible.Trigger className={cn(disclosureTrigger, "w-fit group-data-[state=open]/reasoning:text-foreground")}>
         <LightbulbIcon weight="regular" className={cn("size-3.5", running && "motion-safe:animate-pulse text-sun")} />
         <span>
           {running ? "Thinking" : duration ? "Thought for" : "Thought"}
@@ -39,7 +40,7 @@ export const Reasoning: ReasoningMessagePartComponent = ({ status, providerMetad
           className="size-3 transition-transform duration-200 ease-orbit group-data-[state=open]/reasoning:rotate-90"
         />
       </Collapsible.Trigger>
-      <Collapsible.Content className="mt-3 ml-3.5 border-l pl-4 text-muted-foreground">
+      <Collapsible.Content className={cn(disclosureBody, "mt-3 text-muted-foreground")}>
         <MarkdownText className="text-sm leading-6" />
       </Collapsible.Content>
     </Collapsible.Root>

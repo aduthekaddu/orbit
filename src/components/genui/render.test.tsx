@@ -109,7 +109,7 @@ function renderSpec(spec: unknown) {
 
 test("a finished view renders on exactly one surface with grouped numbers", () => {
   const html = renderSpec(allSpec);
-  assert.equal(html.match(/data-genui=""/g)?.length, 1);
+  assert.equal(html.match(/data-genui="/g)?.length, 1);
   assert.match(html, />42,000</);
   assert.match(html, />1234</);
   assert.doesNotMatch(html, />42000</);
@@ -140,12 +140,12 @@ test("a huge table opens at twelve rows with a control for the rest", () => {
 
 test("a callout carries its tone", () => {
   const html = renderSpec({ root: "c", elements: { c: element("Callout", { tone: "warning", text: "Careful" }) } });
-  assert.match(html, /data-callout="" data-tone="warning"|data-tone="warning"[^>]*data-callout/);
+  assert.match(html, /<div data-callout="[^"]*" data-tone="warning"/);
 });
 
 test("an invalid spec is one line with a closed Details disclosure", () => {
   const html = renderPart({ result: { ok: false, error: "elements.card.props.title: expected string", raw: { root: "card" } }, status: { type: "complete" } });
-  assert.match(html, /<details data-genui-fallback=""[^>]*>/);
+  assert.match(html, /<details data-genui-fallback="[^"]*"[^>]*>/);
   assert.doesNotMatch(html, /<details[^>]* open/);
   assert.match(html, /Could not show this view/);
   assert.match(html, />Details</);

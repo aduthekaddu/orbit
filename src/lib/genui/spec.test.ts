@@ -34,13 +34,20 @@ test("a card and a metric pass", () => {
   assert.equal(outcome.spec.root, "card");
 });
 
-test("a numeric metric value is stored as text", () => {
+test("a numeric metric value stays a number, so the widget can format it", () => {
   const spec = structuredClone(card);
-  spec.elements.metric.props.value = 1 as unknown as string;
+  spec.elements.metric.props.value = 42000 as unknown as string;
   const outcome = parseRenderSpec(spec);
   assert.equal(outcome.ok, true);
   if (!outcome.ok) return;
-  assert.equal(outcome.spec.elements.metric.props.value, "1");
+  assert.equal(outcome.spec.elements.metric.props.value, 42000);
+});
+
+test("a stored metric with a text value and no change still parses", () => {
+  const outcome = parseRenderSpec(structuredClone(card));
+  assert.equal(outcome.ok, true);
+  if (!outcome.ok) return;
+  assert.equal(outcome.spec.elements.metric.props.value, card.elements.metric.props.value);
 });
 
 test("a bad prop fails and does not throw", () => {

@@ -13,7 +13,7 @@ function issueText(error: z.ZodError, prefix: Array<string | number>) {
   });
 }
 
-function tableWidthIssues(key: string, props: { columns: string[]; rows: string[][] }) {
+function tableWidthIssues(key: string, props: { columns: string[]; rows: (string | number)[][] }) {
   return props.rows.flatMap((row, index) =>
     row.length === props.columns.length
       ? []
@@ -36,7 +36,7 @@ function tightenProps(spec: Spec): { ok: true; spec: Spec } | { ok: false; error
       continue;
     }
     if (element.type === "Table") {
-      lines.push(...tableWidthIssues(key, parsed.data as { columns: string[]; rows: string[][] }));
+      lines.push(...tableWidthIssues(key, parsed.data as { columns: string[]; rows: (string | number)[][] }));
     }
     elements[key] = { ...element, props: parsed.data };
   }

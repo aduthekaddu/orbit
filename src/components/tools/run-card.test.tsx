@@ -28,7 +28,7 @@ function line(html: string) {
 }
 
 function widgetStatus(html: string) {
-  assert.doesNotMatch(html, /<section/);
+  assert.doesNotMatch(html, /<section data-tool-name/);
   assert.doesNotMatch(html, /Generated UI|Succeeded|Running|Cancelled/);
   return /^<div data-tool-name="render_ui" data-tool-status="([a-z]+)"/.exec(html)?.[1];
 }
@@ -93,7 +93,7 @@ test("a finished search is one closed line that opens to its sources", () => {
   assert.match(html, /^<details data-tool-name="web_search"/);
   assert.doesNotMatch(html, /^<details[^>]* open/);
   assert.equal(line(html), "Searched the web, 3 sources|succeeded");
-  assert.equal(html.match(/data-tile=""/g)?.length, 3);
+  assert.equal(/<summary.*<\/summary>/s.exec(html)?.[0].match(/data-tile="/g)?.length, 3);
   assert.equal(html.match(/target="_blank"/g)?.length, 3);
   assert.doesNotMatch(html, /Web search|Succeeded/);
 });
