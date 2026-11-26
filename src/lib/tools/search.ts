@@ -75,23 +75,6 @@ function maskResultUrl(href: string, redact: Redactor | undefined): string | nul
   }
 }
 
-function redactResults(results: SearchResult[], redact: Redactor): SearchResult[] {
-  const seen = new Set<string>();
-  const masked: SearchResult[] = [];
-  for (const item of results) {
-    const url = maskResultUrl(item.url, redact);
-    if (!url || seen.has(url)) continue;
-    seen.add(url);
-    masked.push({
-      ...item,
-      title: redact.text(item.title),
-      url,
-      snippet: redact.text(item.snippet).slice(0, 300),
-    });
-  }
-  return masked;
-}
-
 export function parseSearchResults(response: unknown, engine: SearchResult["engine"], redact?: Redactor): SearchResult[] {
   const parsed = responseSchema.parse(response);
   const seen = new Set<string>();
@@ -154,19 +137,19 @@ export async function searchWeb(
   if (settings.searxngUrl) {
     attempts.push({
       backend: "searxng",
-      run: () => backends.searxng === searchSearxng ? searchSearxng(settings.searxngUrl, query, signal, mask) : backends.searxng(settings.searxngUrl, query, signal),
+      run: () => backends.searxng(settings.searxngUrl, query, signal, mask),
     });
   }
   if (settings.tavilyApiKey) {
     attempts.push({
       backend: "tavily",
-      run: () => backends.tavily === searchTavily ? searchTavily(settings.tavilyApiKey, query, signal, mask) : backends.tavily(settings.tavilyApiKey, query, signal),
+      run: () => backends.tavily(settings.tavilyApiKey, query, signal, mask),
     });
   }
   for (const attempt of attempts) {
     if (signal?.aborted) return { ok: false, query: safeQuery, error: STOP_MARKERS.searchStopped };
     try {
-      const results = redactResults(await attempt.run(), mask);
+      const results = await attempt.run();
       if (signal?.aborted) return { ok: false, query: safeQuery, error: STOP_MARKERS.searchStopped };
       if (results.length) return { ok: true, query: safeQuery, results };
     } catch (error) {
