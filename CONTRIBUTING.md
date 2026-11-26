@@ -40,7 +40,7 @@ Every third-party action is pinned to a commit SHA and every tool image to a dig
 
 ## Security checks
 
-The `Security` and `CodeQL` workflows run on every pull request, every push to `main`, and once a week. GitHub code scanning, dependency review, and secret scanning are not available on a private personal repository, so each job does its own failing. `Security passed` succeeds only when all the `Security` jobs do.
+The `Security` and `CodeQL` workflows run on every pull request, every push to `main`, and once a week. GitHub's own code scanning, dependency review, and secret scanning only show alerts, so each job does its own failing with this repository's rules and allowlists. `Security passed` succeeds only when all the `Security` jobs do.
 
 - **Secrets.** `gitleaks` scans the whole git history and redacts what it finds. `.gitleaks.toml` allows one fake secret that a test wrote in three old commits. Do not put a real key in a test. Make a fake one at run time.
 - **Dependencies.** OSV-Scanner reads `package-lock.json` through `scripts/ci/osv-gate.sh`. On a pull request it fails only for vulnerabilities the change adds, which includes another copy of a vulnerable package and a dev dependency that becomes a production one. On `main` and on the weekly run it fails for a vulnerable production dependency and only warns about dev dependencies.
@@ -53,6 +53,12 @@ The `Security` and `CodeQL` workflows run on every pull request, every push to `
 2. Run `npm run db:generate` to write a migration into `drizzle/`.
 3. For SQL that Drizzle cannot describe, such as FTS5 or `sqlite-vec` tables, run `npx drizzle-kit generate --custom --name <name>` and write the SQL by hand.
 4. Run the migration against a copy of a real database before you open the pull request.
+
+## Dependency overrides
+
+An `overrides` entry in `package.json` is a temporary workaround, and JSON cannot hold a comment, so this section is the comment beside it. Every entry lists why it exists, when to remove it, and the open issue that tracks its removal. Delete an entry in the pull request that closes its issue. The suite check `src/lib/dependency-overrides.test.ts` fails an entry whose package has left `package-lock.json`, and an entry with no line here.
+
+- `@esbuild-kit/core-utils` pins `esbuild` to 0.25.12. drizzle-kit 0.31.11 reaches that deprecated package through `@esbuild-kit/esm-loader`. That chain asks for esbuild `~0.18.20`, which carries GHSA-67mh-4wv8-2f99 (#71, #80). Remove the entry when a drizzle-kit upgrade stops installing `@esbuild-kit/`, which `npm ls @esbuild-kit/core-utils` printing `(empty)` shows. Tracked in #237.
 
 ## Work on a planned slice
 
