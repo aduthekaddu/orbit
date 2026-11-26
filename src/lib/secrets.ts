@@ -37,14 +37,25 @@ function existingKey(): Buffer | null {
   return fs.existsSync(file) ? readKeyFile(file) : null;
 }
 
-// Two processes can start at once on a fresh install, so the file is created exclusively and the loser reads the winner's key.
+// Two processes can start at once on a fresh install. Each writes a whole key to its own temporary file, and a hard link
+// publishes it only if no key exists yet, so no process reads a partial key and the loser reads the winner's.
 function createdKey() {
   const file = keyFile();
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const temporary = `${file}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
   try {
-    fs.writeFileSync(file, randomBytes(32).toString("hex"), { mode: 0o600, flag: "wx" });
+    const fd = fs.openSync(temporary, "wx", 0o600);
+    try {
+      fs.writeSync(fd, randomBytes(32).toString("hex"));
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    fs.linkSync(temporary, file);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  } finally {
+    fs.rmSync(temporary, { force: true });
   }
   return readKeyFile(file);
 }

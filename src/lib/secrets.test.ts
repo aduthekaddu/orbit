@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -145,4 +145,54 @@ test("another key or a lost key file throws SecretUnreadable", () => {
   assert.deepEqual(inChild(dataDir, OTHER_KEY_HEX, DECRYPT_OR_REPORT)(stored), { unreadable: true }, "another ORBIT_SECRET_KEY");
   fs.rmSync(path.join(dataDir, "secret-key"));
   assert.deepEqual(inChild(dataDir, undefined, DECRYPT_OR_REPORT)(stored), { unreadable: true }, "the key file is gone");
+});
+
+// The window between creating the key file and finishing its write is microseconds wide, so each child makes its first
+// use in many fresh data directories, and the two meet at a barrier before each one.
+const RACE_ROUNDS = 3000;
+const RACE_CHILD = `const fs = await import("node:fs");
+const m = await import(process.argv[1]);
+const [base, me, rounds] = process.argv.slice(2);
+const results = [];
+for (let round = 0; round < Number(rounds); round++) {
+  const dir = base + "/round-" + round;
+  process.env.ORBIT_DATA_DIR = dir;
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(dir + "/ready-" + me, "");
+  while (!fs.existsSync(dir + "/ready-a") || !fs.existsSync(dir + "/ready-b")) {}
+  try { results.push({ stored: m.encryptSecret(${JSON.stringify(PLAIN)}) }); }
+  catch (error) { results.push({ error: error.message }); }
+}
+console.log(JSON.stringify(results));`;
+
+function raceChild(base: string, me: "a" | "b"): Promise<{ stored?: string; error?: string }[]> {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  delete env.ORBIT_SECRET_KEY;
+  delete env.NODE_TEST_CONTEXT;
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["--import", "tsx", "-e", RACE_CHILD, secretsUrl, base, me, String(RACE_ROUNDS)], { cwd: repo, env, timeout: 60_000 });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => (stdout += chunk));
+    child.stderr.on("data", (chunk) => (stderr += chunk));
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      if (code === 0) resolve(JSON.parse(stdout.trim().split("\n").at(-1) ?? "[]"));
+      else reject(new Error(`child ${me} ended with ${signal ?? code}: ${stderr}`));
+    });
+  });
+}
+
+test("two processes that use the secret key first at the same time get one complete key that opens what each wrote", async () => {
+  const base = childDataDir();
+  const [a, b] = await Promise.all([raceChild(base, "a"), raceChild(base, "b")]);
+  const failed = [...a, ...b].filter((result) => result.error !== undefined);
+  assert.deepEqual(failed.slice(0, 3), [], `${failed.length} of ${2 * RACE_ROUNDS} first uses failed`);
+  for (let round = 0; round < RACE_ROUNDS; round++) {
+    const dir = path.join(base, `round-${round}`);
+    const key = Buffer.from(fs.readFileSync(path.join(dir, "secret-key"), "utf8").trim(), "hex");
+    assert.equal(open(a[round].stored!, key, AAD), PLAIN, `round ${round}, process a`);
+    assert.equal(open(b[round].stored!, key, AAD), PLAIN, `round ${round}, process b`);
+    assert.deepEqual(fs.readdirSync(dir).filter((name) => !name.startsWith("ready-")), ["secret-key"], `round ${round} left a temporary file`);
+  }
 });
