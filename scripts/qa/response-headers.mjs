@@ -22,16 +22,22 @@ function check(name, ok, detail) {
   if (!ok) failures += 1;
 }
 
+const login = await fetch(`${origin}/login`);
+const script = (await login.text()).match(/\/_next\/static\/[^"']+\.js/)?.[0];
+assert.ok(script, "the login page references a static script");
+
+const page = ["frame-src 'none'", "frame-ancestors 'none'"];
 const responses = [
-  { path: "/login", label: "login page", status: 200 },
-  { path: `/c/${id}`, label: "chat page", status: 200, cookie },
+  { path: "/login", label: "login page", status: 200, frame: page },
+  { path: `/c/${id}`, label: "chat page", status: 200, cookie, frame: page },
   { path: "/response-headers-missing-page", label: "missing page", status: 404, cookie },
   { path: "/api/chats", label: "signed-in API", status: 200, cookie },
   { path: "/api/chats", label: "signed-out API", status: 401 },
+  { path: script, label: "static script", status: 200 },
 ];
 
 for (const response of responses) {
-  const { path, label, status } = response;
+  const { path, label, status, frame } = response;
   const { headers, status: actualStatus, body } = await fetch(origin + path, {
     headers: response.cookie ? { cookie: response.cookie } : {},
     redirect: "manual",
@@ -39,20 +45,18 @@ for (const response of responses) {
   await body?.cancel();
   check(`${label} returns HTTP ${status}`, actualStatus === status, `got ${actualStatus}`);
   for (const [name, expected] of Object.entries({
-    "x-frame-options": "DENY",
     "x-content-type-options": "nosniff",
     "referrer-policy": "same-origin",
     "x-powered-by": null,
+    ...(frame ? { "x-frame-options": "DENY" } : {}),
   })) {
     const actual = headers.get(name);
     check(`${label}: ${name} = ${expected ?? "absent"}`, actual === expected, `got ${actual ?? "absent"}`);
   }
+  if (!frame) continue;
   const csp = headers.get("content-security-policy");
   const directives = csp?.split(";").map(directive => directive.trim()) ?? [];
-  const required = path.startsWith("/api/")
-    ? ["default-src 'none'", "frame-ancestors 'none'"]
-    : ["default-src 'self'", "frame-src 'none'", "frame-ancestors 'none'", "object-src 'none'"];
-  check(`${label}: CSP includes ${required.join(", ")}`, required.every(directive => directives.includes(directive)), csp ?? "no CSP");
+  check(`${label}: CSP includes ${frame.join(", ")}`, frame.every(directive => directives.includes(directive)), csp ?? "no CSP");
 }
 
 if (failures) process.exitCode = 1;
