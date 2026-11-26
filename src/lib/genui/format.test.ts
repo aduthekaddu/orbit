@@ -10,6 +10,13 @@ test("numbers group from five digits, so years and short ids keep no comma", () 
   assert.equal(formatValue(-0.5), "-0.5");
 });
 
+test("a number that rounds to zero prints without a minus sign", () => {
+  assert.equal(formatValue(-0), "0");
+  assert.equal(formatValue(-0.001), "0");
+  assert.equal(formatValue(-0.5), "-0.5");
+  assert.equal(formatValue(-0.005), "-0.01");
+});
+
 test("a string prints as the model wrote it", () => {
   assert.equal(formatValue("42000"), "42000");
   assert.equal(formatValue("EU"), "EU");
@@ -30,6 +37,16 @@ test("a change's tone follows its sign unless the model names one", () => {
   assert.equal(changeToneOf(-8, "positive"), "positive");
   assert.equal(changeToneOf(5, "negative"), "negative");
   assert.equal(changeToneOf(5, null), "positive");
+});
+
+test("a change that rounds to zero reads as no change, the way it prints", () => {
+  assert.equal(formatChange(-0.001, "percent"), "0%");
+  assert.equal(formatChange(0.004, "percent"), "0%");
+  assert.equal(changeToneOf(-0.001), "neutral");
+  assert.equal(changeToneOf(0.004), "neutral");
+  assert.equal(changeToneOf(0.005), "positive");
+  assert.equal(changeToneOf(-0.005), "negative");
+  assert.equal(changeToneOf(0.004, "negative"), "negative");
 });
 
 test("a column is numeric when every filled cell is a number or reads as one", () => {

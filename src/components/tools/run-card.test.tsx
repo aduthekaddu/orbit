@@ -98,6 +98,23 @@ test("a finished search is one closed line that opens to its sources", () => {
   assert.doesNotMatch(html, /Web search|Succeeded/);
 });
 
+test("a finished search with no hits is a closed line with nothing to open", () => {
+  const html = render({ toolName: "web_search", args: { query: "orbit" }, result: { ok: true, query: "orbit", results: [] }, status: { type: "complete" } });
+  assert.match(html, /^<div data-tool-name="web_search"/);
+  assert.equal(line(html), "Searched the web, 0 sources|succeeded");
+  assert.doesNotMatch(html, /invalid result/);
+});
+
+test("a finished search whose result does not parse says so instead of counting zero sources", () => {
+  const unknownEngine = { ...searched, results: [{ ...searched.results[0], engine: "bing" }] };
+  for (const result of [unknownEngine, { ok: true, query: "orbit" }, "saved as text"]) {
+    const html = render({ toolName: "web_search", args: { query: "orbit" }, result, status: { type: "complete" } });
+    assert.match(html, /^<details data-tool-name="web_search"/, JSON.stringify(result));
+    assert.match(html, /Search returned an invalid result/, JSON.stringify(result));
+    assert.doesNotMatch(html, /0 sources/, JSON.stringify(result));
+  }
+});
+
 test("a failed search starts open with its error", () => {
   const html = render({ toolName: "web_search", args: { query: "orbit" }, result: { ok: false, query: "orbit", error: "Search is unavailable" }, status: { type: "complete" } });
   assert.match(html, /^<details data-tool-name="web_search"[^>]* open=""/);

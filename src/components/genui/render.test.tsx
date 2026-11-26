@@ -129,6 +129,16 @@ test("a metric change shows its sign, arrow, and tone", () => {
   assert.match(cheaper, /data-tone="positive"[^>]*>.*data-arrow="down".*-8%/s);
 });
 
+test("a metric change that rounds to zero shows no arrow and no tone", () => {
+  for (const change of [-0.001, 0.004]) {
+    const html = renderSpec({ root: "m", elements: { m: element("Metric", { label: "Drift", value: 50, change, changeFormat: "percent" }) } });
+    assert.match(html, /data-tone="neutral"[^>]*>0%</, `change ${change}`);
+    assert.doesNotMatch(html, /data-arrow/, `change ${change}`);
+  }
+  const moved = renderSpec({ root: "m", elements: { m: element("Metric", { label: "Drift", value: 50, change: 0.005, changeFormat: "percent" }) } });
+  assert.match(moved, /data-tone="positive"[^>]*>.*data-arrow="up".*\+0\.01%/s);
+});
+
 test("a huge table opens at twelve rows with a control for the rest", () => {
   const rows = Array.from({ length: 220 }, (_, index) => [index + 1, `Team ${index % 12}`, (index + 1) * 1000]);
   const html = renderSpec({ root: "table", elements: { table: element("Table", { columns: ["Row", "Team", "Budget"], rows }) } });
