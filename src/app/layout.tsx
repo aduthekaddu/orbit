@@ -8,11 +8,9 @@ import { appearanceForRequest } from "@/lib/preferences";
 import { cn } from "@/lib/utils";
 import "./globals.css";
 
-// Geist's x-height over Source Serif 4's, measured at 53.0 and 49.2 per 100px.
-const SERIF_X_HEIGHT_MATCH = "107%";
-
 const sourceSerif = localFont({
-  declarations: [{ prop: "size-adjust", value: SERIF_X_HEIGHT_MATCH }],
+  // Geist's x-height over Source Serif 4's (53.0 and 49.2 per 100px). next/font only takes literals here.
+  declarations: [{ prop: "size-adjust", value: "107%" }],
   src: [
     { path: "../../node_modules/@fontsource-variable/source-serif-4/files/source-serif-4-latin-wght-normal.woff2", style: "normal" },
     { path: "../../node_modules/@fontsource-variable/source-serif-4/files/source-serif-4-latin-wght-italic.woff2", style: "italic" },

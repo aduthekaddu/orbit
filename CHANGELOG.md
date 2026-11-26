@@ -4,6 +4,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- Long replies are easier to read. Replies are 16px with more line spacing in a narrower column that holds about 70 characters a line, labels and code are larger, and markdown headings look distinct at every level. Text fields are 16px or more, so iOS no longer zooms the page when you tap one. A new Appearance section at the top of Settings picks a theme (Dark, Dim, Light, or System), a text size, a reply font (Sans or Serif), a chat width, and an accent color. Each change applies at once, saves to your account, and shows from the first paint after a reload, even with JavaScript off.
+
 - Replies keep running when your connection drops, you switch chats, or you close the tab. Orbit reconnects to the same reply, even if the connection first dropped before the browser received its ID and the reply is still running. **Stop** cancels it. Thinking shows elapsed time and keeps the final duration after reload, even if you stop or the model provider fails before the answer starts. Repeated connection drops make Orbit wait longer between reconnect attempts. Stop stays disabled while Orbit saves a stopped reply, and Edit waits for the active reply to end.
 
 - Importing server modules or running `next build` no longer opens, migrates, or seeds `orbit.db` or writes `auth-secret`. The server now opens and migrates the database at startup through `src/instrumentation.ts`, and callers open the database or auth on first `getDb()` or `getAuth()` call. (#131, #199)

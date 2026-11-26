@@ -36,6 +36,7 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 - [Settings](./settings.md) stores a provider without returning the key.
 - [Chat](./chat.md) streams one turn and reads it back from SQLite.
 - [Durable replies](./durable-replies.md) reconnects a dropped stream and checks that Stop saves the thinking duration.
+- [Reading and appearance](./appearance.md) measures reply type, line length, input sizes, and contrast in every theme, and checks that saved appearance paints from the server.
 - [Browse](./browse.md) drives Chrome for retry and stop, the palette, short-screen settings, failed requests, the empty chat, sign out, and the thread map shortcut.
 
 - [Branching](./branching.md) keeps edited prompts and regenerated answers, switches versions, and restores the last written branch.
