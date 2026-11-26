@@ -68,7 +68,12 @@ export function decryptSecret(stored: string): string {
   if (parts.length !== 4 || parts[0] !== VERSION || !parts.slice(1).every((part) => BASE64URL.test(part))) throw new SecretUnreadable();
   const [iv, tag, ciphertext] = parts.slice(1).map((part) => Buffer.from(part, "base64url"));
   if (iv.length !== 12 || tag.length !== 16) throw new SecretUnreadable();
-  const key = existingKey();
+  let key: Buffer | null;
+  try {
+    key = existingKey();
+  } catch {
+    throw new SecretUnreadable();
+  }
   if (!key) throw new SecretUnreadable();
   try {
     const decipher = createDecipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });

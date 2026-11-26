@@ -153,6 +153,19 @@ test("another key or a lost key file throws SecretUnreadable", () => {
   assert.deepEqual(inChild(dataDir, undefined, DECRYPT_OR_REPORT)(stored), { unreadable: true }, "the key file is gone");
 });
 
+test("a damaged key file makes decrypt throw SecretUnreadable, and encrypt throws without replacing the file", () => {
+  const dataDir = childDataDir();
+  const stored = inChild(dataDir, undefined, "console.log(JSON.stringify(m.encryptSecret(input)));")(PLAIN);
+  const keyFile = path.join(dataDir, "secret-key");
+  const ENCRYPT_OR_REPORT = `try { console.log(JSON.stringify({ stored: m.encryptSecret(input) })); } catch { console.log(JSON.stringify({ threw: true })); }`;
+  for (const damaged of [fs.readFileSync(keyFile, "utf8").slice(0, 20), "not hex at all"]) {
+    fs.writeFileSync(keyFile, damaged, { mode: 0o600 });
+    assert.deepEqual(inChild(dataDir, undefined, DECRYPT_OR_REPORT)(stored), { unreadable: true }, `key file ${JSON.stringify(damaged)}`);
+    assert.deepEqual(inChild(dataDir, undefined, ENCRYPT_OR_REPORT)(PLAIN), { threw: true }, "encrypt with a damaged key file");
+    assert.equal(fs.readFileSync(keyFile, "utf8"), damaged, "encrypt replaced the damaged key file");
+  }
+});
+
 // The window between creating the key file and finishing its write is microseconds wide, so each child makes its first
 // use in many fresh data directories, and the two meet at a barrier before each one.
 const RACE_ROUNDS = 3000;
