@@ -146,3 +146,26 @@ test("a save keeps another tab's change to a field this card did not touch", () 
   const { queue } = run(DEFAULT_APPEARANCE, [select({ theme: "light" }), "server-ok"], server);
   assert.deepEqual(shownAppearance(queue), { ...DEFAULT_APPEARANCE, theme: "light", accent: "sand" });
 });
+
+test("a click made while a save is out still goes out when that save fails", () => {
+  const { queue, sent, server } = run(DEFAULT_APPEARANCE, [select({ theme: "light" }), select({ textSize: "lg" }), "server-fail", "server-ok"]);
+  assert.deepEqual(sent, [{ theme: "light" }, { textSize: "lg" }]);
+  assert.deepEqual(server, { ...DEFAULT_APPEARANCE, textSize: "lg" });
+  assert.deepEqual(shownAppearance(queue), { ...DEFAULT_APPEARANCE, textSize: "lg" });
+  assert.equal(queue.error, "Could not save");
+});
+
+test("the server's appearance after a refresh replaces the saved state under any waiting clicks", () => {
+  let queue = reduceSaveQueue(saveQueue(DEFAULT_APPEARANCE), { type: "failed", error: "Could not save" });
+  queue = reduceSaveQueue(queue, { type: "synced", appearance: { ...DEFAULT_APPEARANCE, theme: "light" } });
+  assert.deepEqual(shownAppearance(queue), { ...DEFAULT_APPEARANCE, theme: "light" });
+
+  let busy = reduceSaveQueue(saveQueue(DEFAULT_APPEARANCE), { type: "select", patch: { accent: "rose" } });
+  busy = reduceSaveQueue(busy, { type: "send" });
+  busy = reduceSaveQueue(busy, { type: "synced", appearance: { ...DEFAULT_APPEARANCE, theme: "dim" } });
+  assert.deepEqual(shownAppearance(busy), { ...DEFAULT_APPEARANCE, theme: "dim", accent: "rose" });
+  assert.deepEqual(busy.inFlight, { accent: "rose" });
+
+  const same = saveQueue(DEFAULT_APPEARANCE);
+  assert.equal(reduceSaveQueue(same, { type: "synced", appearance: { ...DEFAULT_APPEARANCE } }), same);
+});

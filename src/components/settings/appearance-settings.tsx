@@ -67,6 +67,12 @@ export function AppearanceSettings({ initial }: { initial: Appearance }) {
     };
   }, []);
 
+  // A refresh after an unclear failure can show that the save landed after all.
+  const { theme, textSize, replyFont, chatWidth, accent } = initial;
+  useEffect(() => {
+    dispatch({ type: "synced", appearance: { theme, textSize, replyFont, chatWidth, accent } });
+  }, [theme, textSize, replyFont, chatWidth, accent]);
+
   function dispatch(event: SaveQueueEvent) {
     current.current = reduceSaveQueue(current.current, event);
     if (mounted.current) {
@@ -90,8 +96,8 @@ export function AppearanceSettings({ initial }: { initial: Appearance }) {
           else router.refresh();
         },
         onFailed: (failure) => {
-          dispatch({ type: "failed", error: (failure.kind === "http" && failure.error) || "Could not save" });
-          router.refresh();
+          if (nextPatch(dispatch({ type: "failed", error: (failure.kind === "http" && failure.error) || "Could not save" }))) flush();
+          else router.refresh();
         },
       },
     );

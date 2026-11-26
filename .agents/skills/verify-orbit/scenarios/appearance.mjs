@@ -374,8 +374,32 @@ export default async function appearance({ page, origin, step, shot }) {
       step("a failed save puts data-theme back to dim", rolled.theme === "dim" && (await radio(page, "Dim").getAttribute("aria-checked")) === "true", `data-theme ${rolled.theme}`);
       step("a failed save keeps Large, Serif, and Sky", rolled.textSize === "lg" && rolled.replyFont === "serif" && rolled.accent === "sky", JSON.stringify(rolled));
       await page.unroute(PREFERENCES, failSaves);
+
+      // A click made while a save is out still saves when that save fails.
+      const releaseFailure = Promise.withResolvers();
+      let held = false;
+      const failFirstSave = async (route) => {
+        if (route.request().method() !== "PATCH" || held) return route.fallback();
+        held = true;
+        await releaseFailure.promise;
+        return route.abort();
+      };
+      await page.route(PREFERENCES, failFirstSave);
+      await radio(page, "Light").click();
+      await eventually(async () => held, Boolean, { timeoutMs: 5_000, what: "the Light save to be held" });
+      await radio(page, "Sand").click();
+      releaseFailure.resolve();
+      const readStored = async () => (await page.request.get(`${origin}/api/preferences`)).json();
+      const storedAfterFailure = await eventually(readStored, (value) => value.accent === "sand", { timeoutMs: 10_000, what: "Sand to reach the server" }).catch(readStored);
+      step("a click made during a failed save still saves", storedAfterFailure.accent === "sand" && storedAfterFailure.theme === "dim", JSON.stringify(storedAfterFailure));
+      await page.unroute(PREFERENCES, failFirstSave);
+      await page.reload();
+      await section(page).waitFor({ timeout: 10_000 });
+      const sandChecked = await radio(page, "Sand").getAttribute("aria-checked");
+      const dimChecked = await radio(page, "Dim").getAttribute("aria-checked");
+      step("after a reload Sand is selected and Dim stays", sandChecked === "true" && dimChecked === "true", `Sand ${sandChecked}, Dim ${dimChecked}`);
     } else {
-      for (const name of ["after the held save answers, <html> keeps all four rapid choices", "the server stores all four rapid choices", "after a reload Dim, Large, Serif, and Sky are selected", "a failed save shows Could not save", "a failed save puts data-theme back to dim", "a failed save keeps Large, Serif, and Sky"]) {
+      for (const name of ["after the held save answers, <html> keeps all four rapid choices", "the server stores all four rapid choices", "after a reload Dim, Large, Serif, and Sky are selected", "a failed save shows Could not save", "a failed save puts data-theme back to dim", "a failed save keeps Large, Serif, and Sky", "a click made during a failed save still saves", "after a reload Sand is selected and Dim stays"]) {
         step(name, false, "no Appearance section");
       }
     }

@@ -106,7 +106,8 @@ export type SaveQueueEvent =
   | { type: "select"; patch: AppearancePatch }
   | { type: "send" }
   | { type: "saved"; appearance: Appearance }
-  | { type: "failed"; error: string };
+  | { type: "failed"; error: string }
+  | { type: "synced"; appearance: Appearance };
 
 export function saveQueue(committed: Appearance): SaveQueue {
   return { committed, inFlight: null, pending: {}, error: null };
@@ -144,10 +145,19 @@ export function reduceSaveQueue(queue: SaveQueue, event: SaveQueueEvent): SaveQu
         committed: saved,
         inFlight: null,
         pending: without(queue.pending, (key) => queue.pending[key] === saved[key]),
-        error: null,
+        error: queue.error,
       };
     }
-    case "failed":
-      return { committed: queue.committed, inFlight: null, pending: {}, error: event.error };
+    case "failed": {
+      // Only what the failed request carried reverts; clicks made while it was out still go.
+      const pending = without(queue.pending, (key) => queue.pending[key] === queue.committed[key]);
+      return { committed: queue.committed, inFlight: null, pending, error: event.error };
+    }
+    case "synced": {
+      const server = event.appearance;
+      if (Object.keys(server).every((key) => server[key as keyof Appearance] === queue.committed[key as keyof Appearance])) return queue;
+      const pending = queue.inFlight === null ? without(queue.pending, (key) => queue.pending[key] === server[key]) : queue.pending;
+      return { ...queue, committed: server, pending };
+    }
   }
 }
