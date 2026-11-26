@@ -192,6 +192,7 @@ export default async function modelPicker({ page, origin, mockUrl, step, shot, u
   step("thinking is adaptive and summarized", sent.body.thinking?.type === "adaptive" && sent.body.thinking?.display === "summarized", `thinking ${JSON.stringify(sent.body.thinking)}`);
   step("cache_control is set", sent.body.cache_control?.type === "ephemeral", `cache_control ${JSON.stringify(sent.body.cache_control)}`);
   step("binding beta header is sent", String(sent.headers?.["anthropic-beta"] ?? "").includes("thinking-binding-controls-2026-08-01"), `anthropic-beta ${sent.headers?.["anthropic-beta"]}`);
+  step("request asks for default fallbacks", sent.body.fallbacks === "default" && String(sent.headers?.["anthropic-beta"] ?? "").includes("server-side-fallback-2026-07-01"), `fallbacks ${JSON.stringify(sent.body.fallbacks)}, anthropic-beta ${sent.headers?.["anthropic-beta"]}`);
   step("no key in the log", !holdsKey(fs.readFileSync(requestLog, "utf8")), "the mock request log holds a key");
   step("reply label reads claude-opus-5-5 · High", first.label === "claude-opus-5-5 · High", `label reads ${first.label}`);
   await page.reload();
@@ -222,6 +223,26 @@ export default async function modelPicker({ page, origin, mockUrl, step, shot, u
   requests = modelRequests(since);
   step("regenerate sends claude-opus-5-5 at High", requests.length === 1 && requests[0].body.model === "claude-opus-5-5" && requests[0].body.output_config?.effort === "high", `requests ${JSON.stringify(requests.map((line) => [line.body.model, line.body.output_config]))}`);
   step("regenerated reply label reads claude-opus-5-5 · High", regenerated.label === "claude-opus-5-5 · High", `label reads ${regenerated.label}`);
+
+  await openChat();
+  await pick("claude-opus-5-5", "High");
+  const fellBack = await send("[qa:claude-fallback] hello");
+  await page.reload();
+  await composer.waitFor();
+  const fellBackReloaded = await visible(labelOf(lastReply()).getByText("claude-opus-5 · High", { exact: true }));
+  step("a fallback reply names the model that answered", fellBack.label === "claude-opus-5 · High" && fellBackReloaded, `label reads ${fellBack.label} when the reply finishes, after reload shown ${fellBackReloaded}`);
+  since = logLines().length;
+  before = await replyIds();
+  await composer.fill("[qa:plain] after the fallback");
+  await composer.press("Enter");
+  const afterFallback = await nextReply(before).catch((error) => ({ label: `no reply: ${error.message}` }));
+  const echoedTurn = modelRequests(since).at(-1)?.body.messages?.find((message) => message.role === "assistant")?.content ?? [];
+  const echoedTypes = Array.isArray(echoedTurn) ? echoedTurn.map((block) => block.type) : [];
+  step(
+    "the turn after a fallback is accepted",
+    afterFallback.label === "claude-opus-5-5 · High" && JSON.stringify(echoedTypes) === JSON.stringify(["text", "fallback", "text"]) && echoedTurn[1]?.to?.model === "claude-opus-5",
+    `label ${afterFallback.label}, echoed blocks ${JSON.stringify(echoedTypes)}`,
+  );
 
   const reasonerChat = await openChat();
   await pick("mock-reasoner", "Extra high", mock.id);

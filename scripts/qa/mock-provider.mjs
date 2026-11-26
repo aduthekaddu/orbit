@@ -745,7 +745,57 @@ function claudeStream(res, model, { thinking = null, text }) {
   res.end();
 }
 
+// A mid-stream fallback, as the Messages API sends it when a safety classifier declines the turn partway through:
+// message_start names the requested model, and a fallback block hands the rest of the reply to claude-opus-5.
+function claudeFallbackStream(res, model) {
+  const to = "claude-opus-5";
+  res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache" });
+  sendEvent(res, {
+    type: "message_start",
+    message: { id: `msg_mock_${Date.now()}`, type: "message", role: "assistant", model, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 12, output_tokens: 1 } },
+  });
+  sendEvent(res, { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "", signature: "" } });
+  sendEvent(res, { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "Starting on the request." } });
+  sendEvent(res, { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "bW9jay1zaWduYXR1cmU" } });
+  sendEvent(res, { type: "content_block_stop", index: 0 });
+  sendEvent(res, { type: "content_block_start", index: 1, content_block: { type: "text", text: "" } });
+  sendEvent(res, { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: "Before the switch. " } });
+  sendEvent(res, { type: "content_block_stop", index: 1 });
+  sendEvent(res, { type: "content_block_start", index: 2, content_block: { type: "fallback", from: { model }, to: { model: to } } });
+  sendEvent(res, { type: "content_block_stop", index: 2 });
+  sendEvent(res, { type: "content_block_start", index: 3, content_block: { type: "text", text: "" } });
+  sendEvent(res, { type: "content_block_delta", index: 3, delta: { type: "text_delta", text: "Answered by the fallback model." } });
+  sendEvent(res, { type: "content_block_stop", index: 3 });
+  sendEvent(res, {
+    type: "message_delta",
+    delta: { stop_reason: "end_turn", stop_sequence: null },
+    usage: {
+      output_tokens: 30,
+      iterations: [
+        { type: "message", model, input_tokens: 12, output_tokens: 10 },
+        { type: "fallback_message", model: to, input_tokens: 12, output_tokens: 20 },
+      ],
+    },
+  });
+  sendEvent(res, { type: "message_stop" });
+  res.end();
+}
+
+// Like the Messages API: a turn that fell back is sent back without the thinking or tool use from before its last
+// fallback block.
+function echoesRefusedTurn(body) {
+  return (body.messages ?? []).some(({ role, content }) => {
+    if (role !== "assistant" || !Array.isArray(content)) return false;
+    const boundary = content.findLastIndex((block) => block?.type === "fallback");
+    return content.slice(0, boundary).some((block) => ["thinking", "redacted_thinking", "tool_use"].includes(block?.type));
+  });
+}
+
 function claudeReply(res, body, raw, scenario) {
+  if (echoesRefusedTurn(body)) {
+    anthropicError(res, 400, "invalid_request_error", "messages: thinking, redacted_thinking and tool_use blocks before the last fallback block must be omitted");
+    return;
+  }
   const refused = claudeRequestError(body);
   if (refused) {
     anthropicError(res, ...refused);
@@ -772,6 +822,10 @@ function claudeReply(res, body, raw, scenario) {
       thinking: summarized ? "The user said hello, so a short greeting back fits." : "",
       text: "Hello from the mock Claude.",
     });
+    return;
+  }
+  if (scenario === "claude-fallback") {
+    claudeFallbackStream(res, body.model);
     return;
   }
   claudeStream(res, body.model, { text: "pong" });

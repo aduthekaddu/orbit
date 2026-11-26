@@ -10,7 +10,9 @@ Precondition: `launch --mock`. The mock serves an OpenAI-style list (`mock-genui
 node .agents/skills/verify-orbit/verify.mjs browse model-picker
 ```
 
-The scenario adds an Anthropic connection in **Settings** and hides `claude-haiku-4-5`. In an Anthropic chat it picks `claude-opus-5-5` at **High**, sends, edits the prompt, and regenerates. Each request in `.verify/mock-requests.jsonl` must carry `output_config.effort` high, adaptive summarized thinking, `cache_control`, and the binding beta header, and each reply label must read `claude-opus-5-5 · High`. Then it checks:
+The scenario adds an Anthropic connection in **Settings** and hides `claude-haiku-4-5`. In an Anthropic chat it picks `claude-opus-5-5` at **High**, sends, edits the prompt, and regenerates. Each request in `.verify/mock-requests.jsonl` must carry `output_config.effort` high, adaptive summarized thinking, `cache_control`, the binding beta header, and `fallbacks: "default"` with the `server-side-fallback-2026-07-01` beta, and each reply label must read `claude-opus-5-5 · High`. Then it checks:
+
+- `[qa:claude-fallback]` streams a mid-stream fallback from `claude-opus-5-5` to `claude-opus-5`. The label reads `claude-opus-5 · High` when the reply finishes and after reload. The next send in that chat is accepted, and its request echoes the reply as text, `fallback`, text. The mock rejects a request that echoes thinking from before a `fallback` block, as the API does.
 
 - `[qa:effort-reject]` on `mock-reasoner` at **Extra high** gives `mock-reasoner · Extra high (ignored)`.
 - A chat pinned to a model that is hidden later keeps its chip and still sends with it.
