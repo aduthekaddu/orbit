@@ -122,7 +122,7 @@ A `render_ui` reply renders inline, as part of the answer. It has no run frame a
 
 ## Tool run cards
 
-Tool calls have three layouts, set per tool in `src/lib/tools/metadata.ts`. `render_ui` is **inline**: the widget above. `run_code` is a **card**. Every other tool, web search, memory, GitHub, and unknown tools, is a **line**.
+Tool calls have three layouts, which `RunCard` picks from each tool's card kind in `src/lib/tools/metadata.ts`. `render_ui` is **inline**: the widget above. `run_code` is a **card**. Every other tool, web search, memory, GitHub, and unknown tools, is a **line**.
 
 A line is one pill that says what happened, in the same family as the reasoning pill: both use `disclosureTrigger` from `src/components/chat/disclosure.ts`. It holds `OrbitMark` while running, else the tool's icon, then the summary. The summary is the only status, so a line never adds Succeeded or Failed.
 
@@ -134,9 +134,9 @@ A line is one pill that says what happened, in the same family as the reasoning 
 | GitHub | List issues on GitHub | List issues on GitHub, 2 results | List issues on GitHub failed | List issues on GitHub stopped |
 | Any other | Do thing | Do thing | Do thing failed | Do thing stopped |
 
-Counts use the singular for one. Names come from the registry, never the raw tool name. A line with more to read is a `<details>` that opens on tap or with Enter and Space. Its body hangs from a hairline under the pill, like reasoning. A failed line starts open with its error. A finished search opens to its result links, a GitHub call to its links, and an unknown tool to its JSON output in a sunken well. A saved memory shows its text on the line after the label and has no body. On a touch screen the pill is 44px tall. On a phone the summary truncates with an ellipsis.
+Counts use the singular for one. Names come from the registry, never the raw tool name. A line with more to read is a `<details>` that opens on tap or with Enter and Space. Its body hangs from a hairline under the pill, like reasoning. A failed line starts open with its error. A finished search opens to its result links, or to "Search returned an invalid result" when its saved result does not parse, and the line then reads "Searched the web" with no count. A GitHub call opens to its links, and an unknown tool to its JSON output in a sunken well. A saved memory shows its text on the line after the label and has no body. On a touch screen the pill is 44px tall. On a phone the summary truncates with an ellipsis.
 
-Each search result has a tile: the first letter or digit of its host, without `www.`, on a 20% tint of one of `--chart-1` to `--chart-5`. The tone is a stable hash of the whole host, so `example.com` and `example.org` share a letter and get their own colors. Tiles are computed in `src/lib/tools/domain-tile.ts`, and the browser fetches nothing from the site. The line shows up to five tiles, three on a phone. The open list shows each result's title link, its host, and its snippet.
+Each search result has a tile: the first letter or digit of its host, without `www.`, on a 20% tint of one of `--chart-1` to `--chart-5`. The letter is that chart color mixed 35% toward `--foreground`, so it reads at 4.5:1 in every theme. The tone is a stable hash of the whole host, so `example.com` and `example.org` share a letter and get their own colors. Tiles are computed in `src/lib/tools/domain-tile.ts`, and the browser fetches nothing from the site. The line shows up to five tiles, three on a phone. The open list shows each result's title link, its host, and its snippet.
 
 The code-run card keeps its full layout, because its output is often the answer. Its header shows "Run code", the language, and the status word: muted while running or stopped, `text-positive` on success, `text-destructive` on failure. Status comes from the message part, so the same card appears after reload.
 

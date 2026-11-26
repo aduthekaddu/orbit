@@ -143,7 +143,7 @@ statechart docs/architecture/ChatTurn.tla --config docs/architecture/ChatTurn.cf
 | `src/lib/settings.ts` | The settings row. `toPublicSettings` is the only shape that leaves the server. |
 | `src/lib/appearance.ts` | The appearance choices, their defaults, the parser for stored rows, the `data-*` attributes they set on `<html>`, the theme color, and the Appearance card's save queue. Safe to import in the browser. |
 | `src/lib/preferences.ts` | The `user_preferences` reads and writes, and `appearanceForRequest`, which the root layout uses to paint the saved appearance on first render. |
-| `src/lib/tools/` | The tool registry, the GitHub MCP client, SearXNG and Tavily search adapters, browser-safe card metadata (each tool's layout, plain name, and summary line in `metadata.ts`), the search output shape, domain tiles, and tool status rules. |
+| `src/lib/tools/` | The tool registry, the GitHub MCP client, SearXNG and Tavily search adapters, browser-safe card metadata (each tool's card kind, plain name, and summary line in `metadata.ts`), the search output shape, domain tiles, and tool status rules. |
 | `src/lib/sandbox/` | The fixed container policy, pinned language images, per-run Docker lifecycle, and the sweep of stale containers. |
 | `src/components/tools/` | `RunCard`, which picks a tool's layout: the code-run card, or `ToolLine`, one line that opens to search links, GitHub links, or JSON output. Search result tiles. |
 | `src/lib/genui/` | The `render_ui` tool: the component catalog, the spec parser, the system prompt, and `format.ts`, which formats every number a widget prints. |
