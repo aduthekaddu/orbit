@@ -10,6 +10,7 @@ export type ReplyEndReason = "stopped" | "failed";
 export type ReplyEndPart = { type: "data-reply-end"; data: { reason: ReplyEndReason } };
 
 type Listener = ReadableStreamDefaultController<UIMessageChunk>;
+type FailureChunk = Extract<UIMessageChunk, { type: "abort" | "error" }>;
 type RunState =
   | { kind: "starting" | "running" | "stopping"; listeners: Set<Listener> }
   | { kind: "ended"; graceTimer: ReturnType<typeof setTimeout> };
@@ -137,21 +138,26 @@ export function startReplyRun(
   };
 
   void (async () => {
-    let terminal: Extract<UIMessageChunk, { type: "abort" | "error" }> | undefined;
+    let finish: Extract<UIMessageChunk, { type: "finish" }> | undefined;
+    let failure: FailureChunk | undefined;
+    const interrupted = (): FailureChunk => run.controller.signal.aborted
+      ? { type: "abort" }
+      : { type: "error", errorText: "The reply was interrupted." };
     try {
       for await (const chunk of stream) {
-        if (chunk.type === "abort" || chunk.type === "error") terminal ??= chunk;
+        if (chunk.type === "abort" || chunk.type === "error") failure ??= chunk;
+        else if (chunk.type === "finish") finish ??= chunk;
         else publish(chunk);
       }
     } catch {
-      terminal ??= { type: "error", errorText: "The reply was interrupted." };
+      failure ??= interrupted();
     } finally {
       const reason = getEndReason();
       if (reason) {
         const part: ReplyEndPart = { type: "data-reply-end", data: { reason } };
         publish(part);
       }
-      if (terminal) publish(terminal);
+      publish(failure ?? finish ?? interrupted());
       closeListeners(listeners);
       const graceTimer = setTimeout(() => evictEnded(run), REPLAY_GRACE_MS);
       graceTimer.unref();

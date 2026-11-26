@@ -222,10 +222,10 @@ export async function POST(request: Request) {
       originalMessages: uiMessages,
       generateMessageId: () => write.id,
       onError: (error) => streamErrorMessage(error, redact),
-      onEnd: async ({ responseMessage, isAborted, outcome }) => {
+      onEnd: async ({ responseMessage, isAborted, outcome, finishReason }) => {
         void embedPending();
         try {
-          const interrupted = isAborted || outcome.status !== "completed";
+          const interrupted = isAborted || outcome.status !== "completed" || finishReason === "error";
           const toolParts = settleInterruptedParts(interrupted ? await stopped.apply(responseMessage.parts) : responseMessage.parts, interrupted);
           const parts = interrupted ? settleReasoningTimes(toolParts) : toolParts;
           if (!assistantHasVisiblePart(parts)) {

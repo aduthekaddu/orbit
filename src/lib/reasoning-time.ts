@@ -20,6 +20,11 @@ export function stampReasoningTimes<Tools extends ToolSet>(now = Date.now) {
     },
   });
 
+  const closeSpans = (controller: TransformStreamDefaultController<TextStreamPart<Tools>>) => {
+    for (const [id, span] of spans) controller.enqueue(end(id, span));
+    spans.clear();
+  };
+
   return new TransformStream<TextStreamPart<Tools>, TextStreamPart<Tools>>({
     transform(chunk, controller) {
       switch (chunk.type) {
@@ -46,12 +51,13 @@ export function stampReasoningTimes<Tools extends ToolSet>(now = Date.now) {
           return;
         }
         case "abort":
-          for (const [id, span] of spans) controller.enqueue(end(id, span));
-          spans.clear();
+        case "finish":
+          closeSpans(controller);
           break;
       }
       controller.enqueue(chunk);
     },
+    flush: closeSpans,
   });
 }
 

@@ -53,7 +53,7 @@ VisiblePartArrives == phase = "streaming" /\ ~visible /\ visible' = TRUE /\ UNCH
 \* code: src/app/api/chat/route.ts POST
 \* code: src/lib/messages.ts finishChatReply
 \* code: src/lib/messages.ts insertMessage
-\* onEnd with a completed outcome saves the reply when it is visible.
+\* onEnd with a completed outcome and no error finish reason saves the reply when it is visible.
 Finishes ==
   /\ phase = "streaming" /\ phase' = "idle"
   /\ stored' = IF visible THEN "full" ELSE stored

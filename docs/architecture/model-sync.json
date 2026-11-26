@@ -1,5 +1,5 @@
 {
-  "src/app/api/chat/route.ts POST": "e8b2b910bd7a8c397d09b521d57505fe465ad67b3cac97d77ffbbec8b78b5875",
+  "src/app/api/chat/route.ts POST": "91f0dc29cc29e9d829110dde7a9cb0c8a9c895a7196091f659c4705b21b637b2",
   "src/lib/chat-parts.ts replaceTextParts": "065af95baa15a5abefb0ef7912537991ec768de615b08102da21958ca443b309",
   "src/lib/chat-tree.ts isPath": "6079fdb2e7244ec44b62f930b2a810625f0f50ca50d255b313e6765874b30ca8",
   "src/lib/genui/spec.ts assistantHasVisiblePart": "07c8c236dc87ea744a4843a514fa938da0a6cb55f32e77e8ddd4378324c33dc4",
