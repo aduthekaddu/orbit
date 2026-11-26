@@ -112,11 +112,11 @@ A `render_ui` reply renders inline, as part of the answer. It has no run frame a
 | `List` | Bullets at `text-prose`. |
 | `Text` | A dashed hairline border and a 14px `PencilSimpleIcon` at rest. Hover and focus make the border solid, and focus turns it sun. Code format sits in a sunken well with `text-code`, no wrapping, and a sideways fade. |
 | `Callout` | `info`, `warning`, and `success` use `--info`, `--warning`, and `--positive` for a 2px rule on the left and the icon (`InfoIcon`, `WarningIcon`, `CheckCircleIcon`), and a 10% tint of the same token for the fill. Title and text stay `text-foreground`. |
-| `Button` | The `Button` primitive, `variant="secondary"`, `size="sm"`. The note shows once below it. |
+| `Button` | The `Button` primitive, `variant="secondary"`, `size="sm"`. A click shows its note once, below the button. When a callout's `statePath` is `/note`, that callout shows the note and the button does not repeat it. |
 
 - **Numbers.** Every number a widget prints goes through `formatValue` in `src/lib/genui/format.ts`: `Intl.NumberFormat("en-US")` with `useGrouping: "min2"`, so `42000` reads `42,000` while `1234` and the year `2026` keep no comma. The locale is fixed so the server and the browser print the same text. A string prints as the model wrote it.
 - **Long content.** The surface breaks long words anywhere, so a 1,000-character word never widens the page.
-- **One place per value.** A value bound to state renders once.
+- **One place per value.** A value bound to state renders once. If a callout shows a note, the button does not repeat it. `calloutShowsNote` in `src/lib/genui/spec.ts` decides this from the spec.
 - **Loading.** While the spec streams, the surface holds `Skeleton` blocks, a title bar and three lines, with a hidden "Building view" status.
 - **Failures.** A spec that fails validation is one line, "Could not show this view", in `text-destructive` with `WarningCircleIcon`. It is a closed disclosure named **Details** that holds the error lines and the raw JSON in a sunken well capped at `max-h-tool-content`. A stopped spec is one muted line, "Stopped".
 

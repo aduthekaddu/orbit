@@ -2,11 +2,12 @@
 
 import { defineRegistry, useStateStore, useStateValue } from "@json-render/react";
 import { ArrowDownIcon, ArrowUpIcon, CheckCircleIcon, InfoIcon, PencilSimpleIcon, WarningIcon, type Icon } from "@phosphor-icons/react";
-import { useMemo, useRef, useState } from "react";
+import { createContext, useContext, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { ScrollFade } from "@/components/ui/scroll-fade";
 import { catalog } from "@/lib/genui/catalog";
+import { NOTE_PATH } from "@/lib/genui/spec";
 import { TABLE_ROW_CAP, changeDirection, changeToneOf, formatChange, formatValue, numericColumns, type Cell, type ChangeFormat, type ChangeTone } from "@/lib/genui/format";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +24,9 @@ const calloutTones: Record<CalloutTone, { icon: Icon; className: string }> = {
   warning: { icon: WarningIcon, className: "bg-warning/10 before:bg-warning [&>svg]:text-warning" },
   success: { icon: CheckCircleIcon, className: "bg-positive/10 before:bg-positive [&>svg]:text-positive" },
 };
+
+/** True when a callout in the view shows the button's note, so the button leaves it to the callout. */
+export const CalloutShowsNote = createContext(false);
 
 export const { registry } = defineRegistry(catalog, {
   components: {
@@ -244,7 +248,7 @@ function CalloutView({
   text: string;
   statePath?: string | null;
 }) {
-  const watched = useStateValue<string>(statePath || "/note");
+  const watched = useStateValue<string>(statePath || NOTE_PATH);
   const extra = statePath && typeof watched === "string" && watched.trim() ? watched : "";
   const { icon: ToneIcon, className } = calloutTones[tone];
   return (
@@ -268,6 +272,7 @@ function CalloutView({
 
 function ButtonView({ label, note }: { label: string; action: "note"; note: string }) {
   const { set } = useStateStore();
+  const calloutShows = useContext(CalloutShowsNote);
   const [shown, setShown] = useState("");
   return (
     <div className="flex flex-col items-start gap-2">
@@ -277,13 +282,13 @@ function ButtonView({ label, note }: { label: string; action: "note"; note: stri
         variant="secondary"
         onClick={() => {
           setShown(note);
-          // Callouts may watch /note, so the click also updates the shared value.
-          set("/note", note);
+          // Callouts may watch the note path, so the click also updates the shared value.
+          set(NOTE_PATH, note);
         }}
       >
         {label}
       </Button>
-      {shown.trim() ? <p className="text-sm text-muted-foreground">{shown}</p> : null}
+      {!calloutShows && shown.trim() ? <p className="text-sm text-muted-foreground">{shown}</p> : null}
     </div>
   );
 }

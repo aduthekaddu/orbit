@@ -6,10 +6,10 @@ import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { CaretRightIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { Component, useMemo, type ReactNode } from "react";
 import { disclosureBody, disclosureTrigger } from "@/components/chat/disclosure";
-import { registry } from "@/components/genui/registry";
+import { CalloutShowsNote, registry } from "@/components/genui/registry";
 import { ScrollFade } from "@/components/ui/scroll-fade";
 import { Skeleton } from "@/components/ui/skeleton";
-import { parseRenderSpec, type RenderOutcome } from "@/lib/genui/spec";
+import { calloutShowsNote, parseRenderSpec, type RenderOutcome } from "@/lib/genui/spec";
 import { toolCallRunEnd, type ToolRunEnd } from "@/lib/tools/run-status";
 import { cn } from "@/lib/utils";
 
@@ -78,9 +78,12 @@ class RenderBoundary extends Component<{ children: ReactNode; raw: unknown }, { 
 
 export function SpecView({ spec }: { spec: Spec }) {
   const store = useMemo(() => createStateStore({ note: "" }), []);
+  const calloutShows = useMemo(() => calloutShowsNote(spec), [spec]);
   return (
     <JSONUIProvider registry={registry} store={store}>
-      <Renderer spec={spec} registry={registry} />
+      <CalloutShowsNote.Provider value={calloutShows}>
+        <Renderer spec={spec} registry={registry} />
+      </CalloutShowsNote.Provider>
     </JSONUIProvider>
   );
 }
