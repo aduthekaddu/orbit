@@ -327,6 +327,25 @@ test("the SDK does not call finish for short reconnect responses", async (t) => 
   assert.equal(link.getSnapshot().state.kind, "lost");
 });
 
+test("the mounted chat resumes a reply discovered after its POST loses headers", async (t) => {
+  const { chat, link, finish, refresh, resumeStream } = sdkFixture(t, () => streamResponse([
+    ...partial,
+    { type: "text-delta", id: "text", delta: " then finished" },
+    { type: "text-end", id: "text" },
+    { type: "finish", finishReason: "stop" },
+  ]), () => { throw new TypeError("Network failed before response headers"); });
+  link.mount(null, noSaved, true);
+  await chat.sendMessage({ text: "question" });
+  assert.equal(finish.mock.calls[0]?.arguments[0].isDisconnect, true);
+  assert.equal(refresh.mock.callCount(), 1);
+
+  link.mount("a1", noSaved, true);
+  assert.equal(resumeStream.mock.callCount(), 1, "the refreshed reply id reaches the SDK reconnect");
+  await resumeStream.mock.calls[0]?.result;
+  assert.equal(chat.messages.at(-1)?.id, "a1");
+  assert.equal(chat.messages.at(-1)?.parts.find((part) => part.type === "text")?.text, "partial then finished");
+});
+
 test("a 204 reconnect reaches history without calling the SDK finish callback", async (t) => {
   const { chat, link, finish, stored } = sdkFixture(t, () => new Response(null, { status: 204 }));
   t.mock.method(globalThis, "fetch", async () => Response.json({
