@@ -9,6 +9,8 @@ type ReasoningStartChunk = Extract<UIMessageChunk, { type: "reasoning-start" }>;
 type ClosedSegment<S extends UIMessageChunk, E extends UIMessageChunk> = {
   id: string;
   start?: S;
+  lookbehind?: string;
+  inSpan?: boolean;
   tail: string;
   end: E;
 };
@@ -57,8 +59,9 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
     controller: TransformStreamDefaultController<UIMessageChunk>,
   ) => {
     if (channel.closed.length === 0 || !channel.active) return;
+    const first = channel.closed[0];
     const segments = [...channel.closed.map((seg) => seg.tail), channel.pendingBuffer];
-    const masked = redact.maskSegments(segments);
+    const masked = redact.maskSegments(segments, { lookbehind: first.lookbehind, inSpan: first.inSpan });
     for (let i = 0; i < channel.closed.length; i++) {
       const seg = channel.closed[i];
       if (seg.start) controller.enqueue(seg.start);
@@ -81,9 +84,11 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
     controller: TransformStreamDefaultController<UIMessageChunk>,
   ) => {
     if (channel.closed.length > 0) {
+      const first = channel.closed[0];
+      const prefix = { lookbehind: first.lookbehind, inSpan: first.inSpan };
       if (channel.active) {
         const segments = [...channel.closed.map((seg) => seg.tail), channel.pendingBuffer];
-        const masked = redact.maskSegments(segments);
+        const masked = redact.maskSegments(segments, prefix);
         for (let i = 0; i < channel.closed.length; i++) {
           const seg = channel.closed[i];
           if (seg.start) controller.enqueue(seg.start);
@@ -101,7 +106,7 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
         channel.pendingBuffer = "";
         return;
       }
-      const masked = redact.maskSegments(channel.closed.map((seg) => seg.tail));
+      const masked = redact.maskSegments(channel.closed.map((seg) => seg.tail), prefix);
       for (let i = 0; i < channel.closed.length; i++) {
         const seg = channel.closed[i];
         if (seg.start) controller.enqueue(seg.start);
@@ -207,9 +212,11 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
       channel.pendingBuffer = "";
       return;
     }
-    const tail = channel.active.stream.takeTail();
+    const { lookbehind, tail, inSpan } = channel.active.stream.takeTail();
     channel.closed.push({
       id: channel.active.id,
+      lookbehind,
+      inSpan,
       tail,
       end: safe,
     });
