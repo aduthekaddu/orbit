@@ -53,6 +53,8 @@ export default async function modelPickerReal({ page, origin, step, shot }) {
     const reply = page.locator('[data-message-role="assistant"]').last();
     const label = reply.locator("[data-reply-label]");
     await label.waitFor({ timeout: 180_000 });
+    // The label shows when the stream starts; read the reply only once the Send button is back.
+    await page.getByRole("button", { name: "Send", exact: true }).waitFor({ timeout: 180_000 });
     const thought = await reply.getByRole("button", { name: /^Thought for / }).count();
     const labelText = (await label.innerText()).trim();
     await shot("reply");
