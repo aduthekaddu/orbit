@@ -16,6 +16,9 @@ Orbit is a self-hosted chat app, shaped like ChatGPT or Claude, for one person w
 - Find chats with the command palette (⌘K or Ctrl+K) and move around with keyboard shortcuts.
 - Find a message by its text and give new chats short model-written titles.
 - Search the web through SearXNG or Tavily and answer with source links.
+- Read your GitHub repositories, issues, and pull requests when you save a GitHub token.
+- Remember facts across chats. The model saves a memory, and a `/memory` page lists, searches, edits, and deletes them.
+- A nightly job turns the day's chats into memories.
 - Keep chats, settings, and the account in `data/orbit.db`. The API key stays on the server.
 - Work on a phone at 390 px wide.
 - Run short Python and JavaScript programs in isolated containers when the operator enables the code sandbox.
@@ -105,6 +108,7 @@ Every variable is optional.
 | `ORBIT_TAVILY_API_KEY` | Empty | Seed the server-side Tavily key on a new database. Tavily runs when SearXNG fails or returns no results. |
 | `ORBIT_GITHUB_TOKEN` | Empty | Seed the server-side GitHub token on a new database. Tools stay read-only and cover repositories, issues, and pull requests. The token is sent only to `api.githubcopilot.com`, `github.com`, and `api.github.com` over HTTPS. |
 | `ORBIT_OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama base URL for memory embeddings. The model is `nomic-embed-text`. Compose defaults to `http://host.docker.internal:11434`. |
+| `ORBIT_DREAM_HOUR` | `3` | Local hour when the nightly memory pass starts. The Docker image runs UTC unless `TZ` is set, so 3 means 03:00 UTC there. |
 | `ORBIT_SANDBOX` | Off | Source builds use `on` to enable `run_code`. Compose requires the [sandbox override](#enable-the-code-sandbox). Settings shows whether it is on. |
 | `DOCKER_HOST` | Local Docker socket for source builds | Configure the local connection for source builds. Default Compose omits it. The sandbox override sets a private proxy. Remote Docker hosts are unsupported. |
 | `ORBIT_DATA_DIR` | `./data` | Where Orbit keeps `orbit.db` and `auth-secret`. |

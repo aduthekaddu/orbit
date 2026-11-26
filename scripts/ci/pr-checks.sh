@@ -29,7 +29,9 @@ fi
 
 # A draft is still being written, so the description and changelog checks wait for it to be ready.
 if [ "${DRAFT:-false}" != "true" ]; then
-  # Windows line endings come from the web editor. Drop the HTML comments from the template, which can span lines and contain ">".
+  # Windows line endings come from the web editor. Drop the HTML comments from the template, which can span
+  # lines and contain ">", and the trailing spaces a dropped comment leaves behind. Fenced code blocks stay
+  # in: their content is text of the section they sit in.
   stripped=$(printf '%s' "${BODY:-}" | tr -d '\r' | awk '
     {
       line = $0
@@ -43,16 +45,41 @@ if [ "${DRAFT:-false}" != "true" ]; then
           if (start == 0) { out = out line; line = "" } else { out = out substr(line, 1, start - 1); line = substr(line, start + 4); in_comment = 1 }
         }
       }
+      sub(/[ \t]+$/, "", out)
       print out
     }')
-  for heading in "## Why" "## What changed" "## Verification"; do
-    if ! grep -qxF "$heading" <<< "$stripped"; then
-      problem "The description is missing the \"$heading\" section from the pull request template."
+  required=("## Why" "## What changed" "## Verification")
+  required_list=$(printf '%s\n' "${required[@]}")
+  # A fence opens on a line starting with ``` or ~~~ and closes on a later line starting with the same
+  # character. Inside a fence no line is a heading or a section boundary.
+  fence_rules='/^(```|~~~)/ {
+    if (fence == "") fence = substr($0, 1, 1)
+    else if (substr($0, 1, 1) == fence) fence = ""
+    next
+  }'
+  found=$(awk -v required="$required_list" "$fence_rules"'
+    BEGIN { count = split(required, list, "\n"); for (i = 1; i <= count; i++) is_required[list[i]] = 1 }
+    fence { next }
+    is_required[$0] { print }' <<< "$stripped")
+  if [ "$found" != "$required_list" ]; then
+    missing=
+    for heading in "${required[@]}"; do
+      if ! grep -qxF "$heading" <<< "$found"; then
+        problem "The description is missing the \"$heading\" section from the pull request template."
+        missing=1
+      fi
+    done
+    if [ -z "$missing" ]; then
+      problem "The \"## Why\", \"## What changed\" and \"## Verification\" sections of the description must appear in template order."
     fi
-  done
-  for heading in "## Why" "## What changed" "## Verification"; do
-    section=$(awk -v heading="$heading" '$0 == heading {found = 1; next} /^## / {found = 0} found' <<< "$stripped" | tr -d '[:space:]')
-    if grep -qxF "$heading" <<< "$stripped" && [ -z "$section" ]; then
+  fi
+  for heading in "${required[@]}"; do
+    section=$(awk -v heading="$heading" "$fence_rules"'
+      fence { if (found) print; next }
+      $0 == heading { found = 1; next }
+      found && /^## / { found = 0 }
+      found { print }' <<< "$stripped" | tr -d '[:space:]')
+    if grep -qxF "$heading" <<< "$found" && [ -z "$section" ]; then
       problem "The \"$heading\" section of the description is empty."
     fi
   done

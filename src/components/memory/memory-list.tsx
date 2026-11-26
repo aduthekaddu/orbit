@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
@@ -54,6 +54,15 @@ function formatWhen(value: string) {
   return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(value));
 }
 
+function subscribeNothing() {
+  return () => {};
+}
+
+// False on the server and during hydration. The server's time zone is not the reader's, so dates are formatted only in the browser.
+function useInBrowser() {
+  return useSyncExternalStore(subscribeNothing, () => true, () => false);
+}
+
 function sourceHref(memory: MemoryItem) {
   if (!memory.sourceChatId) return null;
   const message = memory.sourceMessageId ? `?m=${encodeURIComponent(memory.sourceMessageId)}` : "";
@@ -70,6 +79,7 @@ export function MemoryList({
   dreamStatus?: string | null;
 }) {
   const router = useRouter();
+  const inBrowser = useInBrowser();
   const [query, setQuery] = useState("");
   const [search, loadSearch, reloadSearch, resetSearch] = useLoaded<{ query: string; rows: MemoryItem[] }>({ status: "idle" });
   const requested = useRef("");
@@ -216,7 +226,9 @@ export function MemoryList({
                 <div className="flex flex-col gap-2">
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="text-2xs font-medium text-muted-foreground">{KIND_LABEL[memory.kind]}</span>
-                    <span className="num text-2xs text-muted-foreground">{memory.lastUsedAt ? `Used ${formatWhen(memory.lastUsedAt)}` : formatWhen(memory.createdAt)}</span>
+                    <span className="num text-2xs text-muted-foreground">
+                      {inBrowser && (memory.lastUsedAt ? `Used ${formatWhen(memory.lastUsedAt)}` : formatWhen(memory.createdAt))}
+                    </span>
                   </div>
                   <p className="break-words text-sm text-foreground">{memory.text}</p>
                   <div className="flex items-center justify-between gap-3">

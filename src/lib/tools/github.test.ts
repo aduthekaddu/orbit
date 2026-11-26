@@ -157,6 +157,132 @@ test("abort closes the client", { timeout: 20_000 }, async () => {
   });
 });
 
+test("aborting after initialize answers during notifications/initialized closes the MCP session", { timeout: 10_000 }, async () => {
+  await withMock(async (mock) => {
+    const hold = mock.holdMethod("notifications/initialized");
+    const controller = new AbortController();
+    try {
+      const pending = openGithubTurn(githubSettings(mock.token, mock.url), controller.signal, { setupMs: 5_000 });
+      await hold.arrived;
+      assert.equal(mock.openSessions(), 1);
+      controller.abort();
+      await assert.rejects(pending, (error: unknown) => {
+        const name = error instanceof Error ? error.name : "";
+        return name === "AbortError" || (error instanceof Error && /abort/i.test(error.message));
+      });
+      await noOpenSessions(mock);
+      assert.equal(mock.closeCount(), 1);
+    } finally {
+      hold.release();
+    }
+  });
+});
+
+test("aborting while initialize is answering closes the MCP session once the response lands", { timeout: 10_000 }, async () => {
+  await withMock(async (mock) => {
+    const hold = mock.holdInitializeResponse();
+    const controller = new AbortController();
+    try {
+      const pending = openGithubTurn(githubSettings(mock.token, mock.url), controller.signal, { setupMs: 5_000 });
+      await hold.arrived;
+      assert.equal(mock.openSessions(), 1);
+      controller.abort();
+      await assert.rejects(pending, (error: unknown) => {
+        const name = error instanceof Error ? error.name : "";
+        return name === "AbortError" || (error instanceof Error && /abort/i.test(error.message));
+      });
+      hold.release();
+      await noOpenSessions(mock);
+      assert.equal(mock.closeCount(), 1);
+    } finally {
+      hold.release();
+    }
+  });
+});
+
+test("a setup deadline during notifications/initialized stops the turn and closes the MCP session", { timeout: 10_000 }, async () => {
+  await withMock(async (mock) => {
+    const logs: string[] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => {
+      logs.push(args.map(String).join(" "));
+    };
+    const hold = mock.holdMethod("notifications/initialized");
+    try {
+      const pending = openGithubTurn(githubSettings(mock.token, mock.url), undefined, { setupMs: 120 });
+      await hold.arrived;
+      assert.equal(mock.openSessions(), 1);
+      const opened = await pending;
+      assert.deepEqual(opened.tools, {});
+      await opened.close();
+      await noOpenSessions(mock);
+      assert.equal(mock.closeCount(), 1);
+      assert.equal(logs.length, 1);
+      assert.doesNotMatch(logs[0], new RegExp(mock.token));
+    } finally {
+      hold.release();
+      console.error = original;
+    }
+  });
+});
+
+test("a setup deadline during initialize stops the turn and closes the MCP session once the response lands", { timeout: 10_000 }, async () => {
+  await withMock(async (mock) => {
+    const logs: string[] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => {
+      logs.push(args.map(String).join(" "));
+    };
+    const hold = mock.holdInitializeResponse();
+    try {
+      const pending = openGithubTurn(githubSettings(mock.token, mock.url), undefined, { setupMs: 120 });
+      await hold.arrived;
+      assert.equal(mock.openSessions(), 1);
+      const opened = await pending;
+      assert.deepEqual(opened.tools, {});
+      await opened.close();
+      hold.release();
+      await noOpenSessions(mock);
+      assert.equal(mock.closeCount(), 1);
+      assert.equal(logs.length, 1);
+      assert.doesNotMatch(logs[0], new RegExp(mock.token));
+    } finally {
+      hold.release();
+      console.error = original;
+    }
+  });
+});
+
+test("aborting a warm turn during its handshake closes the MCP session", { timeout: 10_000 }, async () => {
+  await withMock(async (mock) => {
+    const first = await githubTools(githubSettings(mock.token, mock.url));
+    await first.close();
+    await noOpenSessions(mock);
+    const closesBefore = mock.closeCount();
+
+    const hold = mock.holdInitializeResponse();
+    const controller = new AbortController();
+    try {
+      const warm = await openGithubTurn(githubSettings(mock.token, mock.url), controller.signal, { setupMs: 5_000 });
+      const call = warm.tools.github_list_issues?.execute?.(
+        { owner: "aduthekaddu", repo: "orbit" },
+        { ...toolOptions, abortSignal: controller.signal },
+      );
+      assert.ok(call);
+      await hold.arrived;
+      assert.equal(mock.openSessions(), 1);
+      controller.abort();
+      await assert.rejects(call);
+      await warm.close();
+      hold.release();
+      await noOpenSessions(mock);
+      assert.equal(mock.closeCount(), closesBefore + 1);
+    } finally {
+      hold.release();
+    }
+  });
+});
+
 test("open-session cleanup check fails when a session stays open", { timeout: 5_000 }, async () => {
   await withMock(async (mock) => {
     const opened = await githubTools(githubSettings(mock.token, mock.url));
