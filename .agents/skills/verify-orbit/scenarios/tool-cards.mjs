@@ -3,26 +3,32 @@ import { startMockSearxng } from "../../../../scripts/qa/mock-searxng.mjs";
 
 // Tool line checks for slice 15: a search that finishes, a memory save, and a search whose SearXNG is gone,
 // all in one chat. Then a reload, a 390 touch view with the line opened by a tap, and a 360 touch view.
+// The memory is 100 characters, so every preview cuts it and only the line's body shows it whole.
 
-const MEMORY = "I deploy to Fly.io";
+const MEMORY = "I deploy side projects to Fly.io from a GitHub Action and keep every Docker image under 200 MB total";
 const RAW_NAMES = new Set(["remember", "forget", "web_search", "render_ui", "run_code", "github_list_issues"]);
 const SAFE_REL = "noopener noreferrer nofollow";
 
-// The line as a reader meets it: its root, the status element and its words, the saved text, the tiles, and the
-// height of the part that takes a tap.
+// The line as a reader meets it: its root, the status element and its words, the saved text on the line and in the
+// body that opens, the tiles, and the height of the part that takes a tap.
 function readLine(root) {
   const clean = (text) => (text ?? "").replace(/\s+/g, " ").trim();
   const details = root.matches("details");
   const summary = details ? root.querySelector(":scope > summary") : null;
   const status = root.querySelector('[role="status"][data-tool-status]') ?? root.querySelector("[data-tool-status]");
   const tiles = [...root.querySelectorAll("[data-tile]")].filter((tile) => tile.checkVisibility({ checkVisibilityCSS: true }));
+  const preview = root.querySelector("[data-tool-detail]");
+  const body = details ? root.querySelector(":scope > div") : null;
   return {
     tag: root.tagName.toLowerCase(),
     open: details ? root.open : null,
     status: status?.getAttribute("data-tool-status") ?? "",
     role: status?.getAttribute("role") ?? "",
     text: clean(status?.textContent),
-    detail: root.querySelector("[data-tool-detail]") ? clean(root.querySelector("[data-tool-detail]").textContent) : null,
+    detail: preview ? clean(preview.textContent) : null,
+    detailShown: preview ? preview.checkVisibility({ checkVisibilityCSS: true }) : null,
+    body: body ? clean(body.textContent) : null,
+    bodyCut: body ? body.scrollWidth > body.clientWidth : null,
     tiles: tiles.map((tile) => ({
       inSummary: summary !== null && summary.contains(tile),
       hidden: tile.closest('[aria-hidden="true"]') !== null,
@@ -125,10 +131,16 @@ export default async function toolCards({ page, origin, mockUrl, step, shot }) {
     const remembered = await memory.evaluate(readLine);
     step("a saved memory line reads Saved to memory", remembered.text === "Saved to memory" && remembered.status === "succeeded" && remembered.role === "status", describe(remembered));
     step("the memory line shows the saved text", remembered.detail === MEMORY, `[data-tool-detail] ${JSON.stringify(remembered.detail)}; ${describe(remembered)}`);
+    step("a saved memory line starts closed", remembered.tag === "details" && remembered.open === false && remembered.detailShown === true, describe(remembered));
     const raw = await page.evaluate(rawNames, [...RAW_NAMES]);
     step("no visible text is a raw tool name", raw.length === 0, `found ${JSON.stringify(raw)}`);
     await memory.scrollIntoViewIfNeeded();
     await shot("remember-1440");
+    await openLine(memory);
+    const memoryOpen = await memory.evaluate(readLine);
+    step("opening the memory line shows the whole saved text once, in its body", memoryOpen.body === MEMORY && memoryOpen.detailShown === false && memoryOpen.bodyCut === false, `body ${JSON.stringify(memoryOpen.body)}, preview shown ${memoryOpen.detailShown}, body cut ${memoryOpen.bodyCut}`);
+    await shot("remember-open-1440");
+    await memory.locator(":scope > summary").click();
 
     // 3. With SearXNG gone, the search fails and its line starts open.
     await searxng.close();
@@ -178,6 +190,16 @@ export default async function toolCards({ page, origin, mockUrl, step, shot }) {
       step(`${view.name} touch: a tap opens the search line to three safe links`, tapped.length === 3 && tapped.every((link) => link.target === "_blank" && link.rel === SAFE_REL), JSON.stringify(tapped));
       step(`${view.name} touch: the open search line does not scroll the page sideways`, (await phone.evaluate(pageWidth)).scrollWidth <= view.width, JSON.stringify(await phone.evaluate(pageWidth)));
       await shot(`search-open-${view.name}`, phone);
+      const phoneMemory = phone.locator('[data-tool-name="remember"]').first();
+      await phoneMemory.scrollIntoViewIfNeeded();
+      const memoryClosed = await phoneMemory.evaluate(readLine);
+      step(`${view.name} touch: the memory line previews its text on one line`, memoryClosed.detail === MEMORY && memoryClosed.detailShown === true && memoryClosed.open === false, describe(memoryClosed));
+      await shot(`remember-closed-${view.name}`, phone);
+      await openLine(phoneMemory, true);
+      const memoryTapped = await phoneMemory.evaluate(readLine);
+      step(`${view.name} touch: a tap opens the memory line to its whole saved text`, memoryTapped.body === MEMORY && memoryTapped.detailShown === false && memoryTapped.bodyCut === false, `body ${JSON.stringify(memoryTapped.body)}, preview shown ${memoryTapped.detailShown}, body cut ${memoryTapped.bodyCut}`);
+      step(`${view.name} touch: the open memory line does not scroll the page sideways`, (await phone.evaluate(pageWidth)).scrollWidth <= view.width, JSON.stringify(await phone.evaluate(pageWidth)));
+      await shot(`remember-open-${view.name}`, phone);
     }
   } finally {
     for (const context of contexts) await context.close().catch(() => {});
