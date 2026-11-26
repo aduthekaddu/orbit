@@ -16,11 +16,11 @@ Orbit grows in slices. A slice is one pull request that ships one user-visible c
 | 10 | [Memory](10.md) | `feat/memory` | Shipped in #55 |
 | 11 | [Dreaming](11.md) | `feat/dreaming` | Shipped in #57 |
 | 12 | [Deploy](12.md) | `feat/deploy` | Shipped in #58 |
-| 13 | [Replies that survive a dropped connection](13.md) | `feat/durable-replies` | In review |
+| 13 | [Replies that survive a dropped connection](13.md) | `feat/durable-replies` | Shipped in #256 |
 | 14 | [Reading foundation and appearance](14.md) | `feat/reading-appearance` | Shipped in #261 |
 | 15 | [Widgets and tool cards](15.md) | `feat/widgets-tool-cards` | Planned |
 | 16 | [Messages, artifact cards, phone fixes, rename and delete](16.md) | `feat/thread-polish` | Planned |
-| 17 | [Model and effort in the chat, plus Anthropic](17.md) | `feat/model-picker` | Planned |
+| 17 | [Model and effort in the chat, plus Anthropic](17.md) | `feat/model-picker` | Shipped in #264 |
 | 18 | [Accounts and hosting modes](18.md) | `feat/accounts`, then `feat/accounts-modes` | Planned |
 | 19 | [Tools page and tools sheet](19.md) | `feat/tools-page` | Planned |
 | 20 | [Files](20.md) | `feat/files` | Planned |

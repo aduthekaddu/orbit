@@ -50,7 +50,7 @@ The helper is the harness. Prefer the commands below over ad hoc curls. Page che
 - Chat. `node .agents/skills/verify-orbit/verify.mjs drive chat`
 - Dreaming. `node .agents/skills/verify-orbit/verify.mjs drive dream`
 - Public URL. `node .agents/skills/verify-orbit/verify.mjs drive public`. Launch with `ORBIT_PUBLIC_URL` set. See `features/public.md`.
-- Browser. `node .agents/skills/verify-orbit/verify.mjs browse <scenario>`. See `features/browse.md` and the [feature map](features/README.md). Sandbox recipes are in [Code sandbox](features/sandbox.md).
+- Browser. `node .agents/skills/verify-orbit/verify.mjs browse <scenario>`. See `features/browse.md` and the [feature map](features/README.md). Sandbox recipes are in [Code sandbox](features/sandbox.md). The model picker recipe, with its real Anthropic run, is in [Model picker](features/model-picker.md).
 
 Feature recipes live in `features/`. Read `features/README.md` first. Drive one feature from that map. A proof that uses a different entry point does not cover the ones you skipped.
 

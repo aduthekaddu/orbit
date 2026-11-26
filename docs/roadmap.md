@@ -31,11 +31,11 @@ Orbit is a self-hosted chat app, shaped like ChatGPT or Claude, that runs on you
 | 10 | [Memory](slices/10.md) | Orbit remembers facts across chats. A page lists and edits them. | Shipped in #55 |
 | 11 | [Dreaming](slices/11.md) | A nightly job turns the day's chats into memories. | Shipped in #57 |
 | 12 | [Deploy](slices/12.md) | Reach Orbit from anywhere behind Cloudflare Access. | Shipped in #58 |
-| 13 | [Replies that survive a dropped connection](slices/13.md) | A reply keeps generating and saving when the phone drops the connection, and thinking shows a timer. | In review |
+| 13 | [Replies that survive a dropped connection](slices/13.md) | A reply keeps generating and saving when the phone drops the connection, and thinking shows a timer. | Shipped in #256 |
 | 14 | [Reading foundation and appearance](slices/14.md) | Larger text, a narrower reading column, dark, dim, light, and system themes, and settings for text size, font, and width. | Shipped in #261 |
 | 15 | [Widgets and tool cards](slices/15.md) | Generated UI and tool results read as part of the reply, with real color and formatted numbers. | Planned |
 | 16 | [Messages, artifact cards, phone fixes, rename and delete](slices/16.md) | Long messages collapse, artifacts get a card and a themed preview, phone layouts stop clipping, and chats can be renamed and deleted. | Planned |
-| 17 | [Model and effort in the chat, plus Anthropic](slices/17.md) | Pick the model and effort for each chat from the composer. Add an Anthropic key. | Planned |
+| 17 | [Model and effort in the chat, plus Anthropic](slices/17.md) | Pick the model and effort for each chat from the composer. Add an Anthropic key. | Shipped in #264 |
 | 18 | [Accounts and hosting modes](slices/18.md) | Host Orbit for yourself, a team, or other people, with invites and per-user data. | Planned |
 | 19 | [Tools page and tools sheet](slices/19.md) | Test every tool from one page, and switch tools on or off for a chat. | Planned |
 | 20 | [Files](slices/20.md) | Attach files to a chat, and find, download, or delete them later. | Planned |
