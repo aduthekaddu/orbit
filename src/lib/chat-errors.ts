@@ -91,7 +91,8 @@ function urlSecrets(rawUrl: string | undefined): string[] {
     found.push(url.password);
     const decoded = safeDecodeComponent(url.password);
     if (decoded !== url.password) found.push(decoded);
-  } else if (url.username) {
+  }
+  if (url.username && (!url.password || url.username.length >= MIN_CREDENTIAL_LENGTH)) {
     found.push(url.username);
     const decoded = safeDecodeComponent(url.username);
     if (decoded !== url.username) found.push(decoded);
@@ -123,7 +124,16 @@ export function redactUrl(raw: string, redact: Redactor): string {
   const hadExplicitSlash = pathStart >= 0 && afterScheme[pathStart] === "/";
   const pathPart = url.pathname === "/" && !hadExplicitSlash ? "" : redact.text(url.pathname);
   const queryPart = hasQuery
-    ? `?${[...url.searchParams.entries()].map(([key]) => `${redact.text(key).replace(/[&=]/g, encodeURIComponent)}=${REDACTED}`).join("&")}`
+    ? `?${url.search
+        .slice(1)
+        .split("&")
+        .map((pair) => {
+          const eq = pair.indexOf("=");
+          if (eq === -1) return REDACTED;
+          const key = safeDecodeComponent(pair.slice(0, eq).replace(/\+/g, " "));
+          return `${redact.text(key).replace(/[&=]/g, encodeURIComponent)}=${REDACTED}`;
+        })
+        .join("&")}`
     : "";
   const hashPart = hasHash ? `#${REDACTED}` : "";
   const userinfoPart = hasUserinfo ? `${REDACTED}@` : "";
@@ -454,23 +464,67 @@ type SecretSet = {
   hasSpace: boolean;
 };
 
+const MAX_INCOMPLETE_ESCAPE_CHARS = 12;
+
+function trailingIncompleteEscapeLength(buf: string): number {
+  const start = Math.max(0, buf.length - MAX_INCOMPLETE_ESCAPE_CHARS);
+  const tail = buf.slice(start);
+  let extra = 0;
+  let bs = tail.length;
+  let hex = 0;
+  while (bs > 0 && hex < 3 && hexDigit(tail.charCodeAt(bs - 1)) >= 0) {
+    bs -= 1;
+    hex += 1;
+  }
+  if (bs > 0 && tail.charCodeAt(bs - 1) === 117) {
+    const beforeU = bs - 1;
+    let slashes = 0;
+    while (beforeU - slashes > 0 && tail.charCodeAt(beforeU - slashes - 1) === 92) slashes += 1;
+    if (slashes > 0) extra = Math.max(extra, tail.length - (beforeU - slashes));
+  }
+  let trailingSlashes = 0;
+  while (tail.length - trailingSlashes > 0 && tail.charCodeAt(tail.length - trailingSlashes - 1) === 92) trailingSlashes += 1;
+  if (trailingSlashes > 0) extra = Math.max(extra, trailingSlashes);
+
+  const lastPct = tail.lastIndexOf("%");
+  if (lastPct >= 0) {
+    const rem = tail.length - lastPct;
+    if (rem <= 3 && (rem === 1 || hexDigit(tail.charCodeAt(lastPct + 1)) >= 0) && (rem < 3 || hexDigit(tail.charCodeAt(lastPct + 2)) >= 0)) {
+      let scan = lastPct;
+      while (scan >= 3 && percentByte(tail, scan - 3) >= 0) scan -= 3;
+      extra = Math.max(extra, tail.length - scan);
+    }
+  }
+  return extra;
+}
+
 function buildViews(text: string, hasSpace: boolean): Array<IndexedView | null> {
   const views: Array<IndexedView | null> = [null];
-  const addSecondary = (src: string, base: IndexedView | null) => {
-    const term = decodeTerminal(src, base);
-    if (term) {
-      views.push(term);
-      const pct = decodePercentOnce(term.text, term, hasSpace);
-      if (pct) views.push(pct);
-    }
+  const addPercentPasses = (src: string, base: IndexedView | null, plusAsSpace: boolean) => {
     let curPct: IndexedView | null = null;
     for (let pass = 0; pass < MAX_PERCENT_PASSES; pass++) {
-      const next = decodePercentOnce(curPct ? curPct.text : src, curPct ?? base, hasSpace);
+      const next = decodePercentOnce(curPct ? curPct.text : src, curPct ?? base, plusAsSpace);
       if (!next) break;
       views.push(next);
       const pctTerm = decodeTerminal(next.text, next);
       if (pctTerm) views.push(pctTerm);
       curPct = next;
+    }
+  };
+  const addSecondary = (src: string, base: IndexedView | null) => {
+    const term = decodeTerminal(src, base);
+    if (term) {
+      views.push(term);
+      const pct = decodePercentOnce(term.text, term, false);
+      if (pct) views.push(pct);
+      if (hasSpace && term.text.includes("+")) {
+        const pctSpace = decodePercentOnce(term.text, term, true);
+        if (pctSpace) views.push(pctSpace);
+      }
+    }
+    addPercentPasses(src, base, false);
+    if (hasSpace && src.includes("+")) {
+      addPercentPasses(src, base, true);
     }
   };
   addSecondary(text, null);
@@ -688,54 +742,78 @@ export class Redactor {
   createStream(): StreamRedactor {
     const hold = this.streamHoldback;
     const rawHoldCap = Math.max(hold * 6 + 64, 4096);
-    const maxB64Hold = Math.ceil((this.#maxLongBytes + 2) / 3) * 4;
+    const maxB64Hold = Math.ceil((this.#maxLongBytes + 2) / 3) * 4 + 4;
     let buffer = "";
     let redacting = false;
 
+    const b64TailNeed = (src: string, view: IndexedView | null, sliceLen: number, trailing: number): number => {
+      if (this.#longSet.bytesForBase64.length === 0) return 0;
+      let end = Math.max(0, src.length - trailing);
+      let pad = 0;
+      while (pad < 2 && end > 0 && src.charCodeAt(end - 1) === 61) {
+        end -= 1;
+        pad += 1;
+      }
+      let start = end;
+      const limit = Math.max(0, end - maxB64Hold);
+      while (start > limit) {
+        const code = src.charCodeAt(start - 1);
+        if (code >= 128 || B64_TABLE[code] < 0) break;
+        start -= 1;
+      }
+      const payloadLen = end - start;
+      if (payloadLen < 2) return 0;
+      for (let off = 0; off < 4; off++) {
+        if (payloadLen - off < 2) break;
+        const decoded = decodeB64Slice(src, start + off, end);
+        if (endsWithSecretPrefix(decoded, this.#longSet.bytesForBase64)) {
+          return view ? sliceLen - view.starts[start] : src.length - start;
+        }
+      }
+      return 0;
+    };
+
     const neededHold = (buf: string): number => {
       if (hold === 0 || buf.length <= hold) return hold;
-      let need = hold;
+      const trailing = trailingIncompleteEscapeLength(buf);
+      let need = hold + trailing;
       const tailSliceStart = Math.max(0, buf.length - rawHoldCap);
       const tailSlice = buf.slice(tailSliceStart);
       if (tailSlice.includes("\\") || tailSlice.includes("%") || /[\x00-\x08\x0b-\x1f\x7f-\x9f]/.test(tailSlice)) {
+        const decodedHold = hold + MAX_INCOMPLETE_ESCAPE_CHARS;
         for (const view of buildViews(tailSlice, this.#longSet.hasSpace)) {
           if (!view) continue;
-          if (view.text.length <= hold) {
+          if (view.text.length <= decodedHold) {
             need = Math.max(need, tailSlice.length);
           } else {
-            const rawStart = view.starts[view.text.length - hold];
+            const rawStart = view.starts[view.text.length - decodedHold];
             need = Math.max(need, tailSlice.length - rawStart);
           }
+          need = Math.max(need, b64TailNeed(view.text, view, tailSlice.length, 0));
         }
       }
-      if (this.#longSet.bytesForBase64.length > 0) {
-        let end = buf.length;
-        let pad = 0;
-        while (pad < 2 && end > 0 && buf.charCodeAt(end - 1) === 61) {
-          end -= 1;
-          pad += 1;
-        }
-        let start = end;
-        const limit = Math.max(0, end - maxB64Hold);
-        while (start > limit) {
-          const code = buf.charCodeAt(start - 1);
-          if (code >= 128 || B64_TABLE[code] < 0) break;
-          start -= 1;
-        }
-        const runLen = buf.length - start;
-        if (runLen > need) {
-          const payloadLen = end - start;
-          for (let off = 0; off < 4; off++) {
-            if (payloadLen - off < 2) break;
-            const decoded = decodeB64Slice(buf, start + off, end);
-            if (endsWithSecretPrefix(decoded, this.#longSet.bytesForBase64)) {
-              need = Math.max(need, runLen);
-              break;
-            }
-          }
-        }
+      need = Math.max(need, b64TailNeed(buf, null, buf.length, 0));
+      if (trailing > 0) {
+        need = Math.max(need, b64TailNeed(buf, null, buf.length, trailing));
       }
       return Math.min(need, rawHoldCap);
+    };
+
+    const consumeRebuiltPrefix = (buf: string, startOffset: number, maxOffset: number): { offset: number; straddles: boolean } => {
+      let offset = startOffset;
+      const probeWindow = Math.max(hold * 6 + 64, maxB64Hold) + REDACTED.length;
+      for (;;) {
+        const probeEnd = Math.min(buf.length, offset + probeWindow);
+        const afterMarker = REDACTED + buf.slice(offset, probeEnd);
+        if (!hasAnyMatch(afterMarker, this.#longSet)) return { offset, straddles: false };
+        const markerSpans = findMergedSpans(afterMarker, this.#longSet);
+        const touching = markerSpans.find(([start]) => start < REDACTED.length);
+        if (!touching) return { offset, straddles: false };
+        const advance = Math.max(0, touching[1] - REDACTED.length);
+        if (advance === 0) return { offset, straddles: false };
+        if (offset + advance > maxOffset) return { offset, straddles: true };
+        offset += advance;
+      }
     };
 
     return {
@@ -746,7 +824,8 @@ export class Redactor {
           return "";
         }
         if (redacting) {
-          let out = this.text(buffer);
+          const consumed = consumeRebuiltPrefix(buffer, 0, buffer.length);
+          let out = this.text(buffer.slice(consumed.offset));
           if (out.startsWith(REDACTED)) out = out.slice(REDACTED.length);
           buffer = "";
           redacting = false;
@@ -761,10 +840,25 @@ export class Redactor {
         if (hold === 0) return delta;
         buffer += delta;
         let emitted = "";
-        while (buffer.length > 0) {
+        outer: while (buffer.length > 0) {
           const keep = neededHold(buffer);
           if (buffer.length <= keep) break;
           const safeEnd = buffer.length - keep;
+          if (redacting) {
+            const consumed = consumeRebuiltPrefix(buffer, 0, safeEnd);
+            if (consumed.straddles) {
+              if (buffer.length - consumed.offset > rawHoldCap) {
+                buffer = buffer.slice(buffer.length - rawHoldCap);
+              } else {
+                buffer = buffer.slice(consumed.offset);
+              }
+              break;
+            }
+            if (consumed.offset > 0) {
+              buffer = buffer.slice(consumed.offset);
+              continue;
+            }
+          }
           const spans = findMergedSpans(buffer, this.#longSet);
           if (spans.length === 0 || spans[0][0] >= safeEnd) {
             emitted += buffer.slice(0, safeEnd);
@@ -772,33 +866,56 @@ export class Redactor {
             redacting = false;
             break;
           }
-          const [sStart, sEnd] = spans[0];
-          if (sStart > 0) {
-            emitted += buffer.slice(0, sStart);
+          let cursor = 0;
+          for (const [sStart, sEnd] of spans) {
+            if (sEnd <= cursor) continue;
+            if (sStart < cursor) {
+              buffer = buffer.slice(cursor);
+              continue outer;
+            }
+            if (sStart >= safeEnd) {
+              emitted += buffer.slice(cursor, safeEnd);
+              buffer = buffer.slice(safeEnd);
+              redacting = false;
+              break outer;
+            }
+            if (sStart > cursor) {
+              emitted += buffer.slice(cursor, sStart);
+              redacting = false;
+            }
+            if (sEnd <= safeEnd) {
+              if (!redacting) emitted += REDACTED;
+              const consumed = consumeRebuiltPrefix(buffer, sEnd, safeEnd);
+              if (consumed.straddles) {
+                redacting = true;
+                if (buffer.length - consumed.offset > rawHoldCap) {
+                  buffer = buffer.slice(buffer.length - rawHoldCap);
+                } else {
+                  buffer = buffer.slice(consumed.offset);
+                }
+                break outer;
+              }
+              redacting = false;
+              cursor = consumed.offset;
+              continue;
+            }
+            if (buffer.length - sStart > rawHoldCap) {
+              if (!redacting) {
+                emitted += REDACTED;
+                redacting = true;
+              }
+              buffer = buffer.slice(Math.max(sStart + 1, sEnd - hold));
+            } else {
+              buffer = buffer.slice(sStart);
+            }
+            break outer;
+          }
+          if (cursor < safeEnd) {
+            emitted += buffer.slice(cursor, safeEnd);
+            cursor = safeEnd;
             redacting = false;
           }
-          if (sEnd <= safeEnd) {
-            let nextOffset = sEnd;
-            const afterMarker = REDACTED + buffer.slice(sEnd, sEnd + hold);
-            if (hasAnyMatch(afterMarker, this.#longSet)) {
-              const markerSpans = findMergedSpans(afterMarker, this.#longSet);
-              const touching = markerSpans.find(([start]) => start < REDACTED.length);
-              if (touching) nextOffset = sEnd + Math.max(0, touching[1] - REDACTED.length);
-            }
-            if (!redacting) emitted += REDACTED;
-            redacting = false;
-            buffer = buffer.slice(nextOffset);
-            continue;
-          }
-          if (buffer.length - sStart > rawHoldCap) {
-            if (!redacting) {
-              emitted += REDACTED;
-              redacting = true;
-            }
-            buffer = buffer.slice(Math.max(sStart + 1, sEnd - hold));
-            break;
-          }
-          buffer = buffer.slice(sStart);
+          buffer = buffer.slice(cursor);
           break;
         }
         return emitted;
@@ -814,7 +931,12 @@ export class Redactor {
           buffer = "";
           return out;
         }
-        let out = this.text(buffer);
+        let rest = buffer;
+        if (redacting) {
+          const consumed = consumeRebuiltPrefix(rest, 0, rest.length);
+          rest = rest.slice(consumed.offset);
+        }
+        let out = this.text(rest);
         if (redacting && out.startsWith(REDACTED)) out = out.slice(REDACTED.length);
         buffer = "";
         redacting = false;

@@ -161,6 +161,9 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
     delta: string,
     controller: TransformStreamDefaultController<UIMessageChunk>,
   ) => {
+    if (channel.active && channel.active.id !== id) {
+      flushChannel(channel, controller);
+    }
     if (!channel.active) {
       channel.active = { id, stream: redact.createStream() };
       channel.pendingBuffer = "";
@@ -357,10 +360,14 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
           flushAll(controller);
           controller.enqueue(redactObjectField(chunk, redact));
           return;
-        case "start":
-        case "message-metadata":
         case "tool-output-denied":
         case "custom":
+          flushChannel(textChannel, controller);
+          flushChannel(reasoningChannel, controller);
+          controller.enqueue(redactObjectField(chunk, redact));
+          return;
+        case "start":
+        case "message-metadata":
           controller.enqueue(redactObjectField(chunk, redact));
           return;
         default: {

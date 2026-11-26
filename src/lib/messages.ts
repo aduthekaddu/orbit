@@ -102,14 +102,15 @@ export function replaceFallbackTitle(chatId: string, fallback: string, title: st
 }
 
 function redactPartsCrossBoundary(parts: unknown, redact: Redactor): unknown {
-  if (!Array.isArray(parts)) return parts;
+  if (!Array.isArray(parts)) return redact.value(parts);
   const copy = parts.map((part) => {
-    if (!part || typeof part !== "object") return part;
-    const record = part as Record<string, unknown>;
-    if (typeof record.errorText === "string") {
-      return { ...record, errorText: redact.diagnostic(record.errorText) };
+    if (!part || typeof part !== "object" || Array.isArray(part)) return redact.value(part);
+    const raw = part as Record<string, unknown>;
+    const masked = redact.value(raw) as Record<string, unknown>;
+    if (typeof raw.errorText === "string") {
+      masked.errorText = redact.diagnostic(raw.errorText);
     }
-    return { ...record };
+    return masked;
   });
   for (const kind of ["text", "reasoning"] as const) {
     const indexes: number[] = [];
@@ -132,7 +133,7 @@ function redactPartsCrossBoundary(parts: unknown, redact: Redactor): unknown {
 
 // The search text joins parts and strips terminal codes, which can spell a credential, so it is masked after.
 function messageBody(parts: unknown, redact: Redactor): SavedText {
-  const saved = redactPartsCrossBoundary(redact.value(parts), redact);
+  const saved = redactPartsCrossBoundary(parts, redact);
   return { content: redact.text(searchTextFromParts(saved)), parts: JSON.stringify(saved) };
 }
 

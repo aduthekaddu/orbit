@@ -1,6 +1,6 @@
 import { createMCPClient, type MCPClient } from "@ai-sdk/mcp";
 import type { Tool } from "ai";
-import { REDACTED, Redactor, type StoredCredentials } from "../chat-errors";
+import { REDACTED, Redactor, redactUrl, type StoredCredentials } from "../chat-errors";
 import { githubLogin } from "./github-links";
 
 export const DEFAULT_GITHUB_MCP_URL = "https://api.githubcopilot.com/mcp/";
@@ -216,10 +216,19 @@ export async function checkGithub(
   submitted: { token?: string; mcpUrl?: string } = {},
   signal?: AbortSignal,
 ): Promise<{ ok: true; login: string } | { ok: false; error: string }> {
+  const storedRedact = new Redactor(stored);
+  const submittedUrl = submitted.mcpUrl?.trim();
+  const maskedStoredUrl = redactUrl(resolveGithubMcpUrl(stored.githubMcpUrl), storedRedact);
+  const githubMcpUrl =
+    submittedUrl === undefined
+      ? stored.githubMcpUrl
+      : stored.githubMcpUrl && submittedUrl === maskedStoredUrl
+        ? stored.githubMcpUrl
+        : submittedUrl;
   const settings = {
     ...stored,
     githubToken: submitted.token?.trim() || stored.githubToken,
-    githubMcpUrl: submitted.mcpUrl ?? stored.githubMcpUrl,
+    githubMcpUrl,
   };
   const redact = new Redactor(stored, settings);
   if (!settings.githubToken.trim()) return { ok: false, error: "Add a GitHub token." };
