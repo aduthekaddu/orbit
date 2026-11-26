@@ -254,3 +254,39 @@ test("web_search masks stored credentials in titles, URLs, snippets, and queries
     assert.equal(serialized.includes(secret), false, `search output carried ${secret}`);
   }
 });
+
+test("searchWeb passes the redactor to configured backends and masks each search result once", async (t) => {
+  const { Redactor } = await import("../chat-errors");
+  const redactor = new Redactor({ apiKey: "made-up-provider-key-0001", tavilyApiKey: settings.tavilyApiKey, githubToken: "" });
+
+  let searxRedact: unknown;
+  let tavilyRedact: unknown;
+  const fallback = await searchWeb(
+    settings,
+    "orbit",
+    undefined,
+    {
+      searxng: async (_url, _query, _signal, redact) => {
+        searxRedact = redact;
+        return [];
+      },
+      tavily: async (_key, _query, _signal, redact) => {
+        tavilyRedact = redact;
+        return [result];
+      },
+    },
+    redactor,
+  );
+  assert.equal(fallback.ok, true);
+  assert.equal(searxRedact, redactor, "custom searxng backend did not receive the redactor");
+  assert.equal(tavilyRedact, redactor, "custom tavily backend did not receive the redactor");
+
+  const local = await fixture(t, {
+    results: [{ title: "Orbit", url: "https://example.com/orbit", content: "Bright orbit" }],
+  });
+  const spy = t.mock.method(redactor, "text");
+  const output = await searchWeb({ searxngUrl: local.url, tavilyApiKey: "" }, "orbit", undefined, undefined, redactor);
+  assert.equal(output.ok, true);
+  // 1 call for query + 1 each for url, title, and snippet (not masked a second time).
+  assert.equal(spy.mock.callCount(), 4, `expected 4 redact.text calls, got ${spy.mock.callCount()}`);
+});
