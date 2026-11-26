@@ -34,7 +34,7 @@ export default async function artifactNavigation({ page, origin, step, shot }) {
       ),
       page.getByRole("link", { name: "Back to chats" }).click(),
     ]);
-    step("Back to chats loads a document with the page CSP", chatDocument.ok() && chatDocument.headers()["content-security-policy"] === "frame-src 'none'");
+    step("Back to chats loads a document with the page CSP", chatDocument.ok() && chatDocument.headers()["content-security-policy"]?.split(";").some((directive) => directive.trim() === "frame-src 'none'"));
     const composer = page.getByPlaceholder("Ask anything");
     const reply = page.locator('[data-message-role="assistant"]').last();
     const panel = page.getByRole("complementary", { name: "Artifact", exact: true });

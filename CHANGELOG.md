@@ -5,6 +5,15 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 ## [Unreleased]
 
 - New prompts and manual reply edits mask stored credentials in chat history and message search. (#202)
+- Orbit pages now refuse to be framed by other pages. Every response outside `/s/` sends `nosniff` and a same-origin referrer rule, and none names Next.js in `X-Powered-By`. (#133)
+- Stopping a chat turn or hitting the setup deadline during the GitHub MCP handshake now closes the session on the GitHub MCP server instead of leaving it open. (#93)
+- A chat page keeps one layout from its first paint. An empty chat opens with its centered composer and starters, a chat with messages shows a placeholder in their shape until they load, and no Scroll to bottom button shows over an empty thread. (#246)
+- The chat composer waits for the page to become interactive so the first prompt cannot be lost while the page loads. (#229)
+- The Docker image runs Node.js 24 LTS instead of Node.js 22, and `@types/node` and Dependabot now follow that line. (#53)
+- verify-orbit reports ready only for the server that bound the requested port. Concurrent launches in one checkout share the sandbox server. (#193)
+- The test suite fails a `package.json` dependency override whose package has left the lockfile or whose removal is not tracked in CONTRIBUTING.md, so a dead override cannot go unnoticed. (#146)
+- The README, ARCHITECTURE.md, and `.env.example` describe the shipped GitHub tools, memory, the nightly dream, and the Cloudflare deploy. The stack diagram draws SearXNG, Tavily, the code sandbox, Ollama, GitHub MCP, and Cloudflare as optional services instead of planned ones. `.env.example` also lists `ORBIT_TRUSTED_ORIGINS` for runs from source. (#130)
+- The Memory page formats each memory's date only in the browser, in the reader's time zone, so a reader in a different zone from the server no longer gets React hydration error #418. (#140)
 - Signed-out requests to paths such as `/api/authors` now get the same sign-in check as other API requests. (#134)
 - A refreshed session cookie now reaches the browser on page and API responses, so daily use keeps a session rolling forward past 7 days without a forced sign-in. (#119)
 - The hook lint in CI is a required check. A failing `rules-of-hooks` or `exhaustive-deps` finding now fails the job. (#145)

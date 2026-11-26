@@ -9,6 +9,11 @@ export type MockMcpRequest = {
   tools: string;
 };
 
+export type MockMcpHold = {
+  arrived: Promise<void>;
+  release: () => void;
+};
+
 export type MockMcp = {
   url: string;
   token: string;
@@ -18,6 +23,8 @@ export type MockMcp = {
   callCount: () => number;
   closeCount: () => number;
   holdStart: () => () => void;
+  holdMethod: (method: string) => MockMcpHold;
+  holdInitializeResponse: () => MockMcpHold;
   close: () => Promise<void>;
 };
 
