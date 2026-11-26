@@ -1,4 +1,5 @@
-import { convertToModelMessages, createUIMessageStreamResponse, stepCountIs, streamText, toUIMessageStream, type UIMessage } from "ai";
+import { convertToModelMessages, stepCountIs, streamText, toUIMessageStream, type UIMessage, type UIMessageChunk } from "ai";
+import { after } from "next/server";
 import { ARTIFACT_INSTRUCTIONS } from "@/lib/artifacts/detect";
 import { logProviderError, Redactor, streamErrorMessage } from "@/lib/chat-errors";
 import { redactUIMessageStream } from "@/lib/chat-stream-redactor";
@@ -11,6 +12,8 @@ import { answerStepFor, CHAT_STEP_LIMIT } from "@/lib/tools/answer-step";
 import { createStoppedRuns } from "@/lib/tools/stopped-runs";
 import { ensureChat, finishChatReply, planChatWrite, redactChatTitle, storedAssistantParts, storedMessageCount, storedMessageIds, textFromParts, touchChat } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
+import { settleReasoningTimes, stampReasoningTimes, stripOrbitTiming } from "@/lib/reasoning-time";
+import { bindReplyPlan, releaseReplyRun, replyResponse, reserveReplyRun, startReplyRun, type ReplyEndPart, type ReplyEndReason } from "@/lib/reply-runs";
 import { startChatTitle } from "@/lib/titles";
 import { getSettings } from "@/lib/settings";
 import { LIMITS, r, readJsonBody } from "@/lib/route-schema";
@@ -18,7 +21,6 @@ import { getSession, unauthorized } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
 
 // A message the chat already stores can be older than the limits, and the client sends the whole
 // path on every turn. Stored messages are held to the request size cap. A message the request adds,
@@ -103,55 +105,72 @@ export async function POST(request: Request) {
   const chat = ensureChat(parsed.data.id, session.user.id);
   if (!chat) return Response.json({ error: "Not found" }, { status: 404 });
 
-  const incoming = parsed.data.messages;
-  const messagesBeforeTurn = storedMessageCount(chat.id);
-  const write = planChatWrite(chat.id, incoming, redact, parsed.data.trigger, parsed.data.editMessageId);
-  if ("error" in write) {
-    if (write.error === "invalid-edit") {
-      return Response.json({ error: "Invalid edit request" }, { status: 400 });
-    }
-    if (write.error === "no-prompt") {
-      return Response.json({ error: "A chat request needs a user message." }, { status: 400 });
-    }
-    if (write.error === "cross-chat") {
-      return Response.json({ error: "A message id belongs to a different chat." }, { status: 409 });
-    }
-    return Response.json({ error: "The chat changed. Reload and try again." }, { status: 409 });
+  const reserved = await reserveReplyRun(chat.id, session.user.id);
+  if (!reserved.ok) {
+    if (reserved.reason === "busy") return Response.json({ error: "A reply is still running." }, { status: 409 });
+    return Response.json({ error: "Too many replies running." }, { status: 429 });
   }
-  const firstUser = incoming.find((message) => message.role === "user");
-  const lastUser = incoming.findLast((message) => message.role === "user");
-  const title = textFromParts(firstUser?.parts).trim();
-  if (title) touchChat(chat.id, title, redact);
-  else touchChat(chat.id);
-  if (title) {
-    startChatTitle({
-      messagesBeforeTurn,
-      chatId: chat.id,
-      firstMessage: redact.text(title),
-      fallbackTitle: redactChatTitle(title, redact),
-      model: orbitModel({
-        baseUrl: settings.baseUrl,
-        apiKey: settings.apiKey,
-        model: settings.model,
-        chatId: chat.id,
-      }),
-      redact,
-      onError: (message) => redact.logError("chat title", message),
-    });
-  }
+  const { run } = reserved;
+  const signal = run.controller.signal;
 
-  const stored = storedAssistantParts(chat.id, incoming.filter((message) => message.role === "assistant").map((message) => message.id));
-  const uiMessages = incoming.map((message) => ({
-    id: message.id,
-    role: message.role,
-    parts: (message.role === "assistant" ? stored.get(message.id) ?? message.parts ?? [] : message.parts ?? []) as UIMessage["parts"],
-  })) as UIMessage[];
-
+  let detached = false;
   let closeTools = async () => {};
+  const respond = (replyId: string, stream: ReadableStream<UIMessageChunk>, endReason: () => ReplyEndReason | null) => {
+    after(() => run.done);
+    startReplyRun(run, stream, endReason);
+    detached = true;
+    return replyResponse(run, replyId);
+  };
+
   try {
+    const incoming = parsed.data.messages;
+    const messagesBeforeTurn = storedMessageCount(chat.id);
+    const write = planChatWrite(chat.id, incoming, redact, parsed.data.trigger, parsed.data.editMessageId);
+    if ("error" in write) {
+      if (write.error === "invalid-edit") {
+        return Response.json({ error: "Invalid edit request" }, { status: 400 });
+      }
+      if (write.error === "no-prompt") {
+        return Response.json({ error: "A chat request needs a user message." }, { status: 400 });
+      }
+      if (write.error === "cross-chat") {
+        return Response.json({ error: "A message id belongs to a different chat." }, { status: 409 });
+      }
+      return Response.json({ error: "The chat changed. Reload and try again." }, { status: 409 });
+    }
+    bindReplyPlan(run, write.id, write.prompt.id);
+    const firstUser = incoming.find((message) => message.role === "user");
+    const lastUser = incoming.findLast((message) => message.role === "user");
+    const title = textFromParts(firstUser?.parts).trim();
+    if (title) touchChat(chat.id, title, redact);
+    else touchChat(chat.id);
+    if (title) {
+      startChatTitle({
+        messagesBeforeTurn,
+        chatId: chat.id,
+        firstMessage: redact.text(title),
+        fallbackTitle: redactChatTitle(title, redact),
+        model: orbitModel({
+          baseUrl: settings.baseUrl,
+          apiKey: settings.apiKey,
+          model: settings.model,
+          chatId: chat.id,
+        }),
+        redact,
+        onError: (message) => redact.logError("chat title", message),
+      });
+    }
+
+    const stored = storedAssistantParts(chat.id, incoming.filter((message) => message.role === "assistant").map((message) => message.id));
+    const uiMessages = incoming.map((message) => ({
+      id: message.id,
+      role: message.role,
+      parts: (message.role === "assistant" ? stored.get(message.id) ?? message.parts ?? [] : message.parts ?? []) as UIMessage["parts"],
+    })) as UIMessage[];
+
     const allowReasoning = modelAllowsReasoning(settings.baseUrl, settings.model);
     const stopped = createStoppedRuns();
-    const loaded = await toolsForTurn(settings, stopped, { chatId: chat.id, messageId: lastUser?.id ?? null }, request.signal, redact);
+    const loaded = await toolsForTurn(settings, stopped, { chatId: chat.id, messageId: lastUser?.id ?? null }, signal, redact);
     let closed = false;
     closeTools = async () => {
       if (closed) return;
@@ -175,6 +194,8 @@ export async function POST(request: Request) {
     ]
       .filter((part) => part.length > 0)
       .join("\n\n");
+    const modelMessages = await convertToModelMessages(stripOrbitTiming(uiMessages), { tools });
+    signal.throwIfAborted();
     const result = streamText({
       model: orbitModel({
         baseUrl: settings.baseUrl,
@@ -183,19 +204,20 @@ export async function POST(request: Request) {
         chatId: chat.id,
       }),
       instructions,
-      messages: attachMemoryNotes(await convertToModelMessages(uiMessages, { tools }), notes),
+      messages: attachMemoryNotes(modelMessages, notes),
       tools,
       stopWhen: stepCountIs(CHAT_STEP_LIMIT),
       prepareStep: answerStepFor(tools),
-      abortSignal: request.signal,
+      abortSignal: signal,
       ...(allowReasoning ? reasoningOptions(settings.reasoningEffort) : {}),
       onError: ({ error }) => logProviderError(error, redact),
     });
 
     // Send the response id so the client reuses it. Without it the client mints
     // its own id and the next turn stores the assistant reply a second time.
+    let savedEndReason: ReplyEndReason | null = null;
     const uiStream = toUIMessageStream({
-      stream: result.stream,
+      stream: result.stream.pipeThrough(stampReasoningTimes()),
       tools,
       originalMessages: uiMessages,
       generateMessageId: () => write.id,
@@ -204,7 +226,8 @@ export async function POST(request: Request) {
         void embedPending();
         try {
           const interrupted = isAborted || outcome.status !== "completed";
-          const parts = settleInterruptedParts(interrupted ? await stopped.apply(responseMessage.parts) : responseMessage.parts, interrupted);
+          const toolParts = settleInterruptedParts(interrupted ? await stopped.apply(responseMessage.parts) : responseMessage.parts, interrupted);
+          const parts = interrupted ? settleReasoningTimes(toolParts) : toolParts;
           if (!assistantHasVisiblePart(parts)) {
             const types = Array.isArray(responseMessage.parts)
               ? responseMessage.parts
@@ -215,19 +238,39 @@ export async function POST(request: Request) {
             redact.logError("chat end without text", isAborted ? "aborted" : "finished", status, types.join(",") || "none");
             return;
           }
-          finishChatReply(write, parts, redact);
-          touchChat(chat.id);
+          if (!interrupted) {
+            if (finishChatReply(write, parts, redact)) touchChat(chat.id);
+            return;
+          }
+          if (!Array.isArray(parts)) return;
+          const reason = isAborted && signal.reason === "stopped" ? "stopped" : "failed";
+          const endPart: ReplyEndPart = { type: "data-reply-end", data: { reason } };
+          if (finishChatReply(write, [...parts, endPart], redact)) {
+            savedEndReason = reason;
+            touchChat(chat.id);
+          }
         } finally {
           await closeTools();
         }
       },
     });
 
-    return createUIMessageStreamResponse({ stream: uiStream.pipeThrough(redactUIMessageStream(redact)) });
+    return respond(write.id, uiStream.pipeThrough(redactUIMessageStream(redact)), () => savedEndReason);
   } catch (error) {
     await closeTools();
+    if (signal.aborted && run.identity) {
+      const stream = new ReadableStream<UIMessageChunk>({
+        start(controller) {
+          controller.enqueue({ type: "abort" });
+          controller.close();
+        },
+      });
+      return respond(run.identity.replyId, stream, () => null);
+    }
     const message = error instanceof Error ? error.message : "The model request failed";
     redact.logError("chat request error", message);
     return Response.json({ error: "The model request failed" }, { status: 502 });
+  } finally {
+    if (!detached) releaseReplyRun(run);
   }
 }

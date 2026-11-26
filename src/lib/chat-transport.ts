@@ -1,5 +1,20 @@
 import { AssistantChatTransport } from "@assistant-ui/react-ai-sdk";
-import type { UIMessage } from "ai";
+import type { UIMessage, UIMessageChunk } from "ai";
+
+class OrbitChatTransport extends AssistantChatTransport<UIMessage> {
+  protected processResponseStream(stream: ReadableStream<Uint8Array<ArrayBufferLike>>) {
+    let terminalSeen = false;
+    return super.processResponseStream(stream).pipeThrough(new TransformStream<UIMessageChunk, UIMessageChunk>({
+      transform(chunk, controller) {
+        if (chunk.type === "finish" || chunk.type === "abort" || chunk.type === "error") terminalSeen = true;
+        controller.enqueue(chunk);
+      },
+      flush() {
+        if (!terminalSeen) throw new TypeError("Network connection ended before the reply finished.");
+      },
+    }));
+  }
+}
 
 // The AI SDK throws a refused response as an Error whose message is the whole body. Orbit routes
 // refuse with `{ "error": "..." }`, so the composer would show that JSON. This passes the text on.
@@ -16,12 +31,34 @@ function plainRefusals(send: typeof fetch): typeof fetch {
 
 export function orbitChatTransport(
   chatId: string,
-  options?: { editMessageId?: () => string | null; api?: string; headers?: Record<string, string>; fetch?: typeof fetch },
+  options?: {
+    editMessageId?: () => string | null;
+    api?: string;
+    headers?: Record<string, string>;
+    fetch?: typeof fetch;
+    onReplyId?: (replyId: string) => void;
+    onReconnectResponse?: (status: number) => void;
+  },
 ) {
-  return new AssistantChatTransport<UIMessage>({
+  return new OrbitChatTransport({
     api: options?.api ?? "/api/chat",
     headers: options?.headers,
-    fetch: plainRefusals((input, init) => (options?.fetch ?? fetch)(input, init)),
+    fetch: plainRefusals(async (input, init) => {
+      const response = await (options?.fetch ?? fetch)(input, init);
+      if (!init?.signal?.aborted) {
+        if (init?.method === "GET") options?.onReconnectResponse?.(response.status);
+        else if (response.ok) {
+          const replyId = response.headers.get("x-resumable-stream-id");
+          if (replyId) options?.onReplyId?.(replyId);
+        }
+      }
+      return response;
+    }),
+    prepareReconnectToStreamRequest: ({ body }) => {
+      const replyId = typeof body?.replyId === "string" ? body.replyId : null;
+      const query = replyId ? `?${new URLSearchParams({ replyId })}` : "";
+      return { api: `/api/chats/${encodeURIComponent(chatId)}/stream${query}` };
+    },
     // assistant-ui replaces the request id with its local thread id. The open chat id has to win.
     prepareSendMessagesRequest: ({ body, messages, trigger, messageId }) => ({
       body: { ...body, id: chatId, messages, trigger, messageId, editMessageId: trigger === "submit-message" ? options?.editMessageId?.() ?? undefined : undefined },

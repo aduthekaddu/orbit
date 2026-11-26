@@ -15,11 +15,12 @@ Orbit is one Next.js process. It serves the pages, the API routes, and the chat 
 
 1. You type in the composer. assistant-ui sends `POST /api/chat` through `orbitChatTransport` in `src/lib/chat-transport.ts`. The transport puts the open chat id on the request, because assistant-ui would otherwise send its own local thread id.
 2. `src/proxy.ts` checks the session cookie and forwards any `Set-Cookie` header better-auth returns when a session refreshes or expires. `src/lib/session.ts` reads the session with refresh disabled so only the proxy moves a session forward. Every page and API route needs a session except `/login`, `/signup`, `/api/auth/*`, and `/api/setup`. An API request with a method other than `GET`, `HEAD`, or `OPTIONS`, other than `/api/auth/*`, gets 403 when it carries a `Sec-Fetch-Site` other than `same-origin`, or, without Fetch Metadata, an `Origin` that is not a trusted origin. The browser sets `Sec-Fetch-Site`, so a write it marks `same-origin` passes without consulting the trusted list. A write with neither header, such as curl, passes. `/api/auth/*` uses better-auth's origin check.
-3. `src/app/api/chat/route.ts` reads the body up to `LIMITS.requestBytes` (32 MiB, else `413`), parses it with zod, and holds each message the chat does not store yet to the message limits (a user message over 50,000 characters gets `413`; stored messages keep working at any length), loads the settings row, and calls `planChatWrite` in `src/lib/messages.ts`. That function saves the incoming user messages and returns a `ReplyPlan`: the id the reply will be stored under, plus copies of the prompt row and of the saved reply the stream continues, if any. It refuses a request with no user message with `400`, and a write planned against an older copy of the chat with `409`. It moves `chats.head_id` to the prompt, or to the saved reply the stream continues.
+3. `src/app/api/chat/route.ts` reads the body up to `LIMITS.requestBytes` (32 MiB, else `413`), parses it with zod, and holds each message the chat does not store yet to the message limits (a user message over 50,000 characters gets `413`; stored messages keep working at any length), loads the settings row, checks ownership, reserves the chat’s only active reply, and calls `planChatWrite` in `src/lib/messages.ts`. That function saves the incoming user messages and returns a `ReplyPlan`: the id the reply will be stored under, plus copies of the prompt row and of the saved reply the stream continues, if any. It refuses a request with no user message with `400`, and a write planned against an older copy of the chat with `409`. It moves `chats.head_id` to the prompt, or to the saved reply the stream continues.
 4. The route calls `streamText` from the AI SDK with the model from `orbitModel` in `src/lib/provider.ts` and the tools from `toolsForTurn` in `src/lib/tools/index.ts`. The registry always enables `render_ui`, `remember`, and `forget`, enables `web_search` when a search backend is configured, and enables `run_code` only when the server sets `ORBIT_SANDBOX=on`. `toolsForTurn` also tries to add the `github_*` tools when a GitHub token is saved. If loading fails, the failure is logged as one redacted line and the turn runs without GitHub tools. The route closes the GitHub client when the turn ends. Before the model call, the route asks `recall` in `src/lib/memory/recall.ts` for up to three memories relevant to the last user message. Recall returns none when there are no memories or nothing matches. Otherwise the route attaches them as quoted notes on that user message, as data and not as instructions, and adds `REMEMBER_INSTRUCTIONS` to the system text. The loop stops after at most five model steps. The fifth step allows only `render_ui` and receives the completed conversation as JSON data, so the model answers instead of calling another tool or writing tool-call markup. It keeps the route instructions so the model can answer with citations, render a card, or write an artifact without searching again.
-5. The stream goes back to the browser as AI SDK UI message parts. Text, reasoning, and tool parts render as they arrive.
-6. When the stream ends, `onEnd` passes the plan and the reply's parts to `finishChatReply` in `src/lib/messages.ts`. It saves only a reply that has a visible part, and nothing when a row the plan copied has changed. A regenerate saves a new sibling and keeps the earlier reply. The hook also starts `embedPending()` in `src/lib/memory/embed.ts`, which fills in the memory vectors Ollama has not returned yet, and closes the GitHub tools.
-7. On reload, `src/app/(app)/c/[id]/page.tsx` loads every message and its parent into the history adapter. The chat opens the path ending at `chats.head_id`. The runtime loads them after hydration, so until they reach the thread it shows a placeholder in their shape, or the empty-chat layout when the chat has none.
+5. The server reads one stream of AI SDK UI message parts, masks credentials, and keeps the chunks in the reply run. Each connected tab reads its own copy. A dropped connection or a closed tab removes its listener. The model and tools keep running. The browser uses `GET /api/chats/[id]/stream?replyId=…` to replay that reply and follow new chunks. `POST /api/chats/[id]/stop` tells the server to cancel the model and tools.
+6. When the stream ends, `onEnd` passes the plan and the reply's parts to `finishChatReply` in `src/lib/messages.ts`. Text, reasoning, and tool parts count as visible content. A visible reply saves if the rows the plan copied still match. Reasoning keeps its duration, and interrupted replies keep their end marker. A regenerate saves a new sibling and keeps the earlier reply. The hook also starts `embedPending()` in `src/lib/memory/embed.ts`, which fills in the memory vectors Ollama has not returned yet, and closes the GitHub tools.
+7. The server holds ended runs for up to 10 minutes and keeps at most 64 MiB of ended chunks. The oldest ended runs leave first. Each user can have up to four active replies across their chats. A server restart clears the run registry. The browser checks SQLite if replay is unavailable and keeps an interrupted reply on screen for retry if there is no saved row.
+8. On reload, `src/app/(app)/c/[id]/page.tsx` loads every message and its parent into the history adapter. The chat opens the path ending at `chats.head_id`. The runtime loads them after hydration, so until they reach the thread it shows a placeholder in their shape, or the empty-chat layout when the chat has none.
 
 ## The rules of a turn
 
@@ -39,44 +40,66 @@ stateDiagram-v2
   class lg1 orange
   class lg2 pink
   s0: Idle, no reply saved
-  s1: Sending, waiting for text
+  s1: Sending, waiting for visible parts
   s2: Error shown
-  s3: Sending, text on screen
-  s4: Regenerating, waiting for text
-  s5: Idle, reply saved
-  s6: Regenerating, text on screen
+  s3: Reconnecting, reply running
+  s4: Sending, visible parts received
+  s5: Reconnecting after provider failure
+  s6: Reconnecting, no reply saved
+  s7: Idle, reply saved
+  s8: Regenerating, waiting for visible parts
+  s9: Reconnecting, reply saved
+  s10: Regenerating, visible parts received
   [*] --> s0
   s0 --> s1: you send a message
   s1 --> s0: the model finishes or you press stop
   s1 --> s2: the provider fails
-  s1 --> s3: text starts to stream
+  s1 --> s3: the connection drops
+  s1 --> s4: the model streams a visible part
   s2 --> s1: you send a message
-  s2 --> s4: you press retry
-  s3 --> s5: the model finishes or you press stop
-  s3 --> s2: the provider fails
+  s2 --> s8: you press retry
+  s3 --> s1: the browser reconnects
+  s3 --> s5: the provider fails
+  s3 --> s6: the model finishes
   s4 --> s2: the provider fails
-  s4 --> s0: the model finishes or you press stop
-  s4 --> s6: text starts to stream
-  s5 --> s1: you send a message
-  s5 --> s4: you press regenerate
-  s4 --> s5: the model finishes or you press stop
-  s6 --> s5: the model finishes or you press stop
-  s6 --> s2: the provider fails
+  s4 --> s7: the model finishes or you press stop
+  s4 --> s3: the connection drops
+  s5 --> s2: the browser reconnects
+  s6 --> s0: the browser reconnects
+  s7 --> s1: you send a message
+  s7 --> s8: you press regenerate
+  s8 --> s2: the provider fails
+  s8 --> s0: the model finishes or you press stop
+  s8 --> s3: the connection drops
+  s8 --> s10: the model streams a visible part
+  s3 --> s4: the browser reconnects
+  s3 --> s9: the model finishes
+  s9 --> s7: the browser reconnects
+  s8 --> s7: the model finishes or you press stop
+  s3 --> s8: the browser reconnects
+  s10 --> s2: the provider fails
+  s10 --> s7: the model finishes or you press stop
+  s10 --> s3: the connection drops
+  s3 --> s10: the browser reconnects
   class s0 blue
   class s1 orange
   class s2 pink
   class s3 orange
   class s4 orange
-  class s5 blue
+  class s5 orange
   class s6 orange
+  class s7 blue
+  class s8 orange
+  class s9 orange
+  class s10 orange
 ```
 
 These rules hold in every state the model reaches:
 
-- **Nothing is saved without text.** A reply row changes only when you saw text for that turn.
-- **Regenerate keeps the old reply.** Every visible new reply is a sibling. A stop or provider failure saves its visible text without changing the earlier reply.
-- **A stopped send keeps its text.** If you stop a new message mid-stream, the partial reply is saved and is still there after reload.
-- **Text you saw is kept (ShownTextKept).** If you stop and no older reply exists, the text you saw is saved. This covers a retry after a failed first message, which is a regenerate with nothing to replace.
+- **A reply with visible content can save.** Non-blank text, non-blank reasoning, and tool parts count.
+- **Regenerate keeps the old reply.** Every visible new reply is a sibling. A stop or provider failure saves its visible content without changing the earlier reply.
+- **A stopped send keeps its visible content.** If you stop a new message mid-stream, its visible parts are still there after reload.
+- **Visible content is kept (ShownTextKept).** If you stop and no older reply exists, the visible content is saved. This covers a retry after a failed first message, which is a regenerate with nothing to replace.
 
 `finishChatReply` saves every reply with visible content. [Slice 4](docs/slices/04.md) gives a regenerate a new id, so saving a partial reply preserves the earlier version. A stop before visible content leaves the head on the saved prompt.
 
@@ -102,7 +125,7 @@ statechart docs/architecture/ChatTurn.tla --config docs/architecture/ChatTurn.cf
 | `src/app/(app)/` | Signed-in pages: the chat at `/c/[id]`, settings, the memory page, and the app shell layout. |
 | `src/app/login/`, `src/app/signup/` | The two public pages. |
 | `src/app/api/chat/route.ts` | The chat stream. The only route that calls the model. |
-| `src/app/api/chats/` | List and create chats, read one chat. `PATCH .../messages/[messageId]` saves an edited reply. |
+| `src/app/api/chats/` | List and create chats, read one chat, reconnect to a reply, or stop it. `PATCH .../messages/[messageId]` saves an edited reply. |
 | `src/app/api/settings/`, `src/app/api/models/` | Read and save the provider, search, and GitHub settings. List the provider's models. |
 | `src/app/api/settings/github/check/` | Checks a saved or submitted GitHub token against the MCP server, and returns the login or the error. |
 | `src/app/api/memories/` | List and search memories. `PATCH .../[id]` edits one and `DELETE .../[id]` deletes one. |
@@ -111,6 +134,7 @@ statechart docs/architecture/ChatTurn.tla --config docs/architecture/ChatTurn.cf
 | `src/instrumentation.ts` | Runs once at server start. It imports the database, which migrates it, starts the dream scheduler, and starts the sandbox sweep when the sandbox is on. |
 | `src/proxy.ts` | The session gate for every request. |
 | `src/lib/db/` | The SQLite connection, the Drizzle schema, and the migration lock. |
+| `src/lib/reply-runs.ts` | One server-owned run per chat with a redacted replay buffer and listeners. |
 | `src/lib/messages.ts` | Chat and message reads and writes. All write planning lives here. |
 | `src/lib/memory/` | Memory storage, hybrid recall, Ollama embeddings, the nightly dream, and the dream scheduler. |
 | `src/lib/search.ts` | The FTS5 match queries behind message and memory search. |

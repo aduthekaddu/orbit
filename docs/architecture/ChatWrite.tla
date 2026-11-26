@@ -21,9 +21,9 @@ VARIABLES
   newest,    \* the last text a reply edit gave R. Only the invariant reads it.
   answered,  \* for each reply a turn saved under P, the text of P it answers
   seen,      \* seen[t]: the copy of P and R in tab t's thread, which it sends back as messages in POST /api/chat
-  turn,      \* turn[t]: 0, or the text of P that tab t's open POST /api/chat request answers
-  base,      \* base[t]: 0 when tab t's open request saves a new reply, or the text of R that its reply continues
-  guard,     \* guard[t]: the row copies in the ReplyPlan that planChatWrite returned for tab t's open request
+  turn,      \* turn[t]: 0, or the text of P that tab t reserved the reply to
+  base,      \* base[t]: 0 when tab t's server run saves a new reply, or the text of R that its reply continues
+  guard,     \* guard[t]: the row copies in the ReplyPlan that planChatWrite returned for tab t's server run
   saving     \* saving[t]: 0, or the text tab t's reply edit saved, which its thread does not show yet
 vars == <<prompt, answer, newest, answered, seen, turn, base, guard, saving>>
 
@@ -77,7 +77,7 @@ ShowReplyEdit(t) ==
 \* from its row is stale (409) if masking it still differs. Both forms of P share a version here.
 \* The copy of R is not written. The new prompt's turn is not modeled.
 Send(t) ==
-  /\ turn[t] = 0
+  /\ \A tab \in Tabs : turn[tab] = 0
   /\ answer # 0 /\ seen[t].answer # 0 /\ seen[t].prompt = prompt
   /\ answer' = IF EchoWrite THEN seen[t].answer ELSE answer
   /\ UNCHANGED <<prompt, newest, answered, seen, turn, base, guard, saving>>
@@ -93,10 +93,12 @@ Send(t) ==
 \* it copies the rows the reply write will compare: P, and R when the reply continues R. A request
 \* with no user message has no P, and planChatWrite refuses it before it writes a row.
 \* Before f075e72 a regenerate reused R's id and compared R's row, and a retry with no R compared nothing.
-\* No await separates planChatWrite and listMessages, so in one server process both read the same R,
+\* The per-chat reservation admits only one Plan at a time, even when the listener disconnects.
+\* No await separates planChatWrite and storedAssistantParts, so both read the same R,
 \* and Plan is one step. Two server processes on one SQLite file could edit R between them.
 Plan(t) ==
-  /\ turn[t] = 0 /\ seen[t].prompt = prompt
+  /\ \A tab \in Tabs : turn[tab] = 0
+  /\ seen[t].prompt = prompt
   /\ \E continues \in IF answer # 0 /\ seen[t].answer # 0 THEN BOOLEAN ELSE {FALSE} :
        /\ base' = [base EXCEPT ![t] = IF continues THEN answer ELSE 0]
        /\ guard' = [guard EXCEPT ![t] =

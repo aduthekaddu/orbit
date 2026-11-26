@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AuiIf, ComposerPrimitive } from "@assistant-ui/react";
 import { ArrowUpIcon, StopIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
+import { useReplyLink } from "./reply-link";
 
 const roundAction =
   "flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground transition-[background-color,color,scale] duration-150 ease-orbit hover:bg-primary/90 enabled:active:scale-90 disabled:bg-surface-raised disabled:text-muted-foreground/60";
@@ -13,6 +14,9 @@ const noSubscribe = () => () => {};
 
 export function Composer({ ready, model, inputRef }: { ready: boolean; model: string; inputRef?: Ref<HTMLTextAreaElement> }) {
   const canCompose = useSyncExternalStore(noSubscribe, () => ready, () => false);
+  const reply = useReplyLink();
+  const reconnecting = reply.kind === "reconnecting";
+  const stopping = reply.kind === "stopping";
   return (
     <ComposerPrimitive.Root
       className={cn(
@@ -39,12 +43,13 @@ export function Composer({ ready, model, inputRef }: { ready: boolean; model: st
         ) : (
           <span />
         )}
-        <AuiIf condition={(state) => state.thread.isRunning}>
-          <ComposerPrimitive.Cancel aria-label="Stop" className={roundAction}>
+        {reply.stopError && <p role="alert" className="text-xs text-destructive">{reply.stopError}</p>}
+        <AuiIf condition={(state) => state.thread.isRunning || reconnecting || stopping}>
+          <button type="button" aria-label="Stop" className={roundAction} disabled={!reply.canStop || stopping} onClick={() => void reply.stop?.()}>
             <StopIcon weight="fill" className="size-3.5" />
-          </ComposerPrimitive.Cancel>
+          </button>
         </AuiIf>
-        <AuiIf condition={(state) => !state.thread.isRunning}>
+        <AuiIf condition={(state) => !state.thread.isRunning && !reconnecting && !stopping}>
           <ComposerPrimitive.Send aria-label="Send" disabled={!canCompose} className={roundAction}>
             <ArrowUpIcon weight="regular" className="size-4" />
           </ComposerPrimitive.Send>

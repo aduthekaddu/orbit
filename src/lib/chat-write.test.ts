@@ -272,7 +272,7 @@ test("a reply is saved under the id the AI SDK streams it under", async () => {
   const saved = message(send.id, "assistant", "answer");
   assert.equal(await streamedId([prompt, saved], write("c-sdk-id", [prompt, saved])), send.id);
 
-  const unsaved: Incoming = { id: "sid-failed", role: "assistant", parts: [{ type: "reasoning", text: "thinking" }] };
+  const unsaved: Incoming = { id: "sid-failed", role: "assistant", parts: [{ type: "step-start" }] };
   const retry = write("c-sdk-id", [prompt, unsaved], "regenerate-message");
   assert.equal(await streamedId([prompt, unsaved], retry), "sid-failed");
   assert.equal(retry.id, "sid-failed");
@@ -404,7 +404,7 @@ test("an unsaved assistant reply does not block the next prompt", () => {
   const plan = mods.planChatWrite("c-invisible", [
     message("f1", "user", "first"),
     message("f2", "assistant", "first answer"),
-    { id: "f3", role: "assistant", parts: [{ type: "reasoning", text: "thinking" }] },
+    { id: "f3", role: "assistant", parts: [{ type: "step-start" }] },
     message("f4", "user", "next question"),
   ], redact);
   assert.ok(plan && !("error" in plan), JSON.stringify(plan));
@@ -420,7 +420,7 @@ test("a retry of an unsaved assistant reply is accepted", () => {
     [
       message("ir1", "user", "first"),
       message("ir2", "assistant", "first answer"),
-      { id: "ir-failed", role: "assistant", parts: [{ type: "reasoning", text: "thinking" }] },
+      { id: "ir-failed", role: "assistant", parts: [{ type: "step-start" }] },
     ],
     redact,
     "regenerate-message",

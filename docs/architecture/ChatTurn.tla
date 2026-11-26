@@ -17,22 +17,26 @@ VARIABLES
   before,        \* stored when the turn started
   replies,       \* every assistant row whose parent_id is the turn's prompt
   replyId,       \* the reply id in the ReplyPlan that planChatWrite returns
-  beforeReplies  \* replies when the turn started
-vars == <<phase, kind, visible, stored, before, replies, replyId, beforeReplies>>
+  beforeReplies, \* replies when the turn started
+  attached       \* whether the browser is receiving the reply
 
-Init == phase = "idle" /\ kind = "send" /\ visible = FALSE /\ stored = "none" /\ before = "none" /\ replies = {} /\ replyId = 1 /\ beforeReplies = {}
+vars == <<phase, kind, visible, stored, before, replies, replyId, beforeReplies, attached>>
+
+Init == phase = "idle" /\ kind = "send" /\ visible = FALSE /\ stored = "none" /\ before = "none" /\ replies = {} /\ replyId = 1 /\ beforeReplies = {} /\ attached = TRUE
 
 \* code: src/lib/messages.ts planChatWrite
 \* Trigger submit-message stores the new prompt and moves head_id to it.
 YouSend ==
-  /\ phase \in {"idle", "failed"}
+  /\ attached /\ phase \in {"idle", "failed"}
+  /\ UNCHANGED attached
   /\ phase' = "streaming" /\ kind' = "send" /\ visible' = FALSE
   /\ stored' = "none" /\ before' = "none" /\ replies' = {} /\ replyId' = 1 /\ beforeReplies' = {}
 
 \* code: src/lib/messages.ts planChatWrite
 \* Trigger regenerate-message gives the reply a new id, so it is a sibling of the earlier replies.
 Regenerate ==
-  /\ replyId < MaxReplies
+  /\ attached /\ replyId < MaxReplies
+  /\ UNCHANGED attached
   /\ replyId' = replyId + 1 /\ beforeReplies' = replies
   /\ phase' = "streaming" /\ kind' = "regenerate" /\ visible' = FALSE
   /\ before' = stored /\ UNCHANGED <<stored, replies>>
@@ -42,10 +46,9 @@ YouRegenerate == phase = "idle" /\ stored # "none" /\ Regenerate
 YouRetry == phase = "failed" /\ Regenerate
 
 \* code: src/lib/genui/spec.ts assistantHasVisiblePart
-\* The stream adds its first part that assistantHasVisiblePart counts: non-blank text or a tool part.
-\* Reasoning alone is not visible. onEnd in POST calls the function on the final parts only, so
-\* visible means "the saved parts would be visible", not "the browser has drawn them".
-VisiblePartArrives == phase = "streaming" /\ ~visible /\ visible' = TRUE /\ UNCHANGED <<phase, kind, stored, before, replies, replyId, beforeReplies>>
+\* The stream adds its first part that assistantHasVisiblePart counts:
+\* non-blank text, non-blank reasoning, or a tool part. The server can collect these while detached.
+VisiblePartArrives == phase = "streaming" /\ ~visible /\ visible' = TRUE /\ UNCHANGED <<phase, kind, stored, before, replies, replyId, beforeReplies, attached>>
 
 \* code: src/app/api/chat/route.ts POST
 \* code: src/lib/messages.ts finishChatReply
@@ -55,13 +58,13 @@ Finishes ==
   /\ phase = "streaming" /\ phase' = "idle"
   /\ stored' = IF visible THEN "full" ELSE stored
   /\ replies' = IF visible THEN replies \cup {[id |-> replyId, status |-> "full"]} ELSE replies
-  /\ UNCHANGED <<kind, visible, before, replyId, beforeReplies>>
+  /\ UNCHANGED <<kind, visible, before, replyId, beforeReplies, attached>>
 
 \* code: src/app/api/chat/route.ts POST
 \* code: src/lib/messages.ts finishChatReply
 \* code: src/lib/messages.ts insertMessage
 \* code: src/lib/genui/spec.ts settleInterruptedParts
-\* onEnd after Stop (isAborted) or a provider failure applies the same rule as a finish.
+\* onEnd after an explicit Stop or a provider failure applies the same rule as a finish.
 \* settleInterruptedParts marks unfinished tool parts Stopped, and they stay visible.
 \* Before fa399a2 it returned early for a regenerate, so a stopped Retry saved nothing.
 Interrupt(to) ==
@@ -69,12 +72,23 @@ Interrupt(to) ==
   /\ LET saved == visible /\ (SaveStoppedRegenerate \/ kind = "send")
      IN /\ stored' = IF saved THEN "partial" ELSE stored
         /\ replies' = IF saved THEN replies \cup {[id |-> replyId, status |-> "partial"]} ELSE replies
-  /\ UNCHANGED <<kind, visible, before, replyId, beforeReplies>>
+  /\ UNCHANGED <<kind, visible, before, replyId, beforeReplies, attached>>
 
-YouStop == Interrupt("idle")
+YouStop == attached /\ Interrupt("idle")
 ProviderFails == Interrupt("failed")
 
-Next == YouSend \/ YouRegenerate \/ YouRetry \/ VisiblePartArrives \/ Finishes \/ YouStop \/ ProviderFails
+\* A dropped connection only removes its listener. Model and SQLite state continue to advance.
+Disconnect ==
+  /\ phase = "streaming" /\ attached /\ attached' = FALSE
+  /\ UNCHANGED <<phase, kind, visible, stored, before, replies, replyId, beforeReplies>>
+
+\* Replaying the same reply can attach during the run or after the server saves it.
+Reconnect ==
+  /\ ~attached /\ attached' = TRUE
+  /\ UNCHANGED <<phase, kind, visible, stored, before, replies, replyId, beforeReplies>>
+
+Next == YouSend \/ YouRegenerate \/ YouRetry \/ VisiblePartArrives \/ Finishes
+        \/ YouStop \/ ProviderFails \/ Disconnect \/ Reconnect
 
 \* A row changes only when this turn's parts hold a visible part.
 NothingSavedWithoutText == (phase # "streaming" /\ stored # before) => visible

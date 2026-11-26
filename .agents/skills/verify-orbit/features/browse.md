@@ -21,6 +21,10 @@ A scenario exports one default function that receives `{ page, origin, mockUrl, 
 
 ## Scenarios
 
+### durable-reply
+
+Drops a live connection during text and thinking. Checks reconnect, explicit Stop, switching chats, a second tab, and an older branch. See [Check durable replies](durable-replies.md).
+
 ### retry-stop
 
 Sends `[qa:fail-first] hello <time>`. The mock returns HTTP 500 three times, so the first send shows **Retry**. Clicks **Retry**, waits for `word3`, clicks **Stop**, and reloads.

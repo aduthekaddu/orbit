@@ -6,6 +6,8 @@ import { getChatForUser, messageRepository } from "@/lib/messages";
 import { getSettings, toPublicSettings } from "@/lib/settings";
 import { artifactHistory } from "@/lib/artifacts/history";
 import { requireUser } from "@/lib/session";
+import { focusedHead } from "@/lib/chat-tree";
+import { findActiveReplyRun } from "@/lib/reply-runs";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +24,16 @@ export default async function ChatPage({
   const focusMessageId = typeof query.m === "string" ? query.m : null;
   const chat = getChatForUser(id, session.user.id);
   if (!chat) notFound();
-  const repository = artifactHistory(messageRepository(id), typeof query.artifact === "string" ? query.artifact : undefined);
+  const saved = messageRepository(id);
+  const repository = artifactHistory(saved, typeof query.artifact === "string" ? query.artifact : undefined);
+  const selectedHead = focusedHead(
+    repository.messages.map(({ message, parentId }) => ({ id: message.id, parentId })),
+    repository.headId,
+    focusMessageId,
+  );
+  const active = findActiveReplyRun(id, session.user.id);
+  const liveReplyId = active && selectedHead === active.promptId ? active.replyId : null;
+  const restorePending = active ? liveReplyId !== null : selectedHead === saved.headId;
   const settings = getSettings();
   const ready = Boolean(settings?.baseUrl && settings.apiKey && settings.model);
   if (!ready && repository.messages.length === 0) {
@@ -37,7 +48,7 @@ export default async function ChatPage({
   }
   return (
     <div className="min-h-0 flex-1">
-      <ChatPanel key={`${id}:${focusMessageId ?? ""}`} chatId={id} focusMessageId={focusMessageId} initialHistory={repository} ready={ready} model={settings?.model ?? ""} />
+      <ChatPanel key={`${id}:${focusMessageId ?? ""}`} chatId={id} focusMessageId={focusMessageId} initialHistory={repository} ready={ready} model={settings?.model ?? ""} liveReplyId={liveReplyId} restorePending={restorePending} />
     </div>
   );
 }
