@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test, { after, before } from "node:test";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { getDb, type OrbitDb } from "@/lib/db";
@@ -54,6 +55,8 @@ const hooks = registerHooks({
 });
 
 let route: typeof import("./route");
+let replay: typeof import("../chats/[id]/stream/route").GET;
+let stop: typeof import("../chats/[id]/stop/route").POST;
 let db: OrbitDb | undefined;
 const originalCwd = process.cwd();
 const originalEnv = Object.fromEntries(["ORBIT_OLLAMA_URL", "ORBIT_SANDBOX", ...SEEDED_ENV].map((name) => [name, process.env[name]]));
@@ -91,6 +94,8 @@ before(async () => {
   db.insert(schema.user).values({ id: USER_ID, name: "Stream", email: "stream@orbit.local", emailVerified: false, createdAt: now, updatedAt: now }).run();
   setCredentials();
   route = await import("./route");
+  ({ GET: replay } = await import("../chats/[id]/stream/route"));
+  ({ POST: stop } = await import("../chats/[id]/stop/route"));
 });
 
 after(async () => {
@@ -133,7 +138,7 @@ async function sendChat(chatId: string, text: string, model: MockLanguageModelV4
     await Promise.allSettled(afterTasks.splice(0));
     const saved = messages.listMessages(chatId);
     const titleRow = getDb().$client.prepare<[string], { title: string }>("select title from chats where id = ?").get(chatId);
-    return { raw, chunks: parseSse(raw), saved, title: titleRow?.title ?? "" };
+    return { raw, chunks: parseSse(raw), saved, title: titleRow?.title ?? "", replyId: response.headers.get("x-resumable-stream-id") };
   } finally {
     console.error = originalError;
   }
@@ -679,7 +684,200 @@ test("reasoning-delta and text-delta providerMetadata survive POST /api/chat SSE
   assert.ok(reasoning && reasoning.type === "reasoning");
   assert.ok(text && text.type === "text");
   assert.equal(reasoning.text, "checking [redacted] now");
-  assert.deepEqual(reasoning.providerMetadata, { anthropic: { signature: "sig-e2e-final", debug: "key=[redacted]" } });
+  assert.deepEqual(reasoning.providerMetadata?.anthropic, { signature: "sig-e2e-final", debug: "key=[redacted]" });
+  assert.equal(typeof reasoning.providerMetadata?.orbitTiming.startedAt, "number");
+  assert.equal(typeof reasoning.providerMetadata?.orbitTiming.thoughtMs, "number");
   assert.equal(text.text, "Answer ready.");
   assert.deepEqual(text.providerMetadata, { openai: { itemId: "msg-e2e-1", note: "tok=[redacted]" } });
+});
+
+test("a disconnected response still saves the full reply", { timeout: 5_000 }, async (t) => {
+  const chatId = "durable-disconnect";
+  const first = "First words " + "more words ".repeat(40);
+  const client = new AbortController();
+  const tail = Promise.withResolvers<void>();
+  t.after(() => tail.resolve());
+  nextModel = () => new MockLanguageModelV4({
+    doGenerate: generateTitle("Durable reply"),
+    doStream: async () => ({
+      stream: new ReadableStream({
+        async start(controller) {
+          controller.enqueue({ type: "stream-start", warnings: [] });
+          controller.enqueue({ type: "text-start", id: "text" });
+          controller.enqueue({ type: "text-delta", id: "text", delta: first });
+          await tail.promise;
+          controller.enqueue({ type: "text-delta", id: "text", delta: "last words " + PROVIDER_KEY });
+          controller.enqueue({ type: "text-end", id: "text" });
+          controller.enqueue(finishChunk());
+          controller.close();
+        },
+      }),
+    }),
+  });
+  const response = await route.POST(new Request("http://127.0.0.1/api/chat", {
+    method: "POST",
+    signal: client.signal,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      id: chatId,
+      messages: [{ id: "durable-disconnect-prompt", role: "user", parts: [{ type: "text", text: "Send the full reply." }] }],
+    }),
+  }));
+  assert.equal(response.status, 200);
+  const replyId = response.headers.get("x-resumable-stream-id");
+  assert.ok(replyId);
+  const context = { params: Promise.resolve({ id: chatId }) };
+  const url = `http://127.0.0.1/api/chats/${chatId}/stream`;
+  assert.equal((await replay(new Request(`${url}?replyId=wrong`), context)).status, 204);
+  assert.ok(response.body);
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  for (;;) {
+    const chunk = await reader.read();
+    assert.equal(chunk.done, false, "the first text must reach the browser before it disconnects");
+    if (chunk.value?.includes("First words")) break;
+  }
+  const rejected = await route.POST(new Request("http://127.0.0.1/api/chat", {
+    method: "POST",
+    body: JSON.stringify({
+      id: chatId,
+      messages: [{ id: "busy-prompt", role: "user", parts: [{ type: "text", text: "Send an overlapping reply." }] }],
+    }),
+  }));
+  assert.equal(rejected.status, 409);
+  assert.equal(messages.listMessages(chatId).some((row) => row.id === "busy-prompt"), false);
+  client.abort();
+  const cancelled = reader.cancel();
+  tail.resolve();
+  await cancelled;
+  await Promise.allSettled(afterTasks.splice(0));
+  const rows = messages.listMessages(chatId).filter((row) => row.role === "assistant");
+  assert.equal(rows.map((row) => messages.textFromParts(row.parts)).join(""), first + "last words [redacted]");
+
+  const replayed = await replay(new Request(`${url}?replyId=${replyId}`), context);
+  assert.equal(replayed.status, 200);
+  assert.equal(replayed.headers.get("x-resumable-stream-id"), replyId);
+  const raw = await replayed.text();
+  assert.equal(raw.includes(PROVIDER_KEY), false);
+  assert.equal(parseSse(raw).filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta).join(""),
+    first + "last words [redacted]");
+});
+
+test("stopping during reasoning saves its duration and streams the stopped marker before abort", { timeout: 5_000 }, async () => {
+  const chatId = "durable-stop-thinking";
+  const reasoning = "Consider the answer. ".repeat(30);
+  nextModel = () => new MockLanguageModelV4({
+    doGenerate: generateTitle("Stop during reasoning"),
+    doStream: async ({ abortSignal }) => ({
+      stream: new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: "stream-start", warnings: [] });
+          controller.enqueue({ type: "reasoning-start", id: "r" });
+          controller.enqueue({ type: "reasoning-delta", id: "r", delta: reasoning });
+          abortSignal?.addEventListener("abort", () => controller.close(), { once: true });
+        },
+      }),
+    }),
+  });
+  const response = await route.POST(new Request("http://127.0.0.1/api/chat", {
+    method: "POST",
+    body: JSON.stringify({
+      id: chatId,
+      messages: [{ id: "durable-stop-prompt", role: "user", parts: [{ type: "text", text: "Think about the answer." }] }],
+    }),
+  }));
+  assert.equal(response.status, 200);
+  assert.ok(response.body);
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  const context = { params: Promise.resolve({ id: chatId }) };
+  const url = `http://127.0.0.1/api/chats/${chatId}/stop`;
+  try {
+    let raw = "";
+    for (;;) {
+      const chunk = await reader.read();
+      assert.equal(chunk.done, false);
+      raw += chunk.value;
+      if (raw.includes("reasoning-delta")) break;
+    }
+    const stopped = await stop(new Request(url, { method: "POST" }), context);
+    assert.deepEqual(await stopped.json(), { ok: true, stopped: true });
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      raw += chunk.value;
+    }
+    const events = parseSse(raw);
+    const endIndex = events.findIndex((chunk) => chunk.type === "data-reply-end");
+    assert.ok(endIndex >= 0 && endIndex < events.findIndex((chunk) => chunk.type === "abort"));
+    assert.deepEqual(events[endIndex].data, { reason: "stopped" });
+    const parts = messages.listMessages(chatId).find((row) => row.role === "assistant")?.parts;
+    const saved = parts?.find((part) => part.type === "reasoning");
+    assert.equal(saved?.text, reasoning);
+    assert.equal(typeof saved?.providerMetadata?.orbitTiming.thoughtMs, "number");
+    assert.deepEqual(parts?.at(-1), { type: "data-reply-end", data: { reason: "stopped" } });
+  } finally {
+    await stop(new Request(url, { method: "POST" }), context);
+    await reader.cancel();
+    await Promise.allSettled(afterTasks.splice(0));
+  }
+});
+
+
+test("a provider error during reasoning sends the same duration live, on replay, and after reload", async () => {
+  const chatId = "durable-error-thinking";
+  const reasoning = "Work out the answer.";
+  const model = new MockLanguageModelV4({
+    doGenerate: generateTitle("Provider error during reasoning"),
+    doStream: async () => ({
+      stream: simulateReadableStream({
+        chunks: [
+          { type: "stream-start", warnings: [] },
+          { type: "reasoning-start", id: "r" },
+          { type: "reasoning-delta", id: "r", delta: reasoning, providerMetadata: { mock: { signature: "test" } } },
+          { type: "error", error: new Error("The provider stopped during reasoning.") },
+        ],
+      }),
+    }),
+  });
+  const { chunks, saved, replyId } = await sendChat(chatId, "Think about the answer.", model);
+  const parts = saved.find((row) => row.role === "assistant")?.parts;
+  const stored = parts?.find((part) => part.type === "reasoning");
+  assert.equal(stored?.text, reasoning);
+  assert.ok(replyId);
+  const url = `http://127.0.0.1/api/chats/${chatId}/stream?replyId=${replyId}`;
+  const replayed = await replay(new Request(url), { params: Promise.resolve({ id: chatId }) });
+  assert.equal(replayed.status, 200);
+  assert.deepEqual(parseSse(await replayed.text()), chunks);
+  const endIndex = chunks.findIndex((chunk) => chunk.type === "reasoning-end");
+  assert.ok(endIndex >= 0, "live and replay streams must close reasoning before the error");
+  assert.ok(endIndex < chunks.findIndex((chunk) => chunk.type === "error"));
+  assert.equal(typeof stored?.providerMetadata?.orbitTiming.thoughtMs, "number");
+  assert.deepEqual(chunks[endIndex].providerMetadata, stored?.providerMetadata);
+  assert.deepEqual(parts?.at(-1), { type: "data-reply-end", data: { reason: "failed" } });
+});
+
+
+test("an OpenAI-compatible stream without a finish reason is saved and streamed as interrupted", async () => {
+  const upstream = createOpenAICompatible({
+    name: "mock",
+    baseURL: "http://mock.invalid/v1",
+    fetch: async () => new Response(
+      'data: {"choices":[{"delta":{"content":"Partial answer."}}]}\n\n',
+      { headers: { "content-type": "text/event-stream" } },
+    ),
+  }).chatModel("mock");
+  const model = new MockLanguageModelV4({
+    doGenerate: generateTitle("Partial answer"),
+    doStream: (options) => upstream.doStream(options),
+  });
+  const { chunks, saved } = await sendChat("durable-missing-finish", "Send the answer.", model);
+  const parts = saved.find((row) => row.role === "assistant")?.parts;
+  assert.deepEqual({
+    text: parts && messages.textFromParts(parts),
+    savedEnd: parts?.at(-1),
+    wireEnding: chunks.filter((chunk) => chunk.type === "finish" || chunk.type === "error" || chunk.type === "data-reply-end").map((chunk) => chunk.type),
+  }, {
+    text: "Partial answer.",
+    savedEnd: { type: "data-reply-end", data: { reason: "failed" } },
+    wireEnding: ["data-reply-end", "error"],
+  });
 });

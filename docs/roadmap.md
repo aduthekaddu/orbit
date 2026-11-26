@@ -31,7 +31,7 @@ Orbit is a self-hosted chat app, shaped like ChatGPT or Claude, that runs on you
 | 10 | [Memory](slices/10.md) | Orbit remembers facts across chats. A page lists and edits them. | Shipped in #55 |
 | 11 | [Dreaming](slices/11.md) | A nightly job turns the day's chats into memories. | Shipped in #57 |
 | 12 | [Deploy](slices/12.md) | Reach Orbit from anywhere behind Cloudflare Access. | Shipped in #58 |
-| 13 | [Replies that survive a dropped connection](slices/13.md) | A reply keeps generating and saving when the phone drops the connection, and thinking shows a timer. | Planned |
+| 13 | [Replies that survive a dropped connection](slices/13.md) | A reply keeps generating and saving when the phone drops the connection, and thinking shows a timer. | In review |
 | 14 | [Reading foundation and appearance](slices/14.md) | Larger text, a narrower reading column, dark, dim, light, and system themes, and settings for text size, font, and width. | Planned |
 | 15 | [Widgets and tool cards](slices/15.md) | Generated UI and tool results read as part of the reply, with real color and formatted numbers. | Planned |
 | 16 | [Messages, artifact cards, phone fixes, rename and delete](slices/16.md) | Long messages collapse, artifacts get a card and a themed preview, phone layouts stop clipping, and chats can be renamed and deleted. | Planned |

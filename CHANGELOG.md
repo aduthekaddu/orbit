@@ -4,6 +4,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- Replies keep running when your connection drops, you switch chats, or you close the tab. Orbit reconnects to the same reply, even if the connection first dropped before the browser received its ID and the reply is still running. **Stop** cancels it. Thinking shows elapsed time and keeps the final duration after reload, even if you stop or the model provider fails before the answer starts. Repeated connection drops make Orbit wait longer between reconnect attempts. Stop stays disabled while Orbit saves a stopped reply, and Edit waits for the active reply to end.
+
 - Importing server modules or running `next build` no longer opens, migrates, or seeds `orbit.db` or writes `auth-secret`. The server now opens and migrates the database at startup through `src/instrumentation.ts`, and callers open the database or auth on first `getDb()` or `getAuth()` call. (#131, #199)
 - The nightly dream reads every message of a chat's window in pages instead of only the oldest 100, and a chat retried after a failed night re-reads its whole window from the night it first failed, so facts stated late in a busy chat are no longer silently skipped. (#123)
 

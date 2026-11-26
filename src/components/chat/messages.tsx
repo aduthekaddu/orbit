@@ -11,6 +11,7 @@ import {
   type MessagePrimitive as MessagePrimitiveTypes,
   type TextMessagePartComponent,
 } from "@assistant-ui/react";
+import { useAISDKChat } from "@assistant-ui/react-ai-sdk";
 import { ArrowClockwiseIcon, CheckIcon, CopyIcon, PencilSimpleIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { OrbitMark } from "@/components/orbit-mark";
@@ -19,6 +20,8 @@ import { IconAction, iconActionClass } from "./icon-action";
 import { MarkdownText } from "./markdown-text";
 import { MessageTextEditor } from "./message-editor";
 import { Reasoning } from "./reasoning";
+import { ReplyEnd } from "./reply-end";
+import { useReplyLink } from "./reply-link";
 import { RunCard } from "@/components/tools/run-card";
 import { useEditTarget } from "./chat-id";
 import { BranchPicker } from "./branch-picker";
@@ -40,7 +43,13 @@ const Pending: EmptyMessagePartComponent = ({ status }) => {
 
 const PlainText: TextMessagePartComponent = ({ text }) => <>{text}</>;
 
-const assistantParts: PartComponents = { Text: () => <MarkdownText editable />, Reasoning, Empty: Pending, tools: { Override: RunCard } };
+const assistantParts: PartComponents = {
+  Text: () => <MarkdownText editable />,
+  Reasoning,
+  Empty: Pending,
+  tools: { Override: RunCard },
+  data: { by_name: { "reply-end": ReplyEnd } },
+};
 
 const userParts: PartComponents = { Text: PlainText };
 
@@ -69,10 +78,24 @@ function EditAction({ onClick, label = "Edit reply" }: { onClick: () => void; la
   );
 }
 
+function ReplyStatus({ kind }: { kind: "reconnecting" | "lost" }) {
+  return (
+    <p role="status" className="mt-2 text-xs text-muted-foreground">
+      {kind === "reconnecting" ? "Reconnecting" : "Interrupted"}
+    </p>
+  );
+}
+
 function AssistantMessage() {
+  const reply = useReplyLink();
   const running = useAuiState((s) => s.message.status?.type === "running");
-  const failed = useAuiState((s) => s.message.status?.type === "incomplete" && s.message.status.reason === "error");
+  const threadRunning = useAuiState((s) => s.thread.isRunning);
+  const sdkFailed = useAuiState((s) => s.message.status?.type === "incomplete" && s.message.status.reason === "error");
   const last = useAuiState((s) => s.message.isLast);
+  const reconnecting = last && reply.kind === "reconnecting";
+  const lost = last && !threadRunning && reply.kind === "lost";
+  const failed = sdkFailed || lost;
+  const busy = reply.kind === "reconnecting" || reply.kind === "stopping";
   const messageId = useAuiState((s) => s.message.id);
   const text = useAuiState((s) =>
     s.message.parts
@@ -90,15 +113,19 @@ function AssistantMessage() {
       ) : (
         <>
           <MessagePrimitive.Parts components={assistantParts} />
-          <MessagePrimitive.Error>
-            <ErrorPrimitive.Root className="mt-3 flex items-start gap-2 text-sm leading-6 text-destructive first:mt-0">
-              <WarningCircleIcon weight="regular" className="mt-1 size-4 shrink-0" />
-              <ErrorPrimitive.Message className="min-w-0 break-words" />
-            </ErrorPrimitive.Root>
-          </MessagePrimitive.Error>
+          {reconnecting || lost ? (
+            <ReplyStatus kind={reconnecting ? "reconnecting" : "lost"} />
+          ) : (
+            <MessagePrimitive.Error>
+              <ErrorPrimitive.Root className="mt-3 flex items-start gap-2 text-sm leading-6 text-destructive first:mt-0">
+                <WarningCircleIcon weight="regular" className="mt-1 size-4 shrink-0" />
+                <ErrorPrimitive.Message className="min-w-0 break-words" />
+              </ErrorPrimitive.Root>
+            </MessagePrimitive.Error>
+          )}
         </>
       )}
-      {!editing && (
+      {!editing && !busy && (
         <div className={cn("mt-1 -ml-1.5 h-7", failed && "mt-2 ml-0")}>
           <ActionBarPrimitive.Root hideWhenRunning className={cn("flex gap-0.5", !last && !failed && hoverActionsClass)}>
             {text && <CopyAction />}
@@ -126,16 +153,23 @@ function AssistantMessage() {
 }
 
 function UserMessage() {
+  const reply = useReplyLink();
+  const chat = useAISDKChat();
+  const running = useAuiState((s) => s.thread.isRunning);
+  const busy = running || reply.kind === "reconnecting" || reply.kind === "stopping";
   const id = useAuiState((s) => s.message.id);
+  const last = useAuiState((s) => s.message.isLast);
   const editing = useAuiState((s) => s.message.composer.isEditing);
-  if (editing) return <UserEditComposer />;
+  const reconnecting = last && reply.kind === "reconnecting";
+  const lost = last && !running && reply.kind === "lost";
+  if (editing) return <UserEditComposer busy={busy} />;
   return (
     <MessagePrimitive.Root data-turn-id={id} data-message-id={id} tabIndex={-1} className="group/message mx-auto flex w-full scroll-mt-6 outline-none max-w-widget animate-rise flex-col items-end gap-1.5">
       <div className="flex w-full items-end justify-end gap-1.5">
         <ActionBarPrimitive.Root className={cn("flex", hoverActionsClass)}>
           <CopyAction />
           <IconAction label="Edit">
-            <ActionBarPrimitive.Edit className={iconActionClass}>
+            <ActionBarPrimitive.Edit disabled={busy} className={iconActionClass}>
               <PencilSimpleIcon />
             </ActionBarPrimitive.Edit>
           </IconAction>
@@ -145,27 +179,41 @@ function UserMessage() {
         </div>
       </div>
       <BranchPicker />
+      {(reconnecting || lost) && <ReplyStatus kind={reconnecting ? "reconnecting" : "lost"} />}
+      {lost && (
+        <Button variant="outline" size="xs" onClick={() => void chat?.regenerate({ messageId: id })}>
+          <ArrowClockwiseIcon weight="regular" />
+          Retry
+        </Button>
+      )}
     </MessagePrimitive.Root>
   );
 }
 
 // The edit keeps the bubble's shape and place, so it reads as changing this message, not writing a new one.
-function UserEditComposer() {
+function UserEditComposer({ busy }: { busy: boolean }) {
   const id = useAuiState((s) => s.message.id);
   const editTarget = useEditTarget();
   return (
     <MessagePrimitive.Root className="mx-auto flex w-full max-w-widget animate-rise justify-end">
-      <ComposerPrimitive.Root onSubmit={() => editTarget(id)} className="flex max-w-[85%] min-w-64 flex-col overflow-hidden rounded-2xl border border-primary/40 bg-surface-raised">
+      <ComposerPrimitive.Root
+        onSubmit={(event) => {
+          if (busy) return event.preventDefault();
+          editTarget(id);
+        }}
+        className="flex max-w-[85%] min-w-64 flex-col overflow-hidden rounded-2xl border border-primary/40 bg-surface-raised"
+      >
         <ComposerPrimitive.Input
           autoFocus
           rows={1}
           cancelOnEscape
+          disabled={busy}
           aria-label="Edit message"
           className="block max-h-60 max-w-full resize-none bg-transparent px-3.5 pt-2 text-sm leading-6 outline-none field-sizing-content scrollbar-thin"
         />
         <div className="flex items-center justify-end gap-1 px-2 py-2">
           <ComposerPrimitive.Cancel onClick={() => editTarget(null)} className={buttonVariants({ variant: "ghost", size: "xs" })}>Cancel</ComposerPrimitive.Cancel>
-          <ComposerPrimitive.Send className={buttonVariants({ size: "xs" })}>Send</ComposerPrimitive.Send>
+          <ComposerPrimitive.Send disabled={busy} className={buttonVariants({ size: "xs" })}>Send</ComposerPrimitive.Send>
         </div>
       </ComposerPrimitive.Root>
     </MessagePrimitive.Root>

@@ -68,7 +68,7 @@ export function assistantHasVisiblePart(parts: unknown) {
   for (const part of parts) {
     if (!part || typeof part !== "object") continue;
     const record = part as { type?: unknown; text?: unknown };
-    if (record.type === "text" && typeof record.text === "string" && record.text.trim()) return true;
+    if ((record.type === "text" || record.type === "reasoning") && typeof record.text === "string" && record.text.trim()) return true;
     const type = typeof record.type === "string" ? record.type : "";
     if (type === "dynamic-tool" || type.startsWith("tool-")) return true;
   }

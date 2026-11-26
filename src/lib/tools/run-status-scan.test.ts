@@ -10,7 +10,10 @@ const fix = `Decide how a tool call ended with toolCallRunEnd or toolRunEnd in $
 const stored = ["Stopped", "Code run was stopped", "Search was stopped", "User cancelled tool call by sending a new message."];
 
 // Literals that are UI copy, not stored stop texts.
-const allowed = [{ file: "src/components/tools/code-run.tsx", text: "Stopped", why: "the label of a stopped run's outcome" }];
+const allowed = [
+  { file: "src/components/tools/code-run.tsx", text: "Stopped", why: "the label of a stopped run's outcome" },
+  { file: "src/components/chat/reply-end.tsx", text: "Stopped", why: "the label of a stopped reply" },
+];
 
 const receiver = String.raw`(?:\berrorText|\b(?:output|result)\??\.error\b)`;
 const comparisons = [

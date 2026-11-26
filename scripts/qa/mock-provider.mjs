@@ -412,19 +412,20 @@ function textResponse(res, text) {
   res.end();
 }
 
-function slowResponse(res) {
+function slowResponse(res, { thoughts = 0, words = 50 } = {}) {
   start(res);
   let index = 0;
   const timer = setInterval(() => {
     index += 1;
-    if (index > 50) {
+    if (index > thoughts + words) {
       clearInterval(timer);
       send(res, chunk([{ index: 0, delta: {}, finish_reason: "stop" }]));
       res.write("data: [DONE]\n\n");
       res.end();
       return;
     }
-    send(res, chunk([{ index: 0, delta: { content: `word${index} ` }, finish_reason: null }]));
+    const delta = index <= thoughts ? { reasoning_content: `thought${index} ` } : { content: `word${index - thoughts} ` };
+    send(res, chunk([{ index: 0, delta, finish_reason: null }]));
   }, 200);
   res.on("close", () => clearInterval(timer));
 }
@@ -675,6 +676,10 @@ const server = http.createServer((req, res) => {
         return;
       }
       slowResponse(res);
+      return;
+    }
+    if (scenario === "think-slow") {
+      slowResponse(res, { thoughts: 40, words: 10 });
       return;
     }
     if (scenario === "slow") {

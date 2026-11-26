@@ -13,12 +13,12 @@ const saved: StoredMessage[] = [
   { id: "a1", parentId: "u1", role: "assistant", parts: [{ type: "text", text: "pong" }] },
 ];
 
-function firstPaint(messages: StoredMessage[]) {
+function firstPaint(messages: StoredMessage[], liveReplyId?: string) {
   return renderToString(
     <AppRouterContext.Provider value={router}>
       <PathnameContext.Provider value="/c/c1">
         <SearchParamsContext.Provider value={new URLSearchParams()}>
-          <ChatPanel chatId="c1" initialHistory={toRepository(messages, messages.at(-1)?.id ?? null)} focusMessageId={null} ready model="mock" />
+          <ChatPanel chatId="c1" initialHistory={toRepository(messages, messages.at(-1)?.id ?? null)} focusMessageId={null} ready model="mock" liveReplyId={liveReplyId} />
         </SearchParamsContext.Provider>
       </PathnameContext.Provider>
     </AppRouterContext.Provider>,
@@ -36,4 +36,8 @@ test("a chat with saved messages paints neither the starters nor a Scroll to bot
   assert.match(html, /placeholder="Ask anything"/);
   assert.doesNotMatch(html, />Make a table</);
   assert.doesNotMatch(html, /Scroll to bottom/);
+});
+
+test("a chat with a live reply renders on the server without reading browser storage", () => {
+  assert.match(firstPaint(saved.slice(0, 1), "a1"), /placeholder="Ask anything"/);
 });
