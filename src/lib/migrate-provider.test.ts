@@ -240,3 +240,27 @@ test("an install with no provider upgrades with nothing to move", () => {
   const rows = withDb(install, (db) => db.prepare("select (select count(*) from provider_connections) as connections, (select count(*) from pending_connection) as pending").get());
   assert.deepEqual(rows, { connections: 0, pending: 0 });
 });
+
+test("signing up gives the first account the provider from the environment, as its default", () => {
+  const key = "sk-made-up-signup-key-0001";
+  const install = preSliceInstall("signup");
+  upgrade(install);
+  boot(
+    install,
+    { ORBIT_BASE_URL: "http://127.0.0.1:9/v1", ORBIT_API_KEY: key, ORBIT_MODEL: "env-model" },
+    `const { getAuth } = await import(new URL("../auth.ts", process.argv[1]).href);
+     const { LOCAL_AUTH_URL } = await import(new URL("../auth-origins.ts", process.argv[1]).href);
+     await getAuth().api.signUpEmail({ body: { name: "First", email: "first@orbit.local", password: "first-password-1" }, headers: new Headers({ origin: LOCAL_AUTH_URL }) });`,
+  );
+  const seeded = withDb(install, (db) => ({
+    connections: db.prepare("select c.*, u.email from provider_connections c join user u on u.id = c.user_id").all() as Record<string, unknown>[],
+    preferences: db.prepare("select default_connection_id, default_model, default_effort from user_preferences").all(),
+  }));
+  assert.equal(seeded.connections.length, 1);
+  const [connection] = seeded.connections;
+  assert.equal(connection.email, "first@orbit.local");
+  assert.equal(connection.base_url, "http://127.0.0.1:9/v1");
+  assert.equal(decrypt(install, String(connection.api_key_ciphertext)), key);
+  assert.deepEqual(seeded.preferences, [{ default_connection_id: connection.id, default_model: "env-model", default_effort: "medium" }]);
+  assert.deepEqual(holdsKey(install, key), [], "the plain key is in the database files");
+});
