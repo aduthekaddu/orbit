@@ -209,3 +209,84 @@ test("a malformed search response logs a safe failure category", async (t) => {
   await searchWeb({ searxngUrl: local.url, tavilyApiKey: "" }, "private-query");
   assert.deepEqual(diagnostic.mock.calls.map((call) => call.arguments), [["web search backend failed", { backend: "searxng", error: "ZodError" }]]);
 });
+
+test("web_search masks stored credentials in titles, URLs, snippets, and queries, including keys straddling the snippet limit", async (t) => {
+  const providerKey = "made-up-provider-key-0001";
+  const tavilyKey = "made-up-tavily-key-0002";
+  const githubToken = "made-up-github-token-0003";
+  const local = await fixture(t, {
+    results: [
+      {
+        title: `Docs for ${tavilyKey} &amp; ${providerKey}`,
+        url: `https://example.com/search?k=${encodeURIComponent(tavilyKey)}&p=made%2Dup-provider-key-0001`,
+        content: `${"a".repeat(290)}${tavilyKey} and ${githubToken}`,
+      },
+    ],
+  });
+  const { toolsFor } = await import("./index");
+  const tools = toolsFor({
+    baseUrl: "http://127.0.0.1:9/v1",
+    apiKey: providerKey,
+    model: "mock",
+    reasoningEffort: "low",
+    searxngUrl: local.url,
+    tavilyApiKey: tavilyKey,
+    githubToken,
+    githubMcpUrl: "",
+  });
+  const execute = tools.web_search?.execute;
+  assert.ok(execute);
+  const output = (await execute({ query: `lookup ${providerKey}` }, { toolCallId: "s1", messages: [], context: {} })) as {
+    ok: boolean;
+    query: string;
+    results?: Array<{ title: string; url: string; snippet: string }>;
+  };
+  assert.equal(output.ok, true);
+  assert.equal(output.query, "lookup [redacted]");
+  const first = output.results?.[0];
+  assert.ok(first);
+  assert.equal(first.title, "Docs for [redacted] & [redacted]");
+  assert.equal(first.url, "https://example.com/search?k=[redacted]&p=[redacted]");
+  assert.equal(first.snippet.includes("made-up"), false, `snippet leaked clipped key: ${first.snippet}`);
+  assert.equal(first.snippet.endsWith("[redacted]"), true, `expected masked tail in snippet: ${first.snippet}`);
+  const serialized = JSON.stringify(output);
+  for (const secret of [providerKey, tavilyKey, githubToken]) {
+    assert.equal(serialized.includes(secret), false, `search output carried ${secret}`);
+  }
+});
+
+test("searchWeb passes the redactor to configured backends and masks each search result once", async (t) => {
+  const { Redactor } = await import("../chat-errors");
+  const redactor = new Redactor({ apiKey: "made-up-provider-key-0001", tavilyApiKey: settings.tavilyApiKey, githubToken: "" });
+
+  let searxRedact: unknown;
+  let tavilyRedact: unknown;
+  const fallback = await searchWeb(
+    settings,
+    "orbit",
+    undefined,
+    {
+      searxng: async (_url, _query, _signal, redact) => {
+        searxRedact = redact;
+        return [];
+      },
+      tavily: async (_key, _query, _signal, redact) => {
+        tavilyRedact = redact;
+        return [result];
+      },
+    },
+    redactor,
+  );
+  assert.equal(fallback.ok, true);
+  assert.equal(searxRedact, redactor, "custom searxng backend did not receive the redactor");
+  assert.equal(tavilyRedact, redactor, "custom tavily backend did not receive the redactor");
+
+  const local = await fixture(t, {
+    results: [{ title: "Orbit", url: "https://example.com/orbit", content: "Bright orbit" }],
+  });
+  const spy = t.mock.method(redactor, "text");
+  const output = await searchWeb({ searxngUrl: local.url, tavilyApiKey: "" }, "orbit", undefined, undefined, redactor);
+  assert.equal(output.ok, true);
+  // 1 call for query + 1 each for url, title, and snippet (not masked a second time).
+  assert.equal(spy.mock.callCount(), 4, `expected 4 redact.text calls, got ${spy.mock.callCount()}`);
+});

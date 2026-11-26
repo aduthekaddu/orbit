@@ -1,6 +1,7 @@
 import { tavily } from "@tavily/core";
 import { tool } from "ai";
 import { z } from "zod";
+import { Redactor } from "../chat-errors";
 import { withTavilySignal } from "./tavily-signal";
 import { STOP_MARKERS } from "./run-status";
 
@@ -50,7 +51,31 @@ function plainText(value: string) {
     .trim();
 }
 
-export function parseSearchResults(response: unknown, engine: SearchResult["engine"]): SearchResult[] {
+function maskResultUrl(href: string, redact: Redactor | undefined): string | null {
+  let clean = href;
+  if (redact) {
+    try {
+      const parsed = new URL(clean);
+      if (parsed.username || parsed.password) {
+        parsed.username = "";
+        parsed.password = "";
+        clean = parsed.href;
+      }
+    } catch {
+      return null;
+    }
+    clean = redact.text(clean);
+  }
+  try {
+    const checked = new URL(clean);
+    if (checked.protocol !== "http:" && checked.protocol !== "https:") return null;
+    return clean;
+  } catch {
+    return null;
+  }
+}
+
+export function parseSearchResults(response: unknown, engine: SearchResult["engine"], redact?: Redactor): SearchResult[] {
   const parsed = responseSchema.parse(response);
   const seen = new Set<string>();
   const results: SearchResult[] = [];
@@ -58,10 +83,17 @@ export function parseSearchResults(response: unknown, engine: SearchResult["engi
     let url: URL;
     try { url = new URL(item.url); } catch { continue; }
     if (url.protocol !== "http:" && url.protocol !== "https:") continue;
-    const href = url.href;
-    if (seen.has(href)) continue;
+    const href = maskResultUrl(url.href, redact);
+    if (!href || seen.has(href)) continue;
     seen.add(href);
-    results.push({ title: plainText(item.title), url: href, snippet: plainText(item.content ?? "").slice(0, 300), engine });
+    const title = plainText(item.title);
+    const content = plainText(item.content ?? "");
+    results.push({
+      title: redact ? redact.text(title) : title,
+      url: href,
+      snippet: (redact ? redact.text(content) : content).slice(0, 300),
+      engine,
+    });
     if (results.length === 8) break;
   }
   return results;
@@ -72,7 +104,7 @@ function searchSignal(signal?: AbortSignal) {
   return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
-export async function searchSearxng(url: string, query: string, signal?: AbortSignal): Promise<SearchResult[]> {
+export async function searchSearxng(url: string, query: string, signal?: AbortSignal, redact?: Redactor): Promise<SearchResult[]> {
   const endpoint = new URL(url);
   endpoint.pathname = `${endpoint.pathname.replace(/\/+$/, "")}/search`;
   endpoint.hash = "";
@@ -80,15 +112,15 @@ export async function searchSearxng(url: string, query: string, signal?: AbortSi
   endpoint.searchParams.set("format", "json");
   const response = await fetch(endpoint, { signal: searchSignal(signal) });
   if (!response.ok) throw new SearchHttpError(response.status);
-  return parseSearchResults(await response.json(), "searxng");
+  return parseSearchResults(await response.json(), "searxng", redact);
 }
 
-export async function searchTavily(key: string, query: string, signal?: AbortSignal): Promise<SearchResult[]> {
+export async function searchTavily(key: string, query: string, signal?: AbortSignal, redact?: Redactor): Promise<SearchResult[]> {
   const abort = searchSignal(signal);
   abort.throwIfAborted();
   const client = tavily({ apiKey: key });
   const response = await withTavilySignal(abort, () => client.search(query, { maxResults: 8, timeout: 8, includeRawContent: false }));
-  return parseSearchResults(response, "tavily");
+  return parseSearchResults(response, "tavily", redact);
 }
 
 export async function searchWeb(
@@ -96,17 +128,30 @@ export async function searchWeb(
   query: string,
   signal?: AbortSignal,
   backends: SearchBackends = { searxng: searchSearxng, tavily: searchTavily },
+  redact?: Redactor,
 ): Promise<SearchOutput> {
+  const mask = redact ?? new Redactor({ apiKey: "", tavilyApiKey: settings.tavilyApiKey, githubToken: "", searxngUrl: settings.searxngUrl });
+  const safeQuery = mask.text(query);
   let timedOut = false;
   const attempts: Array<{ backend: SearchResult["engine"]; run: () => Promise<SearchResult[]> }> = [];
-  if (settings.searxngUrl) attempts.push({ backend: "searxng", run: () => backends.searxng(settings.searxngUrl, query, signal) });
-  if (settings.tavilyApiKey) attempts.push({ backend: "tavily", run: () => backends.tavily(settings.tavilyApiKey, query, signal) });
+  if (settings.searxngUrl) {
+    attempts.push({
+      backend: "searxng",
+      run: () => backends.searxng(settings.searxngUrl, query, signal, mask),
+    });
+  }
+  if (settings.tavilyApiKey) {
+    attempts.push({
+      backend: "tavily",
+      run: () => backends.tavily(settings.tavilyApiKey, query, signal, mask),
+    });
+  }
   for (const attempt of attempts) {
-    if (signal?.aborted) return { ok: false, query, error: STOP_MARKERS.searchStopped };
+    if (signal?.aborted) return { ok: false, query: safeQuery, error: STOP_MARKERS.searchStopped };
     try {
       const results = await attempt.run();
-      if (signal?.aborted) return { ok: false, query, error: STOP_MARKERS.searchStopped };
-      if (results.length) return { ok: true, query, results };
+      if (signal?.aborted) return { ok: false, query: safeQuery, error: STOP_MARKERS.searchStopped };
+      if (results.length) return { ok: true, query: safeQuery, results };
     } catch (error) {
       if (signal?.aborted || error instanceof Error && error.name === "AbortError") continue;
       const category = error instanceof SearchHttpError ? "HttpError"
@@ -119,14 +164,14 @@ export async function searchWeb(
       timedOut ||= error instanceof Error && error.name === "TimeoutError";
     }
   }
-  if (signal?.aborted) return { ok: false, query, error: STOP_MARKERS.searchStopped };
-  return { ok: false, query, error: timedOut ? "Search timed out" : "Search is unavailable" };
+  if (signal?.aborted) return { ok: false, query: safeQuery, error: STOP_MARKERS.searchStopped };
+  return { ok: false, query: safeQuery, error: timedOut ? "Search timed out" : "Search is unavailable" };
 }
 
-export function createSearchTool(settings: SearchSettings) {
+export function createSearchTool(settings: SearchSettings, redact?: Redactor) {
   return tool({
     description: "Search the web for titles, URLs, and short snippets. Use the result URLs when citing sources.",
     inputSchema: z.object({ query: z.string().trim().min(1).max(500) }),
-    execute: ({ query }, { abortSignal }) => searchWeb(settings, query, abortSignal),
+    execute: ({ query }, { abortSignal }) => searchWeb(settings, query, abortSignal, undefined, redact),
   });
 }

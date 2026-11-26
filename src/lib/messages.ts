@@ -74,10 +74,14 @@ export function chatTitle(text: string): string {
   return `${(space > 50 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
-export function touchChat(id: string, title?: string) {
+export function redactChatTitle(text: string, redact: Redactor): string {
+  return redact.text(chatTitle(redact.text(text)));
+}
+
+export function touchChat(id: string, title?: string, redact?: Redactor) {
   const existing = db.select().from(chats).where(eq(chats.id, id)).get();
   if (!existing) return;
-  const clean = title ? chatTitle(title) : "";
+  const clean = title ? (redact ? redactChatTitle(title, redact) : chatTitle(title)) : "";
   const nextTitle = clean && existing.title === "New chat" ? clean : existing.title;
   db.update(chats).set({ title: nextTitle, updatedAt: new Date() }).where(eq(chats.id, id)).run();
 }
@@ -97,11 +101,40 @@ export function replaceFallbackTitle(chatId: string, fallback: string, title: st
   db.update(chats).set({ title }).where(and(eq(chats.id, chatId), eq(chats.title, fallback))).run();
 }
 
+function redactPartsCrossBoundary(parts: unknown, redact: Redactor): unknown {
+  if (!Array.isArray(parts)) return redact.value(parts);
+  const copy = parts.map((part) => {
+    if (!part || typeof part !== "object" || Array.isArray(part)) return redact.value(part);
+    const raw = part as Record<string, unknown>;
+    const masked = redact.value(raw) as Record<string, unknown>;
+    if (typeof raw.errorText === "string") {
+      masked.errorText = redact.diagnostic(raw.errorText);
+    }
+    return masked;
+  });
+  for (const kind of ["text", "reasoning"] as const) {
+    const indexes: number[] = [];
+    const texts: string[] = [];
+    for (let i = 0; i < copy.length; i++) {
+      const item = copy[i];
+      if (item && typeof item === "object" && (item as { type?: unknown }).type === kind && typeof (item as { text?: unknown }).text === "string") {
+        indexes.push(i);
+        texts.push((item as { text: string }).text);
+      }
+    }
+    if (indexes.length < 2) continue;
+    const masked = redact.maskSegments(texts);
+    for (let i = 0; i < indexes.length; i++) {
+      (copy[indexes[i]] as { text: string }).text = masked[i];
+    }
+  }
+  return copy;
+}
+
 // The search text joins parts and strips terminal codes, which can spell a credential, so it is masked after.
-function messageBody(parts: unknown, redact?: Redactor) {
-  const saved = redact ? redact.value(parts) : parts;
-  const content = redact ? redact.text(searchTextFromParts(saved)) : searchTextFromParts(saved);
-  return { content, parts: JSON.stringify(saved) };
+function messageBody(parts: unknown, redact: Redactor): SavedText {
+  const saved = redactPartsCrossBoundary(parts, redact);
+  return { content: redact.text(searchTextFromParts(saved)), parts: JSON.stringify(saved) };
 }
 
 // Callers hold the transaction.
@@ -109,7 +142,7 @@ function insertMessage(
   chatId: string,
   message: { id: string; role: "user" | "assistant"; parts: unknown },
   parentId: string | null,
-  redact?: Redactor,
+  redact: Redactor,
 ) {
   if (db.select().from(messages).where(eq(messages.id, message.id)).get()) return false;
   if (!db.select().from(chats).where(eq(chats.id, chatId)).get()) return false;
@@ -130,7 +163,7 @@ function insertMessage(
 export type IncomingMessage = { id: string; role: string; parts?: unknown };
 export type WriteResult = "ok" | "cross-chat" | "stale";
 
-export function persistIncoming(chatId: string, incoming: IncomingMessage[]): WriteResult {
+export function persistIncoming(chatId: string, incoming: IncomingMessage[], redact: Redactor): WriteResult {
   return db.transaction(() => {
     const rows = db.select({
       id: messages.id,
@@ -163,21 +196,26 @@ export function persistIncoming(chatId: string, incoming: IncomingMessage[]): Wr
       const saved = byId.get(message.id);
       if (!saved) {
         if (message !== tail || message.role !== "user" || !Array.isArray(message.parts)) return "stale";
-      } else if (saved.role !== message.role || (saved.role === "user" && message.parts && (() => {
-        const body = bodyById.get(message.id);
-        return !body || body.content !== searchTextFromParts(message.parts) || body.parts !== JSON.stringify(message.parts);
-      })())) {
+      } else if (saved.role !== message.role ||
+        (saved.role === "user" && message.parts && !matchesIncomingBody(bodyById.get(message.id), message.parts, redact))) {
         return "stale";
       }
     }
     if (tail && !byId.has(tail.id)) {
-      if (!insertMessage(chatId, { id: tail.id, role: "user", parts: tail.parts }, prefix.at(-1)?.id ?? null)) return "cross-chat";
+      if (!insertMessage(chatId, { id: tail.id, role: "user", parts: tail.parts }, prefix.at(-1)?.id ?? null, redact)) return "cross-chat";
     }
     return "ok";
   });
 }
 
 type SavedText = { content: string; parts: string };
+
+function matchesIncomingBody(saved: SavedText | undefined, parts: unknown, redact: Redactor) {
+  if (!saved) return false;
+  // An open tab can still hold the prompt as typed. Older rows already match verbatim.
+  return (saved.parts === JSON.stringify(parts) && saved.content === searchTextFromParts(parts)) ||
+    unchanged(saved, messageBody(parts, redact));
+}
 
 function savedText(chatId: string, id: string): SavedText | undefined {
   return db.select({ content: messages.content, parts: messages.parts }).from(messages)
@@ -203,6 +241,7 @@ export type ChatWritePlan = ReplyPlan | { error: "invalid-edit" | "no-prompt" | 
 export function planChatWrite(
   chatId: string,
   incoming: IncomingMessage[],
+  redact: Redactor,
   trigger?: string,
   editMessageId?: string,
 ): ChatWritePlan {
@@ -220,7 +259,7 @@ export function planChatWrite(
     }
     const user = incoming.findLast((message) => message.role === "user");
     if (!user) return { error: "no-prompt" };
-    const result = persistIncoming(chatId, incoming);
+    const result = persistIncoming(chatId, incoming, redact);
     if (result !== "ok") return { error: result };
     const saved = savedText(chatId, user.id);
     if (!saved) return { error: "stale" };
@@ -239,7 +278,7 @@ function unchanged(row: SavedText | undefined, copy: SavedText) {
 }
 
 /** Saves a reply with a visible part, unless a row its plan copied has changed. Returns whether it saved. */
-export function finishChatReply(plan: ReplyPlan, parts: unknown, redact?: Redactor): boolean {
+export function finishChatReply(plan: ReplyPlan, parts: unknown, redact: Redactor): boolean {
   if (!assistantHasVisiblePart(parts)) return false;
   return db.transaction(() => {
     if (!unchanged(savedText(plan.chatId, plan.prompt.id), plan.prompt.saved)) return false;
@@ -251,7 +290,7 @@ export function finishChatReply(plan: ReplyPlan, parts: unknown, redact?: Redact
   });
 }
 
-export function updateMessageText(chatId: string, messageId: string, text: string, partIndex?: number) {
+export function updateMessageText(chatId: string, messageId: string, text: string, redact: Redactor, partIndex?: number) {
   if (text.trim() === "") return false;
   const row = db
     .select()
@@ -263,7 +302,7 @@ export function updateMessageText(chatId: string, messageId: string, text: strin
   const parts = partIndex == null ? replaceTextParts(current, text) : replaceTextPart(current, partIndex, text);
   if (!parts) return false;
   db.update(messages)
-    .set({ content: searchTextFromParts(parts), parts: JSON.stringify(parts) })
+    .set(messageBody(parts, redact))
     .where(eq(messages.id, messageId))
     .run();
   return true;
