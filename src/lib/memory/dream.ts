@@ -214,7 +214,7 @@ function applyCandidatesWithSource(chatId: string, prepared: Prepared[]): { adde
       merged += 1;
       if (memory && candidate.createdAt > memory.createdAt.getTime() && text.length > memory.text.length) {
         try {
-          const updated = updateMemory(memory.id, { text, kind: candidate.kind });
+          const updated = updateMemory(memory.id, { text, kind: candidate.kind, source: "dream" });
           if (updated) rememberVector(updated.id, updated.text, candidate.vector);
         } catch (error) {
           if (!(error instanceof MemoryRejected)) throw error;
@@ -226,6 +226,7 @@ function applyCandidatesWithSource(chatId: string, prepared: Prepared[]): { adde
     const saved = saveMemory({
       text,
       kind: candidate.kind,
+      source: "dream",
       sourceChatId: sourceChat(candidate.sourceMessageId) === chatId ? chatId : null,
       sourceMessageId: sourceChat(candidate.sourceMessageId) === chatId ? candidate.sourceMessageId : null,
     });

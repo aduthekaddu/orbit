@@ -27,7 +27,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   try {
     const redact = new Redactor(getSettings());
     const text = redact.text(cleanMemoryText(redact.text(parsed.data.text)));
-    const memory = updateMemory(params.data.id, { ...parsed.data, text });
+    const memory = updateMemory(params.data.id, { ...parsed.data, text, source: "user" });
     if (!memory) return Response.json({ error: "Not found" }, { status: 404 });
     return Response.json({ memory: memoryJson(memory) });
   } catch (error) {

@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- Recalled memories tell the model whether the user wrote the note or the assistant saved it. Changing only a note's kind, spacing, or capitalization keeps its attribution. (#127)
 - Stored credentials (including percent-encoded, Base64/Basic-auth, JSON-escaped, ANSI-split, and chunk-split forms) are now masked across live chat stream chunks, provider-executed tool errors, tool outputs (`web_search`, `run_code` before its 64 KiB output cap, `remember`, `render_ui`), chat titles, dream memories, `/api/models`, and saved URLs returned by `/api/settings`. (#186)
 - New prompts and manual reply edits mask stored credentials in chat history and message search. (#202)
 - Orbit pages now refuse to be framed by other pages. Every response outside `/s/` sends `nosniff` and a same-origin referrer rule, and none names Next.js in `X-Powered-By`. (#133)
