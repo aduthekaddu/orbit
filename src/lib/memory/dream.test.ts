@@ -127,7 +127,7 @@ async function seedRow(chatId: string, n: number, role: "user" | "assistant", te
   }
   const { db } = await import("../db");
   const { persistIncoming } = await import("../messages");
-  assert.equal(persistIncoming(chatId, [{ id, role: "user", parts: [{ type: "text", text }] }]), "ok");
+  assert.equal(persistIncoming(chatId, [{ id, role: "user", parts: [{ type: "text", text }] }], redact), "ok");
   db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(createdAt, id);
 }
 
