@@ -8,6 +8,6 @@ The request labels the Fly.io note as one the assistant saved. After the Memory 
 
 The scenario saves `page.png`, `edited.png`, `save-offline.png`, `delete-offline.png`, `ollama-down.png`, `long-card.png`, `long-row.png`, `mobile.png`, `save-offline-scrolled.png`, and `delete-offline-scrolled.png` under `.verify/evidence/memory/`. The phone shot is 390 by 844.
 
-`scripts/qa/mock-provider.mjs` appends each request body to `.verify/mock-requests.jsonl`.
+`scripts/qa/mock-provider.mjs` appends each request body to `.verify/mock-requests.jsonl`, with its `anthropic-beta` header and no other header.
 
 `browse no-search-final-answer` turns search off and sends `[qa:remember-loop] keep notes`. The mock calls `remember` while the step offers it and answers `Answered after four notes.` when it does not. If that last request still holds a `tool` message, the mock writes DSML tool-call markup instead, as some models do. Require four remember cards, five model steps, and the answer text in the reply (wait for that text; do not sample the DOM once when Regenerate first shows), before and after a reload. The scenario deletes the `Loop note` memories it made. It saves `final-answer.png` and `reloaded.png`.

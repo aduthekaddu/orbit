@@ -34,6 +34,8 @@ const DB_REACHING_MODULES = [
   "./src/lib/settings.ts",
   "./src/lib/preferences.ts",
   "./src/lib/messages.ts",
+  "./src/lib/secrets.ts",
+  "./src/lib/connections.ts",
   "./src/lib/auth.ts",
   "./src/app/api/auth/[...all]/route.ts",
   "./src/proxy.ts",
