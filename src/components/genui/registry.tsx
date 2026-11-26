@@ -23,7 +23,7 @@ export const { registry } = defineRegistry(catalog, {
       <div className="rounded-xl border bg-card p-4">
         <p className="text-sm text-muted-foreground">{props.label}</p>
         <p className="mt-1 text-2xl font-medium">{props.value}</p>
-        {props.hint ? <p className="mt-1 text-xs text-muted-foreground">{props.hint}</p> : null}
+        {props.hint ? <p className="mt-1 text-meta text-muted-foreground">{props.hint}</p> : null}
       </div>
     ),
     KeyValue: ({ props }) => (
@@ -96,11 +96,11 @@ function EditableText({
   const code = format === "code";
   return (
     <div className="flex flex-col gap-1 text-sm">
-      {label ? <p className="text-xs text-muted-foreground">{label}</p> : null}
+      {label ? <p className="text-meta text-muted-foreground">{label}</p> : null}
       <div
         className={
           code
-            ? "overflow-x-auto whitespace-pre-wrap break-words rounded-xl border bg-muted/40 p-3 font-mono text-xs"
+            ? "overflow-x-auto whitespace-pre-wrap break-words rounded-xl border bg-muted/40 p-3 font-mono text-code"
             : "whitespace-pre-wrap break-words rounded-xl border border-transparent px-1 py-0.5 hover:border-border focus:border-border focus:outline-none"
         }
         contentEditable

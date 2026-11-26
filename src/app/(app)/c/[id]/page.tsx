@@ -42,7 +42,10 @@ export default async function ChatPage({
         <div className="w-40 animate-rise">
           <Figure name="plug" />
         </div>
-        <SettingsForm initial={toPublicSettings(settings)} title="Connect a provider" />
+        <div className="mx-auto w-full max-w-page px-6 py-10">
+          <h1 className="mb-6 text-xl font-semibold tracking-tight">Connect a provider</h1>
+          <SettingsForm initial={toPublicSettings(settings)} />
+        </div>
       </div>
     );
   }

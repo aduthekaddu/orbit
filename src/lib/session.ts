@@ -1,10 +1,11 @@
+import { cache } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getAuth } from "./auth";
 
-export async function getSession() {
-  return getAuth().api.getSession({ headers: await headers(), query: { disableRefresh: true } });
-}
+export const getSession = cache(async () =>
+  getAuth().api.getSession({ headers: await headers(), query: { disableRefresh: true } }),
+);
 
 export async function requireUser() {
   const session = await getSession();

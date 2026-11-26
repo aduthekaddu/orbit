@@ -75,7 +75,7 @@ export function Thread({ ready, model, focusMessageId, hasHistory }: { ready: bo
                 )}
               </div>
               <ThreadPrimitive.ViewportFooter className="pointer-events-none sticky bottom-0 mt-auto bg-gradient-to-t from-background from-60% pt-8 pb-4">
-                <div className="pointer-events-auto relative mx-auto w-full max-w-widget">
+                <div className="pointer-events-auto relative mx-auto w-full max-w-chat">
                   {view === "messages" && (
                     <ThreadPrimitive.ScrollToBottom
                       aria-label="Scroll to bottom"
@@ -99,10 +99,10 @@ export function Thread({ ready, model, focusMessageId, hasHistory }: { ready: bo
 function MessagesSkeleton() {
   return (
     <>
-      <div className="mx-auto flex w-full max-w-widget justify-end">
+      <div className="mx-auto flex w-full max-w-chat justify-end">
         <Skeleton className="h-10 w-2/5 rounded-2xl" />
       </div>
-      <div className="mx-auto flex w-full max-w-widget flex-col gap-2.5">
+      <div className="mx-auto flex w-full max-w-chat flex-col gap-2.5">
         <Skeleton className="h-4 w-full" />
         <Skeleton className="h-4 w-11/12" />
         <Skeleton className="h-4 w-3/5" />
@@ -127,7 +127,7 @@ function EmptyState({ model }: { model: string }) {
       <div className="w-64 max-w-[70%]">
         <Figure name="dish" />
       </div>
-      <div className="mt-8 w-full max-w-widget animate-rise">
+      <div className="mt-8 w-full max-w-chat animate-rise">
         <Composer ready model={model} inputRef={input} />
         <div className="mt-3 flex flex-wrap justify-center gap-2">
           {STARTERS.map((starter) => (

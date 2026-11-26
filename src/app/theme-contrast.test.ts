@@ -3,9 +3,6 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-// Resolves the color tokens in globals.css for each palette and checks them with the WCAG formula.
-// Light reads the first value of light-dark(), dark the second, and dim the dark side with its overrides.
-
 const css = fs.readFileSync(path.join(process.cwd(), "src/app/globals.css"), "utf8");
 
 type Palette = "dark" | "dim" | "light";
@@ -96,7 +93,7 @@ test("every brand primitive has a light value", () => {
 for (const palette of PALETTES) {
   test(`${palette}: text reads at 4.5:1 on every surface`, () => {
     check(palette, pairs(["--foreground", "--muted-foreground"], SURFACES), 4.5);
-    check(palette, [["--primary-foreground", "--primary"]], 4.5);
+    check(palette, [["--primary-foreground", "--primary"], ["--primary-foreground", "--destructive"]], 4.5);
   });
 
   test(`${palette}: status colors read at 4.5:1 where callouts set text`, () => {

@@ -131,6 +131,7 @@ statechart docs/architecture/ChatTurn.tla --config docs/architecture/ChatTurn.cf
 | `src/app/api/memories/` | List and search memories. `PATCH .../[id]` edits one and `DELETE .../[id]` deletes one. |
 | `src/app/api/search/` | Full-text search over stored messages. |
 | `src/app/api/setup/` | Tells the login page whether signup is still open. |
+| `src/app/api/preferences/` | Read and save the signed-in user's appearance. `PATCH` takes only the changed fields. |
 | `src/instrumentation.ts` | Runs once at server start. It imports the database, which migrates it, starts the dream scheduler, and starts the sandbox sweep when the sandbox is on. |
 | `src/proxy.ts` | The session gate for every request. |
 | `src/lib/db/` | The SQLite connection, the Drizzle schema, and the migration lock. |
@@ -140,13 +141,15 @@ statechart docs/architecture/ChatTurn.tla --config docs/architecture/ChatTurn.cf
 | `src/lib/search.ts` | The FTS5 match queries behind message and memory search. |
 | `src/lib/provider.ts` | The model client, reasoning options, the model list, and provider quirks. |
 | `src/lib/settings.ts` | The settings row. `toPublicSettings` is the only shape that leaves the server. |
+| `src/lib/appearance.ts` | The appearance choices, their defaults, the parser for stored rows, the `data-*` attributes they set on `<html>`, the theme color, and the Appearance card's save queue. Safe to import in the browser. |
+| `src/lib/preferences.ts` | The `user_preferences` reads and writes, and `appearanceForRequest`, which the root layout uses to paint the saved appearance on first render. |
 | `src/lib/tools/` | The tool registry, the GitHub MCP client, SearXNG and Tavily search adapters, browser-safe card metadata, and tool status rules. |
 | `src/lib/sandbox/` | The fixed container policy, pinned language images, per-run Docker lifecycle, and the sweep of stale containers. |
 | `src/components/tools/` | Saved tool run cards, search result links, and the generic JSON disclosure. |
 | `src/lib/genui/` | The `render_ui` tool: the component catalog, the spec parser, and the system prompt. |
 | `src/components/chat/` | Thread, messages, composer, code blocks, inline editors, and the thread map. |
 | `src/components/memory/` | The memory page body: the list, its search, and each row's save and delete errors. |
-| `src/components/settings/` | The settings form and its sections. |
+| `src/components/settings/` | The Appearance card, the provider settings form, and their shared row. |
 | `src/components/auth/` | The shared login and signup form. |
 | `src/lib/artifacts/` | Artifact language detection, prompt instructions and the sandboxed frame document. |
 | `src/components/artifacts/` | Preview registration, URL selection, lazy compilation and the responsive panel. |
@@ -165,6 +168,7 @@ All state is in `data/orbit.db`. The directory is mode `0700`, and the database 
 | Table | Rows | Notes |
 | --- | --- | --- |
 | `user`, `session`, `account`, `verification` | better-auth's tables | A SQLite trigger, `user_single_row`, rejects a second user. |
+| `user_preferences` | One per user, keyed by `user_id`, deleted with the user | Theme, text size, reply font, chat width, and accent. A user with no row gets the defaults, and the first save creates it. |
 | `settings` | One row, `id = 1` | Base URL, provider key, model, reasoning effort, SearXNG URL, Tavily key, GitHub token, and GitHub MCP URL. The provider key, the Tavily key, and the GitHub token stay on the server. |
 | `chats` | One per conversation | `title` starts as `New chat` and takes the first message's text. `head_id` selects the last written branch. |
 | `messages` | One per user or assistant message | `parts` is the AI SDK parts array as JSON, and reload reads it. `content` is the plain text of the text parts, then the standard output and standard error of finished code runs, then the source of each code run. Search reads `content`. `parent_id` links each message to its parent. `position` is its depth. Siblings stay in creation order. |

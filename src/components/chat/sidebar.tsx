@@ -106,7 +106,7 @@ export function Sidebar({
       <nav className="scrollbar-thin mt-3 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-2 pb-3">
         {groups.map((group) => (
           <div key={group.label ?? "all"} className="flex flex-col gap-px">
-            {group.label && <h2 className="px-2.5 pb-1 text-2xs font-medium text-muted-foreground">{group.label}</h2>}
+            {group.label && <h2 className="px-2.5 pb-1 text-meta font-medium text-muted-foreground">{group.label}</h2>}
             {group.chats.map((chat) => {
               const href = `/c/${chat.id}`;
               const active = pathname === href;
@@ -133,7 +133,7 @@ export function Sidebar({
 
       <div className="shrink-0 border-t p-2">
         {signOutFailed && (
-          <p role="alert" className="px-1.5 pb-1.5 text-xs text-destructive">
+          <p role="alert" className="px-1.5 pb-1.5 text-meta text-destructive">
             Could not sign out
           </p>
         )}
@@ -148,7 +148,7 @@ export function Sidebar({
             )}
           >
             <span className="sr-only">Settings</span>
-            <span aria-hidden className="grid size-6 shrink-0 place-items-center rounded-full border bg-surface-raised text-2xs font-medium text-foreground uppercase">
+            <span aria-hidden className="grid size-6 shrink-0 place-items-center rounded-full border bg-surface-raised text-meta font-medium text-foreground uppercase">
               {email.charAt(0)}
             </span>
             <span className="truncate">{email}</span>

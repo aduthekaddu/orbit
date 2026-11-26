@@ -155,3 +155,15 @@ export const memoryRuns = sqliteTable("memory_runs", {
   merged: integer("merged").notNull(),
   error: text("error"),
 });
+
+export const userPreferences = sqliteTable("user_preferences", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  theme: text("theme").notNull().default("dark"),
+  textSize: text("text_size").notNull().default("md"),
+  replyFont: text("reply_font").notNull().default("sans"),
+  chatWidth: text("chat_width").notNull().default("normal"),
+  accent: text("accent").notNull().default("sun"),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+});

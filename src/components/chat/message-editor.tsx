@@ -45,7 +45,7 @@ export function MessageTextEditor({
             if (!saving) void commit();
           }
         }}
-        className="block max-h-[60vh] min-h-24 w-full resize-none bg-transparent px-4 py-3 text-sm leading-6 outline-none field-sizing-content scrollbar-thin"
+        className="block max-h-[60vh] min-h-24 w-full resize-none bg-transparent px-4 py-3 text-input outline-none field-sizing-content scrollbar-thin"
       />
       <EditorFooter error={error} saving={saving} saveDisabled={text.trim() === ""} onCancel={onClose} onSave={() => void commit()} />
     </div>

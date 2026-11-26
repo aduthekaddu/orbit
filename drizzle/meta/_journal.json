@@ -85,6 +85,13 @@
       "when": 1795640613185,
       "tag": "0011_memory_source",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1795710159410,
+      "tag": "0012_user_preferences",
+      "breakpoints": true
     }
   ]
 }

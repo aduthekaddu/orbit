@@ -5,7 +5,7 @@ export const ReplyEnd: DataMessagePartComponent<unknown> = ({ data }) => {
   const { reason } = data;
   if (reason !== "stopped" && reason !== "failed") return null;
   return (
-    <p data-reply-end={reason} className="mt-2 text-xs text-muted-foreground">
+    <p data-reply-end={reason} className="mt-2 text-meta text-muted-foreground">
       {reason === "stopped" ? "Stopped" : "Interrupted"}
     </p>
   );

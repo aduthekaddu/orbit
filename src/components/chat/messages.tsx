@@ -80,7 +80,7 @@ function EditAction({ onClick, label = "Edit reply" }: { onClick: () => void; la
 
 function ReplyStatus({ kind }: { kind: "reconnecting" | "lost" }) {
   return (
-    <p role="status" className="mt-2 text-xs text-muted-foreground">
+    <p role="status" className="mt-2 text-meta text-muted-foreground">
       {kind === "reconnecting" ? "Reconnecting" : "Interrupted"}
     </p>
   );
@@ -106,7 +106,7 @@ function AssistantMessage() {
   const [editing, setEditing] = useState(false);
 
   return (
-    <MessagePrimitive.Root data-message-role="assistant" data-message-id={messageId} className="group/message relative mx-auto w-full max-w-widget animate-rise">
+    <MessagePrimitive.Root data-message-role="assistant" data-message-id={messageId} className="group/message relative mx-auto w-full max-w-chat animate-rise">
       <OrbitMark busy={running} tone={running ? "accent" : "mono"} className="absolute top-0.5 -left-9 hidden size-5 @3xl:block" />
       {editing ? (
         <MessageTextEditor messageId={messageId} initialText={text} onClose={() => setEditing(false)} label="Edit reply" />
@@ -164,7 +164,7 @@ function UserMessage() {
   const lost = last && !running && reply.kind === "lost";
   if (editing) return <UserEditComposer busy={busy} />;
   return (
-    <MessagePrimitive.Root data-turn-id={id} data-message-id={id} tabIndex={-1} className="group/message mx-auto flex w-full scroll-mt-6 outline-none max-w-widget animate-rise flex-col items-end gap-1.5">
+    <MessagePrimitive.Root data-turn-id={id} data-message-id={id} tabIndex={-1} className="group/message mx-auto flex w-full scroll-mt-6 outline-none max-w-chat animate-rise flex-col items-end gap-1.5">
       <div className="flex w-full items-end justify-end gap-1.5">
         <ActionBarPrimitive.Root className={cn("flex", hoverActionsClass)}>
           <CopyAction />
@@ -174,7 +174,7 @@ function UserMessage() {
             </ActionBarPrimitive.Edit>
           </IconAction>
         </ActionBarPrimitive.Root>
-        <div className="max-w-[85%] rounded-2xl border bg-surface-raised px-3.5 py-2 text-sm leading-6 break-words whitespace-pre-wrap">
+        <div className="max-w-[85%] rounded-2xl border bg-surface-raised px-3.5 py-2 text-prose break-words whitespace-pre-wrap">
           <MessagePrimitive.Parts components={userParts} />
         </div>
       </div>
@@ -195,7 +195,7 @@ function UserEditComposer({ busy }: { busy: boolean }) {
   const id = useAuiState((s) => s.message.id);
   const editTarget = useEditTarget();
   return (
-    <MessagePrimitive.Root className="mx-auto flex w-full max-w-widget animate-rise justify-end">
+    <MessagePrimitive.Root className="mx-auto flex w-full max-w-chat animate-rise justify-end">
       <ComposerPrimitive.Root
         onSubmit={(event) => {
           if (busy) return event.preventDefault();
@@ -209,7 +209,7 @@ function UserEditComposer({ busy }: { busy: boolean }) {
           cancelOnEscape
           disabled={busy}
           aria-label="Edit message"
-          className="block max-h-60 max-w-full resize-none bg-transparent px-3.5 pt-2 text-sm leading-6 outline-none field-sizing-content scrollbar-thin"
+          className="block max-h-60 max-w-full resize-none bg-transparent px-3.5 pt-2 text-input outline-none field-sizing-content scrollbar-thin"
         />
         <div className="flex items-center justify-end gap-1 px-2 py-2">
           <ComposerPrimitive.Cancel onClick={() => editTarget(null)} className={buttonVariants({ variant: "ghost", size: "xs" })}>Cancel</ComposerPrimitive.Cancel>

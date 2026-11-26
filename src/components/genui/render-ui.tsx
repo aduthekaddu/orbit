@@ -26,7 +26,7 @@ function Fallback({ error, raw }: { error: string; raw: unknown }) {
   return (
     <div data-genui-fallback className="rounded-xl border border-destructive/40 bg-card p-3 text-sm text-card-foreground">
       <p className="whitespace-pre-wrap text-destructive">{error}</p>
-      {text ? <pre className="mt-2 overflow-x-auto text-xs">{text}</pre> : null}
+      {text ? <pre className="mt-2 overflow-x-auto font-mono text-code">{text}</pre> : null}
     </div>
   );
 }

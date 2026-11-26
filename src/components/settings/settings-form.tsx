@@ -6,10 +6,10 @@ import { CheckIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
+import { Row } from "./row";
 import { CUSTOM_OPTION, NO_OPTION, selectedOptionIndex, showsModelInput } from "@/lib/model-picker";
 import { requestJson, useLatestRequest, useLoaded } from "@/lib/request-json";
 import { appliedSave, connectionFrom, modelListBody, type Connection, type ModelList, type SettingsSnapshot } from "@/lib/settings-form";
@@ -31,7 +31,7 @@ function canLoadStored(initial: Pick<PublicSettings, "baseUrl" | "keySet">) {
   return initial.keySet && Boolean(initial.baseUrl);
 }
 
-export function SettingsForm({ initial, title }: { initial: PublicSettings; title: string }) {
+export function SettingsForm({ initial }: { initial: PublicSettings }) {
   const router = useRouter();
   const [baseUrl, setBaseUrl] = useState(initial.baseUrl);
   const [apiKey, setApiKey] = useState("");
@@ -153,8 +153,6 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
   const allowReasoning = !selected || selected.reasoning !== false;
 
   return (
-    <div className="mx-auto w-full max-w-widget px-6 py-10">
-      <h1 className="mb-6 text-xl font-semibold tracking-tight">{title}</h1>
       <form onSubmit={onSubmit} className="rounded-xl border bg-card shadow-card">
         <div className="flex items-center justify-between gap-3 border-b px-5 py-3.5">
           <h2 className="text-sm font-medium">Provider</h2>
@@ -301,14 +299,14 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
         </div>
         <div className="flex items-center justify-between gap-3 border-t px-5 py-3.5">
           <h2 className="text-sm font-medium">Code sandbox</h2>
-          <span data-sandbox-status={initial.sandbox ? "on" : "off"} className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span data-sandbox-status={initial.sandbox ? "on" : "off"} className="flex items-center gap-2 text-meta text-muted-foreground">
             <span className={cn("size-1.5 rounded-full", initial.sandbox ? "bg-positive" : "bg-muted-foreground/40")} />
             {initial.sandbox ? "On" : "Off"}
           </span>
         </div>
         <div className="flex items-center justify-end gap-3 border-t px-5 py-3">
           {save.status === "failed" ? (
-            <p role="alert" className="mr-auto flex min-w-0 items-center gap-2 text-xs text-destructive">
+            <p role="alert" className="mr-auto flex min-w-0 items-center gap-2 text-meta text-destructive">
               <WarningCircleIcon weight="regular" className="size-3.5 shrink-0" />
               <span className="truncate">{save.error}</span>
             </p>
@@ -316,7 +314,7 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
           <span
             aria-live="polite"
             className={cn(
-              "flex items-center gap-1.5 text-xs text-muted-foreground transition-opacity duration-200 ease-orbit",
+              "flex items-center gap-1.5 text-meta text-muted-foreground transition-opacity duration-200 ease-orbit",
               save.status === "succeeded" ? "opacity-100" : "opacity-0",
             )}
           >
@@ -332,32 +330,6 @@ export function SettingsForm({ initial, title }: { initial: PublicSettings; titl
           </Button>
         </div>
       </form>
-    </div>
-  );
-}
-
-function Row({
-  id,
-  label,
-  labelledControl = true,
-  children,
-}: {
-  id: string;
-  label: string;
-  labelledControl?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="grid gap-2 px-5 py-3.5 sm:grid-cols-[7rem_1fr] sm:items-center sm:gap-4">
-      <Label
-        id={`${id}-label`}
-        htmlFor={labelledControl ? id : undefined}
-        className="text-xs text-muted-foreground"
-      >
-        {label}
-      </Label>
-      {children}
-    </div>
   );
 }
 
@@ -378,7 +350,7 @@ function GithubCheckStatus({ check }: { check: GithubCheck }) {
   if (check.status === "idle") return null;
   const dot = check.status === "connected" ? "bg-positive" : check.status === "failed" ? "bg-destructive" : "bg-warning motion-safe:animate-pulse";
   return (
-    <span data-github-status={check.status} aria-live="polite" className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+    <span data-github-status={check.status} aria-live="polite" className="flex min-w-0 items-center gap-2 text-meta text-muted-foreground">
       <span className={cn("size-1.5 shrink-0 rounded-full", dot)} />
       {check.status === "checking" ? "Checking" : null}
       {check.status === "connected" ? <span className="truncate">Connected <span className="text-foreground">{check.login}</span></span> : null}
@@ -389,7 +361,7 @@ function GithubCheckStatus({ check }: { check: GithubCheck }) {
 
 function ConnectionStatus({ connection, hasKey }: { connection: Connection; hasKey: boolean }) {
   return (
-    <span aria-live="polite" className="flex items-center gap-2 text-xs text-muted-foreground">
+    <span aria-live="polite" className="flex items-center gap-2 text-meta text-muted-foreground">
       <span className={cn("size-1.5 rounded-full", STATUS_DOT[connection.status])} />
       {connection.status === "idle" && !hasKey ? "No key" : <ConnectionLabel connection={connection} />}
     </span>

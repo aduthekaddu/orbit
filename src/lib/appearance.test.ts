@@ -59,7 +59,6 @@ test("colorSchemeFor tells the browser which form controls to draw", () => {
   assert.equal(colorSchemeFor("system"), "light dark");
 });
 
-// Drives the queue the way the Appearance card does: after every event, send whatever is waiting.
 function run(start: Appearance, events: (SaveQueueEvent | "server-ok" | "server-fail")[], server = { ...start }) {
   let queue: SaveQueue = saveQueue(start);
   const sent: Partial<Appearance>[] = [];

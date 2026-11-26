@@ -14,7 +14,7 @@ import { paletteSearchNotice } from "./palette-search";
 
 const itemClass =
   "flex h-9 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-sm text-muted-foreground select-none data-[selected=true]:bg-accent data-[selected=true]:text-foreground";
-const groupClass = "[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-2xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground";
+const groupClass = "[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-meta [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground";
 
 // Chat items use the id as their cmdk value so duplicate titles stay distinct; match on the title alone.
 function filter(value: string, search: string, keywords?: string[]) {
@@ -93,7 +93,7 @@ export function CommandPalette({
         <Command filter={filter} loop>
           <div className="flex items-center gap-2.5 border-b px-3.5">
             <MagnifyingGlassIcon weight="light" className="size-4 shrink-0 text-muted-foreground" />
-            <Command.Input value={search} onValueChange={setSearch} placeholder="Search" className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground" />
+            <Command.Input value={search} onValueChange={setSearch} placeholder="Search" className="h-12 flex-1 bg-transparent text-input outline-none placeholder:text-muted-foreground" />
           </div>
           <ScrollFade axis="y" fade="var(--popover)" scrollerClassName="max-h-[min(24rem,60vh)]">
             <Command.List className="p-1.5">

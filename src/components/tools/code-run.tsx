@@ -37,7 +37,7 @@ function CodeText({ text, kind }: { text: string; kind: keyof typeof codeLabels 
     <div className="relative min-w-0">
       <ScrollFade axis="y" fade={surfaces[kind].fade} className={`min-w-0 rounded-md border ${surfaces[kind].well}`} scrollerClassName="max-h-tool-content" scrollerLabel={codeLabels[kind]}>
         <ScrollFade axis="x" fade={surfaces[kind].fade} className="min-w-0" scrollerLabel={`${codeLabels[kind]} horizontal scroll`}>
-          <pre data-code-stdout={kind === "stdout" ? "" : undefined} data-code-stderr={kind === "stderr" ? "" : undefined} className="w-max min-w-full p-3 pr-10 font-mono text-xs leading-5">
+          <pre data-code-stdout={kind === "stdout" ? "" : undefined} data-code-stderr={kind === "stderr" ? "" : undefined} className="w-max min-w-full p-3 pr-10 font-mono text-code">
             <code>{text}</code>
           </pre>
         </ScrollFade>
@@ -85,17 +85,17 @@ export function CodeRun({ input, output }: { input: unknown; output: unknown }) 
         <>
           {stdout.trim() && (
             <div className="min-w-0 space-y-1">
-              <p className="text-xs text-muted-foreground">stdout</p>
+              <p className="text-meta text-muted-foreground">stdout</p>
               <CodeText text={stdout} kind="stdout" />
             </div>
           )}
           {stderr.trim() && (
             <div className="min-w-0 space-y-1">
-              <p className="text-xs text-muted-foreground">stderr</p>
+              <p className="text-meta text-muted-foreground">stderr</p>
               <CodeText text={stderr} kind="stderr" />
             </div>
           )}
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground num">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-meta text-muted-foreground num">
             <span className={run.failed ? "text-destructive" : undefined}>{run.primary}</span>
             <span>{run.duration}</span>
             {parsedOutput.data.truncated && <span>Output truncated</span>}

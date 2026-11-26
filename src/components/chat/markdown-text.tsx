@@ -25,20 +25,20 @@ function styled<T extends Tag>(tag: T, base: string) {
 }
 
 const elementClasses = {
-  h1: "mt-6 mb-3 text-xl font-semibold tracking-tight",
-  h2: "mt-6 mb-3 text-lg font-semibold tracking-tight",
-  h3: "mt-5 mb-2 text-base font-semibold",
-  h4: "mt-4 mb-2 text-sm font-semibold",
-  h5: "mt-4 mb-2 text-sm font-medium",
-  h6: "mt-4 mb-2 text-sm font-medium text-muted-foreground",
-  p: "my-3",
-  ul: "my-3 list-disc pl-5 marker:text-muted-foreground [&_ol]:my-1 [&_ul]:my-1",
-  ol: "my-3 list-decimal pl-5 marker:text-muted-foreground marker:tabular-nums [&_ol]:my-1 [&_ul]:my-1",
-  li: "my-1 pl-1",
-  blockquote: "my-3 border-l border-border-strong pl-4 text-muted-foreground",
-  hr: "my-6 border-t",
+  h1: "mt-8 mb-3 text-h1 font-semibold tracking-tight text-balance",
+  h2: "mt-8 mb-3 text-h2 font-semibold tracking-tight text-balance",
+  h3: "mt-6 mb-2 text-h3 font-semibold text-balance",
+  h4: "mt-6 mb-2 text-h4 font-semibold",
+  h5: "mt-5 mb-1.5 text-h5 font-semibold",
+  h6: "mt-5 mb-1.5 text-h6 font-medium text-muted-foreground",
+  p: "my-4",
+  ul: "my-4 list-disc pl-6 marker:text-muted-foreground [&_ol]:my-1.5 [&_ul]:my-1.5",
+  ol: "my-4 list-decimal pl-6 marker:text-muted-foreground marker:tabular-nums [&_ol]:my-1.5 [&_ul]:my-1.5",
+  li: "my-1.5 pl-1",
+  blockquote: "my-4 border-l-2 border-border-strong pl-4 text-muted-foreground",
+  hr: "my-8 border-t",
   strong: "font-semibold text-foreground",
-  code: "rounded-sm border bg-surface-sunken px-1 py-px font-mono text-[0.85em]",
+  code: "rounded-sm border bg-surface-sunken px-1 py-px font-mono text-[length:max(0.85em,13px)]",
   thead: "border-b border-border-strong",
   tr: "border-b last:border-b-0",
   th: "px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground",
@@ -121,7 +121,7 @@ export function MarkdownText({ className, editable = false }: { className?: stri
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}
         components={components}
-        className={cn("text-sm leading-6 break-words [&>:first-child]:mt-0 [&>:last-child]:mb-0", className)}
+        className={cn("font-reply text-prose break-words [&>:first-child]:mt-0 [&>:last-child]:mb-0", className)}
       />
     </CodeEditContext.Provider>
   );
