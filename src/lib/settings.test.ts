@@ -3,14 +3,17 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test, { before, after } from "node:test";
+import { getDb } from "./db";
+import * as settings from "./settings";
+import { toolsFor } from "./tools";
+import { openGithubTurn } from "./tools/github";
 
 const originalCwd = process.cwd();
 const envNames = ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL", "ORBIT_SEARXNG_URL", "ORBIT_TAVILY_API_KEY", "ORBIT_GITHUB_TOKEN", "ORBIT_SANDBOX"];
 const originalEnv = Object.fromEntries(envNames.map((name) => [name, process.env[name]]));
 let sandbox: string;
-let settings: typeof import("./settings");
 
-before(async () => {
+before(() => {
   const repo = process.cwd();
   sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-search-settings-"));
   fs.cpSync(path.join(repo, "drizzle"), path.join(sandbox, "drizzle"), { recursive: true });
@@ -18,10 +21,10 @@ before(async () => {
   process.env.ORBIT_SEARXNG_URL = "http://127.0.0.1:8888";
   process.env.ORBIT_TAVILY_API_KEY = "test-tavily-key-not-real";
   process.chdir(sandbox);
-  settings = await import("./settings");
 });
 
 after(() => {
+  getDb().$client.close();
   process.chdir(originalCwd);
   for (const name of envNames) {
     if (originalEnv[name] === undefined) delete process.env[name];
@@ -82,7 +85,6 @@ test("an explicit GitHub token removal clears the stored token", async () => {
   assert.equal(removed.githubTokenSet, false);
   assert.equal(settings.getSettings()?.githubToken, "");
   assert.equal(JSON.stringify(removed).includes("good-token"), false);
-  const { openGithubTurn } = await import("./tools/github");
   const stored = settings.getSettings();
   assert.ok(stored);
   const opened = await openGithubTurn({ ...stored, githubMcpUrl: "https://api.githubcopilot.com/mcp/" });
@@ -119,7 +121,6 @@ test("an explicit Tavily removal clears the key and disables its search backend"
   const row = settings.getSettings();
   assert.ok(row);
   assert.equal(row.tavilyApiKey, "");
-  const { toolsFor } = await import("./tools");
   assert.equal("web_search" in toolsFor(row), false);
 });
 

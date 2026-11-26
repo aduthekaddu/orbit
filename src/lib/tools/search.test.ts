@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import test, { type TestContext } from "node:test";
 import { once } from "node:events";
+import { toolsFor } from "./index";
 import { parseSearchResults, searchSearxng, searchWeb, type SearchBackends } from "./search";
 
 const searxng = {
@@ -223,7 +224,6 @@ test("web_search masks stored credentials in titles, URLs, snippets, and queries
       },
     ],
   });
-  const { toolsFor } = await import("./index");
   const tools = toolsFor({
     baseUrl: "http://127.0.0.1:9/v1",
     apiKey: providerKey,

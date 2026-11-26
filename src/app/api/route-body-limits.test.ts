@@ -6,8 +6,12 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test, { after, before } from "node:test";
-import { LIMITS } from "@/lib/route-schema";
 import { Redactor } from "@/lib/chat-errors";
+import { getDb } from "@/lib/db";
+import * as schema from "@/lib/db/schema";
+import * as chatStore from "@/lib/messages";
+import { LIMITS } from "@/lib/route-schema";
+import { getSettings, saveSettings } from "@/lib/settings";
 
 const redact = new Redactor(null);
 
@@ -46,8 +50,6 @@ const hooks = registerHooks({
 let chatRoute: typeof import("./chat/route");
 let settingsRoute: typeof import("./settings/route");
 let modelsRoute: typeof import("./models/route");
-let getSettings: typeof import("@/lib/settings").getSettings;
-let chatStore: typeof import("@/lib/messages");
 let closeDb: () => void;
 let dbPath = "";
 let provider: http.Server;
@@ -85,21 +87,17 @@ before(async () => {
   await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
   const port = (provider.address() as { port: number }).port;
 
-  const { db } = await import("@/lib/db");
-  const schema = await import("@/lib/db/schema");
-  const settings = await import("@/lib/settings");
-  getSettings = settings.getSettings;
+  const db = getDb();
   dbPath = db.$client.name;
   closeDb = () => db.$client.close();
   const now = new Date();
   db.insert(schema.user).values({ id: USER_ID, name: "Limits", email: "limits@orbit.local", emailVerified: false, createdAt: now, updatedAt: now }).run();
-  settings.saveSettings({
+  saveSettings({
     baseUrl: `http://127.0.0.1:${port}/v1`,
     apiKey: PROVIDER_KEY,
     model: "mock",
     reasoningEffort: "medium",
   });
-  chatStore = await import("@/lib/messages");
   chatRoute = await import("./chat/route");
   settingsRoute = await import("./settings/route");
   modelsRoute = await import("./models/route");

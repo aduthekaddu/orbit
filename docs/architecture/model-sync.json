@@ -4,13 +4,13 @@
   "src/lib/chat-tree.ts isPath": "6079fdb2e7244ec44b62f930b2a810625f0f50ca50d255b313e6765874b30ca8",
   "src/lib/genui/spec.ts assistantHasVisiblePart": "63b6266e47c3e0ad37fab2719d8cdbbf669635f01defd0f3ae7b6822c74b00ae",
   "src/lib/genui/spec.ts settleInterruptedParts": "621627203d26c0dc23e1601106f8c15d93489c9e6e70a1b89fa615cf0f597284",
-  "src/lib/messages.ts finishChatReply": "b74386b244a0e7c7bec471422d8be57d52138ab1166b0c2d41559ef2e86b0327",
-  "src/lib/messages.ts insertMessage": "2b53038ef13e7c7810b205ab919b765a254dd7d723164d86bbb660053b22be1e",
+  "src/lib/messages.ts finishChatReply": "6d8359c5d2c180718595e7f24b9de3f5326bc1799f69be68376c5c96742a91f6",
+  "src/lib/messages.ts insertMessage": "857558396cfa53829fd6330a60c2a8e4cfca251a797ae17c895e7a415a3a4911",
   "src/lib/messages.ts matchesIncomingBody": "c97e93082e7ecc92fd4570379b01f18e539c86a9eea483941a6e157d05a150fd",
-  "src/lib/messages.ts messageRepository": "3ac6ef77a4d4d35e722bff32d2b75350c581a2e5b6d4432b7d5eebd4fecebaf5",
-  "src/lib/messages.ts persistIncoming": "07998346ef4da28f5420ddab56ef3b124ebd581c39d454b70edc6c023efff885",
-  "src/lib/messages.ts planChatWrite": "10c402a47989ea0fda5dad2857f5af9d75aa562c7882d7f79882aa8e38a50ae7",
-  "src/lib/messages.ts savedText": "fa72e2dc39d4a482b2c08f9e18aa57ffe4a6cfd820ad16d2b0735cb7a7c2fc7e",
+  "src/lib/messages.ts messageRepository": "872a9c3ed1b1a150027cb46b9e3b0c2364390eb4059dcd82e300ed92a62898f8",
+  "src/lib/messages.ts persistIncoming": "c72be58faf5d35b322140ad17bad980ffb1af05e5bb5da3906706a35335886d5",
+  "src/lib/messages.ts planChatWrite": "a7dffabc1fadc309eee9678a35899c5d3f4c2439f80b825731f6c202564427d9",
+  "src/lib/messages.ts savedText": "19eb076594fd20202b80ca4e2cff0c1e63576d48b6917e35f34991799257c892",
   "src/lib/messages.ts unchanged": "eb0497aedcd5adf965c95e8c250effc5457117d249567cd96e0c8c0d14d6225f",
-  "src/lib/messages.ts updateMessageText": "87d2711c182a297ab99e438125cdf0b5a3cbfddf585187f8e85a33ade9fec294"
+  "src/lib/messages.ts updateMessageText": "6cf39833f741d93265a676eb417a0838c7335276c7901ca4095e07b05d953f2b"
 }

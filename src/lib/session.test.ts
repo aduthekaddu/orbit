@@ -6,6 +6,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test, { after, before } from "node:test";
 import { LOCAL_AUTH_URL } from "./auth-origins";
+import { getAuth } from "./auth";
+import { getDb } from "./db";
 
 const DAY = 86_400_000;
 const ENV_KEYS = ["BETTER_AUTH_URL", "BETTER_AUTH_SECRET", "ORBIT_PUBLIC_URL", "ORBIT_TRUSTED_ORIGINS"] as const;
@@ -28,15 +30,12 @@ const hooks = registerHooks({
 
 const globalSlot = globalThis as { __orbitSessionTestHeaders?: Headers };
 
-let db: typeof import("./db").db | undefined;
-let auth: typeof import("./auth").auth;
 let getSession: typeof import("./session").getSession;
 let sessionCookie = "";
 let sessionToken = "";
 
 function readExpiresAt(token: string) {
-  assert.ok(db);
-  const row = db.$client.prepare("SELECT expires_at AS expiresAt FROM session WHERE token = ?").get(token) as
+  const row = getDb().$client.prepare("SELECT expires_at AS expiresAt FROM session WHERE token = ?").get(token) as
     | { expiresAt: number }
     | undefined;
   return row?.expiresAt;
@@ -47,10 +46,8 @@ before(async () => {
   delete process.env.BETTER_AUTH_SECRET;
   delete process.env.ORBIT_PUBLIC_URL;
   delete process.env.ORBIT_TRUSTED_ORIGINS;
-  ({ db } = await import("./db"));
-  ({ auth } = await import("./auth"));
   ({ getSession } = await import("./session"));
-  const signedUp = await auth.api.signUpEmail({
+  const signedUp = await getAuth().api.signUpEmail({
     body: { name: "Session Test", email: "session-test@orbit.local", password: "session-test-password-1" },
     headers: new Headers({ origin: LOCAL_AUTH_URL }),
     returnHeaders: true,
@@ -65,7 +62,7 @@ before(async () => {
 after(() => {
   hooks.deregister();
   delete globalSlot.__orbitSessionTestHeaders;
-  db?.$client.close();
+  getDb().$client.close();
   for (const key of ENV_KEYS) {
     if (savedEnv[key] === undefined) delete process.env[key];
     else process.env[key] = savedEnv[key];
@@ -74,9 +71,8 @@ after(() => {
 });
 
 test("getSession reads a due-for-refresh session without extending SQLite behind the proxy", async () => {
-  assert.ok(db);
   const backdatedExpiresAt = Date.now() + 6 * DAY - 60_000;
-  db.$client
+  getDb().$client
     .prepare("UPDATE session SET expires_at = ?, updated_at = ? WHERE token = ?")
     .run(backdatedExpiresAt, Date.now() - DAY - 60_000, sessionToken);
 
@@ -87,8 +83,7 @@ test("getSession reads a due-for-refresh session without extending SQLite behind
 });
 
 test("getSession still rejects an expired session", async () => {
-  assert.ok(db);
-  db.$client.prepare("UPDATE session SET expires_at = ? WHERE token = ?").run(Date.now() - 60_000, sessionToken);
+  getDb().$client.prepare("UPDATE session SET expires_at = ? WHERE token = ?").run(Date.now() - 60_000, sessionToken);
 
   globalSlot.__orbitSessionTestHeaders = new Headers({ cookie: sessionCookie });
   const result = await getSession();

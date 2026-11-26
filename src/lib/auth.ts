@@ -5,7 +5,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";
 import { LOCAL_AUTH_URL, resolveAuthBaseUrl, resolveTrustedOrigins } from "./auth-origins";
-import { db, signupOpen } from "./db";
+import { getDb, signupOpen } from "./db";
 import { account, session, user, verification } from "./db/schema";
 import { readEnv } from "./env";
 import { dataDirectory } from "./paths";
@@ -24,37 +24,57 @@ function authSecret() {
   return secret;
 }
 
-const localURL = readEnv("BETTER_AUTH_URL") ?? LOCAL_AUTH_URL;
-const publicURL = readEnv("ORBIT_PUBLIC_URL");
-
-// The local origin stays trusted, so 127.0.0.1:3210 still signs in when a public URL is set.
-export const trustedOrigins = resolveTrustedOrigins(localURL, readEnv("ORBIT_TRUSTED_ORIGINS"), publicURL);
-
-export const auth = betterAuth({
-  baseURL: resolveAuthBaseUrl({ BETTER_AUTH_URL: localURL, ORBIT_PUBLIC_URL: publicURL }),
-  secret: authSecret(),
-  trustedOrigins,
-  database: drizzleAdapter(db, {
-    provider: "sqlite",
-    schema: { user, session, account, verification },
-  }),
-  emailAndPassword: {
-    enabled: true,
-    minPasswordLength: 8,
-  },
-  databaseHooks: {
-    user: {
-      create: {
-        before: async () => {
-          if (!signupOpen()) {
-            throw new APIError("FORBIDDEN", { message: "Signup is closed" });
-          }
+function createAuth() {
+  const localURL = readEnv("BETTER_AUTH_URL") ?? LOCAL_AUTH_URL;
+  const publicURL = readEnv("ORBIT_PUBLIC_URL");
+  // The local origin stays trusted, so 127.0.0.1:3210 still signs in when a public URL is set.
+  const trustedOrigins = resolveTrustedOrigins(localURL, readEnv("ORBIT_TRUSTED_ORIGINS"), publicURL);
+  // Open the database before authSecret writes so the data directory gets mode 0700 first.
+  const db = getDb();
+  const auth = betterAuth({
+    baseURL: resolveAuthBaseUrl({ BETTER_AUTH_URL: localURL, ORBIT_PUBLIC_URL: publicURL }),
+    secret: authSecret(),
+    trustedOrigins,
+    database: drizzleAdapter(db, {
+      provider: "sqlite",
+      schema: { user, session, account, verification },
+    }),
+    emailAndPassword: {
+      enabled: true,
+      minPasswordLength: 8,
+    },
+    databaseHooks: {
+      user: {
+        create: {
+          before: async () => {
+            if (!signupOpen()) {
+              throw new APIError("FORBIDDEN", { message: "Signup is closed" });
+            }
+          },
         },
       },
     },
-  },
-  // Clients can forge X-Forwarded-For. Reading no header keeps a forged value from getting its
-  // own rate-limit bucket, so every client shares one bucket per auth path.
-  advanced: { ipAddress: { ipAddressHeaders: [] } },
-  telemetry: { enabled: false },
-});
+    // Clients can forge X-Forwarded-For. Reading no header keeps a forged value from getting its
+    // own rate-limit bucket, so every client shares one bucket per auth path.
+    advanced: { ipAddress: { ipAddressHeaders: [] } },
+    telemetry: { enabled: false },
+  });
+  return { auth, trustedOrigins };
+}
+
+type AuthState = ReturnType<typeof createAuth>;
+
+let cached: AuthState | undefined;
+
+function authState(): AuthState {
+  cached ??= createAuth();
+  return cached;
+}
+
+export function getAuth() {
+  return authState().auth;
+}
+
+export function getTrustedOrigins() {
+  return authState().trustedOrigins;
+}

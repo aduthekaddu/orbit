@@ -1,14 +1,19 @@
 import { dataDirectory } from "../paths";
 import assert from "node:assert/strict";
 import path from "node:path";
-import test, { type TestContext } from "node:test";
+import test, { after, type TestContext } from "node:test";
 import http from "node:http";
 import { once } from "node:events";
+import { getDb } from "../db";
+import { toolsFor } from "./index";
 import { createRunCodeTool } from "./run-code";
 import { runCodeInputSchema } from "../sandbox/spec";
 
-test("run_code exists only when the server explicitly enables it", async () => {
-  const { toolsFor } = await import("./index");
+after(() => {
+  getDb().$client.close();
+});
+
+test("run_code exists only when the server explicitly enables it", () => {
   const original = process.env.ORBIT_SANDBOX;
   const settings = { baseUrl: "http://localhost/v1", apiKey: "fake", model: "fake", reasoningEffort: "low" as const, searxngUrl: "", tavilyApiKey: "", githubToken: "", githubMcpUrl: "" };
   try {
@@ -23,9 +28,8 @@ test("run_code exists only when the server explicitly enables it", async () => {
   }
 });
 
-test("the tool registry opens its database in the test data directory", async () => {
-  const { db } = await import("../db");
-  assert.equal(db.$client.name, path.join(dataDirectory(), "orbit.db"));
+test("the tool registry opens its database in the test data directory", () => {
+  assert.equal(getDb().$client.name, path.join(dataDirectory(), "orbit.db"));
 });
 
 test("model input allows only the two languages and at most 20000 characters", () => {
@@ -238,7 +242,6 @@ test("run_code masks stored credentials in stdout, stderr, and ANSI-split output
     emit(2, `err ${settings.tavilyApiKey}\n`);
     finish(0);
   });
-  const { toolsFor } = await import("./index");
   const tool = toolsFor(settings).run_code;
   assert.ok(tool?.execute);
   const output = (await tool.execute({ language: "python", code: "print(1)" }, { toolCallId: "rc1", messages: [], context: {} })) as {
@@ -256,7 +259,6 @@ test("run_code masks a stored credential that straddles the 64 KiB output cap wi
     emit(1, "a".repeat(65_530) + settings.apiKey + "tail");
     finish(0);
   });
-  const { toolsFor } = await import("./index");
   const tool = toolsFor(settings).run_code;
   assert.ok(tool?.execute);
   const output = (await tool.execute({ language: "python", code: "print(1)" }, { toolCallId: "rc2", messages: [], context: {} })) as {
@@ -277,7 +279,6 @@ test("run_code masks stored credentials collected before a stopped run is cancel
     emit(1, `partial ${settings.apiKey}\n`);
     void waiting.then(() => readyToStop.resolve());
   });
-  const { toolsFor } = await import("./index");
   const { createStoppedRuns } = await import("./stopped-runs");
   const stopped = createStoppedRuns();
   const tool = toolsFor(settings, stopped).run_code;
@@ -292,7 +293,6 @@ test("run_code masks stored credentials collected before a stopped run is cancel
 
 test("render_ui masks stored credentials in its returned spec output", async () => {
   const settings = sandboxSettings();
-  const { toolsFor } = await import("./index");
   const tool = toolsFor(settings).render_ui;
   assert.ok(tool?.execute);
   const result = await tool.execute(
@@ -316,7 +316,6 @@ test("run_code masks misaligned Basic-auth base64 credentials streamed across st
     for (let i = 0; i < line.length; i += 4) emit(1, line.slice(i, i + 4));
     finish(0);
   });
-  const { toolsFor } = await import("./index");
   const tool = toolsFor(settings).run_code;
   assert.ok(tool?.execute);
   const output = (await tool.execute({ language: "python", code: "print(1)" }, { toolCallId: "rc-b64", messages: [], context: {} })) as {

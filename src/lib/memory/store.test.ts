@@ -4,41 +4,31 @@ import path from "node:path";
 import test, { before, after } from "node:test";
 import { createRequire } from "node:module";
 import Database from "better-sqlite3";
+import { getDb } from "../db";
+import * as schema from "../db/schema";
 import { dataDirectory } from "../paths";
+import { rememberFact } from "../tools/memory";
+import * as embed from "./embed";
 import { startMockOllama } from "./ollama-harness";
+import * as store from "./store";
 
 const require = createRequire(import.meta.url);
 
 delete process.env.ORBIT_OLLAMA_URL;
 
-type StoreModule = typeof import("./store");
-type EmbedModule = typeof import("./embed");
-
-let store: StoreModule | undefined;
-let embed: EmbedModule | undefined;
-let importError = "";
 let mock: { url: string; stop: () => Promise<void> } | undefined;
 
 before(async () => {
-  try {
-    store = await import("./store");
-    embed = await import("./embed");
-  } catch (error) {
-    importError = error instanceof Error ? error.message : String(error);
-  }
-  if (store && embed) {
-    mock = await startMockOllama();
-    process.env.ORBIT_OLLAMA_URL = mock.url;
-  }
+  mock = await startMockOllama();
+  process.env.ORBIT_OLLAMA_URL = mock.url;
 });
 
 after(async () => {
   await mock?.stop();
+  getDb().$client.close();
 });
 
 function requireStore() {
-  assert.equal(importError, "", `memory store is missing: ${importError}`);
-  if (!store || !embed) throw new Error("memory store is missing");
   return { store, embed };
 }
 
@@ -174,7 +164,7 @@ test("a memory's vector stays on that memory after vacuum", async () => {
   const saved = store.saveMemory({ text: "Vacuum keeps the vectorkey token", kind: "fact", source: "tool" });
   const embedded = await embed.embedPending();
   assert.equal(embedded.ok, true, embedded.ok ? undefined : embedded.error);
-  const { db } = await import("../db");
+  const db = getDb();
   const pk = db.$client.prepare("SELECT type AS type FROM pragma_table_info('memories') WHERE pk = 1").get() as { type: string };
   assert.equal(pk.type, "INTEGER");
   const before = db.$client.prepare("SELECT rowid AS rowid FROM memories WHERE id = ?").get(saved.id) as { rowid: number };
@@ -218,7 +208,7 @@ test("delete removes the memory from the table, the text index, and the vector i
   assert.equal(filled.ok, true);
   const embedded = store.getMemory(saved.id);
   assert.equal(embedded?.embedded, true);
-  const { db } = await import("../db");
+  const db = getDb();
   const located = db.$client.prepare("SELECT rowid AS rowid FROM memories WHERE id = ?").get(saved.id) as { rowid: number };
   assert.equal(store.deleteMemory(saved.id), true);
   assert.equal(store.getMemory(saved.id), null);
@@ -273,7 +263,7 @@ test("editing the text clears the vector until embeddings run again", async () =
 test("a vector for the old text does not mark the rewritten text as embedded", async () => {
   const { store } = requireStore();
   const saved = store.saveMemory({ text: "Stale vector token original", kind: "fact", source: "tool" });
-  const { db } = await import("../db");
+  const db = getDb();
   const located = db.$client.prepare("SELECT rowid AS rowid FROM memories WHERE id = ?").get(saved.id) as { rowid: number };
   const vector = Array.from({ length: 768 }, () => 0);
   vector[0] = 1;
@@ -284,11 +274,9 @@ test("a vector for the old text does not mark the rewritten text as embedded", a
   assert.equal(store.getMemory(saved.id)?.embedded, true);
 });
 
-test("remember keeps the chat when the message id is missing", async () => {
+test("remember keeps the chat when the message id is missing", () => {
   const { store } = requireStore();
-  const { db } = await import("../db");
-  const schema = await import("../db/schema");
-  const { rememberFact } = await import("../tools/memory");
+  const db = getDb();
   const now = new Date();
   db.insert(schema.user).values({ id: "mem-user", name: "Mem", email: "mem-user@orbit.local", emailVerified: true }).run();
   db.insert(schema.chats).values({ id: "mem-chat", userId: "mem-user", title: "Host", createdAt: now, updatedAt: now }).run();

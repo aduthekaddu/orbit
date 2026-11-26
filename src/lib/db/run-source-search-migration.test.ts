@@ -1,15 +1,13 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import test, { before } from "node:test";
+import test, { after, before } from "node:test";
+import { searchTextFromParts } from "../messages";
+import * as search from "../search";
+import { getDb, type OrbitDb } from "./index";
+import * as schema from "./schema";
 
-type DbModule = typeof import("./index");
-type SchemaModule = typeof import("./schema");
-type SearchModule = typeof import("../search");
-
-let db: DbModule["db"];
-let schema: SchemaModule;
-let search: SearchModule;
+let db: OrbitDb;
 const backfill = fs.readFileSync(path.join(process.cwd(), "drizzle/0005_run_source_search.sql"), "utf8");
 
 function run(code: unknown, stdout = "", stderr = "") {
@@ -22,11 +20,8 @@ function save(id: string, position: number, role: string, content: string, parts
     .run(id, role, content, JSON.stringify(parts), position);
 }
 
-before(async () => {
-  const dbModule = await import("./index");
-  schema = await import("./schema");
-  search = await import("../search");
-  db = dbModule.db;
+before(() => {
+  db = getDb();
   const now = new Date();
   db.insert(schema.user).values({ id: "u1", name: "One", email: "one@orbit.local" }).run();
   db.insert(schema.chats).values({ id: "c1", userId: "u1", title: "Old chat", createdAt: now, updatedAt: now }).run();
@@ -43,6 +38,10 @@ before(async () => {
   save("old-user", 10, "user", "run it please", [{ type: "text", text: "run it please" }]);
   save("old-colored", 11, "assistant", "colorout\n", [run("colorsource()", "\u001b[31mcolorout\u001b[0m\n")]);
   db.$client.exec(backfill);
+});
+
+after(() => {
+  db?.$client.close();
 });
 
 function content(id: string) {
@@ -79,8 +78,7 @@ test("saved source is found by search after the migration", () => {
   assert.deepEqual(search.searchMessages("u1", "othertoollegacy"), []);
 });
 
-test("the migration writes the same search text that a new save writes", async () => {
-  const { searchTextFromParts } = await import("../messages");
+test("the migration writes the same search text that a new save writes", () => {
   for (const id of ["old-both", "old-silent", "old-stopped", "old-two-runs", "old-blank", "old-skip-blank", "old-not-text", "old-other-tool", "old-text", "old-user", "old-colored"]) {
     const row = db.$client.prepare("SELECT parts FROM messages WHERE id = ?").get(id) as { parts: string };
     assert.equal(content(id), searchTextFromParts(JSON.parse(row.parts)), id);

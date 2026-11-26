@@ -1,14 +1,15 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { getDb } from "../src/lib/db/index";
+import * as schema from "../src/lib/db/schema";
+import { searchMessages } from "../src/lib/search";
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-bench-search-"));
 process.env.ORBIT_DATA_DIR = dataDir;
 
 async function main() {
-const { db } = await import("../src/lib/db/index");
-const schema = await import("../src/lib/db/schema");
-const { searchMessages } = await import("../src/lib/search");
+const db = getDb();
 
 const now = new Date();
 db.insert(schema.user).values({ id: "bench", name: "Bench", email: "bench@orbit.local" }).run();

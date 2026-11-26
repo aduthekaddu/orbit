@@ -4,6 +4,9 @@ import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 import { NextRequest } from "next/server";
 import nextConfig from "../next.config";
 import { LOCAL_AUTH_URL } from "./lib/auth-origins";
+import { getAuth } from "./lib/auth";
+import { getDb } from "./lib/db";
+import { config, proxy } from "./proxy";
 
 const DAY = 86_400_000;
 const EMAIL = "proxy-test@orbit.local";
@@ -11,10 +14,6 @@ const PASSWORD = "proxy-test-password-1";
 const ENV_KEYS = ["BETTER_AUTH_URL", "BETTER_AUTH_SECRET", "ORBIT_PUBLIC_URL", "ORBIT_TRUSTED_ORIGINS"] as const;
 const savedEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 
-let db: typeof import("./lib/db").db | undefined;
-let auth: typeof import("./lib/auth").auth;
-let config: typeof import("./proxy").config;
-let proxy: typeof import("./proxy").proxy;
 let activeCookie = "";
 let activeToken = "";
 
@@ -25,27 +24,24 @@ function extractSessionCookie(headers: Headers) {
 }
 
 function backdateSession(token: string) {
-  assert.ok(db);
-  db.$client
+  getDb().$client
     .prepare("UPDATE session SET expires_at = ?, updated_at = ? WHERE token = ?")
     .run(Date.now() + 6 * DAY - 60_000, Date.now() - DAY - 60_000, token);
 }
 
 function expireSession(token: string) {
-  assert.ok(db);
-  db.$client.prepare("UPDATE session SET expires_at = ? WHERE token = ?").run(Date.now() - 60_000, token);
+  getDb().$client.prepare("UPDATE session SET expires_at = ? WHERE token = ?").run(Date.now() - 60_000, token);
 }
 
 function sessionExpiresAt(token: string) {
-  assert.ok(db);
-  const row = db.$client.prepare("SELECT expires_at AS expiresAt FROM session WHERE token = ?").get(token) as
+  const row = getDb().$client.prepare("SELECT expires_at AS expiresAt FROM session WHERE token = ?").get(token) as
     | { expiresAt: number }
     | undefined;
   return row?.expiresAt;
 }
 
 async function signInFreshSession() {
-  const result = await auth.api.signInEmail({
+  const result = await getAuth().api.signInEmail({
     body: { email: EMAIL, password: PASSWORD },
     headers: new Headers({ origin: LOCAL_AUTH_URL }),
     returnHeaders: true,
@@ -59,10 +55,7 @@ before(async () => {
   delete process.env.BETTER_AUTH_SECRET;
   delete process.env.ORBIT_PUBLIC_URL;
   delete process.env.ORBIT_TRUSTED_ORIGINS;
-  ({ db } = await import("./lib/db"));
-  ({ auth } = await import("./lib/auth"));
-  ({ config, proxy } = await import("./proxy"));
-  const signedUp = await auth.api.signUpEmail({
+  const signedUp = await getAuth().api.signUpEmail({
     body: { name: "Proxy Test", email: EMAIL, password: PASSWORD },
     headers: new Headers({ origin: LOCAL_AUTH_URL }),
     returnHeaders: true,
@@ -73,7 +66,7 @@ before(async () => {
 });
 
 after(() => {
-  db?.$client.close();
+  getDb().$client.close();
   for (const key of ENV_KEYS) {
     if (savedEnv[key] === undefined) delete process.env[key];
     else process.env[key] = savedEnv[key];

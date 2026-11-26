@@ -6,6 +6,9 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test, { after, before } from "node:test";
+import { getDb, type OrbitDb } from "@/lib/db";
+import * as schema from "@/lib/db/schema";
+import { saveSettings } from "@/lib/settings";
 
 const USER_ID = "u-models-route";
 const PROVIDER_KEY = "made-up-provider-key-0001";
@@ -30,8 +33,7 @@ const hooks = registerHooks({
 });
 
 let modelsRoute: typeof import("./route");
-let saveSettings: typeof import("@/lib/settings").saveSettings;
-let db: typeof import("@/lib/db").db;
+let db: OrbitDb | undefined;
 let provider: http.Server;
 let baseUrl = "";
 const originalCwd = process.cwd();
@@ -65,9 +67,7 @@ before(async () => {
   const port = (provider.address() as { port: number }).port;
   baseUrl = `http://127.0.0.1:${port}/v1`;
 
-  ({ db } = await import("@/lib/db"));
-  const schema = await import("@/lib/db/schema");
-  ({ saveSettings } = await import("@/lib/settings"));
+  db = getDb();
   const now = new Date();
   db.insert(schema.user).values({ id: USER_ID, name: "Models", email: "models@orbit.local", emailVerified: false, createdAt: now, updatedAt: now }).run();
   saveSettings({

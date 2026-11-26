@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { auth, trustedOrigins } from "@/lib/auth";
+import { getAuth, getTrustedOrigins } from "@/lib/auth";
 import { describeAuthMiss } from "@/lib/auth-miss";
 import { isCrossOriginWrite } from "@/lib/auth-origins";
 
@@ -8,7 +8,7 @@ const PUBLIC_PAGES = new Set(["/login", "/signup"]);
 function routeResponse(request: NextRequest, pathname: string, signedIn: boolean) {
   if (pathname.startsWith("/api")) {
     if (!signedIn) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (isCrossOriginWrite(request, trustedOrigins)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (isCrossOriginWrite(request, getTrustedOrigins())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     return NextResponse.next();
   }
   if (!signedIn && !PUBLIC_PAGES.has(pathname)) {
@@ -33,7 +33,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const { response: session, headers } = await auth.api.getSession({
+  const { response: session, headers } = await getAuth().api.getSession({
     headers: request.headers,
     returnHeaders: true,
   });

@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- Importing server modules or running `next build` no longer opens, migrates, or seeds `orbit.db` or writes `auth-secret`. The server now opens and migrates the database at startup through `src/instrumentation.ts`, and callers open the database or auth on first `getDb()` or `getAuth()` call. (#131, #199)
 - The nightly dream reads every message of a chat's window in pages instead of only the oldest 100, and a chat retried after a failed night re-reads its whole window from the night it first failed, so facts stated late in a busy chat are no longer silently skipped. (#123)
 
 - Recalled memories tell the model whether the user wrote the note or the assistant saved it. Changing only a note's kind, spacing, or capitalization keeps its attribution. (#127)

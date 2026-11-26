@@ -5,10 +5,11 @@ import path from "node:path";
 import test, { after, before } from "node:test";
 import { pathToFileURL } from "node:url";
 import { LOCAL_AUTH_URL } from "@/lib/auth-origins";
+import { getDb, type OrbitDb } from "@/lib/db";
+import * as store from "@/lib/memory/store";
 import { dataDirectory } from "@/lib/paths";
 
-let db: typeof import("@/lib/db").db | undefined;
-let store: typeof import("@/lib/memory/store");
+let db: OrbitDb | undefined;
 let patch: typeof import("./[id]/route").PATCH;
 let hooks: ReturnType<typeof registerHooks> | undefined;
 
@@ -22,8 +23,7 @@ before(async () => {
       return nextResolve(specifier, context);
     },
   });
-  ({ db } = await import("@/lib/db"));
-  store = await import("@/lib/memory/store");
+  db = getDb();
   ({ PATCH: patch } = await import("./[id]/route"));
 });
 

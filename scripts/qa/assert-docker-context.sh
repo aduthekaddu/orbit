@@ -2,8 +2,7 @@
 # The image must not copy nested databases, secrets, env files, build output or agent worktrees.
 # This plants marker files at those paths in the checkout, builds a throwaway image from the
 # repository root with the repository's .dockerignore, and fails if `COPY . ...` copied any of them.
-# It checks right after the copy, because the real Dockerfile deletes /app/data in a later layer
-# and an earlier layer still holds what it copied. Run it from the repository root. It needs Docker.
+# It checks right after the copy instead of running the full build. Run it from the repository root. It needs Docker.
 set -euo pipefail
 
 name=context-check

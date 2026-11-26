@@ -1,7 +1,7 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { Redactor } from "../chat-errors";
-import { db } from "../db";
+import { getDb } from "../db";
 import { orbitModel } from "../provider";
 import { getSettings } from "../settings";
 import { embed, embedPending } from "./embed";
@@ -45,17 +45,18 @@ ON CONFLICT(date) DO UPDATE SET
 `;
 
 function readRun(date: string): MemoryRun | null {
-  const row = db.$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE date = ?`).get(date);
+  const row = getDb().$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE date = ?`).get(date);
   return row ? parseRun(row) : null;
 }
 
 // The only writer of memory_runs. The immediate transaction takes the write lock before the read,
 // so two processes cannot both apply an event to the same row.
 function advance(date: string, event: RunEvent): MemoryRun | null {
-  return db.$client
+  const client = getDb().$client;
+  return client
     .transaction(() => {
       const next = transition(readRun(date), event);
-      if (next) db.$client.prepare(WRITE_RUN).run(storedRow(next));
+      if (next) client.prepare(WRITE_RUN).run(storedRow(next));
       return next;
     })
     .immediate();
@@ -66,7 +67,7 @@ export function getRun(date: string): MemoryRun | null {
 }
 
 export function latestRun(): MemoryRun | null {
-  const row = db.$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs ORDER BY date DESC LIMIT 1`).get();
+  const row = getDb().$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs ORDER BY date DESC LIMIT 1`).get();
   return row ? parseRun(row) : null;
 }
 
@@ -83,12 +84,12 @@ export function tryClaim(input: { date: string; owner: string; now: Date; chatId
 }
 
 function previousRun(date: string): MemoryRun | null {
-  const row = db.$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE date < ? ORDER BY date DESC LIMIT 1`).get(date);
+  const row = getDb().$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE date < ? ORDER BY date DESC LIMIT 1`).get(date);
   return row ? parseRun(row) : null;
 }
 
 function latestDone(date: string): MemoryRun | null {
-  const row = db.$client
+  const row = getDb().$client
     .prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE date < ? AND state = 'done' ORDER BY date DESC LIMIT 1`)
     .get(date);
   return row ? parseRun(row) : null;
@@ -113,7 +114,7 @@ function retryWindowStart(date: string, chatId: string): number | null {
 
 function changedChatIds(date: string, end: number): string[] {
   const start = windowStart(date);
-  const rows = db.$client
+  const rows = getDb().$client
     .prepare("SELECT DISTINCT chat_id AS id FROM messages WHERE created_at > ? AND created_at <= ?")
     .all(start, end) as { id: string }[];
   const retry = previousRun(date)?.retryChatIds ?? [];
@@ -141,7 +142,7 @@ const PAGE = 100;
 // skips rows that share the last row's timestamp. A null id keeps the first page inside the
 // window's exclusive start.
 function loadWindow(chatId: string, start: number, end: number): ChatMessage[] {
-  const page = db.$client.prepare(
+  const page = getDb().$client.prepare(
     `SELECT id, role, parts, created_at AS createdAt FROM messages
      WHERE chat_id = ? AND created_at > ? AND created_at <= ? AND role IN ('user', 'assistant')
        AND (created_at > ? OR (created_at = ? AND id > ?))
@@ -188,7 +189,7 @@ function promptFor(messages: ChatMessage[]): string {
 
 function nearest(vector: number[]): { id: string; similarity: number } | null {
   const blob = Buffer.from(new Float32Array(vector).buffer);
-  const row = db.$client
+  const row = getDb().$client
     .prepare(
       `SELECT memories.id AS id, vec_distance_cosine(memories_vec.embedding, ?) AS distance
        FROM memories_vec
@@ -202,7 +203,7 @@ function nearest(vector: number[]): { id: string; similarity: number } | null {
 }
 
 function rememberVector(id: string, text: string, vector: number[]) {
-  const located = db.$client.prepare("SELECT rowid AS rowid FROM memories WHERE id = ?").get(id) as { rowid: number } | undefined;
+  const located = getDb().$client.prepare("SELECT rowid AS rowid FROM memories WHERE id = ?").get(id) as { rowid: number } | undefined;
   if (!located) return;
   writeVectors([{ rowid: located.rowid, text, vector }]);
 }
@@ -210,13 +211,14 @@ function rememberVector(id: string, text: string, vector: number[]) {
 type Prepared = Candidate & { vector: number[]; createdAt: number };
 
 function sourceChat(messageId: string): string | null {
-  const row = db.$client.prepare("SELECT chat_id AS chatId FROM messages WHERE id = ?").get(messageId) as { chatId: string } | undefined;
+  const row = getDb().$client.prepare("SELECT chat_id AS chatId FROM messages WHERE id = ?").get(messageId) as { chatId: string } | undefined;
   return row?.chatId ?? null;
 }
 
 function applyCandidatesWithSource(chatId: string, prepared: Prepared[]): { added: number; merged: number } {
   let added = 0;
   let merged = 0;
+  const client = getDb().$client;
   for (const candidate of prepared) {
     let text: string;
     try {
@@ -239,7 +241,7 @@ function applyCandidatesWithSource(chatId: string, prepared: Prepared[]): { adde
       }
       continue;
     }
-    const prior = db.$client.prepare("SELECT id FROM memories WHERE text_norm = ?").get(text.toLowerCase()) as { id: string } | undefined;
+    const prior = client.prepare("SELECT id FROM memories WHERE text_norm = ?").get(text.toLowerCase()) as { id: string } | undefined;
     const saved = saveMemory({
       text,
       kind: candidate.kind,
@@ -264,7 +266,7 @@ function finishChat(
   outcome: "done" | "retry",
   apply: () => { added: number; merged: number },
 ): "done" | "retry" | "lost" {
-  return db.$client
+  return getDb().$client
     .transaction((): "done" | "retry" | "lost" => {
       if (!renew(date, owner)) return "lost";
       const counts = outcome === "done" ? apply() : { added: 0, merged: 0 };

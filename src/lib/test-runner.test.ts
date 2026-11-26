@@ -146,9 +146,9 @@ test("worker count overrides are validated and logged alongside the seed", () =>
 // The shape of PR #82: a static import of the database module with no data directory set first.
 const dbModule = path.join(process.cwd(), "src/lib/db/index.ts");
 const opensDatabase = `import fs from "node:fs";
-import { db } from ${JSON.stringify(dbModule)};
+import { getDb } from ${JSON.stringify(dbModule)};
 test("opens the database", () => {
-  fs.appendFileSync("opened.log", db.$client.name + "\\n");
+  fs.appendFileSync("opened.log", getDb().$client.name + "\\n");
 });`;
 
 test("every test file gets its own temporary data directory, removed after the run", () => {
@@ -184,16 +184,16 @@ for (const [name, { file, args }] of Object.entries(launchForms)) {
 }
 
 test("a program that is not a test file still opens ./data without a data directory", () => {
-  const { dir, env } = makeProject({ "tool.ts": `import { db } from ${JSON.stringify(dbModule)};\nconsole.log(db.$client.name);` });
+  const { dir, env } = makeProject({ "tool.ts": `import { getDb } from ${JSON.stringify(dbModule)};\nconsole.log(getDb().$client.name);` });
   const result = spawnSync(process.execPath, ["--import", "tsx", "src/tool.ts"], { cwd: dir, env, encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
   assert.ok(fs.existsSync(path.join(dir, "data", "orbit.db")));
 });
 
 const killsItself = `import fs from "node:fs";
-import { db } from ${JSON.stringify(dbModule)};
+import { getDb } from ${JSON.stringify(dbModule)};
 test("kills itself after opening the database", () => {
-  fs.appendFileSync("opened.log", db.$client.name + "\\n");
+  fs.appendFileSync("opened.log", getDb().$client.name + "\\n");
   process.kill(process.pid, "SIGKILL");
 });`;
 
@@ -205,9 +205,9 @@ test("a killed test file leaves nothing in the temp directory after the run", ()
 });
 
 const hangs = `import fs from "node:fs";
-import { db } from ${JSON.stringify(dbModule)};
+import { getDb } from ${JSON.stringify(dbModule)};
 test("hangs after opening the database", async () => {
-  fs.writeFileSync("ready.tmp", db.$client.name + "\\n" + process.pid);
+  fs.writeFileSync("ready.tmp", getDb().$client.name + "\\n" + process.pid);
   fs.renameSync("ready.tmp", "ready.log");
   await new Promise((resolve) => setTimeout(resolve, 60_000));
 });`;
@@ -358,10 +358,10 @@ if (tryClaim("slot-1")) {
 
 test("a second signal stops a SIGTERM-ignoring test file immediately without leaking its data directory", async () => {
   const stubborn = `import fs from "node:fs";
-import { db } from ${JSON.stringify(dbModule)};
+import { getDb } from ${JSON.stringify(dbModule)};
 process.on("SIGTERM", () => {});
 test("ignores SIGTERM after opening the database", async () => {
-  fs.writeFileSync("ready.tmp", db.$client.name + "\\n" + process.pid);
+  fs.writeFileSync("ready.tmp", getDb().$client.name + "\\n" + process.pid);
   fs.renameSync("ready.tmp", "ready.log");
   await new Promise((resolve) => setTimeout(resolve, 60_000));
 });`;
@@ -394,11 +394,11 @@ test("ignores SIGTERM after opening the database", async () => {
 test("an empty pid file in the test root does not make the runner signal its own process group", async () => {
   const emptyPid = `import fs from "node:fs";
 import path from "node:path";
-import { db } from ${JSON.stringify(dbModule)};
+import { getDb } from ${JSON.stringify(dbModule)};
 test("creates an empty sibling pid file then hangs", async () => {
   const sibling = fs.mkdtempSync(path.join(process.env.ORBIT_TEST_ROOT!, "orbit-test-data-empty-"));
   fs.writeFileSync(path.join(sibling, "pid"), "");
-  fs.writeFileSync("ready.tmp", db.$client.name + "\\n" + process.pid);
+  fs.writeFileSync("ready.tmp", getDb().$client.name + "\\n" + process.pid);
   fs.renameSync("ready.tmp", "ready.log");
   await new Promise((resolve) => setTimeout(resolve, 60_000));
 });`;

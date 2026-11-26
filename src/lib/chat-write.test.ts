@@ -5,17 +5,26 @@ import path from "node:path";
 import test, { before, after } from "node:test";
 import { toUIMessageStream, type UIMessage } from "ai";
 import { Redactor } from "./chat-errors";
+import { getDb, type OrbitDb } from "./db";
+import * as schema from "./db/schema";
+import {
+  finishChatReply,
+  listMessages,
+  messageRepository,
+  planChatWrite,
+  updateMessageText,
+} from "./messages";
 
 const redact = new Redactor(null);
 
 type Modules = {
-  db: typeof import("./db").db;
-  schema: typeof import("./db/schema");
-  planChatWrite: typeof import("./messages").planChatWrite;
-  finishChatReply: typeof import("./messages").finishChatReply;
-  listMessages: typeof import("./messages").listMessages;
-  messageRepository: typeof import("./messages").messageRepository;
-  updateMessageText: typeof import("./messages").updateMessageText;
+  db: OrbitDb;
+  schema: typeof schema;
+  planChatWrite: typeof planChatWrite;
+  finishChatReply: typeof finishChatReply;
+  listMessages: typeof listMessages;
+  messageRepository: typeof messageRepository;
+  updateMessageText: typeof updateMessageText;
 };
 
 let mods: Modules;
@@ -28,23 +37,20 @@ after(() => {
   if (sandbox) fs.rmSync(sandbox, { recursive: true, force: true });
 });
 
-before(async () => {
+before(() => {
   const repo = process.cwd();
   sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-chat-write-"));
   fs.cpSync(path.join(repo, "drizzle"), path.join(sandbox, "drizzle"), { recursive: true });
   process.chdir(sandbox);
 
-  const dbModule = await import("./db");
-  const schema = await import("./db/schema");
-  const messageModule = await import("./messages");
   mods = {
-    db: dbModule.db,
+    db: getDb(),
     schema,
-    planChatWrite: messageModule.planChatWrite,
-    finishChatReply: messageModule.finishChatReply,
-    listMessages: messageModule.listMessages,
-    messageRepository: messageModule.messageRepository,
-    updateMessageText: messageModule.updateMessageText,
+    planChatWrite,
+    finishChatReply,
+    listMessages,
+    messageRepository,
+    updateMessageText,
   };
 
   const now = new Date();

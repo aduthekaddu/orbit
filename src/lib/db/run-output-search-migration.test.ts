@@ -1,15 +1,13 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import test, { before } from "node:test";
+import test, { after, before } from "node:test";
+import { searchTextFromParts } from "../messages";
+import * as search from "../search";
+import { getDb, type OrbitDb } from "./index";
+import * as schema from "./schema";
 
-type DbModule = typeof import("./index");
-type SchemaModule = typeof import("./schema");
-type SearchModule = typeof import("../search");
-
-let db: DbModule["db"];
-let schema: SchemaModule;
-let search: SearchModule;
+let db: OrbitDb;
 const backfill = fs.readFileSync(path.join(process.cwd(), "drizzle/0004_run_output_search.sql"), "utf8");
 
 function run(stdout: string, stderr = "") {
@@ -22,11 +20,8 @@ function save(id: string, position: number, role: string, content: string, parts
     .run(id, role, content, JSON.stringify(parts), position);
 }
 
-before(async () => {
-  const dbModule = await import("./index");
-  schema = await import("./schema");
-  search = await import("../search");
-  db = dbModule.db;
+before(() => {
+  db = getDb();
   const now = new Date();
   db.insert(schema.user).values({ id: "u1", name: "One", email: "one@orbit.local" }).run();
   db.insert(schema.chats).values({ id: "c1", userId: "u1", title: "Old chat", createdAt: now, updatedAt: now }).run();
@@ -40,6 +35,10 @@ before(async () => {
   save("old-text", 5, "assistant", "just words", [{ type: "text", text: "just words" }]);
   save("old-user", 6, "user", "run it please", [{ type: "text", text: "run it please" }]);
   db.$client.exec(backfill);
+});
+
+after(() => {
+  db?.$client.close();
 });
 
 function content(id: string) {
@@ -75,8 +74,7 @@ test("the migration keeps the output of several runs in the order of the chat", 
   assert.equal(content("old-two-runs"), "between\nfirst-out\n\nfirst-err\n\nsecond-out\n\nsecond-err\n");
 });
 
-test("this migration and the next one write the same search text that a new save writes", async () => {
-  const { searchTextFromParts } = await import("../messages");
+test("this migration and the next one write the same search text that a new save writes", () => {
   // A new save also writes the source of each run, which 0005 adds. Run it last, after the checks above.
   db.$client.exec(fs.readFileSync(path.join(process.cwd(), "drizzle/0005_run_source_search.sql"), "utf8"));
   for (const id of ["old-both", "old-only-output", "old-color", "old-two-runs", "old-blank", "old-stopped", "old-text", "old-user"]) {

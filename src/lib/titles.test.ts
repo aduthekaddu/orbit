@@ -1,17 +1,7 @@
 import assert from "node:assert/strict";
-import test, { before } from "node:test";
-
-let cleanTitle: (raw: string) => string;
-let chatTitle: (text: string) => string;
-let titlePrompt: (firstMessage: string) => string;
-
-before(async () => {
-  const titles = await import("./titles");
-  const messages = await import("./messages");
-  cleanTitle = titles.cleanTitle;
-  titlePrompt = titles.titlePrompt;
-  chatTitle = messages.chatTitle;
-});
+import test from "node:test";
+import { chatTitle } from "./messages";
+import { cleanTitle, titlePrompt } from "./titles";
 
 test("cleanTitle drops wrapping quotes and a trailing period", () => {
   assert.equal(cleanTitle('"Stack trace."'), "Stack trace");

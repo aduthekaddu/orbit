@@ -150,7 +150,8 @@ async function main() {
     };
 
     const { Redactor } = await import("../../src/lib/chat-errors.ts");
-    const { db } = await import("../../src/lib/db/index.ts");
+    const { getDb } = await import("../../src/lib/db/index.ts");
+    const db = getDb();
     const schema = await import("../../src/lib/db/schema.ts");
     const { createChat, persistIncoming } = await import("../../src/lib/messages.ts");
     const { runDream } = await import("../../src/lib/memory/dream.ts");

@@ -1,16 +1,22 @@
 import { dataDirectory } from "../paths";
 import assert from "node:assert/strict";
 import path from "node:path";
-import test from "node:test";
+import test, { after } from "node:test";
 import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { startMockMcp } from "../../../scripts/qa/mock-mcp.mjs";
+import { getDb } from "../db";
 import { eventually } from "../eventually.mjs";
 
 process.env.ORBIT_GITHUB_MCP_FIXTURE = "1";
 import { Redactor, redactUrl } from "../chat-errors";
 import { githubLinks } from "./github-links";
 import { checkGithub, githubTools, openGithubTurn } from "./github";
+import { toolsForTurn } from "./index";
+
+after(() => {
+  getDb().$client.close();
+});
 
 const toolOptions = {
   toolCallId: "github-test",
@@ -614,7 +620,6 @@ test("check reports the GitHub login and a rejected token", { timeout: 20_000 },
 
 test("a turn merges GitHub tools when a token is set and closes the client", { timeout: 20_000 }, async () => {
   await withMock(async (mock) => {
-    const { toolsForTurn } = await import("./index");
     const opened = await toolsForTurn({
       baseUrl: "https://provider.invalid/v1",
       apiKey: "test-key-not-real",
@@ -639,7 +644,6 @@ test("a turn merges GitHub tools when a token is set and closes the client", { t
 });
 
 test("a turn without a GitHub token does not open GitHub", async () => {
-  const { toolsForTurn } = await import("./index");
   const opened = await toolsForTurn({
     baseUrl: "https://provider.invalid/v1",
     apiKey: "test-key-not-real",
@@ -655,9 +659,8 @@ test("a turn without a GitHub token does not open GitHub", async () => {
   await opened.close();
 });
 
-test("the tool registry opens its database in the test data directory", async () => {
-  const { db } = await import("../db");
-  assert.equal(db.$client.name, path.join(dataDirectory(), "orbit.db"));
+test("the tool registry opens its database in the test data directory", () => {
+  assert.equal(getDb().$client.name, path.join(dataDirectory(), "orbit.db"));
 });
 
 test("issue, pull request, and file results become GitHub links", () => {

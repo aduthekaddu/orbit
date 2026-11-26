@@ -5,6 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test, { after, before } from "node:test";
+import { getDb, type OrbitDb } from "@/lib/db";
+import * as schema from "@/lib/db/schema";
+import { getSettings } from "@/lib/settings";
 
 const USER_ID = "u-settings-route";
 const PROVIDER_KEY = "made-up-provider-key-0001";
@@ -26,8 +29,7 @@ const hooks = registerHooks({
 });
 
 let settingsRoute: typeof import("./route");
-let getSettings: typeof import("@/lib/settings").getSettings;
-let db: typeof import("@/lib/db").db;
+let db: OrbitDb | undefined;
 const originalCwd = process.cwd();
 const originalEnv = Object.fromEntries(SEEDED_ENV.map((name) => [name, process.env[name]]));
 
@@ -36,9 +38,7 @@ before(async () => {
   fs.cpSync(path.join(originalCwd, "drizzle"), path.join(sandbox, "drizzle"), { recursive: true });
   process.chdir(sandbox);
 
-  ({ db } = await import("@/lib/db"));
-  const schema = await import("@/lib/db/schema");
-  ({ getSettings } = await import("@/lib/settings"));
+  db = getDb();
   const now = new Date();
   db.insert(schema.user).values({ id: USER_ID, name: "Settings", email: "settings@orbit.local", emailVerified: false, createdAt: now, updatedAt: now }).run();
   settingsRoute = await import("./route");

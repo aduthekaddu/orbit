@@ -7,6 +7,10 @@ import { pathToFileURL } from "node:url";
 import test, { after, before } from "node:test";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
+import { getDb, type OrbitDb } from "@/lib/db";
+import * as schema from "@/lib/db/schema";
+import * as messages from "@/lib/messages";
+import { saveSettings } from "@/lib/settings";
 
 const PROVIDER_KEY = "made-up-provider-key-0001";
 const TAVILY_KEY = "made-up-tavily-key-0002";
@@ -50,9 +54,7 @@ const hooks = registerHooks({
 });
 
 let route: typeof import("./route");
-let messages: typeof import("@/lib/messages");
-let saveSettings: typeof import("@/lib/settings").saveSettings;
-let db: typeof import("@/lib/db").db;
+let db: OrbitDb | undefined;
 const originalCwd = process.cwd();
 const originalEnv = Object.fromEntries(["ORBIT_OLLAMA_URL", "ORBIT_SANDBOX", ...SEEDED_ENV].map((name) => [name, process.env[name]]));
 
@@ -84,13 +86,10 @@ before(async () => {
   fs.cpSync(path.join(originalCwd, "drizzle"), path.join(sandbox, "drizzle"), { recursive: true });
   process.chdir(sandbox);
 
-  ({ db } = await import("@/lib/db"));
-  const schema = await import("@/lib/db/schema");
-  ({ saveSettings } = await import("@/lib/settings"));
+  db = getDb();
   const now = new Date();
   db.insert(schema.user).values({ id: USER_ID, name: "Stream", email: "stream@orbit.local", emailVerified: false, createdAt: now, updatedAt: now }).run();
   setCredentials();
-  messages = await import("@/lib/messages");
   route = await import("./route");
 });
 
@@ -133,7 +132,7 @@ async function sendChat(chatId: string, text: string, model: MockLanguageModelV4
     const raw = await response.text();
     await Promise.allSettled(afterTasks.splice(0));
     const saved = messages.listMessages(chatId);
-    const titleRow = db.$client.prepare<[string], { title: string }>("select title from chats where id = ?").get(chatId);
+    const titleRow = getDb().$client.prepare<[string], { title: string }>("select title from chats where id = ?").get(chatId);
     return { raw, chunks: parseSse(raw), saved, title: titleRow?.title ?? "" };
   } finally {
     console.error = originalError;
