@@ -155,3 +155,16 @@ test("POST /api/models accepts the masked saved base URL without requiring the u
     });
   }
 });
+
+test("POST /api/models rejects an edited base URL with an unresolvable [redacted] marker", async () => {
+  const response = await modelsRoute.POST(
+    new Request("http://127.0.0.1/api/models", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ baseUrl: "http://[redacted]@127.0.0.1:9/v1", apiKey: SUBMITTED_KEY }),
+    }),
+  );
+  assert.equal(response.status, 400);
+  const body = (await response.json()) as { error?: string };
+  assert.match(body.error ?? "", /Base URL/i);
+});

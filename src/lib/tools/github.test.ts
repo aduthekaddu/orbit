@@ -358,6 +358,13 @@ test("check resolves a masked saved MCP URL back to the stored URL", { timeout: 
     assert.equal(maskedUrl, `${mock.url}?token=[redacted]&escaped-login=custom-user`);
     const checked = await checkGithub(stored, { mcpUrl: maskedUrl });
     assert.deepEqual(checked, { ok: true, login: "custom-user" });
+
+    const editedSameOrigin = await checkGithub(stored, { mcpUrl: `${mock.url}?token=[redacted]&escaped-login=edited-user` });
+    assert.deepEqual(editedSameOrigin, { ok: true, login: "edited-user" });
+
+    const unresolvable = await checkGithub(stored, { mcpUrl: `${mock.url}?api_key=[redacted]` });
+    assert.equal(unresolvable.ok, false);
+    if (!unresolvable.ok) assert.match(unresolvable.error, /GitHub MCP URL/i);
   });
 });
 

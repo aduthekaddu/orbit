@@ -105,3 +105,118 @@ test("GET and PUT /api/settings mask userinfo, query credentials, and stored key
   assert.equal(stored?.apiKey, PROVIDER_KEY);
   assert.equal(stored?.reasoningEffort, "high");
 });
+
+test("editing non-secret parts of masked URLs merges saved credentials on the same origin and never stores the marker", async () => {
+  const initialBase = "https://user:pw-secret-value-1234@proxy.example.com/v1";
+  const initialSearx = "http://127.0.0.1:8888/search?token=searx-secret-01&format=json&language=en#top";
+  const initialMcp = "https://api.githubcopilot.com/mcp/?token=gh-mcp-secret-01&mode=a";
+  const first = await settingsRoute.PUT(
+    new Request("http://127.0.0.1/api/settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        baseUrl: initialBase,
+        apiKey: PROVIDER_KEY,
+        searxngUrl: initialSearx,
+        githubMcpUrl: initialMcp,
+        model: "gpt-4",
+        reasoningEffort: "medium",
+      }),
+    }),
+  );
+  assert.equal(first.status, 200);
+  const shown = (await first.json()) as { baseUrl: string; searxngUrl: string; githubMcpUrl: string };
+  assert.equal(shown.baseUrl, "https://[redacted]@proxy.example.com/v1");
+  assert.equal(shown.searxngUrl, "http://127.0.0.1:8888/search?token=[redacted]&format=json&language=en#top");
+  assert.equal(shown.githubMcpUrl, "https://api.githubcopilot.com/mcp/?token=[redacted]&mode=a");
+
+  const edited = await settingsRoute.PUT(
+    new Request("http://127.0.0.1/api/settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        baseUrl: shown.baseUrl.replace("/v1", "/v2"),
+        apiKey: "made-up-provider-key-next-02",
+        searxngUrl: shown.searxngUrl.replace("language=en", "language=de"),
+        githubMcpUrl: shown.githubMcpUrl.replace("mode=a", "mode=b"),
+        model: "gpt-4",
+        reasoningEffort: "medium",
+      }),
+    }),
+  );
+  assert.equal(edited.status, 200);
+  const stored = getSettings();
+  assert.equal(stored?.baseUrl, "https://user:pw-secret-value-1234@proxy.example.com/v2");
+  assert.equal(stored?.searxngUrl, "http://127.0.0.1:8888/search?token=searx-secret-01&format=json&language=de#top");
+  assert.equal(stored?.githubMcpUrl, "https://api.githubcopilot.com/mcp/?token=gh-mcp-secret-01&mode=b");
+});
+
+test("PUT /api/settings rejects an edited URL whose [redacted] marker cannot be resolved and names the field", async () => {
+  const initialBase = `https://user:pw-secret-value-1234@proxy.example.com/v1/${PROVIDER_KEY}`;
+  const initialSearx = "http://127.0.0.1:8888/search?token=searx-secret-01&language=en";
+  const initialMcp = "https://api.githubcopilot.com/mcp/?token=gh-mcp-secret-01";
+  const setup = await settingsRoute.PUT(
+    new Request("http://127.0.0.1/api/settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        baseUrl: initialBase,
+        apiKey: PROVIDER_KEY,
+        searxngUrl: initialSearx,
+        githubMcpUrl: initialMcp,
+        model: "gpt-4",
+        reasoningEffort: "medium",
+      }),
+    }),
+  );
+  assert.equal(setup.status, 200);
+  const shown = (await setup.json()) as { baseUrl: string; searxngUrl: string; githubMcpUrl: string };
+
+  const cases: Array<{ label: RegExp; patch: Record<string, string> }> = [
+    {
+      label: /Base URL/i,
+      patch: { baseUrl: "https://[redacted]@other.example.com/v1", apiKey: "made-up-provider-key-next-03" },
+    },
+    {
+      label: /Base URL/i,
+      patch: { baseUrl: "https://[redacted]@proxy.example.com/v2/[redacted]", apiKey: "made-up-provider-key-next-03" },
+    },
+    {
+      label: /SearXNG URL/i,
+      patch: { searxngUrl: "http://127.0.0.1:9999/search?token=[redacted]" },
+    },
+    {
+      label: /SearXNG URL/i,
+      patch: { searxngUrl: "http://127.0.0.1:8888/search?api_key=[redacted]" },
+    },
+    {
+      label: /GitHub MCP URL/i,
+      patch: { githubMcpUrl: "https://api.github.com/mcp/?token=[redacted]" },
+    },
+  ];
+
+  for (const { label, patch } of cases) {
+    const response = await settingsRoute.PUT(
+      new Request("http://127.0.0.1/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          baseUrl: shown.baseUrl,
+          searxngUrl: shown.searxngUrl,
+          githubMcpUrl: shown.githubMcpUrl,
+          model: "gpt-4",
+          reasoningEffort: "medium",
+          ...patch,
+        }),
+      }),
+    );
+    assert.equal(response.status, 400, `expected 400 for ${JSON.stringify(patch)}`);
+    const body = (await response.json()) as { error?: string };
+    assert.match(body.error ?? "", label);
+  }
+
+  const stored = getSettings();
+  assert.equal(stored?.baseUrl, initialBase);
+  assert.equal(stored?.searxngUrl, initialSearx);
+  assert.equal(stored?.githubMcpUrl, initialMcp);
+});
