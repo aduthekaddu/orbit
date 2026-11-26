@@ -134,6 +134,7 @@ case $suite in
     check verify drive signup
     check verify drive signin
     check verify drive settings
+    check node scripts/qa/response-headers.mjs
     ;;
   browse)
     start_mock_ollama || die "mock ollama"
