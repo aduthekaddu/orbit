@@ -683,3 +683,52 @@ test("reasoning-delta and text-delta providerMetadata survive POST /api/chat SSE
   assert.equal(text.text, "Answer ready.");
   assert.deepEqual(text.providerMetadata, { openai: { itemId: "msg-e2e-1", note: "tok=[redacted]" } });
 });
+
+test("a disconnected response still saves the full reply", { timeout: 5_000 }, async (t) => {
+  const chatId = "durable-disconnect";
+  const first = "First words " + "more words ".repeat(40);
+  const client = new AbortController();
+  const tail = Promise.withResolvers<void>();
+  t.after(() => tail.resolve());
+  nextModel = () => new MockLanguageModelV4({
+    doGenerate: generateTitle("Durable reply"),
+    doStream: async () => ({
+      stream: new ReadableStream({
+        async start(controller) {
+          controller.enqueue({ type: "stream-start", warnings: [] });
+          controller.enqueue({ type: "text-start", id: "text" });
+          controller.enqueue({ type: "text-delta", id: "text", delta: first });
+          await tail.promise;
+          controller.enqueue({ type: "text-delta", id: "text", delta: "last words" });
+          controller.enqueue({ type: "text-end", id: "text" });
+          controller.enqueue(finishChunk());
+          controller.close();
+        },
+      }),
+    }),
+  });
+  const response = await route.POST(new Request("http://127.0.0.1/api/chat", {
+    method: "POST",
+    signal: client.signal,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      id: chatId,
+      messages: [{ id: "durable-disconnect-prompt", role: "user", parts: [{ type: "text", text: "Send the full reply." }] }],
+    }),
+  }));
+  assert.equal(response.status, 200);
+  assert.ok(response.body);
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  for (;;) {
+    const chunk = await reader.read();
+    assert.equal(chunk.done, false, "the first text must reach the browser before it disconnects");
+    if (chunk.value?.includes("First words")) break;
+  }
+  client.abort();
+  const cancelled = reader.cancel();
+  tail.resolve();
+  await cancelled;
+  await Promise.allSettled(afterTasks.splice(0));
+  const rows = messages.listMessages(chatId).filter((row) => row.role === "assistant");
+  assert.equal(rows.map((row) => messages.textFromParts(row.parts)).join(""), first + "last words");
+});

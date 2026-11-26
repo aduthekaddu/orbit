@@ -145,3 +145,9 @@ test("an interrupted reply settles streaming tool parts to a stopped error", () 
   assert.deepEqual(settleInterruptedParts([streaming], false), [streaming]);
   assert.deepEqual(settleInterruptedParts(undefined, true), undefined);
 });
+
+test("reasoning counts as a visible reply when it has content", () => {
+  assert.equal(assistantHasVisiblePart([{ type: "reasoning", text: "Working on it" }]), true);
+  assert.equal(assistantHasVisiblePart([{ type: "reasoning", text: "  " }]), false);
+  assert.equal(assistantHasVisiblePart([{ type: "data-reply-end", data: { reason: "stopped" } }]), false);
+});
