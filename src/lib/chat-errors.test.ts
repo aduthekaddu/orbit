@@ -459,3 +459,107 @@ test("URL credential extraction covers long usernames paired with passwords and 
   assert.equal(masked.includes("bare-query-secret-0001"), false, masked);
   assert.equal(masked, "https://example.com/v1?[redacted]");
 });
+
+test("stream redactor masks Basic-auth and misaligned base64 forms at byte offsets 0, 1, and 2 across chunk sizes", () => {
+  const key = "made-up-provider-key-0001";
+  const redactor = only({ apiKey: key });
+  for (const user of ["", "u", "us", "use", "user", "orbit"]) {
+    const basic = Buffer.from(`${user}:${key}`).toString("base64");
+    const samples = [
+      basic,
+      `Authorization: Basic ${basic} ok`,
+      `before ${Buffer.from(`${user}:${key}:tail`).toString("base64")} after`,
+      `url ${Buffer.from(`${user}:${key}`).toString("base64url")} done`,
+    ];
+    for (const input of samples) {
+      const expected = redactor.text(input);
+      assert.ok(expected.includes(REDACTED), `text() did not mask ${user} in ${input}`);
+      for (const size of [1, 4, input.length]) {
+        const stream = redactor.createStream();
+        let out = "";
+        for (let i = 0; i < input.length; i += size) out += stream.push(input.slice(i, i + size));
+        out += stream.flush();
+        assert.equal(out, expected, `stream mismatch for user=${JSON.stringify(user)} size=${size}`);
+      }
+    }
+  }
+});
+
+test("property: createStream matches text() across random inputs, encodings, base64 offsets, and random chunk boundaries", () => {
+  const keys = [
+    "made-up-provider-key-0001",
+    'made+up/quote"key=0002',
+    "made up space key 0003",
+    "made-up-utf8-key-🔑-04",
+  ];
+  const redactor = new Redactor({
+    apiKey: keys[0],
+    tavilyApiKey: keys[1],
+    githubToken: keys[2],
+    baseUrl: `https://user:${encodeURIComponent(keys[3])}@example.com/v1`,
+  });
+
+  const makeRng = (seed: number) => {
+    let state = seed >>> 0;
+    return () => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      return state / 0x100000000;
+    };
+  };
+
+  const pick = <T,>(rng: () => number, items: readonly T[]): T => items[Math.floor(rng() * items.length)]!;
+  const noisePool = ["hello ", "world", "1234", "%", "%2", "%2F", "\\", "\\u00", "\\n", "=", "==", "dXNl", "🔑", "made-up-", "\u001b[31m", "\u001b[0m", " ", ":"];
+
+  const encodeVariant = (rng: () => number, key: string): string => {
+    const kind = Math.floor(rng() * 9);
+    if (kind === 0) return key;
+    if (kind === 1) return encodeURIComponent(key);
+    if (kind === 2) return encodeURIComponent(encodeURIComponent(key));
+    if (kind === 3) {
+      const prefix = pick(rng, ["", "u:", "us:", "use:", "user:", "x", "xy"]);
+      const suffix = pick(rng, ["", "!", "ab", "xyz"]);
+      return Buffer.from(prefix + key + suffix, "utf8").toString(rng() < 0.5 ? "base64" : "base64url");
+    }
+    if (kind === 4) {
+      const prefix = pick(rng, ["", "a:", "ab:", "user:"]);
+      return Buffer.from(prefix + key, "utf8").toString("base64").replaceAll("/", "\\/");
+    }
+    if (kind === 5) {
+      return [...key].map((ch, idx) => (idx % 3 === 0 ? `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}` : ch)).join("");
+    }
+    if (kind === 6) {
+      return JSON.stringify(JSON.stringify({ k: key }));
+    }
+    if (kind === 7) {
+      const cut = 1 + Math.floor(rng() * (key.length - 1));
+      return `${key.slice(0, cut)}\u001b[31m${key.slice(cut)}`;
+    }
+    const second = pick(rng, keys);
+    return Buffer.from(`${key}:${second}`, "utf8").toString("base64");
+  };
+
+  for (const seed of [101, 202, 303]) {
+    const rng = makeRng(seed);
+    for (let trial = 0; trial < 150; trial++) {
+      const pieces: string[] = [];
+      const count = 3 + Math.floor(rng() * 8);
+      for (let p = 0; p < count; p++) {
+        if (rng() < 0.45) pieces.push(encodeVariant(rng, pick(rng, keys)));
+        else pieces.push(pick(rng, noisePool));
+      }
+      const input = pieces.join("");
+      const expected = redactor.text(input);
+      const stream = redactor.createStream();
+      let out = "";
+      let pos = 0;
+      while (pos < input.length) {
+        const maxStep = rng() < 0.7 ? 8 : 24;
+        const step = 1 + Math.floor(rng() * maxStep);
+        out += stream.push(input.slice(pos, pos + step));
+        pos += step;
+      }
+      out += stream.flush();
+      assert.equal(out, expected, `seed=${seed} trial=${trial} input=${JSON.stringify(input)}`);
+    }
+  }
+});

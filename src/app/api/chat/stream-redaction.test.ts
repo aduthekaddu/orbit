@@ -532,3 +532,70 @@ test("stream transform keeps chunk order around tool-output-denied and separates
   const t3Delta = out.find((c) => c.type === "text-delta" && c.id === "t3");
   assert.equal(t3Delta?.delta, "second", `t3 delta was emitted under wrong id: ${JSON.stringify(out)}`);
 });
+
+test("misaligned Basic-auth base64 credentials are masked across text deltas, cross-part splits, and tool-input deltas", async () => {
+  const { Redactor } = await import("@/lib/chat-errors");
+  const redactor = new Redactor({ apiKey: PROVIDER_KEY, tavilyApiKey: TAVILY_KEY, githubToken: GITHUB_TOKEN });
+  const basic = Buffer.from(`user:${PROVIDER_KEY}`).toString("base64");
+  const fullText = `Authorization: Basic ${basic} ok`;
+  const expectedText = redactor.text(fullText);
+  const textChunks: Array<{ type: "text-delta"; id: string; delta: string }> = [];
+  for (let i = 0; i < fullText.length; i += 4) {
+    textChunks.push({ type: "text-delta", id: "t1", delta: fullText.slice(i, i + 4) });
+  }
+  const toolBasic = Buffer.from(`u:${TAVILY_KEY}`).toString("base64");
+  const toolInput = JSON.stringify({ root: "r", elements: { [toolBasic]: { type: "NotAComponent", props: {}, children: [] } } });
+  const toolDeltas: Array<{ type: "tool-input-delta"; id: string; delta: string }> = [];
+  for (let i = 0; i < toolInput.length; i += 4) {
+    toolDeltas.push({ type: "tool-input-delta", id: "call-b64", delta: toolInput.slice(i, i + 4) });
+  }
+  const splitAt = 10;
+  let step = 0;
+  const model = new MockLanguageModelV4({
+    doGenerate: generateTitle("Clean title"),
+    doStream: async () => {
+      step += 1;
+      if (step === 1) {
+        return {
+          stream: simulateReadableStream({
+            chunks: [
+              { type: "stream-start", warnings: [] },
+              { type: "tool-input-start", id: "call-b64", toolName: "render_ui" },
+              ...toolDeltas,
+              { type: "tool-input-end", id: "call-b64" },
+              { type: "tool-call", toolCallId: "call-b64", toolName: "render_ui", input: toolInput },
+              finishChunk("tool-calls"),
+            ],
+          }),
+        };
+      }
+      return {
+        stream: simulateReadableStream({
+          chunks: [
+            { type: "stream-start", warnings: [] },
+            { type: "text-start", id: "t1" },
+            ...textChunks,
+            { type: "text-end", id: "t1" },
+            { type: "text-start", id: "t2" },
+            { type: "text-delta", id: "t2", delta: ` part:${basic.slice(0, splitAt)}` },
+            { type: "text-end", id: "t2" },
+            { type: "text-start", id: "t3" },
+            { type: "text-delta", id: "t3", delta: `${basic.slice(splitAt)} end` },
+            { type: "text-end", id: "t3" },
+            finishChunk(),
+          ],
+        }),
+      };
+    },
+  });
+  const { raw, chunks } = await sendChat("c-basic-auth-stream", "hello", model);
+  const t1Text = chunks.filter((c) => c.type === "text-delta" && c.id === "t1").map((c) => String(c.delta ?? "")).join("");
+  assert.equal(t1Text, expectedText);
+  const splitPartsText = chunks
+    .filter((c) => c.type === "text-delta" && (c.id === "t2" || c.id === "t3"))
+    .map((c) => String(c.delta ?? ""))
+    .join("");
+  assert.equal(splitPartsText, redactor.text(` part:${basic} end`));
+  assert.equal(raw.includes(basic.slice(6)), false, `stream leaked Basic-auth suffix: ${raw}`);
+  assert.equal(raw.includes(toolBasic.slice(3)), false, `tool-input-delta leaked Basic-auth suffix: ${raw}`);
+});

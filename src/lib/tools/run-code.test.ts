@@ -306,3 +306,22 @@ test("render_ui masks stored credentials in its returned spec output", async () 
   );
   assert.equal(JSON.stringify(result).includes(settings.apiKey), false, `render_ui leaked key: ${JSON.stringify(result)}`);
 });
+
+test("run_code masks misaligned Basic-auth base64 credentials streamed across stdout chunks", async (t) => {
+  enableSandbox(t);
+  const settings = sandboxSettings();
+  const basic = Buffer.from(`user:${settings.apiKey}`).toString("base64");
+  const line = `Authorization: Basic ${basic} ok\n`;
+  await startFakeDockerHttp(t, (emit, finish) => {
+    for (let i = 0; i < line.length; i += 4) emit(1, line.slice(i, i + 4));
+    finish(0);
+  });
+  const { toolsFor } = await import("./index");
+  const tool = toolsFor(settings).run_code;
+  assert.ok(tool?.execute);
+  const output = (await tool.execute({ language: "python", code: "print(1)" }, { toolCallId: "rc-b64", messages: [], context: {} })) as {
+    stdout: string;
+  };
+  assert.equal(output.stdout.includes(basic.slice(6)), false, `run_code leaked Basic-auth suffix: ${output.stdout}`);
+  assert.match(output.stdout, /Authorization: Basic dXNlcj\[redacted\] ok\n/);
+});
