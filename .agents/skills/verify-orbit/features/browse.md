@@ -174,6 +174,25 @@ PASS Alt+Up on the page moves focus to the previous prompt
 
 Screenshots: `composer.png`, `page.png`.
 
+### thread-first-paint
+
+Sends one `[qa:plain]` prompt, then opens that chat and a new empty chat with the `/_next/static/chunks/**` scripts held, so the page shows its server HTML. It records each DOM change, releases the scripts, and waits for hydration. It runs at 1280×800 and again on a 390×844 touch screen with the labels prefixed `phone`. Composer positions are read after finite animations end.
+
+Pass lines, per label `empty chat` and `saved chat`:
+
+```
+PASS empty chat: no Scroll to bottom button before hydration
+PASS empty chat: the composer does not move at hydration
+PASS empty chat: the starters show before hydration
+PASS empty chat: the empty layout stays at every point
+PASS saved chat: no Scroll to bottom button before hydration
+PASS saved chat: the composer does not move at hydration
+PASS saved chat: no empty-chat layout at any point
+PASS saved chat: no Scroll to bottom button over an empty thread
+```
+
+Screenshots: `<label>-held.png` and `<label>-hydrated.png`, with spaces as dashes.
+
 ### long-message
 
 Posts 80,000 letters to `/api/chat`, then sends a 60,000 character message from the composer, then a short one.

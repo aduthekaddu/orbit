@@ -74,7 +74,7 @@ export function ChatPanel({
         <ArtifactProvider>
           <StoppedRunSync chatId={chatId} stopped={stopped}>
             <ArtifactWorkspace>
-              <Thread ready={ready} model={model} focusMessageId={focusMessageId} />
+              <Thread ready={ready} model={model} focusMessageId={focusMessageId} hasHistory={initialHistory.messages.length > 0} />
             </ArtifactWorkspace>
           </StoppedRunSync>
         </ArtifactProvider>

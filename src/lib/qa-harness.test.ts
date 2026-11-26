@@ -20,6 +20,16 @@ import http from "node:http";
 import path from "node:path";
 const port = Number(process.argv[process.argv.indexOf("-p") + 1]);
 const putLog = path.join(process.cwd(), "..", "put.jsonl");
+if (process.argv.includes("--pause-before-bind")) {
+  await new Promise((resolve) => {
+    const gate = fs.watch("../..", (_event, file) => {
+      if (file !== "release-bind") return;
+      gate.close();
+      resolve();
+    });
+    fs.writeFileSync("../../before-bind", "");
+  });
+}
 http
   .createServer((req, res) => {
     let body = "";
@@ -151,7 +161,7 @@ class Checkout {
   readonly dir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-qa-checkout-"));
   port = 0;
 
-  constructor(options: { stubVerify?: boolean } = {}) {
+  constructor(options: { stubVerify?: boolean; pauseBeforeBind?: boolean } = {}) {
     for (const file of [
       ".agents/skills/verify-orbit/verify.mjs",
       "scripts/qa/mock-provider.mjs",
@@ -165,7 +175,9 @@ class Checkout {
     fs.symlinkSync(path.join(repo, "node_modules"), path.join(this.dir, "node_modules"));
     fs.mkdirSync(path.join(this.dir, ".next"));
     fs.writeFileSync(path.join(this.dir, "stub-app.mjs"), STUB_APP);
-    fs.writeFileSync(path.join(this.dir, "package.json"), JSON.stringify({ scripts: { start: `node ${path.join(this.dir, "stub-app.mjs")}` } }));
+    const start = ["node", path.join(this.dir, "stub-app.mjs")];
+    if (options.pauseBeforeBind) start.push("--pause-before-bind");
+    fs.writeFileSync(path.join(this.dir, "package.json"), JSON.stringify({ scripts: { start: start.join(" ") } }));
     if (options.stubVerify) {
       fs.writeFileSync(path.join(this.dir, ".agents/skills/verify-orbit/verify.mjs"), STUB_VERIFY);
       fs.mkdirSync(path.join(this.dir, ".agents/skills/verify-orbit/scenarios"), { recursive: true });
@@ -292,6 +304,33 @@ async function teardown(targets: Checkout[], children: TrackedChild[]) {
 
 after(async () => {
   await teardown(checkouts, spawned);
+});
+
+test("two checkouts launching on one port report ready only for the server that owns it", async () => {
+  const paused = new Checkout({ pauseBeforeBind: true });
+  const contender = new Checkout();
+  paused.port = contender.port = await appPort();
+
+  const first = paused.verifyStarted(["launch"]);
+  await eventually(() => fs.existsSync(path.join(paused.dir, "before-bind")), Boolean, "first server reached bind", 10_000);
+  const second = await contender.verify(["launch"]);
+  fs.writeFileSync(path.join(paused.dir, "release-bind"), "");
+
+  const attempts = [
+    { checkout: paused, result: await first.done },
+    { checkout: contender, result: second },
+  ];
+  const output = attempts.map(({ result }) => `exit ${result.code}: ${result.out.trim()}`).join("\n");
+  const winners = attempts.filter(({ result }) => result.code === 0);
+  assert.equal(winners.length, 1, output);
+  const [winner] = winners;
+  assert.match(winner.result.out, /ready origin=/);
+  const doctor = await winner.checkout.verify(["doctor"]);
+  assert.equal(doctor.code, 0, doctor.out);
+  const loser = attempts.find((attempt) => attempt !== winner);
+  assert.ok(loser);
+  assert.match(loser.result.out, /port .* in use/);
+  assert.equal(fs.existsSync(path.join(loser.checkout.dir, ".verify/server.json")), false);
 });
 
 test("two checkouts that launch a mock at once each get their own mock, and cleanup stops it", async () => {
