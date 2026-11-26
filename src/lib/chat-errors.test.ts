@@ -4,7 +4,7 @@ import { format } from "node:util";
 import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { getTableColumns } from "drizzle-orm";
-import { CREDENTIAL_NOUNS, logProviderError, REDACTED, Redactor, streamErrorMessage, type SettingsLabels, type StoredCredentials } from "./chat-errors";
+import { CREDENTIAL_NOUNS, logProviderError, REDACTED, Redactor, redactUrl, streamErrorMessage, type SettingsLabels, type StoredCredentials } from "./chat-errors";
 import { settings } from "./db/schema";
 import { renderUiTool } from "./genui/tool";
 import { createRunCodeTool } from "./tools/run-code";
@@ -384,4 +384,78 @@ test("a stored credential split by terminal escape codes is masked", () => {
   const colored = "before made-up\u001b[31m-provider-key after";
   assert.equal(redactor.text(colored), "before [redacted] after");
   assert.equal(redactor.diagnostic(colored), REDACTED);
+});
+
+test("stream redactor masks incomplete trailing unicode and percent escapes split across chunks", () => {
+  const key = "made-up-provider-key";
+  const redactor = only({ apiKey: key });
+  const stream = redactor.createStream();
+  const fullUnicode = [...key].map((ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`).join("");
+  const part1 = stream.push(`${fullUnicode.slice(0, -1)}`);
+  const part2 = stream.push(`${fullUnicode.slice(-1)}!`);
+  const part3 = stream.flush();
+  assert.equal(part1 + part2 + part3, "[redacted]!");
+
+  const pctStream = redactor.createStream();
+  const p1 = pctStream.push(`${key.slice(0, -1)}%7`);
+  const p2 = pctStream.push("9!");
+  const p3 = pctStream.flush();
+  assert.equal(p1 + p2 + p3, "[redacted]!");
+});
+
+test("stream redactor runs in linear time on repeated keys, rebuilt keys, and long single-character runs", () => {
+  const key = "made-up-provider-key";
+  const redactor = only({ apiKey: key });
+  const repeatedStream = redactor.createStream();
+  const started = performance.now();
+  const bulk = repeatedStream.push(`${key} `.repeat(2_000)) + repeatedStream.flush();
+  const elapsed = performance.now() - started;
+  assert.equal(bulk.includes(key), false);
+  assert.equal(bulk, `${REDACTED} `.repeat(2_000));
+  assert.ok(elapsed < 500, `streaming 2,000 repeated keys took ${elapsed.toFixed(0)} ms`);
+
+  const rebuiltKey = "]made-up-key";
+  const rebuiltStream = only({ apiKey: rebuiltKey }).createStream();
+  const rebuiltStart = performance.now();
+  const rebuiltOut = rebuiltStream.push(rebuiltKey + "made-up-key".repeat(4_000)) + rebuiltStream.flush();
+  const rebuiltElapsed = performance.now() - rebuiltStart;
+  assert.equal(rebuiltOut.includes(rebuiltKey), false);
+  assert.ok(rebuiltElapsed < 500, `streaming rebuilt key took ${rebuiltElapsed.toFixed(0)} ms`);
+
+  const longRunStream = redactor.createStream();
+  const runStart = performance.now();
+  const runOut = longRunStream.push("x".repeat(200_000)) + longRunStream.flush();
+  const runElapsed = performance.now() - runStart;
+  assert.equal(runOut.length, 200_000);
+  assert.ok(runElapsed < 500, `streaming 200,000 repeated chars took ${runElapsed.toFixed(0)} ms`);
+});
+
+test("a plus-containing key is still percent-decoded when another stored credential contains a space", () => {
+  const redactor = only({ apiKey: "made+up+provider+key", tavilyApiKey: "made up tavily key" });
+  assert.equal(redactor.text("made+up%2Bprovider+key"), REDACTED);
+  assert.equal(redactor.text("made+up+tavily+key"), REDACTED);
+});
+
+test("URL credential extraction covers long usernames paired with passwords and masks bare query tokens", () => {
+  const withTokenUser = new Redactor({
+    apiKey: "",
+    tavilyApiKey: "",
+    githubToken: "",
+    baseUrl: "https://ghp_secret_token_0001:x-oauth-basic@example.com/v1",
+  });
+  assert.equal(withTokenUser.text("leaked ghp_secret_token_0001"), "leaked [redacted]");
+  assert.equal(withTokenUser.diagnostic("err ghp_secret_token_0001"), REDACTED);
+
+  const withShortUser = new Redactor({
+    apiKey: "",
+    tavilyApiKey: "",
+    githubToken: "",
+    baseUrl: "https://user:pass-secret-0001@example.com/v1",
+  });
+  assert.equal(withShortUser.diagnostic("invalid user input"), "invalid user input");
+  assert.equal(withShortUser.diagnostic("invalid pass-secret-0001"), REDACTED);
+
+  const masked = redactUrl("https://example.com/v1?bare-query-secret-0001", withShortUser);
+  assert.equal(masked.includes("bare-query-secret-0001"), false, masked);
+  assert.equal(masked, "https://example.com/v1?[redacted]");
 });

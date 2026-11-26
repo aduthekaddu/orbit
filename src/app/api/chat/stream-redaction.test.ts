@@ -434,3 +434,101 @@ test("generated and fallback chat titles mask stored credentials, including keys
   const fallback = await sendChat("c-title-fallback", `Check ${TAVILY_KEY} please`, fallbackModel);
   assert.equal(fallback.title, "Check [redacted] please");
 });
+
+test("a provider-executed tool error with only a long credential is withheld whole in both stream and saved parts", async () => {
+  const model = new MockLanguageModelV4({
+    doGenerate: generateTitle("Clean title"),
+    doStream: async () => ({
+      stream: simulateReadableStream({
+        chunks: [
+          { type: "stream-start", warnings: [] },
+          { type: "tool-call", toolCallId: "p-long-1", toolName: "provider_search", input: JSON.stringify({ q: "ok" }), providerExecuted: true },
+          {
+            type: "tool-result",
+            toolCallId: "p-long-1",
+            toolName: "provider_search",
+            result: `upstream failed for ${PROVIDER_KEY} with status 401`,
+            isError: true,
+            providerExecuted: true,
+          },
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "Done." },
+          { type: "text-end", id: "t1" },
+          finishChunk(),
+        ],
+      }),
+    }),
+  });
+  const { chunks, saved } = await sendChat("c-provider-tool-error-long", "search", model);
+  const toolErrors = chunks.filter((c) => c.type === "tool-output-error");
+  assert.ok(toolErrors.length > 0);
+  for (const chunk of toolErrors) assert.equal(chunk.errorText, "[redacted]");
+  const assistant = saved.find((m) => m.role === "assistant");
+  assert.ok(assistant);
+  const savedError = (assistant.parts as Array<Record<string, unknown>>).find((part) => typeof part.errorText === "string");
+  assert.ok(savedError);
+  assert.equal(savedError.errorText, "[redacted]");
+});
+
+test("incomplete unicode escapes, percent escapes, and escaped base64 split across deltas do not leak", async () => {
+  const slashKey = "made-up-provider-key???";
+  setCredentials({ apiKey: slashKey, tavilyApiKey: TAVILY_KEY, githubToken: GITHUB_TOKEN });
+  try {
+    const fullUnicode = [...slashKey].map((ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`).join("");
+    const b64Escaped = Buffer.from(slashKey).toString("base64").replaceAll("/", "\\/");
+    assert.ok(b64Escaped.includes("\\/"), "test key must encode a slash in base64");
+    const slashSplit = b64Escaped.indexOf("\\/") + 1;
+    const model = new MockLanguageModelV4({
+      doGenerate: generateTitle("Clean title"),
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          chunks: [
+            { type: "stream-start", warnings: [] },
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", delta: `A:${fullUnicode.slice(0, -1)}` },
+            { type: "text-delta", id: "t1", delta: `${fullUnicode.slice(-1)} B:${slashKey.slice(0, -1)}\\u003` },
+            { type: "text-delta", id: "t1", delta: `f C:${slashKey.slice(0, -1)}%3` },
+            { type: "text-delta", id: "t1", delta: `F D:${b64Escaped.slice(0, slashSplit)}` },
+            { type: "text-delta", id: "t1", delta: `${b64Escaped.slice(slashSplit)} end.` },
+            { type: "text-end", id: "t1" },
+            finishChunk(),
+          ],
+        }),
+      }),
+    });
+    const { raw, chunks } = await sendChat("c-split-escapes", "hello", model);
+    const streamedText = chunks.filter((c) => c.type === "text-delta").map((c) => String(c.delta ?? "")).join("");
+    assert.equal(streamedText, "A:[redacted] B:[redacted] C:[redacted] D:[redacted] end.");
+    assert.equal(raw.includes("made-up-"), false, `stream leaked prefix: ${raw}`);
+    assert.equal(raw.includes("\\u006d"), false, `stream leaked unicode prefix: ${raw}`);
+  } finally {
+    setCredentials();
+  }
+});
+
+test("stream transform keeps chunk order around tool-output-denied and separates text ids", async () => {
+  const { Redactor } = await import("@/lib/chat-errors");
+  const { redactUIMessageStream } = await import("@/lib/chat-stream-redactor");
+  const redactor = new Redactor({ apiKey: PROVIDER_KEY, tavilyApiKey: "", githubToken: "" });
+  const input = simulateReadableStream({
+    chunks: [
+      { type: "text-start" as const, id: "t1" },
+      { type: "text-delta" as const, id: "t1", delta: "hello" },
+      { type: "text-end" as const, id: "t1" },
+      { type: "tool-output-denied" as const, toolCallId: "call-1" },
+      { type: "text-start" as const, id: "t2" },
+      { type: "text-delta" as const, id: "t2", delta: "first" },
+      { type: "text-delta" as const, id: "t3", delta: "second" },
+      { type: "text-end" as const, id: "t3" },
+    ],
+  });
+  const out: Array<Record<string, unknown>> = [];
+  for await (const chunk of input.pipeThrough(redactUIMessageStream(redactor))) {
+    out.push(chunk as Record<string, unknown>);
+  }
+  const endIndex = out.findIndex((c) => c.type === "text-end" && c.id === "t1");
+  const deniedIndex = out.findIndex((c) => c.type === "tool-output-denied");
+  assert.ok(endIndex >= 0 && deniedIndex > endIndex, `tool-output-denied overtook text-end: ${JSON.stringify(out)}`);
+  const t3Delta = out.find((c) => c.type === "text-delta" && c.id === "t3");
+  assert.equal(t3Delta?.delta, "second", `t3 delta was emitted under wrong id: ${JSON.stringify(out)}`);
+});
