@@ -12,6 +12,10 @@ import { getDb } from "@/lib/db";
 import * as schema from "@/lib/db/schema";
 import * as messages from "@/lib/messages";
 import { seedTestConnection } from "@/lib/connection-fixture";
+import { deleteConnection } from "@/lib/connections";
+import { eventually } from "@/lib/eventually.mjs";
+import { releaseReplyRun, reserveReplyRun, stopReplyRun } from "@/lib/reply-runs";
+import { encryptSecret } from "@/lib/secrets";
 import { saveSettings } from "@/lib/settings";
 
 const PROVIDER_KEY = "made-up-provider-key-0001";
@@ -36,6 +40,8 @@ const stubUrls = Object.fromEntries(Object.entries(stubs).map(([specifier, sourc
 }));
 
 const afterTasks: Promise<unknown>[] = [];
+const providerKeys: string[] = [];
+let providerBase = "";
 (globalThis as { __orbitAfter?: Promise<unknown>[] }).__orbitAfter = afterTasks;
 
 const hooks = registerHooks({
@@ -107,6 +113,7 @@ before(async () => {
   process.chdir(sandbox);
 
   provider = http.createServer((req, res) => {
+    providerKeys.push(req.headers.authorization ?? "");
     let raw = "";
     req.on("data", (part) => (raw += part));
     req.on("end", () => answer(res, JSON.parse(raw || "{}")));
@@ -118,7 +125,8 @@ before(async () => {
   closeDb = () => db.$client.close();
   const now = new Date();
   db.insert(schema.user).values({ id: USER_ID, name: "Route", email: "route@orbit.local", emailVerified: false, createdAt: now, updatedAt: now }).run();
-  seedTestConnection(USER_ID, { baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: PROVIDER_KEY, model: "mock" });
+  providerBase = `http://127.0.0.1:${port}/v1`;
+  seedTestConnection(USER_ID, { baseUrl: providerBase, apiKey: PROVIDER_KEY, model: "mock" });
   saveSettings({
     tavilyApiKey: TAVILY_KEY,
     githubToken: github.token,
@@ -287,4 +295,34 @@ test("manual reply edits mask a stored credential in the saved message and searc
       assertSavedText(answer.id, `${beforeKey}: [redacted].`);
     });
   }
+});
+
+test("a send that waits for a stopping reply does not call a connection deleted while it waited", async () => {
+  const chatId = "c-deleted-while-queued";
+  const OTHER_KEY = "made-up-provider-key-0003";
+  getDb()
+    .insert(schema.providerConnections)
+    .values({ id: "conn-deleted-while-queued", userId: USER_ID, kind: "openai-compatible", label: "Other", baseUrl: providerBase, apiKeyCiphertext: encryptSecret(OTHER_KEY), createdAt: new Date() })
+    .run();
+  const stopping = await reserveReplyRun(chatId, USER_ID);
+  assert.ok(stopping.ok);
+  stopReplyRun(chatId, USER_ID);
+  const sent = route.POST(new Request("http://127.0.0.1/api/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      id: chatId,
+      trigger: "submit-message",
+      modelChoice: { connectionId: "conn-deleted-while-queued", model: "mock", effort: "medium" },
+      messages: [{ id: `${chatId}-u1`, role: "user", parts: [{ type: "text", text: "Queued." }] }],
+    }),
+  }));
+  await eventually(() => messages.getChatForUser(chatId, USER_ID), Boolean, { timeoutMs: 5_000, what: "the queued send to reach its reply slot" });
+  assert.equal(deleteConnection(USER_ID, "conn-deleted-while-queued"), true);
+  releaseReplyRun(stopping.run);
+  const response = await sent;
+  await response.text();
+  await Promise.allSettled(afterTasks);
+  assert.equal(providerKeys.includes(`Bearer ${OTHER_KEY}`), false, "the deleted connection's key reached the provider");
+  assert.equal(response.status, 404);
 });

@@ -113,11 +113,14 @@ export async function POST(request: Request) {
 
   const userId = session.user.id;
   const requested = parsed.data.modelChoice;
-  if (requested && !getConnection(userId, requested.connectionId)) return Response.json({ error: "Not found" }, { status: 404 });
-  const resolved = resolveChoice(userId, getChatForUser(parsed.data.id, userId) ?? NO_CHAT_CHOICE, requested);
-  if (!resolved.ok) return Response.json({ error: UNRESOLVED[resolved.reason] }, { status: 400 });
-  const { choice, connection } = resolved;
-  const apiKey = connectionApiKey(userId, connection.id);
+  const resolveSend = () => {
+    if (requested && !getConnection(userId, requested.connectionId)) return Response.json({ error: "Not found" }, { status: 404 });
+    const resolved = resolveChoice(userId, getChatForUser(parsed.data.id, userId) ?? NO_CHAT_CHOICE, requested);
+    if (!resolved.ok) return Response.json({ error: UNRESOLVED[resolved.reason] }, { status: 400 });
+    return resolved;
+  };
+  const early = resolveSend();
+  if (early instanceof Response) return early;
 
   const settings = getSettings();
   const redact = requestRedactor(userId, settings);
@@ -142,6 +145,11 @@ export async function POST(request: Request) {
   };
 
   try {
+    // The send may have waited for a stopping reply, and its connection may be gone by now.
+    const resolved = resolveSend();
+    if (resolved instanceof Response) return resolved;
+    const { choice, connection } = resolved;
+    const apiKey = connectionApiKey(userId, connection.id);
     const incoming = parsed.data.messages;
     const messagesBeforeTurn = storedMessageCount(chat.id);
     const write = planChatWrite(chat.id, incoming, redact, parsed.data.trigger, parsed.data.editMessageId);
