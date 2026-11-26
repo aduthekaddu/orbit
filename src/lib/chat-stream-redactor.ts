@@ -360,6 +360,8 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
             parts: redact.value(chunk.parts) as typeof chunk.parts,
           });
           return;
+        case "start":
+        case "message-metadata":
         case "start-step":
         case "finish-step":
         case "reset-step":
@@ -371,10 +373,6 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
         case "custom":
           flushChannel(textChannel, controller);
           flushChannel(reasoningChannel, controller);
-          controller.enqueue(redactObjectField(chunk, redact));
-          return;
-        case "start":
-        case "message-metadata":
           controller.enqueue(redactObjectField(chunk, redact));
           return;
         default: {
