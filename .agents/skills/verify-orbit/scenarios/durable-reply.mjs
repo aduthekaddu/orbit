@@ -119,10 +119,57 @@ async function dropDuringText({ page, origin, front, step, shot, phone = false }
     "the saved reply is duplicated or incomplete");
 }
 
+async function skewedThinkingClock({ page, origin, step }) {
+  const fast = await page.context().newPage();
+  const slow = await page.context().newPage();
+  try {
+    await fast.addInitScript(() => {
+      const realNow = Date.now;
+      Date.now = () => realNow() + 120_000;
+    });
+    await openChat(fast, origin);
+    await send(fast, "[qa:think-slow] Think with a fast client clock");
+    const fastChip = fast.getByRole("button", { name: /^Thinking / });
+    await fastChip.waitFor({ timeout: 15_000 });
+    const fastLabel = await fastChip.innerText();
+    await fast.getByRole("button", { name: "Stop", exact: true }).click();
+    await fast.getByRole("button", { name: "Send", exact: true }).waitFor({ timeout: 10_000 });
+
+    await slow.addInitScript(() => {
+      const realNow = Date.now;
+      Date.now = () => realNow() - 120_000;
+    });
+    await openChat(slow, origin);
+    await send(slow, "[qa:think-slow] Think with a slow client clock");
+    const slowChip = slow.getByRole("button", { name: /^Thinking / });
+    await slowChip.waitFor({ timeout: 15_000 });
+    await slowChip.click();
+    await slow.getByText(/\bthought15\b/).waitFor({ timeout: 15_000 });
+    const slowLabel = await slowChip.innerText();
+    await slow.reload();
+    const reloadedChip = slow.getByRole("button", { name: /^Thinking / });
+    await reloadedChip.waitFor({ timeout: 15_000 });
+    const reloadedLabel = await reloadedChip.innerText();
+    await slow.getByRole("button", { name: "Stop", exact: true }).click();
+    await slow.getByRole("button", { name: "Send", exact: true }).waitFor({ timeout: 10_000 });
+
+    const fastOk = /^Thinking ([0-9]|1[0-5])s$/.test(fastLabel);
+    const slowOk = /^Thinking ([2-9]|1[0-5])s$/.test(slowLabel);
+    const reloadedOk = /^Thinking ([2-9]|1[0-9]|20)s$/.test(reloadedLabel);
+    step("live thinking timer ignores client clock skew",
+      fastOk && slowOk && reloadedOk,
+      `fast="${fastLabel}", slow="${slowLabel}", reloaded="${reloadedLabel}"`);
+  } finally {
+    await fast.close();
+    await slow.close();
+  }
+}
+
 export default async function durableReply({ page, origin, mockUrl, step, shot }) {
   assert.ok(mockUrl);
   const front = await startDropFront(origin);
   try {
+    await skewedThinkingClock({ page, origin, step });
     await dropBeforeHeaders({ page, origin, step, shot });
     await dropDuringText({ page, origin, front, step, shot });
 

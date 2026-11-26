@@ -3,7 +3,7 @@ import test, { afterEach } from "node:test";
 import type { UIMessageChunk } from "ai";
 import {
   bindReplyPlan, discardReplyRun, findReplyRun, MAX_RUNNING_PER_USER, releaseReplyRun,
-  reserveReplyRun, resetReplyRunsForTest, startReplyRun, stopReplyRun, watchReply,
+  replyResponse, reserveReplyRun, resetReplyRunsForTest, startReplyRun, stopReplyRun, watchReply,
 } from "./reply-runs";
 
 afterEach(resetReplyRunsForTest);
@@ -210,4 +210,23 @@ test("an ended reply remains replayable for ten minutes", async (t) => {
   assert.deepEqual(await readAll(watchReply(replay.run)), [finish]);
   t.mock.timers.tick(1);
   assert.equal(findReplyRun("chat", "user", "reply-chat"), null);
+});
+
+test("reply responses include the server clock timestamp header", async () => {
+  const run = await reserve();
+  startReplyRun(run, new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: "finish", finishReason: "stop" });
+      controller.close();
+    },
+  }), () => null);
+  const before = Date.now();
+  const response = replyResponse(run, "reply-chat");
+  const after = Date.now();
+  const raw = response.headers.get("x-orbit-server-time");
+  await response.body?.cancel();
+  await run.done;
+  assert.ok(raw !== null && /^\d+$/.test(raw), `expected server time header, got ${String(raw)}`);
+  const serverTime = Number(raw);
+  assert.ok(serverTime >= before && serverTime <= after, `expected ${serverTime} within [${before}, ${after}]`);
 });
