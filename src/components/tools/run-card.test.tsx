@@ -309,6 +309,60 @@ test("a remember line shows the saved text and no raw tool name", () => {
   assert.doesNotMatch(html, /<summary[^>]*>Output<\/summary>/);
 });
 
+function remembered(text: string, overrides: Record<string, unknown> = {}) {
+  return render({ toolName: "remember", args: { text, kind: "fact" }, result: { id: "mem-1", text }, status: { type: "complete" }, ...overrides });
+}
+
+/** The text in the part of a closed line that opens: what a reader gets after a tap. */
+function openedText(html: string) {
+  const body = /<\/summary><div[^>]*>(.*)<\/div><\/details>$/s.exec(html)?.[1];
+  assert.ok(body !== undefined, "the line has a body under its summary");
+  return body.replace(/<[^>]+>/g, "").replace(/&#x27;/g, "'");
+}
+
+test("a remember line opens to the whole saved text, because the line cuts it", () => {
+  const text = "I run the nightly backup from the garage server at 3am and want a Slack message if it fails";
+  const html = remembered(text);
+  assert.match(html, /^<details/);
+  assert.doesNotMatch(html, /^<details[^>]* open=""/);
+  assert.equal(line(html), "Saved to memory|succeeded");
+  assert.match(html, /<summary[^>]*>.*data-tool-detail/s);
+  assert.equal(openedText(html), text);
+});
+
+test("a remember line holds all 500 characters of a memory with no spaces under its summary", () => {
+  const text = "orbit".repeat(100);
+  const html = remembered(text);
+  assert.equal(text.length, 500);
+  assert.equal(openedText(html), text);
+});
+
+test("a short memory opens too, because a narrow screen or a large text size can cut any text", () => {
+  const html = remembered("I deploy to Fly.io");
+  assert.match(html, /^<details/);
+  assert.equal(openedText(html), "I deploy to Fly.io");
+});
+
+test("a remember line takes its body from the saved result, as the line does", () => {
+  const html = remembered("tabs, not spaces", { result: { id: "mem-1", text: "Prefers tabs over spaces" } });
+  assert.match(html, /data-tool-detail[^>]*>Prefers tabs over spaces</);
+  assert.equal(openedText(html), "Prefers tabs over spaces");
+});
+
+test("a remember line that is still running or was stopped has no body", () => {
+  const running = remembered("I deploy to Fly.io", { result: undefined, status: { type: "running" } });
+  assert.doesNotMatch(running, /<details/);
+  const stopped = remembered("I deploy to Fly.io", { result: undefined, status: { type: "complete" } });
+  assert.equal(line(stopped), "Stopped|cancelled");
+  assert.doesNotMatch(stopped, /<details|I deploy to Fly\.io/);
+});
+
+test("a forget line has nothing to open", () => {
+  const html = render({ toolName: "forget", args: { id: "mem-1" }, result: { id: "mem-1" }, status: { type: "complete" } });
+  assert.equal(line(html), "Removed a memory|succeeded");
+  assert.doesNotMatch(html, /<details/);
+});
+
 test("a remember line whose save failed starts open and does not show the text as saved", () => {
   const html = render({
     toolName: "remember",

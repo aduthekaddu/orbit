@@ -41,16 +41,17 @@ function bodyFor(kind: LineKind, props: ToolCallMessagePartProps, end: ToolRunEn
     case "github":
       return <GithubOutput output={props.result} input={props.args} />;
     case "memory": {
-      const error = textField(props.result, "error");
-      return end.status === "failed" ? <Failure text={error || "The memory was not changed"} /> : null;
+      if (end.status === "failed") return <Failure text={textField(props.result, "error") || "The memory was not changed"} />;
+      const saved = savedText(props, end);
+      return saved ? <p className="text-sm break-words whitespace-pre-wrap text-muted-foreground">{saved}</p> : null;
     }
     case "generic":
       return <GenericOutput output={props.result} />;
   }
 }
 
-/** The text a memory line shows after its label: what was saved. */
-function detailFor(props: ToolCallMessagePartProps, end: ToolRunEnd) {
+/** What a remember call saved. The line previews it, and the body under the line holds all of it. */
+function savedText(props: ToolCallMessagePartProps, end: ToolRunEnd) {
   if (props.toolName !== "remember" || end.status === "failed" || end.status === "cancelled") return "";
   return textField(props.result, "text") || textField(props.args, "text");
 }
@@ -61,7 +62,7 @@ export function ToolLine({ kind, props, end }: { kind: LineKind; props: ToolCall
   const failed = end.status === "failed";
   const search = parseSearchRun(kind === "search" ? props.result : undefined);
   const body = bodyFor(kind, props, end, search);
-  const detail = detailFor(props, end);
+  const detail = savedText(props, end);
   const sources = end.status === "succeeded" && search.state === "found" ? search.results.slice(0, MAX_TILES) : [];
   const KindIcon = failed ? WarningCircleIcon : icons[kind];
 
@@ -76,7 +77,7 @@ export function ToolLine({ kind, props, end }: { kind: LineKind; props: ToolCall
         {summary}
       </span>
       {detail && (
-        <span data-tool-detail className="min-w-0 max-w-[24ch] shrink-[2] truncate text-foreground sm:max-w-[40ch]">
+        <span data-tool-detail className="min-w-0 max-w-[24ch] shrink-[2] truncate text-foreground group-open/line:hidden sm:max-w-[40ch]">
           {detail}
         </span>
       )}

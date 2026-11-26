@@ -25,7 +25,7 @@ On macOS, run these inside the Linux Playwright image, because verify-orbit read
 ## `browse tool-cards`
 
 - `[qa:search] orbit` reads "Searching the web", then "Searched the web, 3 sources", closed, with three tiles in at least two colors. Opening the line shows three links with `target="_blank"` and `rel="noopener noreferrer nofollow"`.
-- `[qa:remember] I deploy to Fly.io` reads "Saved to memory" with the saved text. No visible text says `remember`.
+- `[qa:remember]` with a 100 character sentence reads "Saved to memory" and previews the text on the line, closed. A click, or a tap at 390 and 360 wide with touch, opens the line to the whole text in its body with the preview hidden, so the text shows once. The body does not cut the text and the page does not scroll sideways. No visible text says `remember`.
 - With the SearXNG fixture stopped, `[qa:search] orbit` reads "Search failed" and starts open.
 - After a reload, each line keeps its text, its status, and its open or closed state.
 - At 360 wide with touch, each line is at least 44px tall and the page does not scroll sideways.

@@ -83,6 +83,33 @@ function measureInside(element, { selector, clipped }) {
   };
 }
 
+// A saved memory line is a closed <details>. A click on its summary opens it to the whole saved text, in a body under
+// the line, and hides the preview on the line so the text shows once.
+async function openMemoryLine(line) {
+  await line.locator(":scope > summary").click();
+  await eventually(() => line.evaluate((root) => root.open), Boolean, { timeoutMs: 2_000, what: "the memory line to open" });
+  // The caret turns on open, and a line whose preview hides shrinks under the pointer, which cancels the hover
+  // transitions and starts their reverse. A cancelled transition rejects `finished`, so settle each round and look again.
+  // Let every transition end so a screenshot shows the open state, not its first frame.
+  await line.evaluate(async (root) => {
+    const running = () => root.getAnimations({ subtree: true }).filter((animation) => animation instanceof CSSTransition);
+    for (let round = 0; round < 5 && running().length > 0; round += 1) await Promise.allSettled(running().map((animation) => animation.finished));
+  });
+}
+
+async function memoryBody(line) {
+  return line.evaluate((root) => {
+    const body = root.querySelector(":scope > div");
+    const preview = root.querySelector("[data-tool-detail]");
+    return {
+      open: root.matches("details[open]"),
+      text: body ? (body.textContent ?? "").trim() : null,
+      previewShown: preview ? preview.checkVisibility({ checkVisibilityCSS: true }) : null,
+      sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    };
+  });
+}
+
 async function textInside(locator, holder, clipped = false) {
   return locator.evaluate(measureInside, { selector: holder, clipped });
 }
@@ -188,7 +215,8 @@ export default async function memory({ page, origin, step, shot }) {
   const savedReply = page.locator('[data-message-role="assistant"]').getByText("Saved.", { exact: true });
   const replied = await savedReply.waitFor({ timeout: 30_000 }).then(() => true, () => false);
   step("remember tool saves from chat", replied);
-  const card = page.locator('[data-tool-name="remember"]').getByText("I deploy to Fly.io", { exact: true });
+  // The preview on the line is inside the summary. The body that opens is not, so this matches the preview alone.
+  const card = page.locator('[data-tool-name="remember"] summary').getByText("I deploy to Fly.io", { exact: true });
   const showed = await card.waitFor({ timeout: 10_000 }).then(() => true, () => false);
   step("remember card shows the saved text", showed);
 
@@ -442,6 +470,16 @@ export default async function memory({ page, origin, step, shot }) {
   step("a 500 character remember line with no spaces stays inside the line", cardFit.inside, cardFit.detail);
   const cardUncut = longCardShown ? await uncut(longCard, cardBox) : noCard;
   step("the line check fails a remember line whose text is neither cut nor wrapped", longCardShown && !cardUncut.inside, cardUncut.detail);
+  const longLine = page.locator('[data-tool-name="remember"]').last();
+  await openMemoryLine(longLine);
+  const longOpen = await memoryBody(longLine);
+  step("a 500 character remember line opens to all of its text", longOpen.text === longText && longOpen.previewShown === false, `${longOpen.text?.length ?? "no"} characters in the body, preview shown ${longOpen.previewShown}`);
+  const longBody = longLine.locator(":scope > div p");
+  const bodyFit = await textInside(longBody, cardBox);
+  await shot("long-card-open");
+  step("the 500 character body stays inside the line and the page does not scroll sideways", bodyFit.inside && !longOpen.sideways, `${bodyFit.detail}; page sideways ${longOpen.sideways}`);
+  const bodyUnwrapped = await unwrapped(longBody, cardBox);
+  step("the body check fails a memory whose text cannot wrap", !bodyUnwrapped.inside, bodyUnwrapped.detail);
 
   await page.goto(`${origin}/memory`);
   const longRow = page.locator("li p").filter({ hasText: longText });
@@ -461,6 +499,23 @@ export default async function memory({ page, origin, step, shot }) {
   await shot("mobile");
   step("memory page renders at 390 by 844", true);
   step("a 500 character memory with no spaces stays inside its row at 390 by 844", phoneFit.inside, phoneFit.detail);
+
+  await page.goto(`${origin}/c/${fourthId}`);
+  const phoneLine = page.locator('[data-tool-name="remember"]').last();
+  await phoneLine.waitFor({ timeout: 15_000 });
+  await openMemoryLine(phoneLine);
+  const phoneOpen = await memoryBody(phoneLine);
+  const phoneBodyFit = await textInside(phoneLine.locator(":scope > div p"), cardBox);
+  await shot("long-card-open-mobile");
+  step("a 500 character remember line opens to all of its text at 390 by 844 without a sideways scroll", phoneOpen.text === longText && phoneBodyFit.inside && !phoneOpen.sideways, `${phoneOpen.text?.length ?? "no"} characters; ${phoneBodyFit.detail}; page sideways ${phoneOpen.sideways}`);
+
+  // The first chat saved a short memory. Its line opens to the same text, because a narrow screen can cut any preview.
+  await page.goto(`${origin}/c/${id}`);
+  const shortLine = page.locator('[data-tool-name="remember"]').first();
+  await shortLine.waitFor({ timeout: 15_000 });
+  await openMemoryLine(shortLine);
+  const shortOpen = await memoryBody(shortLine);
+  step("a short memory line opens to the same text, hiding the preview, at 390 by 844", shortOpen.open && shortOpen.text === "I deploy to Fly.io" && shortOpen.previewShown === false && !shortOpen.sideways, JSON.stringify(shortOpen));
 
   await page.goto(`${origin}/c/${id}`);
   await page.getByRole("textbox").click();
