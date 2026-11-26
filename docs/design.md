@@ -29,12 +29,12 @@ Each color that differs by theme is written once as `light-dark(<light>, <dark>)
 | `--accent` | `#ebeae4` | `#1e1f25` | `bg-accent` | Hover fill |
 | `--destructive` | `--negative` | `--negative` | `text-destructive` | Errors. One source for error red |
 | `--border`, `--input` | `--orbit-border` | `--orbit-border` | `border` (default color) | Hairline borders |
-| `--border-strong` | `#cdcac1` | `#33353d` | `border-border-strong` | Hover and selected borders |
+| `--border-strong` | `#cdcac1` | `#33353d` | `border-border-strong` | Hover and open borders |
 | `--ring` | `--orbit-sun` | `--orbit-sun` | `ring-ring` | Focus rings |
 | `--overlay` | `rgb(28 26 20 / 0.32)` | `rgb(0 0 0 / 0.75)` | `bg-overlay` | Behind dialogs |
 | `--canvas` | `#eeede7` | `#07080a` | `bg-canvas` | Darker than the page, for wells |
 | `--surface-sunken` | `#f1f0eb` | `#0e0f12` | `bg-surface-sunken` | Inputs, code blocks |
-| `--surface-raised` | `#ffffff` | `#1d1e24` | `bg-surface-raised` | Kbd, slider track, the selected toggle |
+| `--surface-raised` | `#ffffff` | `#1d1e24` | `bg-surface-raised` | Kbd, slider track, the selected pill toggle |
 | `--positive`, `--warning`, `--info`, `--negative` | `#18794a`, `#8a5c00`, `#0b6a9c`, `#c3322b` | `#4fd18b`, `#f2cf4a`, `#5ec8f2`, `#ff6259` | `text-positive` | Status only: success, warning, info, error. 4.5:1 on `--card` |
 | `--skeleton`, `--skeleton-highlight` | `#ebeae4`, `#f6f5f1` | `#1a1b20`, `#282a31` | `shimmer` | Loading placeholders |
 | `--chart-1` to `--chart-5` | orange, blue, green, ochre, pink | sun, sky, green, yellow, pink | `fill-chart-1` | Data series, in order. 3:1 on `--card`. An accent change never recolors them |
@@ -78,7 +78,7 @@ Utilities: `num` (Geist Mono, tabular figures), `shimmer`, `scrollbar-none`, `sc
 - **Text size.** `data-text-size` scales the root font size to 93.75%, 100%, 112.5%, or 125%. Percentages keep the browser's own font setting. Everything in rem scales with it, the chat column included, so a line holds the same number of characters at every size.
 - **Copy.** Short labels only. No taglines, helper text, or secondary labels. If a screen needs explaining, fix the layout.
 - **Lines, not shadows.** 1px `border`, `shadow-card` on raised surfaces, `shadow-float` only on things that float (menus, dialogs, tooltips).
-- **Accent.** Primary actions are ivory. Sun appears once or twice per screen: the mark, the active chat, the current prompt. Marks repeated down the thread use `tone="mono"` and turn sun only while busy. A selected toggle is a raised surface, not a tint.
+- **Accent.** Primary actions are ivory. Sun appears once or twice per screen: the mark, the active chat, the current prompt. Marks repeated down the thread use `tone="mono"` and turn sun only while busy. A selected pill toggle is a raised surface, not a tint. A selected outline toggle, such as an effort level, has a `--foreground` border.
 - **Depth.** In every theme, a card is lighter than the page and a well is darker. On dark and dim, depth comes from a lighter surface; on light, from a white card with a soft warm drop. The composer lifts to `bg-popover` on focus instead of drawing a ring.
 - **Touch.** On `pointer: coarse` every control has a 44px hit area. `globals.css` grows buttons and links with a pseudo-element. A control whose parent clips it grows its own box with `pointer-coarse:`.
 - **Icons.** `@phosphor-icons/react`, weight `light` by default, `regular` at 14px and below. Import the `*Icon` names (`XIcon`, not the deprecated `X`). In a server component import from `@phosphor-icons/react/ssr`.
@@ -103,7 +103,7 @@ The composer chip is a `button` (`data-model-chip`) in `font-mono text-meta`, re
 
 - Models grouped under each connection's label, hidden models left out. A search field shows when the lists hold more than 8 rows. Each row shows the model id, its badges, and a check on the current one. Rows are at least 44px tall in the sheet at every text size (`min-h-touch`).
 - A model list that is still loading shows skeleton rows. One that failed shows its error and **Retry** inside its group. A loaded list with nothing to show says `No models`. With no connection at all, the list holds one **Add connection** link to `/settings#connections`, so a chat with history reaches setup too.
-- Under the list, the effort grid: 3 by 2, `None` to `Max`. Levels the model does not take are disabled, and all six are when it takes none. Picking a model that does not take the current effort moves it to the nearest level it takes. The selected level is a raised surface.
+- Under the list, the effort grid: 3 by 2, `None` to `Max`. Levels the model does not take are disabled, and all six are when it takes none. Picking a model that does not take the current effort moves it to the nearest level it takes. The selected level has a `--foreground` border, which reads at 12:1 or more on the popover and the card in every theme, where a raised surface or `--border-strong` reads under 2:1.
 - **Manage** goes to `/settings#models`.
 
 The choice is the chat's own until the next send pins it. Picking a model keeps the picker open, so the effort can follow. A pick whose connection is deleted is dropped, and the chat falls back to its pinned choice or the defaults as the page last resolved them.

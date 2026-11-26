@@ -31,7 +31,7 @@ export function EffortGrid({
       {...labelling}
     >
       {EFFORTS.map((level) => (
-        <ToggleGroupItem key={level} value={level} disabled={levels !== null && !levels.includes(level)} className="w-full px-1 data-[state=on]:bg-surface-raised data-[state=on]:shadow-card">
+        <ToggleGroupItem key={level} value={level} disabled={levels !== null && !levels.includes(level)} className="w-full px-1">
           {EFFORT_LABELS[level]}
         </ToggleGroupItem>
       ))}
