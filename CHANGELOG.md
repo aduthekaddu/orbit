@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- A chat page keeps one layout from its first paint. An empty chat opens with its centered composer and starters, a chat with messages shows a placeholder in their shape until they load, and no Scroll to bottom button shows over an empty thread. (#246)
 - Signed-out requests to paths such as `/api/authors` now get the same sign-in check as other API requests. (#134)
 - A refreshed session cookie now reaches the browser on page and API responses, so daily use keeps a session rolling forward past 7 days without a forced sign-in. (#119)
 - The hook lint in CI is a required check. A failing `rules-of-hooks` or `exhaustive-deps` finding now fails the job. (#145)

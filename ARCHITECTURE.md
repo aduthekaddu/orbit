@@ -21,7 +21,7 @@ The diagram predates slices 7 and 8. SearXNG, Tavily, and the code sandbox now c
 4. The route calls `streamText` from the AI SDK with the model from `orbitModel` in `src/lib/provider.ts` and the tools from `toolsFor(settings)` in `src/lib/tools/index.ts`. The registry always enables `render_ui`, enables `web_search` when a search backend is configured, and enables `run_code` only when the server sets `ORBIT_SANDBOX=on`. The loop stops after at most five model steps. The fifth step allows only `render_ui` and receives the completed conversation as JSON data, so the model answers instead of calling another tool or writing tool-call markup. It keeps the route instructions so the model can answer with citations, render a card, or write an artifact without searching again.
 5. The stream goes back to the browser as AI SDK UI message parts. Text, reasoning, and tool parts render as they arrive.
 6. When the stream ends, `onEnd` passes the plan and the reply's parts to `finishChatReply` in `src/lib/messages.ts`. It saves only a reply that has a visible part, and nothing when a row the plan copied has changed. A regenerate saves a new sibling and keeps the earlier reply.
-7. On reload, `src/app/(app)/c/[id]/page.tsx` loads every message and its parent into the history adapter. The chat opens the path ending at `chats.head_id`.
+7. On reload, `src/app/(app)/c/[id]/page.tsx` loads every message and its parent into the history adapter. The chat opens the path ending at `chats.head_id`. The runtime loads them after hydration, so until they reach the thread it shows a placeholder in their shape, or the empty-chat layout when the chat has none.
 
 ## The rules of a turn
 
