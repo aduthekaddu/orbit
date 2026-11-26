@@ -99,7 +99,7 @@ function readOutcome(result: unknown): RenderOutcome | null {
 export function RenderUiPart(props: ToolCallMessagePartProps) {
   const end = toolCallRunEnd(props);
   return (
-    <div data-tool-name={props.toolName} data-tool-status={end.status} className="my-3 min-w-0 max-w-chat">
+    <div data-tool-name={props.toolName} data-tool-status={end.status} className="my-3 min-w-0 max-w-chat first:mt-0">
       <View props={props} end={end} />
     </div>
   );

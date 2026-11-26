@@ -96,13 +96,13 @@ export function ToolLine({ props, end }: { props: ToolCallMessagePartProps; end:
 
   if (!body) {
     return (
-      <div data-tool-name={props.toolName} className="my-2 min-w-0">
+      <div data-tool-name={props.toolName} className="my-2 min-w-0 first:mt-0">
         <div className={cn(pill, "cursor-default hover:border-border hover:text-muted-foreground", failed && "hover:text-destructive")}>{line}</div>
       </div>
     );
   }
   return (
-    <details data-tool-name={props.toolName} open={failed} className="group/line my-2 min-w-0">
+    <details data-tool-name={props.toolName} open={failed} className="group/line my-2 min-w-0 first:mt-0">
       <summary className={cn(pill, "group-open/line:text-foreground", failed && "group-open/line:text-destructive")}>{line}</summary>
       <div className={disclosureBody}>{body}</div>
     </details>
