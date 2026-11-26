@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test, { after, before } from "node:test";
+import { Redactor } from "./chat-errors";
+import { deleteConnection } from "./connections";
 import { getDb } from "./db";
-import { ensureChat } from "./messages";
-import { resolveChoice, setChatChoice, type ModelChoice } from "./model-choice";
+import { ensureChat, finishChatReply, listMessages, planChatWrite } from "./messages";
+import { resolveChoice, setChatChoice, type ModelChoice, type ReplyRecord } from "./model-choice";
 import { encryptSecret } from "./secrets";
 
 const ONE = "u-choice-one";
@@ -150,4 +152,35 @@ test("a connection with no model to use resolves to no-model", () => {
 test("a connection whose key cannot be decrypted resolves to key-unreadable", () => {
   const result = resolveChoice(ONE, chat("chat-unreadable"), { connectionId: "conn-unreadable", model: "m", effort: "low" });
   assert.deepEqual(result, { ok: false, reason: "key-unreadable" });
+});
+
+// A send resolves its choice, then waits for the reply slot and streams, so a delete can land between any two steps.
+test("a reply whose connection was deleted while it streamed is saved without the connection, and keeps its model and effort", () => {
+  addConnection("conn-deleted-mid-reply", ONE, "openai-compatible");
+  const chatId = "chat-deleted-mid-reply";
+  chat(chatId);
+  const redact = new Redactor(null);
+  const plan = planChatWrite(chatId, [{ id: `${chatId}-u1`, role: "user", parts: [{ type: "text", text: "hello" }] }], redact);
+  assert.ok(!("error" in plan), JSON.stringify(plan));
+  assert.equal(deleteConnection(ONE, "conn-deleted-mid-reply"), true);
+
+  const record: ReplyRecord = { connectionId: "conn-deleted-mid-reply", model: "streamed-model", effort: "high", effortOutcome: "applied" };
+  assert.equal(finishChatReply(plan, [{ type: "text", text: "the reply" }], redact, record), true, "the reply was not saved");
+  const reply = listMessages(chatId).find((message) => message.role === "assistant");
+  assert.deepEqual(reply?.metadata, { reply: { ...record, connectionId: null } });
+});
+
+test("a choice that names a deleted connection is not pinned, and a chat pinned to one uses the defaults", () => {
+  addConnection("conn-deleted-before-pin", ONE, "openai-compatible");
+  chat("chat-pin-after-delete");
+  assert.equal(deleteConnection(ONE, "conn-deleted-before-pin"), true);
+  setChatChoice("chat-pin-after-delete", { connectionId: "conn-deleted-before-pin", model: "pinned-model", effort: "high" });
+  assert.deepEqual(
+    getDb().$client.prepare("select connection_id, model, reasoning_effort from chats where id = 'chat-pin-after-delete'").get(),
+    { connection_id: null, model: null, reasoning_effort: null },
+  );
+
+  chat("chat-pinned-to-gone");
+  sql("update chats set connection_id = 'conn-gone', model = 'gone-model', reasoning_effort = 'low' where id = 'chat-pinned-to-gone'");
+  assert.deepEqual(resolved(ONE, "chat-pinned-to-gone").choice, { connectionId: "conn-openai", model: "default-model", effort: "medium" });
 });

@@ -1,8 +1,8 @@
-import { eq } from "drizzle-orm";
+import { and, eq, exists } from "drizzle-orm";
 import { z } from "zod";
 import { connectionApiKey, getConnection, getModelDefaults, listConnections, seedConnection, type ProviderConnection } from "./connections";
 import { getDb } from "./db";
-import { chats } from "./db/schema";
+import { chats, providerConnections } from "./db/schema";
 import { EFFORTS, type Effort, type EffortOutcome } from "./effort";
 import { SecretUnreadable } from "./secrets";
 
@@ -33,8 +33,15 @@ export function sameChoice(a: ModelChoice | null, b: ModelChoice) {
   return a !== null && a.connectionId === b.connectionId && a.model === b.model && a.effort === b.effort;
 }
 
+// A send waits for its reply slot after it resolves, so the connection may be gone by now. The check and the write are
+// one statement, so a chat is never pinned to a connection that no longer exists or that another user owns.
 export function setChatChoice(chatId: string, choice: ModelChoice) {
-  getDb().update(chats).set({ connectionId: choice.connectionId, model: choice.model, reasoningEffort: choice.effort }).where(eq(chats.id, chatId)).run();
+  const db = getDb();
+  const owned = db
+    .select({ id: providerConnections.id })
+    .from(providerConnections)
+    .where(and(eq(providerConnections.id, choice.connectionId), eq(providerConnections.userId, chats.userId)));
+  db.update(chats).set({ connectionId: choice.connectionId, model: choice.model, reasoningEffort: choice.effort }).where(and(eq(chats.id, chatId), exists(owned))).run();
 }
 
 // A user with no connection gets the install's provider here too, in case the signup hook failed after the user row.

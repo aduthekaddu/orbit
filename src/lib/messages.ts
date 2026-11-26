@@ -4,7 +4,7 @@ import type { Redactor } from "./chat-errors";
 import { replaceTextPart, replaceTextParts } from "./chat-parts";
 import { getDb } from "./db";
 import { assistantHasVisiblePart } from "./genui/spec";
-import { chats, messages } from "./db/schema";
+import { chats, messages, providerConnections } from "./db/schema";
 import { isPath, pathTo, toRepository, type StoredMessage } from "./chat-tree";
 import { EFFORT_OUTCOMES, isEffort, type EffortOutcome } from "./effort";
 import type { ReplyRecord } from "./model-choice";
@@ -286,10 +286,13 @@ function unchanged(row: SavedText | undefined, copy: SavedText) {
   return row !== undefined && row.content === copy.content && row.parts === copy.parts;
 }
 
-// The model id comes from the provider's response, which can repeat a credential.
+// The model id comes from the provider's response, which can repeat a credential. The connection can be deleted while
+// the reply streams, and then the reply is saved without it, as the delete leaves older replies. Callers hold the transaction.
 function replyColumns(reply: ReplyRecord | undefined, redact: Redactor) {
   if (!reply) return {};
-  return { connectionId: reply.connectionId, model: redact.text(reply.model), reasoningEffort: reply.effort, effortOutcome: reply.effortOutcome };
+  const connected = reply.connectionId !== null &&
+    getDb().select({ id: providerConnections.id }).from(providerConnections).where(eq(providerConnections.id, reply.connectionId)).get() !== undefined;
+  return { connectionId: connected ? reply.connectionId : null, model: redact.text(reply.model), reasoningEffort: reply.effort, effortOutcome: reply.effortOutcome };
 }
 
 /** Saves a reply with a visible part, unless a row its plan copied has changed. Returns whether it saved. */
