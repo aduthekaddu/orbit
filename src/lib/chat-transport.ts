@@ -1,5 +1,6 @@
 import { AssistantChatTransport } from "@assistant-ui/react-ai-sdk";
 import type { UIMessage, UIMessageChunk } from "ai";
+import { SERVER_TIME_HEADER } from "./thought-time";
 
 class OrbitChatTransport extends AssistantChatTransport<UIMessage> {
   protected processResponseStream(stream: ReadableStream<Uint8Array<ArrayBufferLike>>) {
@@ -38,6 +39,7 @@ export function orbitChatTransport(
     fetch?: typeof fetch;
     onReplyId?: (replyId: string) => void;
     onReconnectResponse?: (status: number) => void;
+    onServerTime?: (serverTime: number) => void;
   },
 ) {
   return new OrbitChatTransport({
@@ -46,6 +48,10 @@ export function orbitChatTransport(
     fetch: plainRefusals(async (input, init) => {
       const response = await (options?.fetch ?? fetch)(input, init);
       if (!init?.signal?.aborted) {
+        if (response.ok) {
+          const rawTime = response.headers.get(SERVER_TIME_HEADER);
+          if (rawTime && /^\d+$/.test(rawTime)) options?.onServerTime?.(Number(rawTime));
+        }
         if (init?.method === "GET") options?.onReconnectResponse?.(response.status);
         else if (response.ok) {
           const replyId = response.headers.get("x-resumable-stream-id");

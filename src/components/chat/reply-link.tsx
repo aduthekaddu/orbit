@@ -19,7 +19,7 @@ type IdleOrActive = ActiveReply | { kind: "attached"; replyId: null } | { kind: 
 type ReplyLinkState = IdleOrActive
   | { kind: "stopping"; reply: IdleOrActive; request: "sending" | "confirmed" };
 
-type Snapshot = { state: ReplyLinkState; stopError: string };
+type Snapshot = { state: ReplyLinkState; stopError: string; clockOffsetMs: number };
 type ResumeAttempt = { signal: AbortSignal; controller: AbortController; target: Reconnecting; status?: number };
 type ReplyDiscovery = { kind: "initial" | "idle" } | { kind: "awaiting-reply"; promptId: string };
 
@@ -63,10 +63,10 @@ function writeCheckpoint(key: string, replyId: string | null) {
   }
 }
 
-export function createReplyLink(chatId: string, refresh: () => void) {
+export function createReplyLink(chatId: string, refresh: () => void, now = Date.now) {
   const key = `orbit-stream:${chatId}`;
   const api = `/api/chats/${encodeURIComponent(chatId)}`;
-  const initial = { state: { kind: "attached", replyId: null }, stopError: "" } satisfies Snapshot;
+  const initial = { state: { kind: "attached", replyId: null }, stopError: "", clockOffsetMs: 0 } satisfies Snapshot;
   let snapshot: Snapshot = initial;
   const listeners = new Set<() => void>();
   let connection: { chat: Chat; controller: AbortController } | null = null;
@@ -76,7 +76,14 @@ export function createReplyLink(chatId: string, refresh: () => void) {
   let stopTimer: ReturnType<typeof setTimeout> | undefined;
 
   function update(state: ReplyLinkState, stopError = activeReply(state) ? snapshot.stopError : "") {
-    snapshot = { state, stopError };
+    snapshot = { ...snapshot, state, stopError };
+    for (const render of listeners) render();
+  }
+
+  function syncClock(serverTime: number) {
+    const clockOffsetMs = now() - serverTime;
+    if (snapshot.clockOffsetMs === clockOffsetMs) return;
+    snapshot = { ...snapshot, clockOffsetMs };
     for (const render of listeners) render();
   }
 
@@ -282,6 +289,7 @@ export function createReplyLink(chatId: string, refresh: () => void) {
     accept,
     finish,
     reconnectResponse,
+    syncClock,
     stop,
     getSnapshot: () => snapshot,
     getServerSnapshot: () => initial,
@@ -330,17 +338,17 @@ export function createReplyLink(chatId: string, refresh: () => void) {
 type Link = ReturnType<typeof createReplyLink>;
 const ReplyLinkContext = createContext<Link | null>(null);
 const noSubscribe = () => () => {};
-const emptySnapshot: Snapshot = { state: { kind: "attached", replyId: null }, stopError: "" };
+const emptySnapshot: Snapshot = { state: { kind: "attached", replyId: null }, stopError: "", clockOffsetMs: 0 };
 const getEmptySnapshot = () => emptySnapshot;
 
 export function useReplyLink() {
   const link = useContext(ReplyLinkContext);
-  const { state, stopError } = useSyncExternalStore(
+  const { state, stopError, clockOffsetMs } = useSyncExternalStore(
     link?.subscribe ?? noSubscribe,
     link?.getSnapshot ?? getEmptySnapshot,
     link?.getServerSnapshot ?? getEmptySnapshot,
   );
-  return { kind: state.kind, stopError, canStop: link !== null && state.kind !== "stopping", stop: link?.stop };
+  return { kind: state.kind, stopError, clockOffsetMs, canStop: link !== null && state.kind !== "stopping", stop: link?.stop };
 }
 
 export function ReplyLink({

@@ -48,6 +48,7 @@ export function ChatPanel({
     },
     onReplyId: link.accept,
     onReconnectResponse: link.reconnectResponse,
+    onServerTime: link.syncClock,
   }), [chatId, link]);
   const history = useMemo<ThreadHistoryAdapter>(() => ({
     async load() { throw new Error("Chat history requires the ai-sdk/v6 format"); },

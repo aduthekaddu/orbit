@@ -7,8 +7,10 @@ import { CaretRightIcon, LightbulbIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { readOrbitTiming, thinkingLabel, thoughtLabel } from "@/lib/thought-time";
 import { MarkdownText } from "./markdown-text";
+import { useReplyLink } from "./reply-link";
 
 export const Reasoning: ReasoningMessagePartComponent = ({ status, providerMetadata }) => {
+  const { clockOffsetMs } = useReplyLink();
   const timing = readOrbitTiming(providerMetadata);
   const startedAt = timing?.startedAt;
   const thoughtMs = timing?.thoughtMs;
@@ -17,11 +19,11 @@ export const Reasoning: ReasoningMessagePartComponent = ({ status, providerMetad
 
   useEffect(() => {
     if (!running || startedAt === undefined) return;
-    const tick = () => setElapsedMs(Date.now() - startedAt);
+    const tick = () => setElapsedMs(Date.now() - clockOffsetMs - startedAt);
     tick();
     const timer = setInterval(tick, 250);
     return () => clearInterval(timer);
-  }, [running, startedAt]);
+  }, [running, startedAt, clockOffsetMs]);
 
   const duration = thoughtMs !== undefined ? thoughtLabel(thoughtMs) : running && startedAt !== undefined ? thinkingLabel(elapsedMs) : null;
   return (

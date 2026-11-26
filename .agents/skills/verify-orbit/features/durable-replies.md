@@ -13,7 +13,7 @@ node .agents/skills/verify-orbit/verify.mjs cleanup
 
 The scenario first drops the initial reply before the app receives the response headers, then checks that the open tab fetches the same reply and shows all 50 words. It also drops the connection after text reaches Chrome while the browser stays online. It checks that Chrome shows **Reconnecting**, renders all 50 words, and has one copy of the reply after a reload. The scenario repeats this check at 390 by 844 pixels.
 
-It also drops the connection during thinking, then checks that the timer survives reload. It presses **Stop** during a second reply and checks that the reasoning, duration, and **Stopped** label survive. Switching chats must leave the reply running. A second tab can watch that reply but gets HTTP 409 if it sends another prompt. A tab focused on an older branch stays on that branch.
+It also checks that the live thinking timer stays accurate when the browser clock runs two minutes ahead of or behind the server, drops the connection during thinking, and checks that the timer survives reload. It presses **Stop** during a second reply and checks that the reasoning, duration, and **Stopped** label survive. Switching chats must leave the reply running. A second tab can watch that reply but gets HTTP 409 if it sends another prompt. A tab focused on an older branch stays on that branch.
 
 `reply-actions` checks that **Stop** cancels a send before response headers arrive, whether the server already reserved the turn or the request stalled before reaching it. It also holds the Retry response while it checks that the old status clears and only one request goes out, and checks that a pending Stop or reconnect blocks edit submission without losing the draft or the active reply.
 

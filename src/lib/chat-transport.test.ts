@@ -5,6 +5,7 @@ import { RESUMABLE_STREAM_ID_HEADER as ASSISTANT_UI_STREAM_ID_HEADER } from "@as
 import type { UIMessage } from "ai";
 import { orbitChatTransport } from "./chat-transport";
 import { RESUMABLE_STREAM_ID_HEADER } from "./reply-runs";
+import { SERVER_TIME_HEADER } from "./thought-time";
 
 function send(response: Response) {
   const transport = orbitChatTransport("c1", { api: "http://orbit.test/api/chat", fetch: async () => response });
@@ -86,4 +87,29 @@ test("an abort chunk ends a stopped HTTP stream without reconnecting", async () 
   const chat = new Chat({ transport, onFinish: ({ isDisconnect }) => finished.resolve(isDisconnect) });
   await chat.sendMessage({ text: "hello" });
   assert.equal(await finished.promise, false);
+});
+
+test("the transport reports valid server timestamps on stream responses and ignores invalid ones", async () => {
+  const times: number[] = [];
+  const responses = [
+    new Response("data: [DONE]\n\n", { headers: { [RESUMABLE_STREAM_ID_HEADER]: "a1", [SERVER_TIME_HEADER]: "1700000000000" } }),
+    new Response("data: [DONE]\n\n", { headers: { [SERVER_TIME_HEADER]: "1700000005000" } }),
+    new Response("data: [DONE]\n\n", { headers: { [SERVER_TIME_HEADER]: "not-a-timestamp" } }),
+    new Response(null, { status: 500, headers: { [SERVER_TIME_HEADER]: "1700000099999" } }),
+  ];
+  const transport = orbitChatTransport("c1", {
+    api: "http://orbit.test/api/chat",
+    fetch: async () => responses.shift() ?? new Response(null, { status: 204 }),
+    onServerTime: (time) => times.push(time),
+  });
+  const first = await transport.sendMessages({
+    chatId: "local-id", messageId: undefined, messages: [], trigger: "submit-message", abortSignal: undefined,
+  });
+  await first.cancel();
+  const second = await transport.reconnectToStream({ chatId: "local-id", body: { replyId: "a1" } });
+  await second?.cancel();
+  const third = await transport.reconnectToStream({ chatId: "local-id", body: { replyId: "a1" } });
+  await third?.cancel();
+  await assert.rejects(transport.reconnectToStream({ chatId: "local-id", body: { replyId: "a1" } }));
+  assert.deepEqual(times, [1700000000000, 1700000005000]);
 });

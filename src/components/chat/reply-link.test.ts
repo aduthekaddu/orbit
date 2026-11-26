@@ -692,3 +692,17 @@ test("a failed pre-header Stop reports an error and leaves Stop retryable", asyn
     await sending;
   }
 });
+
+test("syncClock tracks positive and negative client clock skew across state transitions", (t) => {
+  browser(t);
+  let clientNow = 1_120_000;
+  const link = createReplyLink("chat", () => {}, () => clientNow);
+  assert.equal(link.getSnapshot().clockOffsetMs, 0);
+  link.syncClock(1_000_000);
+  assert.equal(link.getSnapshot().clockOffsetMs, 120_000);
+  link.accept("a1");
+  assert.equal(link.getSnapshot().clockOffsetMs, 120_000);
+  clientNow = 880_000;
+  link.syncClock(1_000_000);
+  assert.equal(link.getSnapshot().clockOffsetMs, -120_000);
+});

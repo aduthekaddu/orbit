@@ -1,4 +1,5 @@
 import { createUIMessageStreamResponse, type UIMessageChunk } from "ai";
+import { SERVER_TIME_HEADER } from "./thought-time";
 
 export const RESUMABLE_STREAM_ID_HEADER = "x-resumable-stream-id";
 export const MAX_RUNNING_PER_USER = 4;
@@ -174,11 +175,14 @@ export function startReplyRun(
   })();
 }
 
-export function replyResponse(run: ReplyRun, replyId: string) {
+export function replyResponse(run: ReplyRun, replyId: string, now = Date.now) {
   return createUIMessageStreamResponse({
     stream: watchReply(run),
     keepAliveMs: 15_000,
-    headers: { [RESUMABLE_STREAM_ID_HEADER]: replyId },
+    headers: {
+      [RESUMABLE_STREAM_ID_HEADER]: replyId,
+      [SERVER_TIME_HEADER]: String(now()),
+    },
   });
 }
 

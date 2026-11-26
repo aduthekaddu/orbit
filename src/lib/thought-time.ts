@@ -1,3 +1,5 @@
+export const SERVER_TIME_HEADER = "x-orbit-server-time";
+
 export type OrbitTiming = { startedAt: number; thoughtMs?: number };
 
 export function readOrbitTiming(metadata: unknown): OrbitTiming | undefined {
