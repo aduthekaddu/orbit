@@ -45,6 +45,44 @@ async function waitForSavedWords(page, origin, id) {
   assert.deepEqual(words, allWords);
 }
 
+async function dropBeforeHeaders({ page, origin, step, shot }) {
+  const id = await openChat(page, origin);
+  const isPost = (request) => request.method() === "POST" && new URL(request.url()).pathname === "/api/chat";
+  const post = page.waitForResponse((response) => isPost(response.request()));
+  const replays = [];
+  const record = (request) => {
+    if (new URL(request.url()).pathname === `/api/chats/${id}/stream`) replays.push(request.url());
+  };
+  page.on("request", record);
+  try {
+    await page.evaluate(() => {
+      const send = window.fetch;
+      window.fetch = async (input, init) => {
+        if (input !== "/api/chat" || init?.method !== "POST") return send(input, init);
+        window.fetch = send;
+        const response = await send(input, init);
+        if (!response.ok) return response;
+        void response.body?.cancel();
+        throw new TypeError("Network failed before response headers");
+      };
+    });
+    await send(page, "[qa:slow] Answer while I lose the connection before headers");
+    const response = await post;
+    const replyId = await response.headerValue("x-resumable-stream-id");
+    assert.equal(response.status(), 200);
+    assert.ok(replyId, "the server accepted the turn and assigned a reply id");
+    await waitForSavedWords(page, origin, id);
+    const rendered = await word(page, 50).waitFor({ timeout: 4_000 }).then(() => true, () => false);
+    const attached = replays.some((url) => new URL(url).searchParams.get("replyId") === replyId);
+    step("a drop before response headers reconnects the mounted tab to the saved turn",
+      attached && rendered && await replies(page).count() === 1,
+      `server replied 200 and saved all 50 words, replay requested=${attached}, final word visible=${rendered}`);
+    await shot("before-headers");
+  } finally {
+    page.off("request", record);
+  }
+}
+
 async function dropDuringText({ page, origin, front, step, shot, phone = false }) {
   const id = await openChat(page, origin, front.origin);
   await send(page, "[qa:slow] Answer while I lose the connection");
@@ -85,6 +123,7 @@ export default async function durableReply({ page, origin, mockUrl, step, shot }
   assert.ok(mockUrl);
   const front = await startDropFront(origin);
   try {
+    await dropBeforeHeaders({ page, origin, step, shot });
     await dropDuringText({ page, origin, front, step, shot });
 
     const completedThought = await openChat(page, origin, front.origin);
