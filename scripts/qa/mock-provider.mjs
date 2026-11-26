@@ -256,6 +256,111 @@ export default () => {
   "artifact-error": ["html", `<h1>Artifact error</h1><script>throw new Error('Artifact exploded');</script>`],
 };
 
+// A long deploy guide for reading checks: every heading level, paragraphs that wrap several lines in a
+// 36rem column, inline code in prose and in a table cell, a nested list, a quote, a table, two code
+// blocks (the second longer than 20 lines, so it collapses), and one unbroken URL.
+const markdownReply = `# Deploy Orbit to a small server
+
+This guide moves Orbit from your laptop to a small virtual server that you control. It assumes a fresh Ubuntu machine with two gigabytes of memory, a domain name that points at the server, and an SSH key that already works. The whole process takes about twenty minutes, and most of that time is spent waiting for the container image to build. Read each section before you run its commands, because a few of the steps change files that are hard to put back by hand.
+
+## Before you start
+
+Orbit keeps everything it knows in one SQLite file, so a deploy is mostly about putting that file somewhere safe and starting the server next to it. Run \`sqlite3 data/orbit.db .tables\` on your laptop first and make sure the command lists the chats, messages, and settings tables. If the list is empty, you are about to deploy an empty database, which is fine for a first install but surprising if you meant to bring your history along with you.
+
+### Check the machine
+
+Log in once as root and confirm the basics. The server needs a recent kernel, a working clock, and enough free disk space for the image layers, the database, and a week of logs. A machine that drifts more than a few seconds will reject sign-in cookies in ways that look like a password problem, so set up time sync before anything else and check it again after the first reboot.
+
+#### Open the firewall
+
+Allow SSH, HTTP, and HTTPS, and nothing else. The app listens on port 3210 inside the container, but the reverse proxy is the only thing that should reach it. Keep the database port closed, because SQLite has no network port at all and anything listening there is a mistake.
+
+##### Pick a data directory
+
+Choose one directory for the database and the uploaded files, such as \`/srv/orbit/data\`, and make the service user its owner. Every backup and every restore later in this guide reads from that one path.
+
+###### Notes for shared hosts
+
+If other people can log in to the same machine, give the data directory mode 700 so only the service user can read the chats.
+
+## Install the runtime
+
+1. Update the package index and install the tools the build needs.
+   - Docker Engine and the compose plugin
+   - Caddy for TLS and the reverse proxy
+     - The packaged version is new enough
+     - Turn off the default site before you add yours
+   - SQLite tools for backups
+2. Create a service user called \`orbit\` with no login shell.
+3. Clone the repository into \`/srv/orbit/app\` and check out the latest release tag.
+
+> Keep the release tag in a note next to the server. When something breaks after an upgrade, the fastest fix is to check out the previous tag, rebuild, and restart, and you can only do that quickly if you know which tag you came from.
+
+Here is the order the guide follows, with the time each step usually takes on a small machine:
+
+| Step | Command | Time |
+| --- | --- | --- |
+| Install packages | \`apt install docker.io caddy sqlite3\` | 3 min |
+| Build the image | \`docker compose build\` | 8 min |
+| Start the service | \`docker compose up -d\` | 1 min |
+| Check the logs | \`docker compose logs -f orbit\` | 1 min |
+
+## Configure the service
+
+The service reads its settings from the environment, and none of them belong in the repository. Put them in a file that only the service user can read, and point the compose file at it. The two values that matter most are the public URL, which sign-in uses to check where a request came from, and the secret that signs the session cookies, which must stay the same across restarts or every session ends at once.
+
+\`\`\`bash
+sudo install -d -o orbit -g orbit -m 700 /srv/orbit/data
+sudo -u orbit tee /srv/orbit/.env > /dev/null <<'EOF'
+BETTER_AUTH_URL=https://orbit.example.com
+BETTER_AUTH_SECRET=replace-with-a-long-random-string
+ORBIT_DATA_DIR=/srv/orbit/data
+EOF
+sudo chmod 600 /srv/orbit/.env
+\`\`\`
+
+The compose file below builds the image from the checkout, mounts the data directory, and restarts the container when the machine reboots. It also sets a health check, so Docker marks the container unhealthy when the setup route stops answering, and a log limit, so a chatty week does not fill the disk before you notice it.
+
+\`\`\`yaml
+services:
+  orbit:
+    build:
+      context: /srv/orbit/app
+      dockerfile: Dockerfile
+    image: orbit:latest
+    restart: unless-stopped
+    env_file: /srv/orbit/.env
+    environment:
+      NODE_ENV: production
+      PORT: "3210"
+    ports:
+      - "127.0.0.1:3210:3210"
+    volumes:
+      - /srv/orbit/data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3210/api/setup"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    user: "1001:1001"
+\`\`\`
+
+## Put it behind TLS
+
+Caddy gets a certificate on its own the first time a request arrives for your domain, so the site block only needs the domain name and the local port. Reload Caddy after you save the file, then open the domain in a browser and sign up. The first account becomes the only account, and the signup page closes as soon as it exists, so do this step yourself rather than leaving the page open for anyone who finds it.
+
+If the certificate request fails, the error almost always names the reason, and the reference page at https://caddyserver.com/docs/automatic-https/troubleshooting/certificate-issuance/rate-limits/and-staging-endpoints/explained-step-by-step-for-small-self-hosted-servers?from=orbit-deploy-guide&section=tls explains each one with the command that fixes it.
+
+## Back up every night
+
+Copy the database with the SQLite backup command, not with a plain file copy, because a copy taken while the server writes can be torn in half. Keep seven nightly copies and one weekly copy, and test a restore on your laptop once a month, since a backup you have never restored is only a guess about the future.
+`;
+
 function textOf(content) {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
@@ -692,6 +797,10 @@ const server = http.createServer((req, res) => {
     }
     if (scenario === "malformed") {
       malformedResponse(res);
+      return;
+    }
+    if (scenario === "markdown") {
+      textResponse(res, markdownReply);
       return;
     }
     if (scenario === "plain" || scenario === "recover") {
