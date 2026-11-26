@@ -1,6 +1,7 @@
 import { convertToModelMessages, createUIMessageStreamResponse, stepCountIs, streamText, toUIMessageStream, type UIMessage } from "ai";
 import { ARTIFACT_INSTRUCTIONS } from "@/lib/artifacts/detect";
 import { logProviderError, Redactor, streamErrorMessage } from "@/lib/chat-errors";
+import { redactUIMessageStream } from "@/lib/chat-stream-redactor";
 import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
 import { assistantHasVisiblePart, settleInterruptedParts } from "@/lib/genui/spec";
 import { embedPending } from "@/lib/memory/embed";
@@ -8,7 +9,7 @@ import { attachMemoryNotes, quotedMemoryNotes, recall, REMEMBER_INSTRUCTIONS } f
 import { toolsForTurn } from "@/lib/tools";
 import { answerStepFor, CHAT_STEP_LIMIT } from "@/lib/tools/answer-step";
 import { createStoppedRuns } from "@/lib/tools/stopped-runs";
-import { chatTitle, ensureChat, finishChatReply, planChatWrite, storedAssistantParts, storedMessageCount, storedMessageIds, textFromParts, touchChat } from "@/lib/messages";
+import { ensureChat, finishChatReply, planChatWrite, redactChatTitle, storedAssistantParts, storedMessageCount, storedMessageIds, textFromParts, touchChat } from "@/lib/messages";
 import { modelAllowsReasoning, orbitModel, reasoningOptions } from "@/lib/provider";
 import { startChatTitle } from "@/lib/titles";
 import { getSettings } from "@/lib/settings";
@@ -104,7 +105,7 @@ export async function POST(request: Request) {
 
   const incoming = parsed.data.messages;
   const messagesBeforeTurn = storedMessageCount(chat.id);
-  const write = planChatWrite(chat.id, incoming, parsed.data.trigger, parsed.data.editMessageId);
+  const write = planChatWrite(chat.id, incoming, redact, parsed.data.trigger, parsed.data.editMessageId);
   if ("error" in write) {
     if (write.error === "invalid-edit") {
       return Response.json({ error: "Invalid edit request" }, { status: 400 });
@@ -120,20 +121,21 @@ export async function POST(request: Request) {
   const firstUser = incoming.find((message) => message.role === "user");
   const lastUser = incoming.findLast((message) => message.role === "user");
   const title = textFromParts(firstUser?.parts).trim();
-  if (title) touchChat(chat.id, title);
+  if (title) touchChat(chat.id, title, redact);
   else touchChat(chat.id);
   if (title) {
     startChatTitle({
       messagesBeforeTurn,
       chatId: chat.id,
-      firstMessage: title,
-      fallbackTitle: chatTitle(title),
+      firstMessage: redact.text(title),
+      fallbackTitle: redactChatTitle(title, redact),
       model: orbitModel({
         baseUrl: settings.baseUrl,
         apiKey: settings.apiKey,
         model: settings.model,
         chatId: chat.id,
       }),
+      redact,
       onError: (message) => redact.logError("chat title", message),
     });
   }
@@ -149,7 +151,7 @@ export async function POST(request: Request) {
   try {
     const allowReasoning = modelAllowsReasoning(settings.baseUrl, settings.model);
     const stopped = createStoppedRuns();
-    const loaded = await toolsForTurn(settings, stopped, { chatId: chat.id, messageId: lastUser?.id ?? null }, request.signal);
+    const loaded = await toolsForTurn(settings, stopped, { chatId: chat.id, messageId: lastUser?.id ?? null }, request.signal, redact);
     let closed = false;
     closeTools = async () => {
       if (closed) return;
@@ -221,7 +223,7 @@ export async function POST(request: Request) {
       },
     });
 
-    return createUIMessageStreamResponse({ stream: uiStream });
+    return createUIMessageStreamResponse({ stream: uiStream.pipeThrough(redactUIMessageStream(redact)) });
   } catch (error) {
     await closeTools();
     const message = error instanceof Error ? error.message : "The model request failed";

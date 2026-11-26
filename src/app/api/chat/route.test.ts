@@ -45,7 +45,9 @@ type Route = typeof import("./route");
 type Messages = typeof import("@/lib/messages");
 
 let route: Route;
+let editReply: typeof import("../chats/[id]/messages/[messageId]/route").PATCH;
 let messages: Messages;
+let db: typeof import("@/lib/db").db;
 let closeDb: () => void;
 let provider: http.Server;
 let github: MockMcp;
@@ -109,7 +111,7 @@ before(async () => {
   await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
   const port = (provider.address() as { port: number }).port;
 
-  const { db } = await import("@/lib/db");
+  ({ db } = await import("@/lib/db"));
   const schema = await import("@/lib/db/schema");
   const { saveSettings } = await import("@/lib/settings");
   closeDb = () => db.$client.close();
@@ -126,6 +128,7 @@ before(async () => {
   });
   messages = await import("@/lib/messages");
   route = await import("./route");
+  ({ PATCH: editReply } = await import("../chats/[id]/messages/[messageId]/route"));
 });
 
 after(async () => {
@@ -220,4 +223,62 @@ test("a GitHub tool error that names every stored credential leaves them out of 
   assertNoCredential("stream error", errorTexts(streamed));
   assertNoCredential("saved reply", saved);
   assertNoCredential("log", logged);
+});
+
+function assertSavedText(id: string, expected: string) {
+  const row = db.$client.prepare<[string], { content: string; parts: string }>(
+    "select content, parts from messages where id = ?",
+  ).get(id);
+  assert.ok(row, "the route must save the message");
+  const parts: Array<{ type: string; text?: string }> = JSON.parse(row.parts);
+  assert.deepEqual({
+    messageTextMasked: parts.filter(({ type }) => type === "text").map(({ text }) => text).join("") === expected,
+    searchTextMasked: row.content === expected,
+  }, { messageTextMasked: true, searchTextMasked: true });
+}
+
+test("a submitted prompt masks a stored credential in the saved message and search text", async () => {
+  const chatId = "c-redacted-prompt";
+  const text = `My example is ${PROVIDER_KEY} today.`;
+  await send(chatId, text);
+  assertSavedText(`${chatId}-u1`, "My example is [redacted] today.");
+
+  const history = messages.listMessages(chatId);
+  const original = history.map((message) => message.role === "user"
+    ? { ...message, parts: [{ type: "text", text }] }
+    : message);
+  const response = await route.POST(new Request("http://127.0.0.1/api/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      id: chatId,
+      trigger: "submit-message",
+      messages: [...original, { id: `${chatId}-u2`, role: "user", parts: [{ type: "text", text: "A follow-up." }] }],
+    }),
+  }));
+  await response.text();
+  assert.equal(response.status, 200, "the tab can send a follow-up before it reloads the saved prompt");
+  assertSavedText(`${chatId}-u2`, "A follow-up.");
+});
+
+test("manual reply edits mask a stored credential in the saved message and search text", async (t) => {
+  const chatId = "c-redacted-edit";
+  await send(chatId, "Draw it.");
+  const answer = messages.listMessages(chatId).find(({ role }) => role === "assistant");
+  assert.ok(answer);
+  const textIndex = answer.parts.findIndex(({ type }) => type === "text");
+  assert.ok(textIndex >= 0);
+  for (const partIndex of [undefined, textIndex]) {
+    await t.test(partIndex === undefined ? "whole reply" : "one text part", async () => {
+      const beforeKey = partIndex === undefined ? "Whole edit" : "Part edit";
+      const request = new Request(`http://127.0.0.1/api/chats/${chatId}/messages/${answer.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: `${beforeKey}: ${TAVILY_KEY}.`, partIndex }),
+      });
+      const response = await editReply(request, { params: Promise.resolve({ id: chatId, messageId: answer.id }) });
+      assert.equal(response.status, 200);
+      assertSavedText(answer.id, `${beforeKey}: [redacted].`);
+    });
+  }
 });

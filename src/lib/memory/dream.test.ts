@@ -6,6 +6,9 @@ import test, { before, after } from "node:test";
 import Database from "better-sqlite3";
 import { dataDirectory } from "../paths";
 import { startMockOllama } from "./ollama-harness";
+import { Redactor } from "../chat-errors";
+
+const redact = new Redactor(null);
 
 const dataDir = dataDirectory();
 const requestLog = path.join(dataDir, "mock-requests.jsonl");
@@ -96,7 +99,7 @@ async function seedChat(text: string, createdAt: number) {
   const { createChat, persistIncoming } = await import("../messages");
   const chat = createChat("dream-user");
   const messageId = crypto.randomUUID();
-  assert.equal(persistIncoming(chat.id, [{ id: messageId, role: "user", parts: [{ type: "text", text }] }]), "ok");
+  assert.equal(persistIncoming(chat.id, [{ id: messageId, role: "user", parts: [{ type: "text", text }] }], redact), "ok");
   db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(createdAt, messageId);
   return { chatId: chat.id, messageId };
 }
@@ -108,9 +111,9 @@ async function seedReply(chatId: string, text: string, createdAt: number, messag
   const { finishChatReply, listMessages, planChatWrite } = await import("../messages");
   const prompt = listMessages(chatId).find((message) => message.role === "user");
   assert.ok(prompt, "chat has no prompt to reply to");
-  const plan = planChatWrite(chatId, [prompt, { id: messageId, role: "assistant", parts: [] }]);
+  const plan = planChatWrite(chatId, [prompt, { id: messageId, role: "assistant", parts: [] }], redact);
   if ("error" in plan) assert.fail(`write refused: ${plan.error}`);
-  assert.equal(finishChatReply(plan, [{ type: "text", text }]), true);
+  assert.equal(finishChatReply(plan, [{ type: "text", text }], redact), true);
   db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(createdAt, messageId);
   return messageId;
 }
@@ -157,6 +160,8 @@ test("a run adds facts the user stated", async () => {
   assert.equal(row.added, 3);
   assert.equal(row.merged, 0);
   assert.deepEqual(memoryTexts().sort(), ["I live in Lisbon", "I prefer dark mode", "My bike is blue"].sort());
+  const { listMemories } = await import("./store");
+  for (const memory of listMemories()) assert.partialDeepStrictEqual(memory, { source: "dream" });
   assert.equal(row.chatIds.includes(first.chatId) && row.chatIds.includes(second.chatId) && row.chatIds.includes(third.chatId), true);
   assert.equal(row.error, null);
   assert.equal(api.formatDreamStatus(row).includes("I live in Lisbon"), false);
@@ -221,7 +226,8 @@ test("a near-duplicate candidate merges into the older memory", async () => {
   const { db } = await import("../db");
   const store = await import("./store");
   const embed = await import("./embed");
-  const saved = store.saveMemory({ text: "Deploy targets Fly.io", kind: "fact" });
+  const original = { text: "Deploy targets Fly.io", kind: "fact", source: "user" } as const;
+  const saved = store.saveMemory(original);
   db.$client.prepare("UPDATE memories SET created_at = ? WHERE id = ?").run(Date.parse("2099-06-01T08:00:00Z"), saved.id);
   assert.equal((await embed.embedPending()).ok, true);
   const date = "2099-06-01";
@@ -230,7 +236,10 @@ test("a near-duplicate candidate merges into the older memory", async () => {
   const row = await api.runDream({ manual: true, date, now: new Date(at(date, 16)) });
   assert.ok(row);
   assert.equal(memoryTexts().length, before);
-  assert.equal(store.getMemory(saved.id)?.text, "I host everything on Fly.io for production deploys");
+  assert.partialDeepStrictEqual(store.getMemory(saved.id), {
+    text: "I host everything on Fly.io for production deploys",
+    source: "dream",
+  });
   assert.equal(row.merged >= 1, true);
   assert.equal(row.chatIds.includes(chat.chatId), true);
 });
@@ -428,7 +437,7 @@ test("an Ollama outage skips model calls and recovery reads all the messages the
     const { db } = await import("../db");
     const { persistIncoming } = await import("../messages");
     const newestId = crypto.randomUUID();
-    assert.equal(persistIncoming(chatId, [{ id: newestId, role: "user", parts: [{ type: "text", text: "I live in Porto" }] }]), "ok");
+    assert.equal(persistIncoming(chatId, [{ id: newestId, role: "user", parts: [{ type: "text", text: "I live in Porto" }] }], redact), "ok");
     db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(start + 100, newestId);
 
     for (const night of [date, "2099-07-03"]) {
@@ -480,7 +489,7 @@ test("a failed final embed pass marks the run failed", async (t) => {
   await resetChats();
   const store = await import("./store");
   const date = "2099-07-07";
-  const unembedded = store.saveMemory({ text: "I keep a kayak in the garage", kind: "fact" });
+  const unembedded = store.saveMemory({ text: "I keep a kayak in the garage", kind: "fact", source: "tool" });
   const { chatId } = await seedChat("I paddle on Sundays", at(date, 12));
   const fetchLive = globalThis.fetch;
   t.mock.method(globalThis, "fetch", (url: string, init?: RequestInit) => {
@@ -545,4 +554,27 @@ test("a live lease keeps the night after its start time is three hours old", asy
   const before = api.getRun(date);
   assert.equal(api.tryClaim({ date, owner: "worker-b", now, chatIds: [] }), false);
   assert.deepEqual(api.getRun(date), before);
+});
+
+test("dream masks stored credentials before embedding and saving memories", async () => {
+  const api = requireDream();
+  await resetChats();
+  assert.ok(ollama);
+  const { db } = await import("../db");
+  const store = await import("./store");
+  const secret = "test-key-not-real";
+  const date = "2099-05-09";
+  // Seed a pre-redaction user message directly (as rows saved before #202 can look) so the mock dream model echoes the key.
+  await seedChat(`My provider credential is ${secret} in production`, at(date, 12));
+  const row = await api.runDream({ manual: true, date, now: new Date(at(date, 16)) });
+  assert.ok(row);
+  assert.equal(row.state, "done");
+  assert.equal(row.added, 1);
+  const saved = memoryTexts();
+  assert.deepEqual(saved, ["My provider credential is [redacted] in production"]);
+  assert.equal(store.listMemories().some((memory) => memory.text.includes(secret)), false);
+  const received = (await (await fetch(`${ollama.url}/qa/received`)).json()) as string[];
+  assert.equal(received.some((entry) => entry.includes(secret)), false, `Ollama received unmasked key: ${JSON.stringify(received)}`);
+  assert.equal(db.$client.prepare("SELECT count(*) AS n FROM memories_vec").get() !== undefined, true);
+  assert.equal(store.listMemories()[0]?.embedded, true);
 });

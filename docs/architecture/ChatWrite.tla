@@ -71,9 +71,11 @@ ShowReplyEdit(t) ==
   /\ UNCHANGED <<prompt, answer, newest, answered, turn, base, guard>>
 
 \* code: src/lib/messages.ts persistIncoming
+\* code: src/lib/messages.ts matchesIncomingBody
 \* code: src/lib/chat-tree.ts isPath
 \* POST /api/chat with a new prompt after the tab's copies of P and R. A copy of P that differs
-\* from its row is stale (409). The copy of R is not written. The new prompt's turn is not modeled.
+\* from its row is stale (409) if masking it still differs. Both forms of P share a version here.
+\* The copy of R is not written. The new prompt's turn is not modeled.
 Send(t) ==
   /\ turn[t] = 0
   /\ answer # 0 /\ seen[t].answer # 0 /\ seen[t].prompt = prompt
@@ -87,7 +89,7 @@ Send(t) ==
 \* No browser button sends the last kind, but a hand-written request or a chat migrated with two
 \* replies in a row can. For it the AI SDK streams the reply under R's id and appends it to R's saved
 \* parts (node_modules/ai/src/ui-message-stream/get-response-ui-message-id.ts), which POST reads with
-\* listMessages. planChatWrite refuses a copy of P that differs from its row. In the same transaction
+\* storedAssistantParts. planChatWrite checks P the same way Send does. In the same transaction
 \* it copies the rows the reply write will compare: P, and R when the reply continues R. A request
 \* with no user message has no P, and planChatWrite refuses it before it writes a row.
 \* Before f075e72 a regenerate reused R's id and compared R's row, and a retry with no R compared nothing.

@@ -115,9 +115,14 @@ export default async function artifacts({ page, origin, step, shot }) {
   await panel.getByRole("button", { name: "Download", exact: true }).click();
   const download = await downloadEvent;
   step("Download returns an HTML file", download.suggestedFilename().endsWith(".html"));
+  // A headless context holds clipboard-write at "prompt" and denies the write, so grant it first,
+  // as sandbox-copy.mjs does, and verify what actually landed on the clipboard.
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin });
   await panel.getByRole("button", { name: "Copy", exact: true }).click();
   await panel.getByRole("button", { name: "Copied", exact: true }).waitFor();
-  step("Copy reports the copied source", true);
+  const copiedSource = await eventually(() => page.evaluate(() => navigator.clipboard.readText()), (text) => text !== "", { timeoutMs: 3_000, what: "Copy to write the artifact source" });
+  const shownSource = await panel.getByRole("tabpanel").locator("code").textContent();
+  step("Copy reports the copied source", copiedSource === shownSource, `clipboard ${JSON.stringify(copiedSource)}`);
   await panel.getByRole("tab", { name: "Preview", exact: true }).click();
   step("switching tabs keeps the running artifact", !reopened.isDetached() && await reopenedButton.evaluate(node => node.style.backgroundColor === "green"));
   await panel.getByRole("button", { name: "Reload", exact: true }).click();
@@ -210,10 +215,12 @@ export default async function artifacts({ page, origin, step, shot }) {
     { type: "text", text: "```html\n<h1>Reply artifact</h1>\n```", state: "done" },
   ];
   execFileSync(process.execPath, ["--import", "tsx", "-e", `
+    const { Redactor } = require(${JSON.stringify(path.resolve("src/lib/chat-errors.ts"))});
     const { finishChatReply, planChatWrite } = require(${JSON.stringify(path.resolve("src/lib/messages.ts"))});
     const [id, parts] = process.argv.slice(1);
-    const plan = planChatWrite(id, [{ id: id + "-prompt", role: "user", parts: [{ type: "text", text: "Draft, then answer" }] }]);
-    if ("error" in plan || !finishChatReply(plan, JSON.parse(parts))) throw new Error("reasoning fixture was not saved");
+    const redact = new Redactor(null);
+    const plan = planChatWrite(id, [{ id: id + "-prompt", role: "user", parts: [{ type: "text", text: "Draft, then answer" }] }], redact);
+    if ("error" in plan || !finishChatReply(plan, JSON.parse(parts), redact)) throw new Error("reasoning fixture was not saved");
   `, draftedId, JSON.stringify(draftedParts)], { cwd: path.resolve(".verify/sandbox"), env: { ...process.env, ORBIT_DATA_DIR: path.resolve(".verify/sandbox/data") }, stdio: "pipe" });
   await page.goto(`${origin}/c/${draftedId}`);
   const thought = reply.getByRole("button", { name: "Thought", exact: true });

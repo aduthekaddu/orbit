@@ -3,6 +3,7 @@ import { Duplex, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
+import type { Redactor } from "../chat-errors";
 import { sandboxOwner } from "./owner.mjs";
 import { containerSpec, RUN_TIMEOUT_SECONDS, type RunCodeInput, type RunCodeOutput } from "./spec";
 import { STOP_MARKERS } from "../tools/run-status";
@@ -87,26 +88,79 @@ export async function killedForMemory(
   }
 }
 
-function outputCollector() {
-  const bytes = Buffer.alloc(OUTPUT_LIMIT);
-  let length = 0;
+function outputCollector(redact?: Redactor) {
+  if (!redact || !redact.hasLongSecrets) {
+    const bytes = Buffer.alloc(OUTPUT_LIMIT);
+    let length = 0;
+    let truncated = false;
+    const stream = new Writable({
+      write(chunk: Buffer, _encoding, done) {
+        const kept = Math.min(chunk.length, OUTPUT_LIMIT - length);
+        chunk.copy(bytes, length, 0, kept);
+        length += kept;
+        truncated ||= kept < chunk.length;
+        done();
+      },
+    });
+    return {
+      stream,
+      result() {
+        const decoded = new StringDecoder("utf8").end(bytes.subarray(0, length));
+        const normalized = Buffer.from(decoded);
+        truncated ||= normalized.length > OUTPUT_LIMIT;
+        return { text: new StringDecoder("utf8").write(normalized.subarray(0, OUTPUT_LIMIT)), truncated };
+      },
+    };
+  }
+  // Mask before the 64 KiB cap using the bounded streaming masker, so a credential that straddles the
+  // cap leaves no prefix behind and unbounded program output stays in bounded memory.
+  const decoder = new StringDecoder("utf8");
+  const masker = redact.createStream();
+  let out = "";
+  let keptBytes = 0;
   let truncated = false;
+  const appendBounded = (text: string) => {
+    if (!text) return;
+    if (keptBytes >= OUTPUT_LIMIT) {
+      truncated = true;
+      return;
+    }
+    const size = Buffer.byteLength(text, "utf8");
+    if (keptBytes + size <= OUTPUT_LIMIT) {
+      out += text;
+      keptBytes += size;
+      return;
+    }
+    truncated = true;
+    let end = 0;
+    for (const ch of text) {
+      const chSize = Buffer.byteLength(ch, "utf8");
+      if (keptBytes + chSize > OUTPUT_LIMIT) break;
+      keptBytes += chSize;
+      end += ch.length;
+    }
+    if (end > 0) out += text.slice(0, end);
+  };
   const stream = new Writable({
     write(chunk: Buffer, _encoding, done) {
-      const kept = Math.min(chunk.length, OUTPUT_LIMIT - length);
-      chunk.copy(bytes, length, 0, kept);
-      length += kept;
-      truncated ||= kept < chunk.length;
+      if (keptBytes >= OUTPUT_LIMIT) {
+        truncated = true;
+        done();
+        return;
+      }
+      appendBounded(masker.push(decoder.write(chunk)));
       done();
     },
   });
   return {
     stream,
     result() {
-      const decoded = new StringDecoder("utf8").end(bytes.subarray(0, length));
-      const normalized = Buffer.from(decoded);
-      truncated ||= normalized.length > OUTPUT_LIMIT;
-      return { text: new StringDecoder("utf8").write(normalized.subarray(0, OUTPUT_LIMIT)), truncated };
+      if (keptBytes >= OUTPUT_LIMIT) {
+        if (masker.bufferedLength() > 0) truncated = true;
+        return { text: out, truncated };
+      }
+      appendBounded(masker.flush(decoder.end()));
+      return { text: out, truncated };
     },
   };
 }
@@ -159,10 +213,10 @@ function statusCodeOf(error: unknown): number | undefined {
 // `settle` is the only place the outcome is set; the first call wins, and it disarms the deadline and the abort listener.
 // The cleanup task is the only owner of the container. It removes it after the outcome settles, even when Docker
 // finishes creating it after a stop already returned, and kills it first when the program had not exited.
-export function runCode(docker: Docker, input: RunCodeInput, signal?: AbortSignal): CodeRun {
+export function runCode(docker: Docker, input: RunCodeInput, signal?: AbortSignal, redact?: Redactor): CodeRun {
   const started = performance.now();
-  const stdout = outputCollector();
-  const stderr = outputCollector();
+  const stdout = outputCollector(redact);
+  const stderr = outputCollector(redact);
   const settled = Promise.withResolvers<Outcome>();
   let outcome: Outcome | undefined;
   let exit: Exit | undefined;

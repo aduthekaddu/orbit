@@ -1,5 +1,6 @@
 import { generateObject } from "ai";
 import { z } from "zod";
+import { Redactor } from "../chat-errors";
 import { db } from "../db";
 import { orbitModel } from "../provider";
 import { getSettings } from "../settings";
@@ -230,7 +231,7 @@ function applyCandidatesWithSource(chatId: string, prepared: Prepared[]): { adde
       merged += 1;
       if (memory && candidate.createdAt > memory.createdAt.getTime() && text.length > memory.text.length) {
         try {
-          const updated = updateMemory(memory.id, { text, kind: candidate.kind });
+          const updated = updateMemory(memory.id, { text, kind: candidate.kind, source: "dream" });
           if (updated) rememberVector(updated.id, updated.text, candidate.vector);
         } catch (error) {
           if (!(error instanceof MemoryRejected)) throw error;
@@ -242,6 +243,7 @@ function applyCandidatesWithSource(chatId: string, prepared: Prepared[]): { adde
     const saved = saveMemory({
       text,
       kind: candidate.kind,
+      source: "dream",
       sourceChatId: sourceChat(candidate.sourceMessageId) === chatId ? chatId : null,
       sourceMessageId: sourceChat(candidate.sourceMessageId) === chatId ? candidate.sourceMessageId : null,
     });
@@ -284,9 +286,11 @@ export async function dreamChat(chatId: string, input: { date: string; owner: st
   const known = new Set(messages.filter((message) => message.role === "user").map((message) => message.id));
   const createdAt = new Map(messages.map((message) => [message.id, message.createdAt]));
   let candidates: Candidate[] = [];
+  let redact: Redactor;
   try {
     const settings = getSettings();
     if (!settings?.baseUrl || !settings.apiKey || !settings.model) throw new Error("No provider is saved");
+    redact = new Redactor(settings);
     for (let offset = 0; offset < messages.length; offset += PAGE) {
       if (!renew(input.date, input.owner)) return "lost";
       const generated = await generateObject({
@@ -307,7 +311,18 @@ export async function dreamChat(chatId: string, input: { date: string; owner: st
     if (error instanceof Error && error.message === "No provider is saved") throw error;
     return finishChat(input.date, input.owner, chatId, "retry", () => ({ added: 0, merged: 0 }));
   }
-  const accepted = candidates.filter((candidate) => known.has(candidate.sourceMessageId));
+  // Mask before embedding so credentials never reach Ollama and the stored text matches the embedded text.
+  const accepted = candidates
+    .filter((candidate) => known.has(candidate.sourceMessageId))
+    .flatMap((candidate) => {
+      try {
+        const text = redact.text(cleanMemoryText(redact.text(candidate.text)));
+        return [{ ...candidate, text }];
+      } catch (error) {
+        if (error instanceof MemoryRejected) return [];
+        throw error;
+      }
+    });
   const embedded = await embed(accepted.map((candidate) => candidate.text), "document");
   if (!embedded.ok) return finishChat(input.date, input.owner, chatId, "retry", () => ({ added: 0, merged: 0 }));
   const prepared: Prepared[] = accepted.flatMap((candidate, index) => {

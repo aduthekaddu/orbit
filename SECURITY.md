@@ -43,6 +43,16 @@ Known limits:
 - **Orbit does not check the Access JWT yet.** Access adds a signed `Cf-Access-Jwt-Assertion` header to each request. Orbit trusts that the tunnel is the only public path and does not verify that header. Anything that reaches port 3210 without the tunnel skips Access, such as another process or user on the same machine, or a misconfigured port mapping. This is a follow-up: verify the JWT against the team's public keys and the application's audience tag, and reject requests without it when `ORBIT_PUBLIC_URL` is set.
 - Anyone who can read `.env` can run the tunnel. Keep that file at mode `0600`.
 
+## Response headers
+
+`next.config.ts` sends `X-Content-Type-Options: nosniff` and `Referrer-Policy: same-origin` on every response outside `/s/`, static files and API responses included. Next.js omits `X-Powered-By`. The planned `/s/` share pages set their own headers ([slice 22](docs/slices/22.md)).
+
+The app pages (`/`, `/login`, `/signup`, `/settings`, `/memory` and `/c/<id>`) also send `Content-Security-Policy: frame-src 'none'; frame-ancestors 'none'` and `X-Frame-Options: DENY`, so no other page can frame them. A page on another port of the same host is a same-site page that gets the session cookie, so this is the rule that stops it from showing a signed-in Orbit page in a hidden frame.
+
+These rules list the pages by path. A matching Next.js header rule replaces a route handler's own header of the same name, and slice 20 plans `Content-Security-Policy: default-src 'none'; sandbox` on file downloads. Add a new page to the list. `src/next-config.test.ts` fails when a page lacks the frame rules or a route handler gets them.
+
+There is no page-wide policy for scripts, styles, images or requests yet. That policy needs a per-request nonce and belongs to slice 22.
+
 ## Artifact previews
 
 HTML, SVG, JSX and TSX code blocks run only in an iframe with `sandbox="allow-scripts"`. The frame has an opaque origin. It cannot read the parent page, cookies or local storage, and it has no permission to open popups, submit forms or navigate the app.
@@ -57,7 +67,7 @@ This policy blocks fetch requests, including requests to Orbit's API. It allows 
 
 Orbit's pages also send `Content-Security-Policy: frame-src 'none'`. The browser checks this policy each time a frame on the page loads a URL, including a load the frame starts itself. When preview code sets `location.href`, follows a link or uses a meta refresh, the browser blocks the load before the request leaves, so the code cannot send data out in a URL. Chrome 155 and Firefox 157 block these loads. Safari is untested. The browser may show its own blocked page in the frame, and Reload brings the preview back. Orbit passes the preview document as `srcdoc`, not as a URL, so this policy does not block it.
 
-`next.config.ts` sets this header on the named app pages. Route handlers outside those paths can set their own CSP. A matching Next.js header rule can replace a handler's CSP, so keep the rule limited to pages. Client-side links keep the current document's CSP. Give new pages that link into chat the same policy or use a link that loads a new document, as the 404 page does.
+Client-side links keep the current document's CSP. Give new pages that link into chat the same policy or use a link that loads a new document, as the 404 page does.
 
 The app accepts an error report only from the preview frame's own window and shows the message as text. The frame does not limit CPU or memory use. Preview only code you are willing to run under these limits.
 
