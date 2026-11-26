@@ -38,11 +38,14 @@ http
       res.setHeader("content-type", "application/json");
       if (req.url === "/api/setup") return res.end(JSON.stringify({ signupOpen: true }));
       if (req.url === "/api/auth/sign-up/email") return res.end("{}");
-      if (req.url === "/api/settings" && req.method === "PUT") {
+      if (req.url === "/api/connections" && req.method === "GET") return res.end("[]");
+      if (req.url === "/api/connections" && req.method === "POST") {
         const saved = JSON.parse(body);
         fs.appendFileSync(putLog, JSON.stringify(saved) + "\\n");
-        return res.end(JSON.stringify({ baseUrl: saved.baseUrl, model: saved.model, keySet: true }));
+        res.statusCode = 201;
+        return res.end(JSON.stringify({ id: "mock-connection", kind: saved.kind, label: saved.label, baseUrl: saved.baseUrl, keySet: true }));
       }
+      if (req.url === "/api/preferences/model" && req.method === "PUT") return res.end(body);
       res.statusCode = 404;
       res.end("{}");
     });
@@ -355,10 +358,10 @@ test("two checkouts that launch a mock at once each get their own mock, and clea
   assert.equal(a.record(), null);
 });
 
+// launch --mock starts the mock before Orbit, so Orbit gets the mock's Anthropic base URL. These launches start from nothing.
 test("two launches in one checkout at once share one mock", async () => {
   const checkout = new Checkout();
-  const started = await checkout.verify(["launch"]);
-  assert.equal(started.code, 0, started.out);
+  checkout.port = await appPort();
   const results = await Promise.all([checkout.verify(["launch", "--mock"]), checkout.verify(["launch", "--mock"])]);
   for (const result of results) assert.equal(result.code, 0, result.out);
   const port = checkout.record()?.port;
@@ -370,8 +373,8 @@ test("two launches in one checkout at once share one mock", async () => {
 
 test("three overlapping launches cannot reclaim a live mock record and orphan a provider", async () => {
   const checkout = new Checkout();
-  const started = await checkout.verify(["launch"]);
-  assert.equal(started.code, 0, started.out);
+  checkout.port = await appPort();
+  fs.mkdirSync(path.join(checkout.dir, ".verify"), { recursive: true });
 
   const hookPath = path.join(checkout.dir, "race-hook.mjs");
   fs.writeFileSync(
@@ -459,8 +462,8 @@ fs.renameSync = function (from, to) {
 
 test("three overlapping launches over a stale mock record share one new mock", async () => {
   const checkout = new Checkout();
-  const started = await checkout.verify(["launch"]);
-  assert.equal(started.code, 0, started.out);
+  checkout.port = await appPort();
+  fs.mkdirSync(path.join(checkout.dir, ".verify"), { recursive: true });
   fs.writeFileSync(path.join(checkout.dir, ".verify/mock.json"), JSON.stringify({ pid: 1, startTime: "stale", port: 1 }));
   const results = await Promise.all([
     checkout.verify(["launch", "--mock"]),
@@ -513,8 +516,7 @@ test("cleanup and launch --mock stop a live mock recorded in the previous pid-po
   await legacy.tracked.done;
 
   const launchCheckout = new Checkout();
-  const started = await launchCheckout.verify(["launch"]);
-  assert.equal(started.code, 0, started.out);
+  fs.mkdirSync(path.join(launchCheckout.dir, ".verify"), { recursive: true });
   const oldMock = await startLegacyMock(launchCheckout);
   assert.equal(await status(oldMock.port, "/v1/models"), 200);
   fs.writeFileSync(path.join(launchCheckout.dir, ".verify/mock.json"), JSON.stringify({ pid: oldMock.pid, port: oldMock.port }));

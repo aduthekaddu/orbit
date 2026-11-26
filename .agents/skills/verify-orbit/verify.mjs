@@ -240,7 +240,8 @@ function assertOurServer() {
   }
 }
 
-async function launchServer() {
+// launch --mock passes the mock's Anthropic base URL, so Anthropic connections in the sandbox never reach the real API.
+async function launchServer(anthropicBaseUrl = "") {
   const state = readState();
   if (state && alive(state.pid) && procCwd(state.pid) === sandbox) {
     if (state.port !== PORT) {
@@ -258,6 +259,9 @@ async function launchServer() {
     if ((state.publicUrl ?? "") !== publicUrlEnv()) {
       fail(`public url mismatch. Run node .agents/skills/verify-orbit/verify.mjs cleanup, then launch again.`);
     }
+    if (anthropicBaseUrl && (state.anthropicBaseUrl ?? "") !== anthropicBaseUrl) {
+      fail(`anthropic base url mismatch. Running=${state.anthropicBaseUrl || "none"} requested=${anthropicBaseUrl}. Run node .agents/skills/verify-orbit/verify.mjs cleanup, then launch --mock again.`);
+    }
     const owner = ownerFromEnv();
     if (!state.sandboxOwner || owner && state.sandboxOwner !== owner) {
       fail(`sandbox owner mismatch. Running=${state.sandboxOwner ?? "unknown"} requested=${owner ?? "any"}. Run node .agents/skills/verify-orbit/verify.mjs cleanup, then launch again.`);
@@ -265,7 +269,7 @@ async function launchServer() {
     await waitReady(state.pid);
     console.log(`already running pid=${state.pid} origin=${ORIGIN}`);
   } else {
-    await startServer();
+    await startServer(anthropicBaseUrl);
   }
 }
 
@@ -273,7 +277,7 @@ function publicUrlEnv() {
   return process.env.ORBIT_PUBLIC_URL?.trim() ?? "";
 }
 
-async function startServer() {
+async function startServer(anthropicBaseUrl) {
   const listeners = listenerPids();
   if (listeners.length > 0) {
     fail(portInUse(listeners[0]));
@@ -303,6 +307,7 @@ async function startServer() {
       DOCKER_HOST: process.env.DOCKER_HOST ?? "unix:///var/run/docker.sock",
       ...(process.env.ORBIT_OLLAMA_URL ? { ORBIT_OLLAMA_URL: process.env.ORBIT_OLLAMA_URL } : {}),
       ...(publicUrlEnv() ? { ORBIT_PUBLIC_URL: publicUrlEnv() } : {}),
+      ...(anthropicBaseUrl ? { ORBIT_ANTHROPIC_BASE_URL: anthropicBaseUrl } : {}),
     },
     detached: true,
     stdio: ["ignore", logFd, logFd],
@@ -311,7 +316,7 @@ async function startServer() {
   await once(child, "spawn");
   child.unref();
   try {
-    fs.writeFileSync(statePath, JSON.stringify({ pid: child.pid, port: PORT, sandbox, origin: ORIGIN, sandboxEnabled, sandboxOwner, ollamaUrl: process.env.ORBIT_OLLAMA_URL ?? "", publicUrl: publicUrlEnv() }, null, 2));
+    fs.writeFileSync(statePath, JSON.stringify({ pid: child.pid, port: PORT, sandbox, origin: ORIGIN, sandboxEnabled, sandboxOwner, ollamaUrl: process.env.ORBIT_OLLAMA_URL ?? "", publicUrl: publicUrlEnv(), anthropicBaseUrl }, null, 2));
     const ready = await waitReady(child.pid);
     console.log(`ready origin=${ORIGIN} pid=${child.pid} signupOpen=${ready.signupOpen ? "yes" : "no"}`);
   } catch (error) {
@@ -508,9 +513,8 @@ async function spawnMock() {
 }
 
 async function startMock() {
-  let mock;
   try {
-    mock = await withLock(mockLockPath, async () => {
+    return await withLock(mockLockPath, async () => {
       const state = readState(mockStatePath);
       if (isRunning(state)) {
         console.log(`mock already running pid=${state.pid}`);
@@ -526,17 +530,32 @@ async function startMock() {
   } catch (error) {
     fail(`${error instanceof Error ? error.message : String(error)}. Log: ${mockLogPath}`);
   }
+}
+
+// Reuses a connection to this mock, so a second launch adds none.
+async function connectMock(mock) {
   const cookies = await signInVerify();
-  const saved = await request("/api/settings", {
+  const baseUrl = `http://127.0.0.1:${mock.port}/v1`;
+  const listed = await request("/api/connections", { cookies });
+  if (listed.status !== 200) fail(`listing connections returned ${listed.status}`);
+  let connection = JSON.parse(listed.text).find((item) => item.kind === "openai-compatible" && item.baseUrl === baseUrl);
+  if (!connection) {
+    const created = await request("/api/connections", {
+      method: "POST",
+      cookies,
+      json: { kind: "openai-compatible", label: "Mock", baseUrl, apiKey: FAKE_KEY },
+    });
+    if (created.status !== 201) fail(`adding the mock connection returned ${created.status}`);
+    connection = JSON.parse(created.text);
+  }
+  if (connection.keySet !== true || "apiKey" in connection) fail("the mock connection response is not keySet without a key");
+  const defaults = await request("/api/preferences/model", {
     method: "PUT",
     cookies,
-    json: { baseUrl: `http://127.0.0.1:${mock.port}/v1`, apiKey: FAKE_KEY, model: MOCK_MODEL, reasoningEffort: "low" },
+    json: { connectionId: connection.id, model: MOCK_MODEL, effort: "low" },
   });
-  const body = JSON.parse(saved.text);
-  if (saved.status !== 200 || body.model !== MOCK_MODEL || body.keySet !== true) {
-    fail(`saving mock settings returned ${saved.status}`);
-  }
-  console.log(`settings baseUrl=${body.baseUrl} model=${body.model} keySet=yes`);
+  if (defaults.status !== 200) fail(`setting the default model returned ${defaults.status}`);
+  console.log(`connection kind=${connection.kind} model=${MOCK_MODEL} keySet=yes`);
 }
 
 async function stopMock() {
@@ -1219,12 +1238,13 @@ const command = process.argv[2];
 const feature = process.argv[3];
 
 if (command === "launch") {
+  const mock = process.argv.includes("--mock") ? await startMock() : null;
   try {
-    await withLock(serverLockPath, launchServer, 60_000);
+    await withLock(serverLockPath, () => launchServer(mock ? `http://127.0.0.1:${mock.port}/v1` : ""), 60_000);
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
   }
-  if (process.argv.includes("--mock")) await startMock();
+  if (mock) await connectMock(mock);
 } else if (command === "doctor") {
   await doctor();
 } else if (command === "cleanup") {
