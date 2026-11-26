@@ -31,6 +31,13 @@ Preconditions:
 - **Command.** Run `node .agents/skills/verify-orbit/verify.mjs drive settings`.
 - **Proof.** `.verify/evidence/settings/summary.txt` records each status, the key checks on every response, the settings fields, and whether `orbit.db` holds the key.
 
+### Connection and effort regressions in Chromium
+
+With `launch --mock`, run `node .agents/skills/verify-orbit/verify.mjs browse settings-review`.
+The scenario runs at 1280×800 and 390×844. It replaces or repairs a connection from an empty chat's setup screen, then saves a model and opens the composer. It tries to dismiss pending Add, Edit, and Delete dialogs and checks that switching provider types clears the previous draft. It saves a custom model with an available effort and opens the composer with an older default to check that no disabled effort is selected.
+
+The summary and screenshots are in `.verify/evidence/settings-review/`.
+
 ## Gotchas
 
 - Adding a connection, or changing its base URL or key, lists the provider's models first. The drive starts the mock provider when none runs, and `cleanup` stops it.

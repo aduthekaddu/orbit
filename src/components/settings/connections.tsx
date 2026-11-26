@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ConnectionKind, PublicConnection } from "@/lib/connections";
 import { publicConnectionBody } from "@/lib/model-picker";
-import { requestJson, type RequestFailure } from "@/lib/request-json";
+import { requestJson, useLatestRequest, type RequestFailure } from "@/lib/request-json";
 import { idleSubmit, submitTransition } from "@/lib/submit-state";
 
 export const KIND_LABELS: Record<ConnectionKind, string> = {
@@ -84,33 +84,17 @@ export function ConnectionSettings({
         ))}
       </ul>
       <Dialog open={open.kind !== "closed"} onOpenChange={(next) => (next ? undefined : close())}>
-        {open.kind === "add" ? (
-          <DialogContent aria-describedby={undefined}>
-            <DialogHeader>
-              <DialogTitle>Add connection</DialogTitle>
-            </DialogHeader>
-            <ConnectionForm
-              onCancel={close}
-              onSaved={(connection) => {
-                close();
-                onAdded(connection);
-              }}
-            />
-          </DialogContent>
-        ) : open.kind === "edit" ? (
-          <DialogContent aria-describedby={undefined}>
-            <DialogHeader>
-              <DialogTitle>Edit connection</DialogTitle>
-            </DialogHeader>
-            <ConnectionForm
-              editing={open.connection}
-              onCancel={close}
-              onSaved={(connection) => {
-                close();
-                onUpdated(connection);
-              }}
-            />
-          </DialogContent>
+        {open.kind === "add" || open.kind === "edit" ? (
+          <ConnectionForm
+            key={open.kind === "edit" ? open.connection.id : "add"}
+            editing={open.kind === "edit" ? open.connection : undefined}
+            onCancel={close}
+            onSaved={(connection) => {
+              close();
+              if (open.kind === "edit") onUpdated(connection);
+              else onAdded(connection);
+            }}
+          />
         ) : open.kind === "delete" ? (
           <DeleteConnection
             connection={open.connection}
@@ -126,13 +110,26 @@ export function ConnectionSettings({
   );
 }
 
+function ConnectionDialog({ pending, ...props }: React.ComponentProps<typeof DialogContent> & { pending: boolean }) {
+  return (
+    <DialogContent
+      {...props}
+      aria-describedby={undefined}
+      showCloseButton={!pending}
+      onEscapeKeyDown={(event) => { if (pending) event.preventDefault(); }}
+      onInteractOutside={(event) => { if (pending) event.preventDefault(); }}
+    />
+  );
+}
+
 function DeleteConnection({ connection, onCancel, onDeleted }: { connection: PublicConnection; onCancel: () => void; onDeleted: () => void }) {
   const [state, dispatch] = useReducer(submitTransition, idleSubmit);
+  const latest = useLatestRequest();
   const pending = state.status === "pending";
   function remove() {
     if (pending) return;
     dispatch({ type: "submit" });
-    void requestJson(`/api/connections/${encodeURIComponent(connection.id)}`, { method: "DELETE" }, {
+    void requestJson(`/api/connections/${encodeURIComponent(connection.id)}`, { method: "DELETE", signal: latest() }, {
       parse: deletedBody,
       onOk: () => {
         dispatch({ type: "succeed" });
@@ -142,20 +139,20 @@ function DeleteConnection({ connection, onCancel, onDeleted }: { connection: Pub
     });
   }
   return (
-    <DialogContent aria-describedby={undefined} className="sm:max-w-sm">
+    <ConnectionDialog pending={pending} className="sm:max-w-sm">
       <DialogHeader>
         <DialogTitle className="leading-snug break-words">Delete {connection.label}?</DialogTitle>
       </DialogHeader>
       {state.status === "failed" ? <FormError error={state.error} /> : null}
       <DialogFooter>
-        <Button variant="ghost" onClick={onCancel}>
+        <Button variant="ghost" onClick={onCancel} disabled={pending}>
           Cancel
         </Button>
         <Button variant="destructive" disabled={pending} onClick={remove}>
           Delete
         </Button>
       </DialogFooter>
-    </DialogContent>
+    </ConnectionDialog>
   );
 }
 
@@ -180,14 +177,28 @@ export function ConnectionForm({
 }) {
   const ids = useId();
   const [kind, setKind] = useState<ConnectionKind | null>(editing?.kind ?? null);
+  const [choosingKind, setChoosingKind] = useState(!editing);
   const [label, setLabel] = useState(editing?.label ?? "");
   const [baseUrl, setBaseUrl] = useState(editing?.kind === "openai-compatible" ? editing.baseUrl : "");
   const [apiKey, setApiKey] = useState("");
   const [state, dispatch] = useReducer(submitTransition, idleSubmit);
+  const latest = useLatestRequest();
   const pending = state.status === "pending";
 
-  if (!kind) {
+  function inDialog(content: React.ReactNode) {
+    if (!onCancel) return content;
     return (
+      <ConnectionDialog pending={pending}>
+        <DialogHeader>
+          <DialogTitle>{editing ? "Edit connection" : "Add connection"}</DialogTitle>
+        </DialogHeader>
+        {content}
+      </ConnectionDialog>
+    );
+  }
+
+  if (choosingKind || !kind) {
+    return inDialog(
       <div className="flex flex-col gap-4">
         <div role="group" aria-label="Kind" className="grid gap-2 sm:grid-cols-2">
           {KINDS.map((option) => (
@@ -196,8 +207,13 @@ export function ConnectionForm({
               type="button"
               data-connection-kind={option}
               onClick={() => {
+                if (option !== kind) {
+                  setLabel(option === "anthropic" ? KIND_LABELS.anthropic : "");
+                  setBaseUrl("");
+                  setApiKey("");
+                }
                 setKind(option);
-                if (option === "anthropic" && !label) setLabel(KIND_LABELS.anthropic);
+                setChoosingKind(false);
               }}
               className="cursor-pointer rounded-lg border bg-surface-sunken px-4 py-3 text-left text-sm transition-colors duration-150 ease-orbit outline-none hover:border-border-strong hover:bg-accent focus-visible:ring-focus focus-visible:ring-ring/50"
             >
@@ -235,7 +251,12 @@ export function ConnectionForm({
     if (pending) return;
     dispatch({ type: "submit" });
     const url = editing ? `/api/connections/${encodeURIComponent(editing.id)}` : "/api/connections";
-    void requestJson(url, { method: editing ? "PATCH" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body()) }, {
+    void requestJson(url, {
+      method: editing ? "PATCH" : "POST",
+      signal: latest(),
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body()),
+    }, {
       parse: publicConnectionBody,
       onOk: (connection) => {
         dispatch({ type: "succeed" });
@@ -247,7 +268,7 @@ export function ConnectionForm({
 
   const edit = () => dispatch({ type: "edit" });
 
-  return (
+  return inDialog(
     <form onSubmit={submit} data-connection-form={kind} className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${ids}-label`} className="text-meta text-muted-foreground">
@@ -281,12 +302,12 @@ export function ConnectionForm({
       {state.status === "failed" ? <FormError error={state.error} /> : null}
       <div className="flex items-center justify-end gap-2">
         {!editing ? (
-          <Button type="button" variant="ghost" className="mr-auto" disabled={pending} onClick={() => { edit(); setKind(null); }}>
+          <Button type="button" variant="ghost" className="mr-auto" disabled={pending} onClick={() => { edit(); setChoosingKind(true); }}>
             Back
           </Button>
         ) : null}
         {onCancel ? (
-          <Button type="button" variant="ghost" onClick={onCancel}>
+          <Button type="button" variant="ghost" onClick={onCancel} disabled={pending}>
             Cancel
           </Button>
         ) : null}

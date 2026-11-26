@@ -42,10 +42,12 @@ export function FirstRun({ reason, initialConnections, defaults }: { reason: Unr
         connections={connections}
         onAdded={(connection) => {
           setConnections((current) => [...current, connection]);
+          load(connection.id);
           router.refresh();
         }}
         onUpdated={(connection) => {
           setConnections((current) => current.map((item) => (item.id === connection.id ? connection : item)));
+          load(connection.id);
           router.refresh();
         }}
         onDeleted={(id) => {
