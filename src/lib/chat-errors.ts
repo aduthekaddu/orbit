@@ -65,7 +65,7 @@ B64_TABLE[45] = 62; // '-'
 B64_TABLE[47] = 63; // '/'
 B64_TABLE[95] = 63; // '_'
 
-function isCredentialQueryParam(name: string): boolean {
+export function isCredentialQueryParam(name: string): boolean {
   const normalized = name.replace(/[-_]/g, "");
   return normalized.length > 0 && URL_PARAM_PATTERN.test(normalized);
 }
@@ -75,6 +75,19 @@ function safeDecodeComponent(value: string): string {
     return decodeURIComponent(value);
   } catch {
     return value;
+  }
+}
+
+function collectParamSecrets(raw: string, found: string[]) {
+  for (const pair of raw.split("&")) {
+    const eq = pair.indexOf("=");
+    if (eq === -1) continue;
+    const key = safeDecodeComponent(pair.slice(0, eq).replace(/\+/g, " "));
+    const rawValue = pair.slice(eq + 1);
+    if (!rawValue || !isCredentialQueryParam(key)) continue;
+    const decoded = safeDecodeComponent(rawValue.replace(/\+/g, " "));
+    found.push(decoded);
+    if (rawValue !== decoded) found.push(rawValue);
   }
 }
 
@@ -97,10 +110,45 @@ function urlSecrets(rawUrl: string | undefined): string[] {
     const decoded = safeDecodeComponent(url.username);
     if (decoded !== url.username) found.push(decoded);
   }
-  for (const [key, value] of url.searchParams.entries()) {
-    if (value && isCredentialQueryParam(key)) found.push(value);
-  }
+  if (url.search) collectParamSecrets(url.search.slice(1), found);
+  if (url.hash && url.hash.includes("=")) collectParamSecrets(url.hash.slice(1), found);
   return found;
+}
+
+function redactQueryPairs(raw: string, redact: Redactor): string {
+  return raw
+    .split("&")
+    .map((pair) => {
+      const eq = pair.indexOf("=");
+      if (eq === -1) {
+        const decoded = safeDecodeComponent(pair.replace(/\+/g, " "));
+        if (redact.isStoredSecret(pair) || redact.isStoredSecret(decoded)) return REDACTED;
+        return redact.text(pair);
+      }
+      const rawKey = pair.slice(0, eq);
+      const rawValue = pair.slice(eq + 1);
+      const decodedKey = safeDecodeComponent(rawKey.replace(/\+/g, " "));
+      const decodedValue = safeDecodeComponent(rawValue.replace(/\+/g, " "));
+      const safeKey = redact.isStoredSecret(rawKey) || redact.isStoredSecret(decodedKey) ? REDACTED : redact.text(rawKey);
+      if (
+        rawValue !== "" &&
+        (isCredentialQueryParam(decodedKey) || redact.isStoredSecret(rawValue) || redact.isStoredSecret(decodedValue))
+      ) {
+        return `${safeKey}=${REDACTED}`;
+      }
+      return `${safeKey}=${redact.text(rawValue)}`;
+    })
+    .join("&");
+}
+
+function redactFragment(rawHash: string, redact: Redactor): string {
+  if (!rawHash) return "";
+  const raw = rawHash.slice(1);
+  if (!raw) return "#";
+  const decoded = safeDecodeComponent(raw);
+  if (redact.isStoredSecret(raw) || redact.isStoredSecret(decoded)) return `#${REDACTED}`;
+  if (raw.includes("=")) return `#${redactQueryPairs(raw, redact)}`;
+  return `#${redact.text(raw)}`;
 }
 
 export function redactUrl(raw: string, redact: Redactor): string {
@@ -123,19 +171,8 @@ export function redactUrl(raw: string, redact: Redactor): string {
   const pathStart = afterScheme.search(/[/?#]/);
   const hadExplicitSlash = pathStart >= 0 && afterScheme[pathStart] === "/";
   const pathPart = url.pathname === "/" && !hadExplicitSlash ? "" : redact.text(url.pathname);
-  const queryPart = hasQuery
-    ? `?${url.search
-        .slice(1)
-        .split("&")
-        .map((pair) => {
-          const eq = pair.indexOf("=");
-          if (eq === -1) return REDACTED;
-          const key = safeDecodeComponent(pair.slice(0, eq).replace(/\+/g, " "));
-          return `${redact.text(key).replace(/[&=]/g, encodeURIComponent)}=${REDACTED}`;
-        })
-        .join("&")}`
-    : "";
-  const hashPart = hasHash ? `#${REDACTED}` : "";
+  const queryPart = hasQuery ? `?${redactQueryPairs(url.search.slice(1), redact)}` : "";
+  const hashPart = redactFragment(url.hash, redact);
   const userinfoPart = hasUserinfo ? `${REDACTED}@` : "";
   return `${url.protocol}//${userinfoPart}${redact.text(url.host)}${pathPart}${queryPart}${hashPart}`;
 }
@@ -646,6 +683,7 @@ export type StreamRedactor = {
 
 export class Redactor {
   readonly #everySet: SecretSet;
+  readonly #everyLookup: ReadonlySet<string>;
   readonly #longSet: SecretSet;
   readonly #maxLongLength: number;
   readonly #maxLongBytes: number;
@@ -663,6 +701,7 @@ export class Redactor {
       ),
     );
     const every = [...secrets].filter((value) => value !== "");
+    this.#everyLookup = new Set(every);
     const long = every.filter((value) => value.length >= MIN_CREDENTIAL_LENGTH);
     const everyBytes = every.map((value) => Buffer.from(value, "utf8"));
     const longBytes = long.map((value) => Buffer.from(value, "utf8"));
@@ -700,6 +739,10 @@ export class Redactor {
 
   get streamHoldback(): number {
     return Math.max(0, this.#maxLongLength - 1);
+  }
+
+  isStoredSecret(value: string): boolean {
+    return value !== "" && this.#everyLookup.has(value);
   }
 
   #holds(text: string): boolean {
