@@ -4,6 +4,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- The nightly dream reads every message of a chat's window in pages instead of only the oldest 100, and a chat retried after a failed night re-reads its whole window from the night it first failed, so facts stated late in a busy chat are no longer silently skipped. (#123)
+
 - Recalled memories tell the model whether the user wrote the note or the assistant saved it. Changing only a note's kind, spacing, or capitalization keeps its attribution. (#127)
 - Stored credentials (including percent-encoded, Base64/Basic-auth, JSON-escaped, ANSI-split, and chunk-split forms) are now masked across live chat stream chunks, provider-executed tool errors, tool outputs (`web_search`, `run_code` before its 64 KiB output cap, `remember`, `render_ui`), chat titles, dream memories, `/api/models`, and saved URLs returned by `/api/settings`. (#186)
 - New prompts and manual reply edits mask stored credentials in chat history and message search. (#202)

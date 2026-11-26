@@ -118,6 +118,19 @@ async function seedReply(chatId: string, text: string, createdAt: number, messag
   return messageId;
 }
 
+// One row of a busy chat, through the app's write path, at a chosen time.
+async function seedRow(chatId: string, n: number, role: "user" | "assistant", text: string, createdAt: number) {
+  const id = `m${String(n).padStart(3, "0")}`;
+  if (role === "assistant") {
+    await seedReply(chatId, text, createdAt, id);
+    return;
+  }
+  const { db } = await import("../db");
+  const { persistIncoming } = await import("../messages");
+  assert.equal(persistIncoming(chatId, [{ id, role: "user", parts: [{ type: "text", text }] }], redact), "ok");
+  db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(createdAt, id);
+}
+
 function at(date: string, hour: number): number {
   return Date.parse(`${date}T${String(hour).padStart(2, "0")}:00:00Z`);
 }
@@ -251,6 +264,85 @@ test("a failed chat leaves the night done and the next night retries that chat",
   assert.equal(next.chatIds.includes(good.chatId), false);
 });
 
+test("a busy chat's whole window is read, and the next night reads nothing new", async () => {
+  const api = requireDream();
+  await resetChats();
+  fs.writeFileSync(requestLog, "");
+  const { createChat } = await import("../messages");
+  const date = "2099-10-01";
+  const chat = createChat("dream-user");
+  const early = "Message five: I play the cello";
+  const late = "Message 110: my cat is called Tofu";
+  for (let n = 1; n <= 120; n += 1) {
+    const role: "user" | "assistant" = n === 5 || n === 110 || n % 2 === 1 ? "user" : "assistant";
+    const text = n === 5 ? early : n === 110 ? late : `filler ${n}`;
+    await seedRow(chat.id, n, role, text, at(date, 12) + n * 60_000);
+  }
+  const row = await api.runDream({ manual: true, date, now: new Date(at(date, 16)) });
+  assert.ok(row);
+  assert.equal(row.state, "done");
+  const read = new Set(
+    fs
+      .readFileSync(requestLog, "utf8")
+      .split("\n")
+      .filter((line) => line.includes('"scenario":"dream"'))
+      .flatMap((line) => [...line.matchAll(/msg (m\d{3}) user:/g)].map((match) => match[1])),
+  );
+  assert.equal(read.size, 61);
+  assert.equal(read.has("m110"), true);
+  assert.equal(memoryTexts().includes(early), true);
+  assert.equal(memoryTexts().includes(late), true);
+  const second = await api.runDream({ manual: true, date: "2099-10-02", now: new Date(at("2099-10-02", 16)) });
+  assert.ok(second);
+  assert.equal(second.chatIds.includes(chat.id), false);
+  assert.equal(memoryTexts().includes(late), true);
+});
+
+test("messages that share one timestamp are read past the 100th row", async () => {
+  const api = requireDream();
+  await resetChats();
+  const { createChat } = await import("../messages");
+  const date = "2099-10-03";
+  const chat = createChat("dream-user");
+  const late = "Message 105: my cat is called Tofu";
+  for (let n = 1; n <= 105; n += 1) {
+    await seedRow(chat.id, n, "user", n === 105 ? late : `filler ${n}`, at(date, 14));
+  }
+  const row = await api.runDream({ manual: true, date, now: new Date(at(date, 16)) });
+  assert.ok(row);
+  assert.equal(row.state, "done");
+  assert.equal(memoryTexts().includes(late), true);
+});
+
+test("a failed page applies nothing and the retry reads the whole window", async () => {
+  const api = requireDream();
+  await resetChats();
+  const { db } = await import("../db");
+  const { createChat } = await import("../messages");
+  const date = "2099-10-04";
+  const chat = createChat("dream-user");
+  const early = "Message five: I play the cello";
+  const late = "Message 110: my cat is called Tofu";
+  for (let n = 1; n <= 120; n += 1) {
+    const role: "user" | "assistant" = n === 5 || n === 110 || n % 2 === 1 ? "user" : "assistant";
+    const text = n === 5 ? early : n === 110 ? `[qa:dream-fail] ${late}` : `filler ${n}`;
+    await seedRow(chat.id, n, role, text, at(date, 12) + n * 60_000);
+  }
+  const row = await api.runDream({ manual: true, date, now: new Date(at(date, 16)) });
+  assert.ok(row);
+  assert.equal(row.state, "done");
+  assert.deepEqual(row.retryChatIds, [chat.id]);
+  assert.deepEqual(memoryTexts(), []);
+  db.$client.prepare("UPDATE messages SET parts = ? WHERE id = ?").run(JSON.stringify([{ type: "text", text: late }]), "m110");
+  const retry = await api.runDream({ manual: true, date: "2099-10-05", now: new Date(at("2099-10-05", 16)) });
+  assert.ok(retry);
+  assert.equal(retry.state, "done");
+  assert.equal(retry.chatIds.includes(chat.id), true);
+  assert.deepEqual(retry.retryChatIds, []);
+  assert.equal(memoryTexts().includes(early), true);
+  assert.equal(memoryTexts().includes(late), true);
+});
+
 test("a night that fails before its chats keeps them for the next night", async () => {
   const api = requireDream();
   await resetChats();
@@ -323,7 +415,7 @@ test("two runs started at once produce one claim", async () => {
   assert.equal(requests.length, 1);
 });
 
-test("an Ollama outage skips model calls and recovery reads the newest 100 messages", async () => {
+test("an Ollama outage skips model calls and recovery reads all the messages the failed nights missed", async () => {
   const api = requireDream();
   await resetChats();
   fs.writeFileSync(requestLog, "");
@@ -366,7 +458,8 @@ test("an Ollama outage skips model calls and recovery reads the newest 100 messa
   const recovered = await api.runDream({ date: recoveryDate, now: new Date(at(recoveryDate, 16)) });
   assert.equal(recovered?.state, "done");
   assert.deepEqual(recovered?.retryChatIds, []);
-  assert.deepEqual(memoryTexts(), ["I live in Porto"]);
+  assert.equal(recovered?.added, 2);
+  assert.deepEqual(memoryTexts(), ["I live in Lisbon", "I live in Porto"]);
 });
 
 test("a cached query embed failure does not fail a night with Ollama back", async () => {
