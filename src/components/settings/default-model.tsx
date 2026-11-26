@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { listOf, loadedList, type ModelLists } from "@/components/use-model-lists";
 import type { ModelDefaults, PublicConnection } from "@/lib/connections";
-import { DEFAULT_EFFORT, type Effort } from "@/lib/effort";
+import { DEFAULT_EFFORT, sentEffort, type Effort } from "@/lib/effort";
 import { CUSTOM_OPTION, NO_OPTION, modelDefaultsBody, modelLevels, selectedOptionIndex, showsModelInput, switchModel } from "@/lib/model-picker";
 import { requestJson, useLatestRequest } from "@/lib/request-json";
 import { idleSubmit, submitTransition } from "@/lib/submit-state";
@@ -55,9 +55,11 @@ export function DefaultModelSettings({
   // A default may name a hidden model, so it stays in the list while chosen.
   const options = loaded ? loaded.models.filter((item) => !hidden.has(item.id) || item.id === model) : [];
   const selectedIndex = selectedOptionIndex(options, model, customMode);
-  const levels = modelLevels(connection.kind, loaded, model);
-  const pending = save.status === "pending";
   const typed = model.trim();
+  const levels = modelLevels(connection.kind, loaded, typed);
+  // Keep the requested effort for models with no effort control so it can carry over to another model.
+  const selectedEffort = sentEffort(effort, levels) ?? effort;
+  const pending = save.status === "pending";
 
   function edit() {
     dispatchSave({ type: "edit" });
@@ -79,7 +81,7 @@ export function DefaultModelSettings({
         method: "PUT",
         signal: latestSave(),
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ connectionId: connection.id, model: typed, effort }),
+        body: JSON.stringify({ connectionId: connection.id, model: typed, effort: selectedEffort }),
       },
       {
         parse: modelDefaultsBody,
@@ -177,7 +179,7 @@ export function DefaultModelSettings({
           </div>
         </Row>
         <Row id="default-effort" label="Effort" labelledControl={false}>
-          <EffortGrid aria-labelledby="default-effort-label" value={effort} levels={levels} onChange={(next) => { edit(); setEffort(next); }} />
+          <EffortGrid aria-labelledby="default-effort-label" value={selectedEffort} levels={levels} onChange={(next) => { edit(); setEffort(next); }} />
         </Row>
       </div>
       <div className="flex items-center justify-end gap-3 border-t px-5 py-3">

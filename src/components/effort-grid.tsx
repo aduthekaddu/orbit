@@ -17,13 +17,13 @@ export function EffortGrid({
   onChange: (effort: Effort) => void;
   className?: string;
 } & ({ "aria-label": string } | { "aria-labelledby": string })) {
-  const none = levels !== null && levels.length === 0;
+  const selected = levels === null || levels.includes(value) ? value : "";
   return (
     <ToggleGroup
       type="single"
       variant="outline"
       size="sm"
-      value={none ? "" : value}
+      value={selected}
       onValueChange={(next) => {
         if (isEffort(next)) onChange(next);
       }}
