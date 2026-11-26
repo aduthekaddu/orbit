@@ -1,8 +1,9 @@
+import { ScrollFade } from "@/components/ui/scroll-fade";
+
 export function GenericOutput({ output }: { output: unknown }) {
   return (
-    <details>
-      <summary className="cursor-pointer text-sm text-muted-foreground">Output</summary>
-      <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words font-mono text-code">{JSON.stringify(output, null, 2)}</pre>
-    </details>
+    <ScrollFade axis="y" fade="var(--surface-sunken)" className="rounded-md bg-surface-sunken" scrollerClassName="max-h-tool-content" scrollerLabel="Output">
+      <pre className="p-3 whitespace-pre-wrap break-words font-mono text-code text-foreground">{JSON.stringify(output, null, 2)}</pre>
+    </ScrollFade>
   );
 }

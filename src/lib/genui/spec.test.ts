@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { assistantHasVisiblePart, parseRenderSpec, settleInterruptedParts } from "./spec";
+import { assistantHasVisiblePart, calloutShowsNote, parseRenderSpec, settleInterruptedParts } from "./spec";
 
 function table(columns: string[], rows: Array<Array<string | number>>) {
   return {
@@ -34,13 +34,20 @@ test("a card and a metric pass", () => {
   assert.equal(outcome.spec.root, "card");
 });
 
-test("a numeric metric value is stored as text", () => {
+test("a numeric metric value stays a number, so the widget can format it", () => {
   const spec = structuredClone(card);
-  spec.elements.metric.props.value = 1 as unknown as string;
+  spec.elements.metric.props.value = 42000 as unknown as string;
   const outcome = parseRenderSpec(spec);
   assert.equal(outcome.ok, true);
   if (!outcome.ok) return;
-  assert.equal(outcome.spec.elements.metric.props.value, "1");
+  assert.equal(outcome.spec.elements.metric.props.value, 42000);
+});
+
+test("a stored metric with a text value and no change still parses", () => {
+  const outcome = parseRenderSpec(structuredClone(card));
+  assert.equal(outcome.ok, true);
+  if (!outcome.ok) return;
+  assert.equal(outcome.spec.elements.metric.props.value, card.elements.metric.props.value);
 });
 
 test("a bad prop fails and does not throw", () => {
@@ -150,4 +157,28 @@ test("reasoning counts as a visible reply when it has content", () => {
   assert.equal(assistantHasVisiblePart([{ type: "reasoning", text: "Working on it" }]), true);
   assert.equal(assistantHasVisiblePart([{ type: "reasoning", text: "  " }]), false);
   assert.equal(assistantHasVisiblePart([{ type: "data-reply-end", data: { reason: "stopped" } }]), false);
+});
+
+function noteView(callout: Record<string, unknown> | null) {
+  const outcome = parseRenderSpec({
+    root: "card",
+    elements: {
+      card: { type: "Card", props: { title: "Notes" }, children: callout ? ["callout", "button"] : ["button"] },
+      ...(callout ? { callout: { type: "Callout", props: { tone: "info", text: "Saved", ...callout }, children: [] } } : {}),
+      button: { type: "Button", props: { label: "Save note", action: "note", note: "Saved." }, children: [] },
+    },
+  });
+  assert.ok(outcome.ok, outcome.ok ? "" : outcome.error);
+  return outcome.spec;
+}
+
+test("a callout that reads /note shows the button's note, so the button does not repeat it", () => {
+  assert.equal(calloutShowsNote(noteView({ statePath: "/note" })), true);
+});
+
+test("the button shows its own note when no callout reads /note", () => {
+  assert.equal(calloutShowsNote(noteView(null)), false);
+  assert.equal(calloutShowsNote(noteView({})), false);
+  assert.equal(calloutShowsNote(noteView({ statePath: null })), false);
+  assert.equal(calloutShowsNote(noteView({ statePath: "/other" })), false);
 });

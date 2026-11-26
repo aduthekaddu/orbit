@@ -5,6 +5,21 @@ import { catalog } from "./catalog";
 
 export type RenderOutcome = { ok: true; spec: Spec } | { ok: false; error: string; raw: unknown };
 
+/** The state value a Button writes its note to. A Callout whose `statePath` is this path shows that note. */
+export const NOTE_PATH = "/note";
+
+/** Whether a Callout in the drawn tree reads the button's note. That callout shows it, so a Button does not repeat it. */
+export function calloutShowsNote(spec: Spec): boolean {
+  const seen = new Set<string>();
+  const visit = (key: string): boolean => {
+    const element = spec.elements[key];
+    if (!element || seen.has(key)) return false;
+    seen.add(key);
+    return (element.type === "Callout" && element.props?.statePath === NOTE_PATH) || (element.children ?? []).some(visit);
+  };
+  return visit(spec.root);
+}
+
 function issueText(error: z.ZodError, prefix: Array<string | number>) {
   return error.issues.slice(0, 8).map((issue) => {
     const path = [...prefix, ...issue.path];
@@ -13,7 +28,7 @@ function issueText(error: z.ZodError, prefix: Array<string | number>) {
   });
 }
 
-function tableWidthIssues(key: string, props: { columns: string[]; rows: string[][] }) {
+function tableWidthIssues(key: string, props: { columns: string[]; rows: (string | number)[][] }) {
   return props.rows.flatMap((row, index) =>
     row.length === props.columns.length
       ? []
@@ -36,7 +51,7 @@ function tightenProps(spec: Spec): { ok: true; spec: Spec } | { ok: false; error
       continue;
     }
     if (element.type === "Table") {
-      lines.push(...tableWidthIssues(key, parsed.data as { columns: string[]; rows: string[][] }));
+      lines.push(...tableWidthIssues(key, parsed.data as { columns: string[]; rows: (string | number)[][] }));
     }
     elements[key] = { ...element, props: parsed.data };
   }

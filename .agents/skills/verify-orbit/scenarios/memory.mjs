@@ -53,23 +53,87 @@ function writeRequestProof(name) {
 
 // Chrome can end a line 1px past its own paragraph when it breaks a word inside a kerned pair, so the
 // text is measured against the border of the card or row that holds it, which is what a reader sees.
-async function textInside(locator, holder) {
-  return locator.evaluate((element, selector) => {
-    const box = element.closest(selector);
-    const style = getComputedStyle(box);
-    const outer = box.getBoundingClientRect();
-    const left = outer.left + parseFloat(style.borderLeftWidth);
-    const right = outer.right - parseFloat(style.borderRightWidth);
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    const lines = [...range.getClientRects()];
-    const textLeft = Math.min(...lines.map((line) => line.left));
-    const textRight = Math.max(...lines.map((line) => line.right));
+// With `clipped`, only the part inside every clipping box up to the holder counts, because the reader sees
+// nothing past it, and text cut there must end in an ellipsis.
+function measureInside(element, { selector, clipped }) {
+  const box = element.closest(selector);
+  const style = getComputedStyle(box);
+  const outer = box.getBoundingClientRect();
+  const left = outer.left + parseFloat(style.borderLeftWidth);
+  const right = outer.right - parseFloat(style.borderRightWidth);
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  const lines = [...range.getClientRects()];
+  const textLeft = Math.min(...lines.map((line) => line.left));
+  const textRight = Math.max(...lines.map((line) => line.right));
+  let shownLeft = textLeft;
+  let shownRight = textRight;
+  let cut = null;
+  for (let node = element; clipped && node && node !== box.parentElement; node = node.parentElement) {
+    const nodeStyle = getComputedStyle(node);
+    if (nodeStyle.overflowX === "visible") continue;
+    const rect = node.getBoundingClientRect();
+    if (shownRight > rect.right + 0.5 || shownLeft < rect.left - 0.5) cut ??= nodeStyle.textOverflow;
+    shownLeft = Math.max(shownLeft, rect.left);
+    shownRight = Math.min(shownRight, rect.right);
+  }
+  return {
+    inside: shownLeft >= left && shownRight <= right && (cut === null || cut === "ellipsis"),
+    detail: `text spans x=${textLeft} to ${textRight}${clipped ? `, shows x=${shownLeft} to ${shownRight}, cut with ${cut ?? "nothing"}` : ""}, inside the border spans x=${left} to ${right}`,
+  };
+}
+
+// A saved memory line is a closed <details>. A click on its summary opens it to the whole saved text, in a body under
+// the line, and hides the preview on the line so the text shows once.
+async function openMemoryLine(line) {
+  await line.locator(":scope > summary").click();
+  await eventually(() => line.evaluate((root) => root.open), Boolean, { timeoutMs: 2_000, what: "the memory line to open" });
+  // The caret turns on open, and a line whose preview hides shrinks under the pointer, which cancels the hover
+  // transitions and starts their reverse. A cancelled transition rejects `finished`, so settle each round and look again.
+  // Let every transition end so a screenshot shows the open state, not its first frame.
+  await line.evaluate(async (root) => {
+    const running = () => root.getAnimations({ subtree: true }).filter((animation) => animation instanceof CSSTransition);
+    for (let round = 0; round < 5 && running().length > 0; round += 1) await Promise.allSettled(running().map((animation) => animation.finished));
+  });
+}
+
+async function memoryBody(line) {
+  return line.evaluate((root) => {
+    const body = root.querySelector(":scope > div");
+    const preview = root.querySelector("[data-tool-detail]");
     return {
-      inside: textLeft >= left && textRight <= right,
-      detail: `text spans x=${textLeft} to ${textRight}, inside the border spans x=${left} to ${right}`,
+      open: root.matches("details[open]"),
+      text: body ? (body.textContent ?? "").trim() : null,
+      previewShown: preview ? preview.checkVisibility({ checkVisibilityCSS: true }) : null,
+      sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
     };
-  }, holder);
+  });
+}
+
+async function textInside(locator, holder, clipped = false) {
+  return locator.evaluate(measureInside, { selector: holder, clipped });
+}
+
+// The same check with every box from the text up to the holder left unclipped and wrapping off, so text
+// that only fits because a box cuts it spills past the border.
+async function uncut(locator, holder) {
+  return locator.evaluate((element, { selector, source }) => {
+    const measure = new Function(`return (${source})`)();
+    const saved = [];
+    for (let node = element; node; node = node.parentElement) {
+      saved.push([node, node.style.overflow]);
+      node.style.overflow = "visible";
+      if (node === element.closest(selector)) break;
+    }
+    const wrap = element.style.overflowWrap;
+    element.style.overflowWrap = "normal";
+    try {
+      return measure(element, { selector, clipped: true });
+    } finally {
+      for (const [node, value] of saved) node.style.overflow = value;
+      element.style.overflowWrap = wrap;
+    }
+  }, { selector: holder, source: measureInside.toString() });
 }
 
 async function unwrapped(locator, holder) {
@@ -151,7 +215,8 @@ export default async function memory({ page, origin, step, shot }) {
   const savedReply = page.locator('[data-message-role="assistant"]').getByText("Saved.", { exact: true });
   const replied = await savedReply.waitFor({ timeout: 30_000 }).then(() => true, () => false);
   step("remember tool saves from chat", replied);
-  const card = page.locator('[data-tool-name="remember"]').getByText("I deploy to Fly.io", { exact: true });
+  // The preview on the line is inside the summary. The body that opens is not, so this matches the preview alone.
+  const card = page.locator('[data-tool-name="remember"] summary').getByText("I deploy to Fly.io", { exact: true });
   const showed = await card.waitFor({ timeout: 10_000 }).then(() => true, () => false);
   step("remember card shows the saved text", showed);
 
@@ -396,15 +461,25 @@ export default async function memory({ page, origin, step, shot }) {
   await page.goto(`${origin}/c/${fourthId}`);
   await page.getByRole("textbox").fill(`[qa:remember] ${longText}`);
   await page.getByRole("textbox").press("Enter");
-  const longCard = page.locator('[data-tool-name="remember"] p').filter({ hasText: longText });
+  const longCard = page.locator('[data-tool-name="remember"] [data-tool-detail]').filter({ hasText: longText });
   const longCardShown = await longCard.waitFor({ timeout: 30_000 }).then(() => true, () => false);
   const cardBox = '[data-tool-name="remember"]';
-  const noCard = { inside: false, detail: "no card" };
-  const cardFit = longCardShown ? await textInside(longCard, cardBox) : noCard;
+  const noCard = { inside: false, detail: "no [data-tool-detail] with the saved text in the remember line" };
+  const cardFit = longCardShown ? await textInside(longCard, cardBox, true) : noCard;
   await shot("long-card");
-  step("a 500 character remember card with no spaces stays inside the card", cardFit.inside, cardFit.detail);
-  const cardUnwrapped = longCardShown ? await unwrapped(longCard, cardBox) : noCard;
-  step("the card check fails a remember card whose text cannot wrap", longCardShown && !cardUnwrapped.inside, cardUnwrapped.detail);
+  step("a 500 character remember line with no spaces stays inside the line", cardFit.inside, cardFit.detail);
+  const cardUncut = longCardShown ? await uncut(longCard, cardBox) : noCard;
+  step("the line check fails a remember line whose text is neither cut nor wrapped", longCardShown && !cardUncut.inside, cardUncut.detail);
+  const longLine = page.locator('[data-tool-name="remember"]').last();
+  await openMemoryLine(longLine);
+  const longOpen = await memoryBody(longLine);
+  step("a 500 character remember line opens to all of its text", longOpen.text === longText && longOpen.previewShown === false, `${longOpen.text?.length ?? "no"} characters in the body, preview shown ${longOpen.previewShown}`);
+  const longBody = longLine.locator(":scope > div p");
+  const bodyFit = await textInside(longBody, cardBox);
+  await shot("long-card-open");
+  step("the 500 character body stays inside the line and the page does not scroll sideways", bodyFit.inside && !longOpen.sideways, `${bodyFit.detail}; page sideways ${longOpen.sideways}`);
+  const bodyUnwrapped = await unwrapped(longBody, cardBox);
+  step("the body check fails a memory whose text cannot wrap", !bodyUnwrapped.inside, bodyUnwrapped.detail);
 
   await page.goto(`${origin}/memory`);
   const longRow = page.locator("li p").filter({ hasText: longText });
@@ -424,6 +499,23 @@ export default async function memory({ page, origin, step, shot }) {
   await shot("mobile");
   step("memory page renders at 390 by 844", true);
   step("a 500 character memory with no spaces stays inside its row at 390 by 844", phoneFit.inside, phoneFit.detail);
+
+  await page.goto(`${origin}/c/${fourthId}`);
+  const phoneLine = page.locator('[data-tool-name="remember"]').last();
+  await phoneLine.waitFor({ timeout: 15_000 });
+  await openMemoryLine(phoneLine);
+  const phoneOpen = await memoryBody(phoneLine);
+  const phoneBodyFit = await textInside(phoneLine.locator(":scope > div p"), cardBox);
+  await shot("long-card-open-mobile");
+  step("a 500 character remember line opens to all of its text at 390 by 844 without a sideways scroll", phoneOpen.text === longText && phoneBodyFit.inside && !phoneOpen.sideways, `${phoneOpen.text?.length ?? "no"} characters; ${phoneBodyFit.detail}; page sideways ${phoneOpen.sideways}`);
+
+  // The first chat saved a short memory. Its line opens to the same text, because a narrow screen can cut any preview.
+  await page.goto(`${origin}/c/${id}`);
+  const shortLine = page.locator('[data-tool-name="remember"]').first();
+  await shortLine.waitFor({ timeout: 15_000 });
+  await openMemoryLine(shortLine);
+  const shortOpen = await memoryBody(shortLine);
+  step("a short memory line opens to the same text, hiding the preview, at 390 by 844", shortOpen.open && shortOpen.text === "I deploy to Fly.io" && shortOpen.previewShown === false && !shortOpen.sideways, JSON.stringify(shortOpen));
 
   await page.goto(`${origin}/c/${id}`);
   await page.getByRole("textbox").click();

@@ -4,17 +4,7 @@ import { z } from "zod";
 import { Redactor } from "../chat-errors";
 import { withTavilySignal } from "./tavily-signal";
 import { STOP_MARKERS } from "./run-status";
-
-export type SearchResult = {
-  title: string;
-  url: string;
-  snippet: string;
-  engine: "searxng" | "tavily";
-};
-
-export type SearchOutput =
-  | { ok: true; query: string; results: SearchResult[] }
-  | { ok: false; query: string; error: string };
+import type { SearchOutput, SearchResult } from "./search-output";
 
 export type SearchSettings = { searxngUrl: string; tavilyApiKey: string };
 export type SearchBackends = {

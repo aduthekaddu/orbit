@@ -21,14 +21,12 @@ export default async function genuiStopped({ page, origin, step, shot }) {
       const mutedColor = getComputedStyle(probe).color;
       probe.remove();
 
-      const statusNode = node.querySelector("[data-tool-status]");
       const fallbacks = [...node.querySelectorAll("[data-genui-fallback]")];
       const fallbackNode = fallbacks[0] ?? null;
       return {
-        statusAttr: statusNode?.getAttribute("data-tool-status") ?? "",
-        statusText: statusNode?.textContent?.trim() ?? "",
-        statusMuted: statusNode ? getComputedStyle(statusNode).color === mutedColor : false,
+        statusAttr: node.getAttribute("data-tool-status") ?? "",
         fallbackCount: fallbacks.length,
+        fallbackTag: fallbackNode?.tagName.toLowerCase() ?? "",
         fallbackText: fallbackNode?.textContent?.trim() ?? "",
         fallbackMuted: fallbackNode ? getComputedStyle(fallbackNode).color === mutedColor : false,
         rawCount: node.querySelectorAll("pre, details").length,
@@ -38,17 +36,16 @@ export default async function genuiStopped({ page, origin, step, shot }) {
     const ok =
       cardCount === 1 &&
       snapshot.statusAttr === "cancelled" &&
-      snapshot.statusText === "Cancelled" &&
-      snapshot.statusMuted &&
       snapshot.fallbackCount === 1 &&
+      snapshot.fallbackTag === "p" &&
       snapshot.fallbackText === "Stopped" &&
       snapshot.fallbackMuted &&
       snapshot.rawCount === 0 &&
-      snapshot.cardText === "Generated UI Cancelled Stopped";
+      snapshot.cardText === "Stopped";
     step(
       label,
       ok,
-      `cards=${cardCount} status=${snapshot.statusAttr}/${snapshot.statusText} statusMuted=${snapshot.statusMuted} fallbacks=${snapshot.fallbackCount} fallbackText=${JSON.stringify(snapshot.fallbackText)} fallbackMuted=${snapshot.fallbackMuted} raw=${snapshot.rawCount} text=${JSON.stringify(snapshot.cardText)}`,
+      `cards=${cardCount} root data-tool-status=${JSON.stringify(snapshot.statusAttr)} fallbacks=${snapshot.fallbackCount} fallback=${snapshot.fallbackTag} ${JSON.stringify(snapshot.fallbackText)} fallbackMuted=${snapshot.fallbackMuted} raw=${snapshot.rawCount} text=${JSON.stringify(snapshot.cardText)}`,
     );
   }
 
@@ -56,7 +53,7 @@ export default async function genuiStopped({ page, origin, step, shot }) {
   await composer.press("Enter");
   await fallback.waitFor({ timeout: 25_000 });
   await stop.waitFor({ state: "hidden", timeout: 25_000 });
-  await expectStopped("interrupted render_ui shows Cancelled and one muted Stopped line with no raw details");
+  await expectStopped("interrupted render_ui is cancelled and shows only one muted Stopped line");
   await shot("at-interruption");
 
   await composer.fill("[qa:recover] Try a plain reply after the truncated stream.");
@@ -64,7 +61,7 @@ export default async function genuiStopped({ page, origin, step, shot }) {
   const recovered = page.getByText("Recovered after the failed stream.", { exact: true });
   await recovered.waitFor({ timeout: 25_000 });
   await stop.waitFor({ state: "hidden", timeout: 25_000 });
-  await expectStopped("follow-up preserves Cancelled and one muted Stopped line with no raw details");
+  await expectStopped("follow-up keeps the cancelled render_ui with only one muted Stopped line");
   await shot("after-follow-up");
 
   await eventually(async () => {
@@ -74,7 +71,7 @@ export default async function genuiStopped({ page, origin, step, shot }) {
 
   await page.reload();
   await recovered.waitFor({ timeout: 20_000 });
-  await expectStopped("reload preserves Cancelled and one muted Stopped line with no raw details");
+  await expectStopped("reload keeps the cancelled render_ui with only one muted Stopped line");
   const assistants = await page.locator('[data-message-role="assistant"]').count();
   step("reload keeps both assistant turns", assistants === 2, `found ${assistants} assistant message(s)`);
   await shot("after-reload");

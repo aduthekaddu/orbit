@@ -1,6 +1,11 @@
 import { eventually } from "../../../../src/lib/eventually.mjs";
 import { startMockSearxng, searchFixtures } from "../../../../scripts/qa/mock-searxng.mjs";
 
+// A finished tool call is a closed <details> line, and its results show once the summary is clicked.
+async function openLine(line) {
+  if (await line.evaluate((root) => root.matches("details:not([open])"))) await line.locator(":scope > summary").click();
+}
+
 export default async function searchTool({ page, origin, mockUrl, step, shot }) {
   const mock = await startMockSearxng();
   try {
@@ -56,6 +61,9 @@ export default async function searchTool({ page, origin, mockUrl, step, shot }) 
     await cards.last().locator('[data-tool-status="succeeded"]').waitFor({ timeout: 20_000 });
     const done = cards.last();
     step("search card changes from running to succeeded", true);
+    const closed = await done.evaluate((root) => `${root.tagName.toLowerCase()}${root.open ? "[open]" : ""}`);
+    step("a finished search line starts closed", closed === "details", `the line is ${closed}`);
+    await openLine(done);
     step("search card shows three source links", await done.getByRole("link").count() === 3);
     const answer = page.locator('[data-message-role="assistant"]').last().getByRole("link", { name: "Orbit guide", exact: true }).last();
     await answer.waitFor({ timeout: 10_000 });
@@ -66,6 +74,7 @@ export default async function searchTool({ page, origin, mockUrl, step, shot }) 
     await shot("done");
     await page.reload();
     await cards.last().locator('[data-tool-status="succeeded"]').waitFor();
+    await openLine(cards.last());
     step("the search card and three links survive reload", await cards.last().getByRole("link").count() === 3);
     await shot("reloaded");
     await page.setViewportSize({ width: 390, height: 844 });

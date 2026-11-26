@@ -22,12 +22,12 @@ Require each printed check to pass.
 - Settings save reports `githubTokenSet` and the MCP URL, and the response has no token.
 - A wrong token shows `GitHub rejected the token.`
 - Check with the stored token shows Connected and the login `octocat`, then closes the MCP client.
-- `[qa:github]` starts one `github_list_issues` card and changes it to Succeeded.
+- `[qa:github]` starts one `github_list_issues` line that ends as "List issues on GitHub, 1 result", closed. The scenario opens it before it reads the link.
 - The card and the answer link to `https://github.com/aduthekaddu/orbit/issues/7` with `Migration lock`.
 - The link uses `target="_blank"` and `rel="noopener noreferrer nofollow"`.
 - The issue body is not rendered.
-- The card and its link survive reload.
-- The card fits at 390 by 844 without page overflow.
+- The line and its link survive reload.
+- The line fits at 390 by 844 without page overflow.
 - The chat closes the MCP client.
 - Remove on the GitHub token clears it. Settings then reports `githubTokenSet` false and still hides the token.
 

@@ -55,7 +55,8 @@ export function ScrollFade({
     };
   }, [axis]);
 
-  const edge = "pointer-events-none absolute z-10 transition-opacity duration-200 ease-orbit";
+  // An edge fade is a square box in a corner of its container. Taking the container's radius keeps a rounded well's corners round while the fade shows.
+  const edge = "pointer-events-none absolute z-10 rounded-[inherit] transition-opacity duration-200 ease-orbit";
   const side =
     axis === "x"
       ? ["inset-y-0 left-0 w-10 bg-gradient-to-r", "inset-y-0 right-0 w-10 bg-gradient-to-l"]
