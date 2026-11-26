@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- Stopping a chat turn or hitting the setup deadline during the GitHub MCP handshake now closes the session on the GitHub MCP server instead of leaving it open. (#93)
 - A chat page keeps one layout from its first paint. An empty chat opens with its centered composer and starters, a chat with messages shows a placeholder in their shape until they load, and no Scroll to bottom button shows over an empty thread. (#246)
 - The chat composer waits for the page to become interactive so the first prompt cannot be lost while the page loads. (#229)
 - The Docker image runs Node.js 24 LTS instead of Node.js 22, and `@types/node` and Dependabot now follow that line. (#53)
