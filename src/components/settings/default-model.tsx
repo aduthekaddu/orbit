@@ -16,6 +16,8 @@ import { idleSubmit, submitTransition } from "@/lib/submit-state";
 import { cn } from "@/lib/utils";
 import { Row } from "./row";
 
+type Draft = { connectionId: string | null; model: string; custom: boolean };
+
 export function DefaultModelSettings({
   connections,
   defaults,
@@ -29,11 +31,9 @@ export function DefaultModelSettings({
   onRetry: (connectionId: string) => void;
   onSaved: (defaults: ModelDefaults) => void;
 }) {
-  const named = connections.some((connection) => connection.id === defaults.connectionId);
-  const [picked, setPicked] = useState(named ? defaults.connectionId : null);
-  const [model, setModel] = useState(named ? (defaults.model ?? "") : "");
+  // The model belongs to the connection it was chosen for, so a draft never pairs a model with another connection.
+  const [draft, setDraft] = useState<Draft>({ connectionId: defaults.connectionId, model: defaults.model ?? "", custom: false });
   const [effort, setEffort] = useState<Effort>(defaults.effort ?? DEFAULT_EFFORT);
-  const [customMode, setCustomMode] = useState(false);
   const [save, dispatchSave] = useReducer(submitTransition, idleSubmit);
   const latestSave = useLatestRequest();
 
@@ -43,10 +43,12 @@ export function DefaultModelSettings({
     return () => clearTimeout(timer);
   }, [save.status]);
 
-  // A deleted connection leaves the form on the first one that remains.
-  const found = connections.find((item) => item.id === picked) ?? connections[0];
+  // A deleted connection leaves the form on the first one that remains, with no model chosen.
+  const found = connections.find((item) => item.id === draft.connectionId) ?? connections[0];
   if (!found) return null;
   const connection = found;
+  const { model, custom: customMode } = draft.connectionId === connection.id ? draft : { model: "", custom: false };
+  const write = (next: Omit<Draft, "connectionId">) => setDraft({ connectionId: connection.id, ...next });
   const list = listOf(lists, connection.id);
   const loaded = loadedList(list);
   const hidden = new Set(loaded?.hidden ?? []);
@@ -63,7 +65,7 @@ export function DefaultModelSettings({
 
   function chooseModel(id: string) {
     edit();
-    setModel(id);
+    write({ model: id, custom: false });
     setEffort((current) => switchModel(current, connection.id, id, modelLevels(connection.kind, loaded, id)).effort);
   }
 
@@ -103,9 +105,7 @@ export function DefaultModelSettings({
             value={connection.id}
             onValueChange={(id) => {
               edit();
-              setPicked(id);
-              setModel("");
-              setCustomMode(false);
+              setDraft({ connectionId: id, model: "", custom: false });
             }}
           >
             <SelectTrigger id="default-connection" className="w-full min-w-0">
@@ -141,11 +141,9 @@ export function DefaultModelSettings({
                   const option = options[Number(value)];
                   if (!option) {
                     edit();
-                    setCustomMode(true);
-                    if (selectedIndex !== CUSTOM_OPTION) setModel("");
+                    write({ model: selectedIndex === CUSTOM_OPTION ? model : "", custom: true });
                     return;
                   }
-                  setCustomMode(false);
                   chooseModel(option.id);
                 }}
               >
@@ -172,8 +170,7 @@ export function DefaultModelSettings({
                 required
                 onChange={(event) => {
                   edit();
-                  setCustomMode(true);
-                  setModel(event.target.value);
+                  write({ model: event.target.value, custom: true });
                 }}
               />
             ) : null}
