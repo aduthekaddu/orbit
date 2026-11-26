@@ -47,7 +47,8 @@ export default async function modelPickerReal({ page, origin, step, shot }) {
     step("chip reads claude-opus-5-5 · High", (await chip.innerText()) === `${MODEL} · High`, `chip reads ${await chip.innerText()}`);
 
     const composer = page.getByPlaceholder("Ask anything");
-    await composer.fill("Think it through briefly, then answer: what is 17 times 23?");
+    // With adaptive thinking the model can skip thinking on an easy prompt, so this one needs a few steps.
+    await composer.fill("A bat and a ball cost 1.10 in total. The bat costs 1.00 more than the ball. Then the bat and ball are each discounted 10 percent, and a 0.05 coupon applies to the ball only. What does the ball cost now? Reason carefully, then answer in one line.");
     await composer.press("Enter");
     const reply = page.locator('[data-message-role="assistant"]').last();
     const label = reply.locator("[data-reply-label]");
