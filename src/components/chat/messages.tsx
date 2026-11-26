@@ -209,7 +209,7 @@ function UserEditComposer({ busy }: { busy: boolean }) {
           cancelOnEscape
           disabled={busy}
           aria-label="Edit message"
-          className="block max-h-60 max-w-full resize-none bg-transparent px-3.5 pt-2 text-input outline-none field-sizing-content scrollbar-thin"
+          className="block max-h-60 max-w-full resize-none bg-transparent px-3.5 pt-2 text-field outline-none field-sizing-content scrollbar-thin"
         />
         <div className="flex items-center justify-end gap-1 px-2 py-2">
           <ComposerPrimitive.Cancel onClick={() => editTarget(null)} className={buttonVariants({ variant: "ghost", size: "xs" })}>Cancel</ComposerPrimitive.Cancel>

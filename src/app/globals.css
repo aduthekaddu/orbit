@@ -205,8 +205,8 @@
   --text-prose: 1rem;
   --text-prose--line-height: 1.65;
   /* iOS Safari zooms the page on focus when an input's font size is under 16px. */
-  --text-input: max(1rem, 16px);
-  --text-input--line-height: 1.5rem;
+  --text-field: max(1rem, 16px);
+  --text-field--line-height: 1.5rem;
   --text-code: 0.875rem;
   --text-code--line-height: 1.5rem;
   --text-meta: max(0.8125rem, 13px);

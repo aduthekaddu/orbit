@@ -93,7 +93,7 @@ export function CommandPalette({
         <Command filter={filter} loop>
           <div className="flex items-center gap-2.5 border-b px-3.5">
             <MagnifyingGlassIcon weight="light" className="size-4 shrink-0 text-muted-foreground" />
-            <Command.Input value={search} onValueChange={setSearch} placeholder="Search" className="h-12 flex-1 bg-transparent text-input outline-none placeholder:text-muted-foreground" />
+            <Command.Input value={search} onValueChange={setSearch} placeholder="Search" className="h-12 flex-1 bg-transparent text-field outline-none placeholder:text-muted-foreground" />
           </div>
           <ScrollFade axis="y" fade="var(--popover)" scrollerClassName="max-h-[min(24rem,60vh)]">
             <Command.List className="p-1.5">

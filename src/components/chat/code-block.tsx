@@ -140,7 +140,7 @@ function CodeEditor({ code, start, language }: { code: string; start: number; la
         aria-label={`Edit ${language || "code"} block`}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={onKeyDown}
-        className="block max-h-[60vh] min-h-20 w-full resize-none bg-transparent px-3 py-3 font-mono text-input whitespace-pre outline-none field-sizing-content scrollbar-thin"
+        className="block max-h-[60vh] min-h-20 w-full resize-none bg-transparent px-3 py-3 font-mono text-field whitespace-pre outline-none field-sizing-content scrollbar-thin"
       />
       <EditorFooter error={edit?.error} saving={edit?.saving} onCancel={() => edit?.setActive(null)} onSave={() => void commit()} />
     </div>

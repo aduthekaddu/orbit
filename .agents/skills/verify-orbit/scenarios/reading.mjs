@@ -352,7 +352,6 @@ export default async function reading({ page, origin, step, shot }) {
   }
 
   // Every page these contexts open has replyFont sans; the serif check opens its own context.
-  const sansFonts = [];
   const serifUrls = new Set();
   const views = [];
   for (const viewport of VIEWPORTS) {
@@ -361,9 +360,6 @@ export default async function reading({ page, origin, step, shot }) {
       isMobile: viewport.touch, hasTouch: viewport.touch, reducedMotion: "reduce",
     });
     await context.addCookies(cookies);
-    context.on("request", (request) => {
-      if (/\.woff2(\?|$)/.test(request.url())) sansFonts.push(request.url());
-    });
     const view = await context.newPage();
     const userAgent = await view.evaluate(() => navigator.userAgent);
     views.push({ ...viewport, context, page: view, modifier: /Mac|iPhone|iPad/.test(userAgent) ? "Meta" : "Control" });
@@ -549,8 +545,19 @@ export default async function reading({ page, origin, step, shot }) {
     await setPreferences({ textSize: "md" });
     report();
 
+    // Settings previews the Serif option in its own font, so only a context that opens nothing but a chat counts.
+    const sans = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    await sans.addCookies(cookies);
+    const sansFonts = [];
+    sans.on("request", (request) => {
+      if (/\.woff2(\?|$)/.test(request.url())) sansFonts.push(request.url());
+    });
+    const sansView = { name: "1440", context: sans, page: await sans.newPage() };
+    await openMarkdown(sansView);
+    await sansView.page.evaluate(() => document.fonts.ready);
     const serifWhileSans = sansFonts.filter((url) => /serif/i.test(url) || serifUrls.has(url));
-    step("a chat page with replyFont sans requests no serif .woff2", serifWhileSans.length === 0, serifWhileSans.join(", "));
+    step("a chat page with replyFont sans requests no serif .woff2", serifWhileSans.length === 0, serifWhileSans.join(", ") || `woff2 requests: ${sansFonts.length}`);
+    await sans.close();
 
     await setPreferences({ replyFont: "serif" });
     const serif = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });

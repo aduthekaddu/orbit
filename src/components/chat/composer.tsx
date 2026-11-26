@@ -30,7 +30,7 @@ export function Composer({ ready, model, inputRef }: { ready: boolean; model: st
         rows={1}
         disabled={!canCompose}
         autoFocus={canCompose}
-        className="block max-h-60 min-h-12 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-input outline-none scrollbar-thin placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:placeholder:text-muted-foreground/50"
+        className="block max-h-60 min-h-12 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-field outline-none scrollbar-thin placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:placeholder:text-muted-foreground/50"
       />
       <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5">
         {model ? (

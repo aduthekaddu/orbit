@@ -52,7 +52,7 @@ Static theme values in `@theme`:
 | `--container-chat` | `var(--chat-column)` | `max-w-chat` |
 | `--container-page` | `42.5rem` | `max-w-page` |
 | `--text-prose` | `1rem`, line height `1.65` | `text-prose` |
-| `--text-input` | `max(1rem, 16px)`, line height `1.5rem` | `text-input` |
+| `--text-field` | `max(1rem, 16px)`, line height `1.5rem` | `text-field` |
 | `--text-code` | `0.875rem`, line height `1.5rem` | `text-code` |
 | `--text-meta` | `max(0.8125rem, 13px)`, line height `1.25rem` | `text-meta` |
 | `--text-h1` to `--text-h6` | `1.5`, `1.25`, `1.125`, `1.0625`, `1`, `1rem` | `text-h1` to `text-h6` |
@@ -69,7 +69,7 @@ Utilities: `num` (Geist Mono, tabular figures), `shimmer`, `scrollbar-none`, `sc
 ## Rules
 
 - **Type.** Geist Sans and Geist Mono from the `geist` package, self-hosted. The reply serif is Source Serif 4 from `@fontsource-variable/source-serif-4`, loaded by `next/font/local` without preload, so a sans reader never downloads it, and with `size-adjust: 107%` so it reads at Geist's size. No font CDN, no runtime requests. Numbers use tabular figures (`num` or `tabular-nums`). Sentence case everywhere.
-- **Type scale.** Replies and user messages use `text-prose`, 16px at a 1.65 line height. Every input, textarea, and select uses `text-input`, so iOS never zooms. Code uses `text-code`. Labels, statuses, chips, and snippets use `text-meta`, never under 13px. `text-2xs` (11px) is for `Kbd` only, and `text-xs` is not used. Buttons, sidebar rows, and menu items keep `text-sm`. Markdown headings use `text-h1` to `text-h6` at weight 600, with `h6` at 500 and muted, so each level looks distinct from the next and from body text.
+- **Type scale.** Replies and user messages use `text-prose`, 16px at a 1.65 line height. Every input, textarea, and select uses `text-field`, so iOS never zooms. Code uses `text-code`. Labels, statuses, chips, and snippets use `text-meta`, never under 13px. `text-2xs` (11px) is for `Kbd` only, and `text-xs` is not used. Buttons, sidebar rows, and menu items keep `text-sm`. Markdown headings use `text-h1` to `text-h6` at weight 600, with `h6` at 500 and muted, so each level looks distinct from the next and from body text.
 - **Text size.** `data-text-size` scales the root font size to 93.75%, 100%, 112.5%, or 125%. Percentages keep the browser's own font setting. Everything in rem scales with it, the chat column included, so a line holds the same number of characters at every size.
 - **Copy.** Short labels only. No taglines, helper text, or secondary labels. If a screen needs explaining, fix the layout.
 - **Lines, not shadows.** 1px `border`, `shadow-card` on raised surfaces, `shadow-float` only on things that float (menus, dialogs, tooltips).

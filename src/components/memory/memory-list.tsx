@@ -199,13 +199,13 @@ export function MemoryList({
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
                     rows={3}
-                    className="w-full rounded-md border border-input bg-surface-sunken px-3 py-2 text-input text-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/25"
+                    className="w-full rounded-md border border-input bg-surface-sunken px-3 py-2 text-field text-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/25"
                   />
                   <select
                     aria-label="Kind"
                     value={kind}
                     onChange={(event) => setKind(event.target.value as MemoryKind)}
-                    className="h-9 rounded-md border border-input bg-surface-sunken px-3 text-input"
+                    className="h-9 rounded-md border border-input bg-surface-sunken px-3 text-field"
                   >
                     {Object.entries(KIND_LABEL).map(([value, label]) => (
                       <option key={value} value={value}>
