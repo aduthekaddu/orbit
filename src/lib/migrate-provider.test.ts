@@ -245,7 +245,7 @@ test("an install nobody signed up to keeps its provider in pending_connection un
   boot(
     install,
     { ORBIT_BASE_URL: "http://127.0.0.1:7/v1", ORBIT_API_KEY: "sk-made-up-env-key-0002", ORBIT_MODEL: "env-model" },
-    "const { seedConnection } = await import(process.argv[2]); seedConnection('u-first'); seedConnection('u-first');",
+    "const { seedConnection } = await import(process.argv[2]); seedConnection('u-first', 'pending-or-env'); seedConnection('u-first', 'pending-or-env');",
   );
 
   const adopted = withDb(install, (db) => ({

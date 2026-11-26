@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test, { after, before } from "node:test";
 import { Redactor } from "./chat-errors";
-import { deleteConnection } from "./connections";
+import { deleteConnection, listConnections } from "./connections";
 import { getDb } from "./db";
 import { ensureChat, finishChatReply, listMessages, planChatWrite } from "./messages";
 import { resolveChoice, setChatChoice, type ModelChoice, type ReplyRecord } from "./model-choice";
@@ -183,4 +183,18 @@ test("a choice that names a deleted connection is not pinned, and a chat pinned 
   chat("chat-pinned-to-gone");
   sql("update chats set connection_id = 'conn-gone', model = 'gone-model', reasoning_effort = 'low' where id = 'chat-pinned-to-gone'");
   assert.deepEqual(resolved(ONE, "chat-pinned-to-gone").choice, { connectionId: "conn-openai", model: "default-model", effort: "medium" });
+});
+
+test("a user who deleted the connection made from the environment does not get it back on the next send", () => {
+  const user = "u-choice-env";
+  addUser(user);
+  addConnection("conn-from-env", user, "openai-compatible");
+  Object.assign(process.env, { ORBIT_BASE_URL: "http://127.0.0.1:9/v1", ORBIT_API_KEY: "made-up-env-key-0001", ORBIT_MODEL: "env-model" });
+  try {
+    assert.equal(deleteConnection(user, "conn-from-env"), true);
+    assert.deepEqual(resolveChoice(user, chat("chat-env-deleted", user)), { ok: false, reason: "no-connection" });
+    assert.deepEqual(listConnections(user), []);
+  } finally {
+    for (const name of ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL"]) delete process.env[name];
+  }
 });

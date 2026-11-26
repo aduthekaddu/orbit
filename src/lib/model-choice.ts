@@ -44,9 +44,9 @@ export function setChatChoice(chatId: string, choice: ModelChoice) {
   db.update(chats).set({ connectionId: choice.connectionId, model: choice.model, reasoningEffort: choice.effort }).where(and(eq(chats.id, chatId), exists(owned))).run();
 }
 
-// A user with no connection gets the install's provider here too, in case the signup hook failed after the user row.
+// A user with no connection can still adopt the pending provider here, in case the signup hook failed after the user row.
 function fromDefaults(userId: string): ResolvedChoice {
-  if (listConnections(userId).length === 0) seedConnection(userId);
+  if (listConnections(userId).length === 0) seedConnection(userId, "pending");
   const defaults = getModelDefaults(userId);
   const connection = defaults.connectionId ? getConnection(userId, defaults.connectionId) : (listConnections(userId)[0] ?? null);
   if (!connection) return { ok: false, reason: "no-connection" };

@@ -52,9 +52,9 @@ function createAuth() {
               throw new APIError("FORBIDDEN", { message: "Signup is closed" });
             }
           },
-          // The first account takes the provider the install was set up with. Resolving a chat retries it.
+          // The first account takes the provider the install was set up with. Resolving a chat retries the pending row.
           after: async (created) => {
-            seedConnection(created.id);
+            seedConnection(created.id, "pending-or-env");
           },
         },
       },

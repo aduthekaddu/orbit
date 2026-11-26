@@ -218,15 +218,16 @@ export function saveModelDefaults(userId: string, defaults: { connectionId: stri
 
 /**
  * Gives a user with no connection the provider this install was set up with: the pending row a pre-slice install
- * left, or else ORBIT_BASE_URL and ORBIT_API_KEY. Converges, so the signup hook and a later page load can both run it.
+ * left, or, from the signup hook only, ORBIT_BASE_URL and ORBIT_API_KEY. A later send retries only the pending row, so a
+ * connection the user deleted does not come back from the environment. Converges, so both can run it.
  */
-export function seedConnection(userId: string) {
+export function seedConnection(userId: string, from: "pending" | "pending-or-env") {
   getDb().transaction(
     (tx) => {
       if (tx.select({ id: providerConnections.id }).from(providerConnections).where(eq(providerConnections.userId, userId)).get()) return;
       const pending = tx.select().from(pendingConnection).where(eq(pendingConnection.id, 1)).get();
-      const envBaseUrl = readEnv("ORBIT_BASE_URL");
-      const envApiKey = readEnv("ORBIT_API_KEY");
+      const envBaseUrl = from === "pending-or-env" ? readEnv("ORBIT_BASE_URL") : undefined;
+      const envApiKey = from === "pending-or-env" ? readEnv("ORBIT_API_KEY") : undefined;
       const source = pending
         ? { baseUrl: pending.baseUrl, ciphertext: pending.apiKeyCiphertext, model: pending.model, effort: isEffort(pending.effort) ? pending.effort : "medium" }
         : envBaseUrl && envApiKey
