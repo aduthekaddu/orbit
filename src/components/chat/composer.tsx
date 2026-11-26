@@ -45,7 +45,7 @@ export function Composer({ ready, model, inputRef }: { ready: boolean; model: st
         )}
         {reply.stopError && <p role="alert" className="text-xs text-destructive">{reply.stopError}</p>}
         <AuiIf condition={(state) => state.thread.isRunning || reconnecting || stopping}>
-          <button type="button" aria-label="Stop" className={roundAction} disabled={!reply.canStop || stopping} onClick={() => void reply.stop?.()}>
+          <button type="button" aria-label="Stop" className={roundAction} disabled={!reply.canStop} onClick={() => void reply.stop?.()}>
             <StopIcon weight="fill" className="size-3.5" />
           </button>
         </AuiIf>

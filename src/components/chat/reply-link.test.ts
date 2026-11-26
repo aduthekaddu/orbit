@@ -617,11 +617,14 @@ test("Stop retries against the server when headers arrive while a pre-header sto
   const sendStarted = Promise.withResolvers<void>();
   const sendResponse = Promise.withResolvers<Response>();
   const firstStop = Promise.withResolvers<Response>();
+  let closed = false;
   let finishStream = () => {};
   const stream = new ReadableStream<UIMessageChunk>({
     start(controller) {
       for (const chunk of partial) controller.enqueue(chunk);
       finishStream = () => {
+        if (closed) return;
+        closed = true;
         controller.enqueue({ type: "abort" });
         controller.close();
       };

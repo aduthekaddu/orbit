@@ -15,17 +15,17 @@ const STOP_FALLBACK_MS = 1_500;
 type Attached = { kind: "attached"; replyId: string };
 type Reconnecting = { kind: "reconnecting"; replyId: string; attempt: number };
 type ActiveReply = Attached | Reconnecting;
-type ReplyLinkState = ActiveReply | { kind: "attached"; replyId: null }
-  | { kind: "stopping"; reply: ActiveReply; request: "sending" | "confirmed" }
-  | { kind: "lost"; replyId: string };
+type IdleOrActive = ActiveReply | { kind: "attached"; replyId: null } | { kind: "lost"; replyId: string };
+type ReplyLinkState = IdleOrActive
+  | { kind: "stopping"; reply: IdleOrActive; request: "sending" | "confirmed" };
 
 type Snapshot = { state: ReplyLinkState; stopError: string };
 type ResumeAttempt = { signal: AbortSignal; controller: AbortController; target: Reconnecting; status?: number };
 type ReplyDiscovery = { kind: "initial" | "idle" } | { kind: "awaiting-reply"; promptId: string };
 
 function activeReply(state: ReplyLinkState): ActiveReply | null {
-  if (state.kind === "stopping") return state.reply;
-  if (state.kind === "reconnecting" || (state.kind === "attached" && state.replyId !== null)) return state;
+  const reply = state.kind === "stopping" ? state.reply : state;
+  if (reply.kind === "reconnecting" || (reply.kind === "attached" && reply.replyId !== null)) return reply;
   return null;
 }
 
@@ -166,6 +166,10 @@ export function createReplyLink(chatId: string, refresh: () => void) {
   function accept(replyId: string) {
     discovery = { kind: "idle" };
     writeCheckpoint(key, replyId);
+    if (snapshot.state.kind === "stopping") {
+      update({ ...snapshot.state, reply: { kind: "attached", replyId } }, "");
+      return;
+    }
     update({ kind: "attached", replyId }, "");
   }
 
@@ -176,6 +180,13 @@ export function createReplyLink(chatId: string, refresh: () => void) {
     if (isDisconnect && reply) {
       updateReply({ kind: "reconnecting", replyId: reply.replyId, attempt: attempt?.target.attempt ?? 0 });
       scheduleRetry();
+      return;
+    }
+    if (snapshot.state.kind === "stopping") {
+      if (isDisconnect && snapshot.state.request === "sending") return;
+      discovery = { kind: "idle" };
+      settle({ kind: "attached", replyId: null });
+      refresh();
       return;
     }
     const prompt = isDisconnect ? messages.findLast((message) => message.role === "user") : undefined;
@@ -201,43 +212,70 @@ export function createReplyLink(chatId: string, refresh: () => void) {
     void chat.stop().then(wake);
   }
 
+  function armStopFallback(chat: Chat) {
+    clearTimeout(stopTimer);
+    stopTimer = setTimeout(() => {
+      const reply = activeReply(snapshot.state);
+      if (reply) {
+        updateReply({ kind: "reconnecting", replyId: reply.replyId, attempt: attempt?.target.attempt ?? 0 });
+        replaceStream(chat);
+        return;
+      }
+      if (snapshot.state.kind !== "stopping") return;
+      discovery = { kind: "idle" };
+      void chat.stop();
+      settle({ kind: "attached", replyId: null });
+      refresh();
+    }, STOP_FALLBACK_MS);
+  }
+
   async function stop() {
     const active = connection;
     const { state } = snapshot;
-    const reply = activeReply(state);
-    if (!active || state.kind === "stopping" || !reply) return;
-    const { replyId } = reply;
-    clearTimeout(retryTimer);
-    update({ kind: "stopping", reply, request: "sending" }, "");
-    await requestJson(`${api}/stop`, { method: "POST", signal: active.controller.signal }, {
-      parse: stoppedReply,
-      onOk: ({ stopped }) => {
-        const { state: current } = snapshot;
-        if (current.kind !== "stopping" || current.request !== "sending" || current.reply.replyId !== replyId) return;
-        if (!stopped && current.reply.kind === "attached") {
-          void active.chat.stop();
-          settle({ kind: "attached", replyId: null });
-          refresh();
-          return;
-        }
-        update({ ...current, request: "confirmed" });
-        if (current.reply.kind === "reconnecting") {
-          if (attempt) replaceStream(active.chat);
-          else wake();
-          return;
-        }
-        stopTimer = setTimeout(() => {
-          updateReply({ kind: "reconnecting", replyId, attempt: attempt?.target.attempt ?? 0 });
-          replaceStream(active.chat);
-        }, STOP_FALLBACK_MS);
-      },
-      onFailed: () => {
-        const { state: current } = snapshot;
-        if (current.kind !== "stopping" || current.request !== "sending" || current.reply.replyId !== replyId) return;
-        update(current.reply, "Could not stop");
-        scheduleRetry();
-      },
-    });
+    if (!active || state.kind === "stopping") return;
+    let targetState: IdleOrActive = state;
+    for (;;) {
+      const replyId = activeReply(targetState)?.replyId ?? null;
+      const next: { reply: ActiveReply | null } = { reply: null };
+      clearTimeout(retryTimer);
+      update({ kind: "stopping", reply: targetState, request: "sending" }, "");
+      await requestJson(`${api}/stop`, { method: "POST", signal: active.controller.signal }, {
+        parse: stoppedReply,
+        onOk: ({ stopped }) => {
+          const { state: current } = snapshot;
+          if (current.kind !== "stopping" || current.request !== "sending") return;
+          const currentReply = activeReply(current);
+          if (replyId !== null && currentReply?.replyId !== replyId) return;
+          if (!stopped && replyId === null && currentReply !== null) {
+            next.reply = currentReply;
+            return;
+          }
+          if (!stopped && currentReply?.kind !== "reconnecting") {
+            discovery = { kind: "idle" };
+            void active.chat.stop();
+            settle({ kind: "attached", replyId: null });
+            refresh();
+            return;
+          }
+          update({ ...current, request: "confirmed" });
+          if (currentReply?.kind === "reconnecting") {
+            if (attempt) replaceStream(active.chat);
+            else wake();
+            return;
+          }
+          armStopFallback(active.chat);
+        },
+        onFailed: () => {
+          const { state: current } = snapshot;
+          if (current.kind !== "stopping" || current.request !== "sending") return;
+          if (replyId !== null && activeReply(current)?.replyId !== replyId) return;
+          update(current.reply, "Could not stop");
+          scheduleRetry();
+        },
+      });
+      if (!next.reply) return;
+      targetState = next.reply;
+    }
   }
 
   return {
@@ -302,7 +340,7 @@ export function useReplyLink() {
     link?.getSnapshot ?? getEmptySnapshot,
     link?.getServerSnapshot ?? getEmptySnapshot,
   );
-  return { kind: state.kind, stopError, canStop: (state.kind === "attached" || state.kind === "reconnecting") && state.replyId !== null, stop: link?.stop };
+  return { kind: state.kind, stopError, canStop: link !== null && state.kind !== "stopping", stop: link?.stop };
 }
 
 export function ReplyLink({

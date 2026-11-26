@@ -15,7 +15,7 @@ The scenario first drops the initial reply before the app receives the response 
 
 It also drops the connection during thinking, then checks that the timer survives reload. It presses **Stop** during a second reply and checks that the reasoning, duration, and **Stopped** label survive. Switching chats must leave the reply running. A second tab can watch that reply but gets HTTP 409 if it sends another prompt. A tab focused on an older branch stays on that branch.
 
-`reply-actions` holds the Retry response while it checks that the old status clears and only one request goes out. It checks that a pending Stop or reconnect blocks edit submission without losing the draft or the active reply.
+`reply-actions` checks that **Stop** cancels a send before response headers arrive, whether the server already reserved the turn or the request stalled before reaching it. It also holds the Retry response while it checks that the old status clears and only one request goes out, and checks that a pending Stop or reconnect blocks edit submission without losing the draft or the active reply.
 
 Check `.verify/evidence/durable-reply/summary.txt` and the screenshots `dropped.png`, `finished.png`, `thinking.png`, `thought.png`, `stopped.png`, and `phone.png`.
 
