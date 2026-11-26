@@ -43,6 +43,8 @@ async function openLine(line, tap = false) {
   const summary = line.locator(":scope > summary");
   await (tap ? summary.tap() : summary.click());
   await eventually(() => line.evaluate((root) => root.open), Boolean, { timeoutMs: 2_000, what: "the tool line to open" });
+  // The caret turns on open. Let that transition end so a screenshot shows the open state, not its first frame.
+  await line.evaluate((root) => Promise.all(root.getAnimations({ subtree: true }).filter((animation) => animation instanceof CSSTransition).map((animation) => animation.finished)));
 }
 
 async function links(line) {
