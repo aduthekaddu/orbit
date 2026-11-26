@@ -19,7 +19,7 @@ export function EditorFooter({
   return (
     <div className="flex items-center justify-end gap-1 border-t px-2 py-1.5">
       {error ? (
-        <p role="alert" className="mr-auto flex min-w-0 items-center gap-1.5 px-1 text-xs text-destructive">
+        <p role="alert" className="mr-auto flex min-w-0 items-center gap-1.5 px-1 text-meta text-destructive">
           <WarningCircleIcon weight="regular" className="size-3.5 shrink-0" />
           <span className="truncate">{error}</span>
         </p>

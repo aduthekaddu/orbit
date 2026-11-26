@@ -18,7 +18,7 @@ const toggleVariants = cva(
       size: {
         default: "h-9 min-w-9 px-2.5",
         sm: "h-8 min-w-8 px-2",
-        xs: "h-7 min-w-7 px-2 text-xs [&_svg:not([class*='size-'])]:size-3.5",
+        xs: "h-7 min-w-7 px-2 text-meta [&_svg:not([class*='size-'])]:size-3.5",
       },
     },
     defaultVariants: { variant: "default", size: "default" },

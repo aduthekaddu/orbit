@@ -164,7 +164,7 @@ function ArtifactPanel({ artifact, onClose, onFix }: { artifact: Artifact; onClo
       </div>
       <div role="tabpanel" id="artifact-code" aria-labelledby="artifact-tab-code" hidden={tab !== "code"} className="min-h-0 flex-1 overflow-hidden">
         <ScrollFade axis="x" fade="var(--card)" className="h-full overflow-y-auto scrollbar-thin">
-          <pre className="w-max min-w-full p-4 font-mono text-xs leading-5"><code>{artifact.code}</code></pre>
+          <pre className="w-max min-w-full p-4 font-mono text-code"><code>{artifact.code}</code></pre>
         </ScrollFade>
       </div>
     </div>

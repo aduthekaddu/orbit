@@ -21,6 +21,7 @@
     "@assistant-ui/react": "0.15.36",
     "@assistant-ui/react-ai-sdk": "1.4.23",
     "@assistant-ui/react-markdown": "0.14.26",
+    "@fontsource-variable/source-serif-4": "5.3.1",
     "@json-render/core": "0.23.1",
     "@json-render/react": "0.23.1",
     "@lucasmarkes/hairline": "0.5.1",

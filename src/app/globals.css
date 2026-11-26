@@ -1,71 +1,78 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
-
 :root {
   color-scheme: dark;
 
   /* Brand primitives */
-  --orbit-bg: #0b0c0f;
-  --orbit-surface: #131418;
-  --orbit-border: #23252b;
-  --orbit-text: #ecebe6;
-  --orbit-muted: #8c8d94;
-  --orbit-ivory: #f1ece1;
-  /* Sunrise on the planet's limb. The one lit color: the moon, the active chat, the thread map. */
-  --orbit-sun: #ff9e5e;
+  --orbit-bg: light-dark(#f7f6f2, #0b0c0f);
+  --orbit-surface: light-dark(#fdfdfb, #131418);
+  --orbit-border: light-dark(#e2e0d9, #23252b);
+  --orbit-text: light-dark(#1c1d21, #ecebe6);
+  --orbit-muted: light-dark(#63646b, #8c8d94);
+  --orbit-ivory: light-dark(#1c1d21, #f1ece1);
+  --orbit-sun: var(--accent-preset-sun);
+
+  --accent-preset-sun: light-dark(#c85a1c, #ff9e5e);
+  --accent-preset-sky: light-dark(#1a72a6, #5ec8f2);
+  --accent-preset-rose: light-dark(#c23b5f, #ff7d9c);
+  --accent-preset-sand: light-dark(#8a6a2e, #dcc08e);
 
   /* shadcn/ui semantic tokens */
   --background: var(--orbit-bg);
   --foreground: var(--orbit-text);
   --card: var(--orbit-surface);
   --card-foreground: var(--orbit-text);
-  --popover: #18191e;
+  --popover: light-dark(#ffffff, #18191e);
   --popover-foreground: var(--orbit-text);
   --primary: var(--orbit-ivory);
-  --primary-foreground: #0b0c0f;
-  --secondary: #1a1b20;
+  --primary-foreground: light-dark(#fbfaf7, #0b0c0f);
+  --secondary: light-dark(#efeee9, #1a1b20);
   --secondary-foreground: var(--orbit-text);
-  --muted: #1a1b20;
+  --muted: light-dark(#efeee9, #1a1b20);
   --muted-foreground: var(--orbit-muted);
-  --accent: #1e1f25;
+  --accent: light-dark(#ebeae4, #1e1f25);
   --accent-foreground: var(--orbit-text);
-  --destructive: #ff6259;
+  --destructive: var(--negative);
   --border: var(--orbit-border);
   --input: var(--orbit-border);
   --ring: var(--orbit-sun);
   --sun: var(--orbit-sun);
+  --overlay: light-dark(rgb(28 26 20 / 0.32), rgb(0 0 0 / 0.75));
 
   /* orbit extensions */
-  --canvas: #07080a;
-  --surface-sunken: #0e0f12;
-  --surface-raised: #1d1e24;
-  --border-strong: #33353d;
-  --positive: #4fd18b;
-  --negative: #ff6259;
-  --warning: #f2cf4a;
-  --info: #5ec8f2;
-  --skeleton: #1a1b20;
-  --skeleton-highlight: #282a31;
+  --canvas: light-dark(#eeede7, #07080a);
+  --surface-sunken: light-dark(#f1f0eb, #0e0f12);
+  --surface-raised: light-dark(#ffffff, #1d1e24);
+  --border-strong: light-dark(#cdcac1, #33353d);
+  --positive: light-dark(#18794a, #4fd18b);
+  --negative: light-dark(#c3322b, #ff6259);
+  --warning: light-dark(#8a5c00, #f2cf4a);
+  --info: light-dark(#0b6a9c, #5ec8f2);
+  --skeleton: light-dark(#ebeae4, #1a1b20);
+  --skeleton-highlight: light-dark(#f6f5f1, #282a31);
+  --shadow-highlight: light-dark(rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.03));
+  --shadow-drop: light-dark(rgb(40 34 20 / 0.07), rgb(0 0 0 / 0.35));
+  --shadow-far: light-dark(rgb(40 34 20 / 0.16), rgb(0 0 0 / 0.75));
+  --shadow-near: light-dark(rgb(40 34 20 / 0.08), rgb(0 0 0 / 0.5));
 
   /* Data visualisation */
-  --chart-1: #ff9e5e;
-  --chart-2: #5ec8f2;
-  --chart-3: #3dd68c;
-  --chart-4: #f2cf4a;
-  --chart-5: #ff7ab6;
+  --chart-1: light-dark(#cf5f22, #ff9e5e);
+  --chart-2: light-dark(#1f88bd, #5ec8f2);
+  --chart-3: light-dark(#23905a, #3dd68c);
+  --chart-4: light-dark(#a88000, #f2cf4a);
+  --chart-5: light-dark(#cc4589, #ff7ab6);
 
   /* Syntax highlighting */
-  --syntax-keyword: #ff9e5e;
-  --syntax-string: #7ee0a8;
-  --syntax-number: #f2cf4a;
-  --syntax-function: #7cc8f8;
-  --syntax-comment: #5d5f68;
-  --syntax-punctuation: #8c8d94;
-  --syntax-builtin: #ff9ec4;
-  --syntax-class: #f5d58a;
-  --syntax-operator: #c9c8c2;
+  --syntax-keyword: light-dark(#ad4316, #ff9e5e);
+  --syntax-string: light-dark(#1d7444, #7ee0a8);
+  --syntax-number: light-dark(#8f5d00, #f2cf4a);
+  --syntax-function: light-dark(#1b6698, #7cc8f8);
+  --syntax-comment: light-dark(#85868d, #5d5f68);
+  --syntax-punctuation: light-dark(#5c5d64, #8c8d94);
+  --syntax-builtin: light-dark(#a8336f, #ff9ec4);
+  --syntax-class: light-dark(#85590a, #f5d58a);
+  --syntax-operator: light-dark(#45464d, #c9c8c2);
 
   /* Hairline figures. Plates are filled, so the plate must match the surface the figure sits on. */
   --hairline-plate: var(--background);
@@ -75,7 +82,69 @@
   --hairline-lo: var(--orbit-border);
   --hairline-stroke: 0.9;
 
+  --chat-column: 34rem;
+  --reply-font: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+
   --radius: 0.625rem;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="system"] {
+  color-scheme: light dark;
+}
+
+:root[data-theme="dim"] {
+  --orbit-bg: #1c1d22;
+  --orbit-surface: #232429;
+  --orbit-border: #34363d;
+  --orbit-muted: #a0a1a8;
+  --popover: #292a30;
+  --secondary: #26272d;
+  --muted: #26272d;
+  --accent: #2c2d33;
+  --canvas: #16171b;
+  --surface-sunken: #18191d;
+  --surface-raised: #2f3036;
+  --border-strong: #45474f;
+  --skeleton: #26272d;
+  --skeleton-highlight: #33353c;
+  --syntax-comment: #767780;
+  --overlay: rgb(0 0 0 / 0.6);
+}
+
+:root[data-accent="sky"] {
+  --orbit-sun: var(--accent-preset-sky);
+}
+
+:root[data-accent="rose"] {
+  --orbit-sun: var(--accent-preset-rose);
+}
+
+:root[data-accent="sand"] {
+  --orbit-sun: var(--accent-preset-sand);
+}
+
+:root[data-text-size="sm"] {
+  font-size: 93.75%;
+}
+
+:root[data-text-size="lg"] {
+  font-size: 112.5%;
+}
+
+:root[data-text-size="xl"] {
+  font-size: 125%;
+}
+
+:root[data-chat-width="wide"] {
+  --chat-column: 48rem;
+}
+
+:root[data-reply-font="serif"] {
+  --reply-font: var(--font-source-serif), ui-serif, Georgia, serif;
 }
 
 @theme inline {
@@ -98,6 +167,7 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-sun: var(--sun);
+  --color-overlay: var(--overlay);
 
   --color-canvas: var(--canvas);
   --color-surface-sunken: var(--surface-sunken);
@@ -122,20 +192,42 @@
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-serif: var(--font-source-serif), ui-serif, Georgia, serif;
+  --font-reply: var(--reply-font);
+
+  --container-chat: var(--chat-column);
 }
 
 @theme {
-  /* The chat column width; json-render widgets never grow beyond it. */
-  --container-widget: 42.5rem;
+  --container-page: 42.5rem;
   --spacing-tool-content: 15rem;
 
+  --text-prose: 1rem;
+  --text-prose--line-height: 1.65;
+  /* iOS Safari zooms the page on focus when an input's font size is under 16px. */
+  --text-field: max(1rem, 16px);
+  --text-field--line-height: 1.5rem;
+  --text-code: 0.875rem;
+  --text-code--line-height: 1.5rem;
+  --text-meta: max(0.8125rem, 13px);
+  --text-meta--line-height: 1.25rem;
+  --text-h1: 1.5rem;
+  --text-h1--line-height: 1.3;
+  --text-h2: 1.25rem;
+  --text-h2--line-height: 1.35;
+  --text-h3: 1.125rem;
+  --text-h3--line-height: 1.4;
+  --text-h4: 1.0625rem;
+  --text-h4--line-height: 1.45;
+  --text-h5: 1rem;
+  --text-h5--line-height: 1.5;
+  --text-h6: 1rem;
+  --text-h6--line-height: 1.5;
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;
-  --text-3xs: 0.5625rem;
-  --text-3xs--line-height: 0.75rem;
 
-  --shadow-card: inset 0 1px 0 0 rgb(255 255 255 / 0.03), 0 1px 2px 0 rgb(0 0 0 / 0.35);
-  --shadow-float: 0 24px 64px -16px rgb(0 0 0 / 0.75), 0 2px 8px -2px rgb(0 0 0 / 0.5);
+  --shadow-card: inset 0 1px 0 0 var(--shadow-highlight), 0 1px 2px 0 var(--shadow-drop);
+  --shadow-float: 0 24px 64px -16px var(--shadow-far), 0 2px 8px -2px var(--shadow-near);
 
   --ease-orbit: cubic-bezier(0.2, 0.7, 0.2, 1);
 

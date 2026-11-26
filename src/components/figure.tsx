@@ -13,5 +13,5 @@ export function Figure({
   ...props
 }: { name: FigureName } & Omit<HairlineProps, "theme">) {
   const Component = figures[name];
-  return <Component theme="dark" className={cn("w-full", className)} {...props} />;
+  return <Component className={cn("w-full", className)} {...props} />;
 }

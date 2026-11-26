@@ -9,7 +9,7 @@ export function BranchPicker() {
   const { kind } = useReplyLink();
   const busy = kind === "reconnecting" || kind === "stopping";
   return (
-    <BranchPickerPrimitive.Root hideWhenSingleBranch data-branch-picker className="flex items-center gap-1 text-xs text-muted-foreground">
+    <BranchPickerPrimitive.Root hideWhenSingleBranch data-branch-picker className="flex items-center gap-1 text-meta text-muted-foreground">
       <BranchPickerPrimitive.Previous aria-label="Previous" disabled={busy} className={iconActionClass}>
         <CaretLeftIcon />
       </BranchPickerPrimitive.Previous>

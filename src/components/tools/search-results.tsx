@@ -18,10 +18,10 @@ export function SearchResults({ output }: { output: unknown }) {
         const domain = new URL(result.url).hostname;
         return (
           <li key={result.url} className="flex min-w-0 gap-3">
-            <span aria-hidden className="flex size-7 shrink-0 items-center justify-center rounded border text-xs text-muted-foreground uppercase">{domain[0]}</span>
+            <span aria-hidden className="flex size-7 shrink-0 items-center justify-center rounded border text-meta text-muted-foreground uppercase">{domain[0]}</span>
             <div className="min-w-0 text-sm">
               <a href={result.url} target="_blank" rel="noopener noreferrer nofollow" className="break-words text-foreground underline decoration-sun/50 underline-offset-4 hover:decoration-sun">{result.title || domain}</a>
-              {result.snippet && <p className="mt-1 break-words text-xs leading-5 text-muted-foreground">{result.snippet}</p>}
+              {result.snippet && <p className="mt-1 break-words text-meta text-muted-foreground">{result.snippet}</p>}
             </div>
           </li>
         );

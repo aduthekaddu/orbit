@@ -137,7 +137,7 @@ export function SignupForm() {
 function Field({ id, label, children }: { id: string; label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id} className="text-xs text-muted-foreground">
+      <Label htmlFor={id} className="text-meta text-muted-foreground">
         {label}
       </Label>
       {children}
@@ -150,7 +150,7 @@ function FormError({ message }: { message: string }) {
   return (
     <p
       role="alert"
-      className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+      className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-meta text-destructive"
     >
       <WarningCircleIcon weight="regular" className="size-3.5 shrink-0" />
       {message}

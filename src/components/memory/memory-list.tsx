@@ -168,7 +168,7 @@ export function MemoryList({
   const searching = search.status === "revalidating" || isMemorySearchPending(query, fetched);
 
   return (
-    <div className="mx-auto w-full max-w-widget px-6 py-10">
+    <div className="mx-auto w-full max-w-page px-6 py-10">
       <h1 className="mb-6 text-xl font-semibold tracking-tight">Memory</h1>
       {dreamStatus ? <p className="mb-4 text-sm text-muted-foreground num">{dreamStatus}</p> : null}
       <p className={embeddings.ok ? "mb-4 text-sm text-positive" : "mb-4 text-sm text-destructive"}>{embeddings.ok ? "Embeddings on" : embeddings.error}</p>
@@ -199,13 +199,13 @@ export function MemoryList({
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
                     rows={3}
-                    className="w-full rounded-md border border-input bg-surface-sunken px-3 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/25"
+                    className="w-full rounded-md border border-input bg-surface-sunken px-3 py-2 text-field text-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/25"
                   />
                   <select
                     aria-label="Kind"
                     value={kind}
                     onChange={(event) => setKind(event.target.value as MemoryKind)}
-                    className="h-9 rounded-md border border-input bg-surface-sunken px-3 text-sm"
+                    className="h-9 rounded-md border border-input bg-surface-sunken px-3 text-field"
                   >
                     {Object.entries(KIND_LABEL).map(([value, label]) => (
                       <option key={value} value={value}>
@@ -225,8 +225,8 @@ export function MemoryList({
               ) : (
                 <div className="flex flex-col gap-2">
                   <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-2xs font-medium text-muted-foreground">{KIND_LABEL[memory.kind]}</span>
-                    <span className="num text-2xs text-muted-foreground">
+                    <span className="text-meta font-medium text-muted-foreground">{KIND_LABEL[memory.kind]}</span>
+                    <span className="num text-meta text-muted-foreground">
                       {inBrowser && (memory.lastUsedAt ? `Used ${formatWhen(memory.lastUsedAt)}` : formatWhen(memory.createdAt))}
                     </span>
                   </div>

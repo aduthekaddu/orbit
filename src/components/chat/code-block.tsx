@@ -67,7 +67,7 @@ export function CodeHeader({ language, code, node }: CodeHeaderProps) {
         active && "border-primary/40",
       )}
     >
-      <span className="font-mono text-2xs text-muted-foreground">{language || "text"}</span>
+      <span className="font-mono text-meta text-muted-foreground">{language || "text"}</span>
       <span aria-live="polite" className="sr-only">{copied ? "Copied" : failed ? "Copy failed" : ""}</span>
       {active ? null : (
         <div className="flex items-center gap-0.5">
@@ -76,7 +76,7 @@ export function CodeHeader({ language, code, node }: CodeHeaderProps) {
               type="button"
               disabled={!edit?.enabled}
               onClick={() => artifacts.open(key)}
-              className="flex h-6 pointer-coarse:h-11 items-center rounded-md px-2 text-2xs text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+              className="flex h-6 pointer-coarse:h-11 items-center rounded-md px-2 text-meta text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
             >
               Preview
             </button>
@@ -86,7 +86,7 @@ export function CodeHeader({ language, code, node }: CodeHeaderProps) {
               type="button"
               onClick={() => edit.setActive(start)}
               aria-label="Edit code"
-              className="flex h-6 pointer-coarse:h-11 items-center rounded-md px-2 text-2xs text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className="flex h-6 pointer-coarse:h-11 items-center rounded-md px-2 text-meta text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
               Edit
             </button>
@@ -140,7 +140,7 @@ function CodeEditor({ code, start, language }: { code: string; start: number; la
         aria-label={`Edit ${language || "code"} block`}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={onKeyDown}
-        className="block max-h-[60vh] min-h-20 w-full resize-none bg-transparent px-3 py-3 font-mono text-xs leading-5 whitespace-pre outline-none field-sizing-content scrollbar-thin"
+        className="block max-h-[60vh] min-h-20 w-full resize-none bg-transparent px-3 py-3 font-mono text-field whitespace-pre outline-none field-sizing-content scrollbar-thin"
       />
       <EditorFooter error={edit?.error} saving={edit?.saving} onCancel={() => edit?.setActive(null)} onSave={() => void commit()} />
     </div>
@@ -166,11 +166,11 @@ export function SyntaxHighlighter({ code, language, node }: SyntaxHighlighterPro
           axis="x"
           fade="var(--surface-sunken)"
           className={cn(capped && "overflow-hidden")}
-          style={capped ? { maxHeight: `calc(${COLLAPSED_LINES} * 1.25rem + 0.75rem)` } : undefined}
+          style={capped ? { maxHeight: `calc(${COLLAPSED_LINES} * 1.5rem + 0.75rem)` } : undefined}
         >
           <Highlight code={source} language={language} theme={orbitCodeTheme}>
             {({ tokens, getLineProps, getTokenProps }) => (
-              <pre className="w-max min-w-full px-3 py-3 font-mono text-xs leading-5">
+              <pre className="w-max min-w-full px-3 py-3 font-mono text-code">
                 <code>
                   {tokens.map((line, i) => (
                     <div key={i} {...getLineProps({ line })}>
@@ -193,7 +193,7 @@ export function SyntaxHighlighter({ code, language, node }: SyntaxHighlighterPro
           type="button"
           onClick={() => setExpanded(!expanded)}
           aria-expanded={expanded}
-          className="flex h-8 w-full cursor-pointer items-center justify-center gap-1.5 border-t text-2xs text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset"
+          className="flex h-8 w-full cursor-pointer items-center justify-center gap-1.5 border-t text-meta text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset"
         >
           {expanded ? "Show less" : <span><span className="num">{lines - COLLAPSED_LINES}</span> more lines</span>}
           <CaretDownIcon weight="regular" className={cn("size-3 transition-transform duration-200 ease-orbit", expanded && "rotate-180")} />
