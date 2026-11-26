@@ -12,15 +12,21 @@ import { requestJson } from "@/lib/request-json";
 const RETRY_MS = [250, 500, 1_000, 2_000, 4_000, 5_000];
 const STOP_FALLBACK_MS = 1_500;
 
-type Attached = { kind: "attached"; replyId: string | null };
+type Attached = { kind: "attached"; replyId: string };
 type Reconnecting = { kind: "reconnecting"; replyId: string; attempt: number };
-type StopRequest = { kind: "sending"; previous: Attached | Reconnecting } | { kind: "confirmed" };
-type ReplyLinkState = Attached | Reconnecting
-  | { kind: "stopping"; replyId: string; request: StopRequest }
+type ActiveReply = Attached | Reconnecting;
+type ReplyLinkState = ActiveReply | { kind: "attached"; replyId: null }
+  | { kind: "stopping"; reply: ActiveReply; request: "sending" | "confirmed" }
   | { kind: "lost"; replyId: string };
 
 type Snapshot = { state: ReplyLinkState; stopError: string };
-type ResumeAttempt = { controller: AbortController; status?: number };
+type ResumeAttempt = { signal: AbortSignal; controller: AbortController; target: Reconnecting; status?: number };
+
+function activeReply(state: ReplyLinkState): ActiveReply | null {
+  if (state.kind === "stopping") return state.reply;
+  if (state.kind === "reconnecting" || (state.kind === "attached" && state.replyId !== null)) return state;
+  return null;
+}
 
 type Chat = Pick<UseChatHelpers<UIMessage>, "resumeStream" | "clearError" | "setMessages" | "stop">;
 type Finish = Pick<Parameters<ChatOnFinishCallback<UIMessage>>[0], "isDisconnect" | "isAbort">;
@@ -68,62 +74,79 @@ export function createReplyLink(chatId: string, refresh: () => void) {
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let stopTimer: ReturnType<typeof setTimeout> | undefined;
 
-  function update(state: ReplyLinkState, stopError = snapshot.stopError) {
+  function update(state: ReplyLinkState, stopError = activeReply(state) ? snapshot.stopError : "") {
     snapshot = { state, stopError };
     for (const render of listeners) render();
   }
 
+  function updateReply(reply: ActiveReply) {
+    const { state } = snapshot;
+    update(state.kind === "stopping" ? { ...state, reply } : reply);
+  }
+
+  function reconnecting() {
+    const { state } = snapshot;
+    if (state.kind === "stopping" && state.request === "sending") return null;
+    const reply = activeReply(state);
+    return reply?.kind === "reconnecting" ? reply : null;
+  }
+
   function scheduleRetry() {
     clearTimeout(retryTimer);
-    const state = snapshot.state;
-    if (state.kind !== "reconnecting" || !connection || attempt) return;
-    retryTimer = setTimeout(() => void resume(), RETRY_MS[state.attempt] ?? RETRY_MS[RETRY_MS.length - 1]);
+    const reply = reconnecting();
+    if (!reply || !connection || attempt) return;
+    retryTimer = setTimeout(wake, RETRY_MS[reply.attempt] ?? RETRY_MS[RETRY_MS.length - 1]);
+  }
+
+  function settle(state: { kind: "attached"; replyId: null } | { kind: "lost"; replyId: string }) {
+    writeCheckpoint(key, null);
+    update(state);
   }
 
   function lost(replyId: string) {
-    writeCheckpoint(key, null);
     connection?.chat.clearError();
-    update({ kind: "lost", replyId });
+    settle({ kind: "lost", replyId });
   }
 
   async function resume() {
     clearTimeout(retryTimer);
-    const state = snapshot.state;
+    const target = reconnecting();
     const active = connection;
-    if (state.kind !== "reconnecting" || !active || attempt ||
+    if (!target || !active || attempt ||
       navigator.onLine === false || document.visibilityState !== "visible") return;
-    const request: ResumeAttempt = { controller: active.controller };
+    const controller = new AbortController();
+    const signal = AbortSignal.any([active.controller.signal, controller.signal]);
+    const request: ResumeAttempt = { signal, controller, target };
+    const { replyId } = target;
+    const stillReconnecting = () => !signal.aborted && reconnecting()?.replyId === replyId;
     attempt = request;
     try {
-      await active.chat.resumeStream({ body: { replyId: state.replyId } });
-      if (active.controller.signal.aborted || snapshot.state.kind !== "reconnecting") return;
+      await active.chat.resumeStream({ body: { replyId } });
+      if (!stillReconnecting()) return;
       if (request.status === 204) {
-        await requestJson(api, { signal: active.controller.signal }, {
+        await requestJson(api, { signal }, {
           parse: savedChat,
           onOk: ({ messages, headId }) => {
-            if (snapshot.state.kind !== "reconnecting") return;
-            if (!messages.some(({ message }) => message.id === state.replyId)) {
-              lost(state.replyId);
+            if (!stillReconnecting()) return;
+            if (!messages.some(({ message }) => message.id === replyId)) {
+              lost(replyId);
               return;
             }
             const path = pathTo(messages.map(({ message, parentId }) => ({ ...message, parentId })), headId);
             active.chat.setMessages(path.map(({ parentId: _parentId, ...message }) => message));
             active.chat.clearError();
-            writeCheckpoint(key, null);
-            update({ kind: "attached", replyId: null });
+            settle({ kind: "attached", replyId: null });
             refresh();
           },
           onFailed: (failure) => {
-            if (snapshot.state.kind === "reconnecting" && failure.kind !== "network" &&
-              !(failure.kind === "http" && failure.status >= 500)) lost(state.replyId);
+            if (stillReconnecting() && failure.kind !== "network" &&
+              !(failure.kind === "http" && failure.status >= 500)) lost(replyId);
           },
         });
       } else if (request.status && request.status >= 400 && request.status < 500 && request.status !== 429) {
-        lost(state.replyId);
+        lost(replyId);
       }
-      if (snapshot.state.kind === "reconnecting" && snapshot.state.replyId === state.replyId) {
-        update({ kind: "reconnecting", replyId: state.replyId, attempt: snapshot.state.attempt + 1 });
-      }
+      if (stillReconnecting()) updateReply({ ...target, attempt: target.attempt + 1 });
     } finally {
       attempt = null;
       scheduleRetry();
@@ -142,69 +165,67 @@ export function createReplyLink(chatId: string, refresh: () => void) {
   function finish({ isDisconnect, isAbort }: Finish) {
     if (!connection || isAbort) return;
     clearTimeout(stopTimer);
-    const { state } = snapshot;
-    if (isDisconnect && state.replyId && state.kind !== "lost") {
-      const retry: Reconnecting = { kind: "reconnecting", replyId: state.replyId, attempt: 0 };
-      if (state.kind === "stopping" && state.request.kind === "sending") {
-        update({ ...state, request: { kind: "sending", previous: retry } });
-      } else {
-        update(retry);
-        scheduleRetry();
-      }
+    const reply = activeReply(snapshot.state);
+    if (isDisconnect && reply) {
+      updateReply({ kind: "reconnecting", replyId: reply.replyId, attempt: attempt?.target.attempt ?? 0 });
+      scheduleRetry();
       return;
     }
-    writeCheckpoint(key, null);
-    update({ kind: "attached", replyId: null });
+    settle({ kind: "attached", replyId: null });
     refresh();
   }
 
   function reconnectResponse(status: number) {
-    if (!attempt || attempt.controller.signal.aborted) return;
+    if (!attempt || attempt.signal.aborted) return;
     attempt.status = status;
     if (status === 200) {
-      connection?.chat.clearError();
-      const { state } = snapshot;
-      if (state.kind === "reconnecting") update({ kind: "attached", replyId: state.replyId });
-      if (state.kind === "stopping" && state.request.kind === "sending") {
-        update({ ...state, request: { kind: "sending", previous: { kind: "attached", replyId: state.replyId } } });
+      const reply = activeReply(snapshot.state);
+      if (reply?.kind === "reconnecting" && reply.replyId === attempt.target.replyId) {
+        connection?.chat.clearError();
+        updateReply({ kind: "attached", replyId: reply.replyId });
       }
     }
+  }
+
+  function replaceStream(chat: Chat) {
+    attempt?.controller.abort();
+    void chat.stop().then(wake);
   }
 
   async function stop() {
     const active = connection;
     const { state } = snapshot;
-    if (!active || (state.kind !== "attached" && state.kind !== "reconnecting") || !state.replyId) return;
-    const { replyId } = state;
+    const reply = activeReply(state);
+    if (!active || state.kind === "stopping" || !reply) return;
+    const { replyId } = reply;
     clearTimeout(retryTimer);
-    update({ kind: "stopping", replyId, request: { kind: "sending", previous: state } }, "");
+    update({ kind: "stopping", reply, request: "sending" }, "");
     await requestJson(`${api}/stop`, { method: "POST", signal: active.controller.signal }, {
       parse: stoppedReply,
       onOk: ({ stopped }) => {
         const { state: current } = snapshot;
-        if (current.kind !== "stopping" || current.request.kind !== "sending" || current.replyId !== replyId) return;
-        if (current.request.previous.kind === "reconnecting") {
-          update(current.request.previous);
-          wake();
-          return;
-        }
-        if (!stopped) {
+        if (current.kind !== "stopping" || current.request !== "sending" || current.reply.replyId !== replyId) return;
+        if (!stopped && current.reply.kind === "attached") {
           void active.chat.stop();
-          writeCheckpoint(key, null);
-          update({ kind: "attached", replyId: null });
+          settle({ kind: "attached", replyId: null });
           refresh();
           return;
         }
-        update({ kind: "stopping", replyId, request: { kind: "confirmed" } });
+        update({ ...current, request: "confirmed" });
+        if (current.reply.kind === "reconnecting") {
+          if (attempt) replaceStream(active.chat);
+          else wake();
+          return;
+        }
         stopTimer = setTimeout(() => {
-          update({ kind: "reconnecting", replyId, attempt: 0 });
-          void active.chat.stop().then(wake);
+          updateReply({ kind: "reconnecting", replyId, attempt: attempt?.target.attempt ?? 0 });
+          replaceStream(active.chat);
         }, STOP_FALLBACK_MS);
       },
       onFailed: () => {
         const { state: current } = snapshot;
-        if (current.kind !== "stopping" || current.request.kind !== "sending" || current.replyId !== replyId) return;
-        update(current.request.previous, "Could not stop");
+        if (current.kind !== "stopping" || current.request !== "sending" || current.reply.replyId !== replyId) return;
+        update(current.reply, "Could not stop");
         scheduleRetry();
       },
     });
@@ -229,13 +250,14 @@ export function createReplyLink(chatId: string, refresh: () => void) {
       scheduleRetry();
       return () => {
         controller.abort();
+        if (connection?.controller !== controller) return;
         connection = null;
         clearTimeout(retryTimer);
         clearTimeout(stopTimer);
-        if (attempt?.controller === controller) {
-          const { state } = snapshot;
-          if (state.kind === "attached" && state.replyId) {
-            update({ kind: "reconnecting", replyId: state.replyId, attempt: 0 });
+        if (attempt?.signal.aborted) {
+          const reply = activeReply(snapshot.state);
+          if (reply?.kind === "attached") {
+            updateReply({ kind: "reconnecting", replyId: reply.replyId, attempt: attempt.target.attempt });
           }
           void chat.stop();
         }
@@ -269,7 +291,7 @@ export function useReplyLink() {
     link?.getSnapshot ?? getEmptySnapshot,
     link?.getServerSnapshot ?? getEmptySnapshot,
   );
-  return { kind: state.kind, stopError, canStop: (state.kind === "attached" || state.kind === "reconnecting") && Boolean(state.replyId), stop: link?.stop };
+  return { kind: state.kind, stopError, canStop: (state.kind === "attached" || state.kind === "reconnecting") && state.replyId !== null, stop: link?.stop };
 }
 
 export function ReplyLink({

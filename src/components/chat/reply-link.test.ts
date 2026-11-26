@@ -195,7 +195,7 @@ test("Stop leaves the stream open on failure and shows an error", async (t) => {
   assert.equal(stored.get(key), "a1");
 });
 
-test("Stop waits for the server stream to end and can recover if the socket drops", async (t) => {
+test("Stop stays pending while recovering a dropped stream", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const { link, stop, stored, resumeStream } = fixture(t, {
     respond: () => Response.json({ ok: true, stopped: true }),
@@ -205,9 +205,10 @@ test("Stop waits for the server stream to end and can recover if the socket drop
   assert.equal(stop.mock.callCount(), 0);
   assert.equal(link.getSnapshot().state.kind, "stopping");
   link.finish({ isAbort: false, isDisconnect: true });
-  assert.equal(link.getSnapshot().state.kind, "reconnecting");
+  assert.equal(link.getSnapshot().state.kind, "stopping");
   t.mock.timers.tick(250);
   assert.equal(resumeStream.mock.callCount(), 1);
+  assert.equal(link.getSnapshot().state.kind, "stopping");
   link.finish({ isAbort: false, isDisconnect: false });
   assert.equal(stored.get(key), undefined);
   assert.equal(link.getSnapshot().state.kind, "attached");
@@ -454,4 +455,63 @@ test("Stop stays pending when a fallback replay attaches before server cleanup c
   }
   assert.deepEqual(link.getSnapshot().state, { kind: "attached", replyId: null });
   assert.equal(stored.get(key), undefined);
+});
+
+test("a missing replay restores the saved reply after Stop is confirmed", async (t) => {
+  const { chat, link, stored } = sdkFixture(t, () => new Response(null, { status: 204 }));
+  t.mock.method(globalThis, "fetch", async (_url: string, init?: RequestInit) => init?.method === "POST"
+    ? Response.json({ ok: true, stopped: true })
+    : Response.json({
+      headId: "a1",
+      messages: [{ message: prompt, parentId: null }, { message: reply, parentId: "u1" }],
+    }));
+  await chat.sendMessage({ text: "question" });
+  await link.stop();
+  await eventually(() => chat.messages, (messages) => messages.at(-1)?.parts.some((part) =>
+    part.type === "text" && part.text === "finished") === true, {
+    timeoutMs: 1_000,
+    what: "the saved reply after Stop",
+  });
+  assert.deepEqual(chat.messages, [prompt, reply]);
+  assert.deepEqual(link.getSnapshot().state, { kind: "attached", replyId: null });
+  assert.equal(stored.get(key), undefined);
+});
+
+test("headers arriving before Stop is confirmed let the same replay finish", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const response = Promise.withResolvers<Response>();
+  const headersRequested = Promise.withResolvers<void>();
+  const stopResponse = Promise.withResolvers<Response>();
+  let finishReplay = () => {};
+  const { chat, link, request, resumeStream } = sdkFixture(t, () => {
+    headersRequested.resolve();
+    return response.promise;
+  });
+  t.mock.method(globalThis, "fetch", () => stopResponse.promise);
+  link.mount("a1", noSaved, true);
+  await headersRequested.promise;
+  const stopping = link.stop();
+  const stream = new ReadableStream<UIMessageChunk>({
+    start(controller) {
+      for (const chunk of partial) controller.enqueue(chunk);
+      finishReplay = () => {
+        controller.enqueue({ type: "abort" });
+        controller.close();
+      };
+    },
+  });
+  response.resolve(createUIMessageStreamResponse({ stream }));
+  await streaming(chat);
+  try {
+    stopResponse.resolve(Response.json({ ok: true, stopped: true }));
+    await stopping;
+    assert.equal(link.getSnapshot().state.kind, "stopping");
+    assert.equal(request.mock.callCount(), 1);
+  } finally {
+    finishReplay();
+    await resumeStream.mock.calls[0]?.result;
+  }
+  t.mock.timers.tick(1_500);
+  assert.deepEqual(link.getSnapshot().state, { kind: "attached", replyId: null });
+  assert.equal(request.mock.callCount(), 1);
 });
