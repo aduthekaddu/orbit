@@ -7,9 +7,13 @@ import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
 import { focusedHead, type toRepository } from "@/lib/chat-tree";
 import { hasOpenCodeRun } from "@/lib/chat-stopped-runs";
 import { orbitChatTransport } from "@/lib/chat-transport";
+import type { PublicConnection } from "@/lib/connections";
+import type { Effort } from "@/lib/effort";
+import type { ModelChoice } from "@/lib/model-choice";
 import { ArtifactProvider } from "@/components/artifacts/use-artifact";
 import { ArtifactWorkspace } from "@/components/artifacts/artifact-panel";
 import { ChatIdProvider } from "./chat-id";
+import { ModelChoiceProvider } from "./model-picker";
 import { createReplyLink, ReplyLink } from "./reply-link";
 import { StoppedRunSync } from "./stopped-run-sync";
 import { Thread } from "./thread";
@@ -19,7 +23,9 @@ export function ChatPanel({
   initialHistory,
   focusMessageId,
   ready,
-  model,
+  choice: initialChoice,
+  choiceLevels = null,
+  connections,
   liveReplyId = null,
   restorePending = true,
 }: {
@@ -27,12 +33,16 @@ export function ChatPanel({
   initialHistory: ReturnType<typeof toRepository>;
   focusMessageId: string | null;
   ready: boolean;
-  model: string;
+  choice: ModelChoice | null;
+  choiceLevels?: Effort[] | null;
+  connections: PublicConnection[];
   liveReplyId?: string | null;
   restorePending?: boolean;
 }) {
   const router = useRouter();
   const editMessageId = useRef<string | null>(null);
+  const [choice, setChoice] = useState(initialChoice);
+  const sendChoice = useRef(initialChoice);
   const [stopped, setStopped] = useState<string[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const link = useMemo(() => createReplyLink(chatId, () => router.refresh()), [chatId, router]);
@@ -46,6 +56,7 @@ export function ChatPanel({
       editMessageId.current = null;
       return id;
     },
+    modelChoice: () => sendChoice.current,
     onReplyId: link.accept,
     onReconnectResponse: link.reconnectResponse,
     onServerTime: link.syncClock,
@@ -93,7 +104,17 @@ export function ChatPanel({
           <ArtifactProvider>
             <StoppedRunSync chatId={chatId} stopped={stopped}>
               <ArtifactWorkspace>
-                <Thread ready={ready} model={model} focusMessageId={focusMessageId} hasHistory={initialHistory.messages.length > 0} />
+                <ModelChoiceProvider
+                  choice={choice}
+                  connections={connections}
+                  levels={choiceLevels}
+                  onChoose={(next) => {
+                    sendChoice.current = next;
+                    setChoice(next);
+                  }}
+                >
+                  <Thread ready={ready} focusMessageId={focusMessageId} hasHistory={initialHistory.messages.length > 0} />
+                </ModelChoiceProvider>
               </ArtifactWorkspace>
             </StoppedRunSync>
           </ArtifactProvider>

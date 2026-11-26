@@ -188,7 +188,10 @@ async function listAnthropicModels(apiKey: string): Promise<ListedModel[] | null
 }
 
 type CachedCaps = { caps: ModelCaps; expiresAt: number };
-const capsCache = new Map<string, CachedCaps>();
+// Next.js loads route handlers and pages as separate module copies, and the chat page reads what a models request
+// cached, so the cache lives on globalThis as the reply runs do.
+const shared = globalThis as typeof globalThis & { __orbitCapsCache?: Map<string, CachedCaps> };
+const capsCache = (shared.__orbitCapsCache ??= new Map<string, CachedCaps>());
 const cacheKey = (connectionId: string, modelId: string) => `${connectionId}\0${modelId}`;
 
 function rememberCaps(connectionId: string, models: ListedModel[], now = Date.now()) {

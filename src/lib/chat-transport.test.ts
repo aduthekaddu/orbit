@@ -113,3 +113,57 @@ test("the transport reports valid server timestamps on stream responses and igno
   await assert.rejects(transport.reconnectToStream({ chatId: "local-id", body: { replyId: "a1" } }));
   assert.deepEqual(times, [1700000000000, 1700000005000]);
 });
+
+test("every send carries the picker's current choice: a new message, an edit, and a regenerate", async () => {
+  const bodies: Record<string, unknown>[] = [];
+  let choice = { connectionId: "conn-1", model: "claude-opus-5-5", effort: "high" as const };
+  let editing: string | null = null;
+  const transport = orbitChatTransport("c1", {
+    api: "http://orbit.test/api/chat",
+    fetch: async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response("data: [DONE]\n\n");
+    },
+    editMessageId: () => editing,
+    modelChoice: () => choice,
+  });
+  transport.setRuntime({
+    thread: { getModelContext: () => undefined },
+    threads: { mainItem: { initialize: async () => ({ remoteId: "local" }) } },
+  } as never);
+  const messages: UIMessage[] = [{ id: "u1", role: "user", parts: [{ type: "text", text: "hi" }] }];
+  const sendWith = async (trigger: "submit-message" | "regenerate-message") => {
+    const stream = await transport.sendMessages({ chatId: "c1", messageId: undefined, trigger, messages, abortSignal: undefined });
+    await stream.cancel();
+  };
+  await sendWith("submit-message");
+  editing = "u1";
+  choice = { connectionId: "conn-2", model: "mock-reasoner", effort: "low" as never };
+  await sendWith("submit-message");
+  await sendWith("regenerate-message");
+  assert.deepEqual(bodies.map((body) => body.modelChoice), [
+    { connectionId: "conn-1", model: "claude-opus-5-5", effort: "high" },
+    { connectionId: "conn-2", model: "mock-reasoner", effort: "low" },
+    { connectionId: "conn-2", model: "mock-reasoner", effort: "low" },
+  ]);
+  assert.deepEqual(bodies.map((body) => body.editMessageId), [undefined, "u1", undefined]);
+});
+
+test("a chat with no choice yet sends none and lets the server resolve it", async () => {
+  let body: Record<string, unknown> = {};
+  const transport = orbitChatTransport("c1", {
+    api: "http://orbit.test/api/chat",
+    fetch: async (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return new Response("data: [DONE]\n\n");
+    },
+    modelChoice: () => null,
+  });
+  transport.setRuntime({
+    thread: { getModelContext: () => undefined },
+    threads: { mainItem: { initialize: async () => ({ remoteId: "local" }) } },
+  } as never);
+  const stream = await transport.sendMessages({ chatId: "c1", messageId: undefined, trigger: "submit-message", messages: [], abortSignal: undefined });
+  await stream.cancel();
+  assert.equal("modelChoice" in body, false);
+});

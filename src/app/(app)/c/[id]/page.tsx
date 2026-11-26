@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { Figure } from "@/components/figure";
+import { FirstRun } from "@/components/settings/first-run";
+import { getModelDefaults, publicConnections } from "@/lib/connections";
+import { effortLevels } from "@/lib/effort";
+import { cachedCaps } from "@/lib/model-list";
 import { getChatForUser, messageRepository } from "@/lib/messages";
 import { resolveChoice } from "@/lib/model-choice";
 import { artifactHistory } from "@/lib/artifacts/history";
@@ -35,7 +39,7 @@ export default async function ChatPage({
   const restorePending = active ? liveReplyId !== null : selectedHead === saved.headId;
   const resolved = resolveChoice(session.user.id, chat);
   const ready = resolved.ok;
-  if (!ready && repository.messages.length === 0) {
+  if (!resolved.ok && repository.messages.length === 0) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto pt-[8vh] scrollbar-thin">
         <div className="w-40 animate-rise">
@@ -43,13 +47,14 @@ export default async function ChatPage({
         </div>
         <div className="mx-auto w-full max-w-page px-6 py-10">
           <h1 className="mb-6 text-xl font-semibold tracking-tight">Connect a provider</h1>
+          <FirstRun reason={resolved.reason} initialConnections={publicConnections(session.user.id)} defaults={getModelDefaults(session.user.id)} />
         </div>
       </div>
     );
   }
   return (
     <div className="min-h-0 flex-1">
-      <ChatPanel key={`${id}:${focusMessageId ?? ""}`} chatId={id} focusMessageId={focusMessageId} initialHistory={repository} ready={ready} model={resolved.ok ? resolved.choice.model : ""} liveReplyId={liveReplyId} restorePending={restorePending} />
+      <ChatPanel key={`${id}:${focusMessageId ?? ""}`} chatId={id} focusMessageId={focusMessageId} initialHistory={repository} ready={ready} choice={resolved.ok ? resolved.choice : null} choiceLevels={resolved.ok ? effortLevels(resolved.connection.kind, cachedCaps(resolved.connection.id, resolved.choice.model)) : null} connections={publicConnections(session.user.id)} liveReplyId={liveReplyId} restorePending={restorePending} />
     </div>
   );
 }
