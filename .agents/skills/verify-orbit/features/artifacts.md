@@ -13,7 +13,7 @@ The scenario sends `[qa:artifact-html]`, `[qa:artifact-svg]`, `[qa:artifact-reac
 
 A pass requires the HTML button and React counter to respond to clicks. Each kind must block access to `parent.document`, `document.cookie` and fetch requests to the app origin. The frame's only sandbox flag must be `allow-scripts`. A message sent from the parent window must not appear as a runtime error.
 
-The scenario also checks the Code tab, Reload, Copy and Download. An Edit code save updates the open preview. A page reload restores it from `?artifact=`, and Escape and Close remove that parameter. A runtime error appears under the preview, and Fix puts it in the composer.
+The scenario also checks the Code tab, Reload, Copy and Download, and verifies that Copy put the artifact source on the clipboard. An Edit code save updates the open preview. A page reload restores it from `?artifact=`, and Escape and Close remove that parameter. A runtime error appears under the preview, and Fix puts it in the composer.
 
 Last, it saves a reply whose reasoning holds an HTML block before the reply's own HTML block. Thought must show no Preview button for its block, and the reply's Preview must show the reply's HTML while Thought is open and after Thought closes.
 
