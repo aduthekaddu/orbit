@@ -201,6 +201,9 @@
 @theme {
   --container-page: 42.5rem;
   --spacing-tool-content: 15rem;
+  --spacing-picker: 24rem;
+  --spacing-picker-height: 60vh;
+  --spacing-sheet-height: 80dvh;
 
   --text-prose: 1rem;
   --text-prose--line-height: 1.65;

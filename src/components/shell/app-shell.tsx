@@ -11,11 +11,11 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogOverlay, DialogPortal, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sidebar, chatLabel, type ChatSummary } from "@/components/chat/sidebar";
+import { DESKTOP_QUERY } from "@/components/use-desktop";
 import { CommandPalette } from "./command-palette";
 import { ShortcutKbd, useShortcuts } from "./shortcuts";
 import { SIDEBAR_COOKIE } from "./sidebar-cookie";
 
-const DESKTOP_QUERY = "(min-width: 48rem)";
 const NEW_CHAT_ERROR_MS = 4000;
 const createdChat = z.object({ id: z.string().min(1) });
 
