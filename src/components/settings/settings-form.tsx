@@ -1,42 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import { Row } from "./row";
-import { CUSTOM_OPTION, NO_OPTION, selectedOptionIndex, showsModelInput } from "@/lib/model-picker";
-import { requestJson, useLatestRequest, useLoaded } from "@/lib/request-json";
-import { appliedSave, connectionFrom, modelListBody, type Connection, type ModelList, type SettingsSnapshot } from "@/lib/settings-form";
+import { requestJson, useLatestRequest } from "@/lib/request-json";
+import { appliedSave, type SettingsSnapshot } from "@/lib/settings-form";
 import { idleSubmit, submitTransition } from "@/lib/submit-state";
-import type { PublicSettings, ReasoningEffort } from "@/lib/settings";
+import type { PublicSettings } from "@/lib/settings";
 
-const savedBody = z.object({ keySet: z.boolean(), tavilyKeySet: z.boolean(), githubTokenSet: z.boolean() });
+const savedBody = z.object({ tavilyKeySet: z.boolean(), githubTokenSet: z.boolean() });
 const githubCheckBody = z.object({ ok: z.boolean(), login: z.string().optional(), error: z.string().optional() });
 const GITHUB_UNAVAILABLE = "GitHub is unavailable.";
 
-const EFFORTS: { value: ReasoningEffort; label: string }[] = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-];
-
-
-function canLoadStored(initial: Pick<PublicSettings, "baseUrl" | "keySet">) {
-  return initial.keySet && Boolean(initial.baseUrl);
-}
-
 export function SettingsForm({ initial }: { initial: PublicSettings }) {
   const router = useRouter();
-  const [baseUrl, setBaseUrl] = useState(initial.baseUrl);
-  const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState(initial.model);
-  const [effort, setEffort] = useState<ReasoningEffort>(initial.reasoningEffort);
   const [searxngUrl, setSearxngUrl] = useState(initial.searxngUrl);
   const [tavilyApiKey, setTavilyApiKey] = useState<string | null>("");
   const [tavilyKeySet, setTavilyKeySet] = useState(initial.tavilyKeySet);
@@ -46,36 +28,11 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
   const [githubCheck, setGithubCheck] = useState<GithubCheck>({ status: "idle" });
   const latestGithubCheck = useLatestRequest();
   const latestSave = useLatestRequest();
-  const [keySet, setKeySet] = useState(initial.keySet);
-  const hasKey = keySet || apiKey.trim().length > 0;
-  const [modelList, requestModels] = useLoaded<ModelList>(canLoadStored(initial) ? { status: "pending" } : { status: "idle" });
-  const connection = connectionFrom(modelList);
-  const [customMode, setCustomMode] = useState(false);
   const [save, dispatchSave] = useReducer(submitTransition, idleSubmit);
   const pending = save.status === "pending";
-  const formValues: SettingsSnapshot = { baseUrl, apiKey, model, effort, searxngUrl, tavilyApiKey, githubToken, githubMcpUrl };
+  const formValues: SettingsSnapshot = { searxngUrl, tavilyApiKey, githubToken, githubMcpUrl };
   const latestValues = useRef(formValues);
   latestValues.current = formValues;
-
-  const loadModels = useCallback(
-    (nextBase: string, nextKey: string, nextHasKey: boolean) =>
-      requestModels(
-        "/api/models",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ baseUrl: nextBase || undefined, apiKey: nextKey || undefined }),
-        },
-        modelListBody(nextHasKey),
-      ),
-    [requestModels],
-  );
-
-  useEffect(() => {
-    if (canLoadStored({ baseUrl: initial.baseUrl, keySet: initial.keySet })) {
-      loadModels(initial.baseUrl, "", initial.keySet);
-    }
-  }, [initial.baseUrl, initial.keySet, loadModels]);
 
   useEffect(() => {
     if (save.status !== "succeeded") return;
@@ -94,10 +51,6 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
         signal: latestSave(),
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          baseUrl: formValues.baseUrl,
-          apiKey: formValues.apiKey || undefined,
-          model: formValues.model,
-          reasoningEffort: formValues.effort,
           searxngUrl: formValues.searxngUrl.trim(),
           tavilyApiKey: formValues.tavilyApiKey === null ? null : formValues.tavilyApiKey || undefined,
           githubToken: formValues.githubToken === null ? null : formValues.githubToken || undefined,
@@ -110,8 +63,6 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
           // Pages that read settings on the server stay in the router cache, so Back would show them stale.
           router.refresh();
           const applied = appliedSave(formValues, latestValues.current);
-          if (applied.applyKeySet) setKeySet(body.keySet);
-          if (applied.clearKey) setApiKey("");
           setTavilyKeySet(body.tavilyKeySet);
           if (applied.clearTavilyKey) setTavilyApiKey("");
           setGithubTokenSet(body.githubTokenSet);
@@ -147,117 +98,9 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
     );
   }
 
-  const models = connection.status === "connected" ? connection.models : [];
-  const selectedIndex = selectedOptionIndex(models, model, customMode);
-  const selected = models.find((item) => item.id === model);
-  const allowReasoning = !selected || selected.reasoning !== false;
-
   return (
       <form onSubmit={onSubmit} className="rounded-xl border bg-card shadow-card">
-        <div className="flex items-center justify-between gap-3 border-b px-5 py-3.5">
-          <h2 className="text-sm font-medium">Provider</h2>
-          <ConnectionStatus connection={connection} hasKey={hasKey} />
-        </div>
-        <div className="divide-y">
-          <Row id="baseUrl" label="Base URL">
-            <Input
-              id="baseUrl"
-              value={baseUrl}
-              onChange={(event) => {
-                dispatchSave({ type: "edit" });
-                setBaseUrl(event.target.value);
-              }}
-              onBlur={() => loadModels(baseUrl, apiKey, hasKey)}
-              autoComplete="off"
-              required
-            />
-          </Row>
-          <Row id="apiKey" label="API key">
-            <Input
-              id="apiKey"
-              type="password"
-              value={apiKey}
-              placeholder={keySet ? "Key set" : ""}
-              onChange={(event) => {
-                dispatchSave({ type: "edit" });
-                setApiKey(event.target.value);
-              }}
-              onBlur={() => loadModels(baseUrl, apiKey, hasKey)}
-              autoComplete="off"
-            />
-          </Row>
-          <Row id="model" label="Model">
-            <div className="flex flex-col gap-2">
-              {models.length > 0 ? (
-                <Select
-                  required
-                  value={selectedIndex === NO_OPTION ? "" : String(selectedIndex)}
-                  onValueChange={(value) => {
-                    dispatchSave({ type: "edit" });
-                    const option = models[Number(value)];
-                    if (!option) {
-                      setCustomMode(true);
-                      if (selectedIndex !== CUSTOM_OPTION) setModel("");
-                      return;
-                    }
-                    setCustomMode(false);
-                    setModel(option.id);
-                  }}
-                >
-                  <SelectTrigger id="model" className="w-full">
-                    <SelectValue placeholder="Choose a model" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {models.map((item, index) => (
-                      <SelectItem key={item.id} value={String(index)}>
-                        {item.id}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value={String(CUSTOM_OPTION)}>Custom</SelectItem>
-                  </SelectContent>
-                </Select>
-              ) : null}
-              {showsModelInput(models, model, customMode) ? (
-                <Input
-                  id={models.length === 0 ? "model" : "model-custom"}
-                  aria-label={models.length === 0 ? undefined : "Custom model"}
-                  value={model}
-                  onChange={(event) => {
-                    dispatchSave({ type: "edit" });
-                    setCustomMode(true);
-                    setModel(event.target.value);
-                  }}
-                  autoComplete="off"
-                  required
-                />
-              ) : null}
-            </div>
-          </Row>
-          {allowReasoning ? (
-            <Row id="effort" label="Reasoning" labelledControl={false}>
-              <ToggleGroup
-                type="single"
-                variant="pill"
-                size="sm"
-                value={effort}
-                onValueChange={(value) => {
-                  dispatchSave({ type: "edit" });
-                  const next = EFFORTS.find((item) => item.value === value);
-                  if (next) setEffort(next.value);
-                }}
-                aria-labelledby="effort-label"
-                className="rounded-full border bg-surface-sunken p-0.5"
-              >
-                {EFFORTS.map((item) => (
-                  <ToggleGroupItem key={item.value} value={item.value} className="px-3">
-                    {item.label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            </Row>
-          ) : null}
-        </div>
-        <div className="border-y px-5 py-3.5">
+        <div className="border-b px-5 py-3.5">
           <h2 className="text-sm font-medium">Search</h2>
         </div>
         <div className="divide-y">
@@ -333,13 +176,6 @@ export function SettingsForm({ initial }: { initial: PublicSettings }) {
   );
 }
 
-const STATUS_DOT: Record<Connection["status"], string> = {
-  idle: "bg-muted-foreground/40",
-  checking: "bg-warning motion-safe:animate-pulse",
-  connected: "bg-positive",
-  failed: "bg-destructive",
-};
-
 type GithubCheck =
   | { status: "idle" }
   | { status: "checking" }
@@ -357,32 +193,4 @@ function GithubCheckStatus({ check }: { check: GithubCheck }) {
       {check.status === "failed" ? <span className="truncate text-destructive">{check.error}</span> : null}
     </span>
   );
-}
-
-function ConnectionStatus({ connection, hasKey }: { connection: Connection; hasKey: boolean }) {
-  return (
-    <span aria-live="polite" className="flex items-center gap-2 text-meta text-muted-foreground">
-      <span className={cn("size-1.5 rounded-full", STATUS_DOT[connection.status])} />
-      {connection.status === "idle" && !hasKey ? "No key" : <ConnectionLabel connection={connection} />}
-    </span>
-  );
-}
-
-function ConnectionLabel({ connection }: { connection: Connection }) {
-  switch (connection.status) {
-    case "idle":
-      return "Not checked";
-    case "checking":
-      return "Checking";
-    case "connected": {
-      const count = connection.models.length;
-      return (
-        <span>
-          <span className="num text-foreground">{count}</span> {count === 1 ? "model" : "models"}
-        </span>
-      );
-    }
-    case "failed":
-      return "Failed";
-  }
 }

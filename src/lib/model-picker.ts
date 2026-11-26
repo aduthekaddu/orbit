@@ -1,4 +1,6 @@
-export type ModelOption = { id: string; reasoning: boolean | null };
+import type { ListedModel } from "./model-list";
+
+type ModelOption = Pick<ListedModel, "id">;
 
 export const CUSTOM_OPTION = -1;
 export const NO_OPTION = -2;
