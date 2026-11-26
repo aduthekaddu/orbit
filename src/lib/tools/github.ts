@@ -525,14 +525,15 @@ export async function openGithubTurn(
   }
 }
 
-// A token submitted with the check replaces the stored one for this request, and the redactor covers both.
+// A token submitted with the check replaces the stored one for this request, and the redactor covers both. Settings
+// masks the saved URL with `connectionSecrets` too, so the URL it shows matches here.
 export async function checkGithub(
   stored: GithubSettings,
   submitted: { token?: string; mcpUrl?: string } = {},
   signal?: AbortSignal,
   connectionSecrets: readonly ConnectionSecrets[] = [],
 ): Promise<{ ok: true; login: string } | { ok: false; error: string }> {
-  const storedRedact = new Redactor(stored);
+  const storedRedact = new Redactor(stored, ...connectionSecrets);
   const resolvedMcp = resolveMaskedUrl({
     submitted: submitted.mcpUrl,
     saved: stored.githubMcpUrl,

@@ -12,6 +12,7 @@ import * as schema from "@/lib/db/schema";
 import { seedTestConnection } from "@/lib/connection-fixture";
 import { connectionApiKey } from "@/lib/connections";
 import { getSettings } from "@/lib/settings";
+import { startMockMcp } from "../../../../scripts/qa/mock-mcp.mjs";
 
 const USER_ID = "u-settings-route";
 const PROVIDER_KEY = "made-up-provider-key-0001";
@@ -176,4 +177,24 @@ test("an edited URL whose [redacted] marker cannot be resolved is rejected with 
   assert.equal(connectionApiKey(USER_ID, connectionId), PROVIDER_KEY);
   assert.equal(stored.searxngUrl, initialSearx);
   assert.equal(stored.githubMcpUrl, initialMcp);
+});
+
+test("Check matches the GitHub MCP URL that Settings shows, also when Settings masked a connection key in it", async () => {
+  const originalFixture = process.env.ORBIT_GITHUB_MCP_FIXTURE;
+  process.env.ORBIT_GITHUB_MCP_FIXTURE = "1";
+  const mock = await startMockMcp();
+  try {
+    seedTestConnection(USER_ID, { baseUrl: `http://${providerHost}/v1`, apiKey: PROVIDER_KEY, model: "gpt-4" });
+    const saved = await putSettings({ githubToken: mock.token, githubMcpUrl: `${mock.url}?escaped-login=custom-user&note=${PROVIDER_KEY}` });
+    assert.equal(saved.status, 200, await saved.clone().text());
+    const shown = ((await (await settingsRoute.GET()).json()) as { githubMcpUrl: string }).githubMcpUrl;
+    assert.equal(shown.includes(PROVIDER_KEY), false, shown);
+    const { POST: check } = await import("./github/check/route");
+    const checked = await check(new Request("http://127.0.0.1/api/settings/github/check", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mcpUrl: shown }) }));
+    assert.deepEqual(await checked.json(), { ok: true, login: "custom-user" });
+  } finally {
+    await mock.close();
+    if (originalFixture === undefined) delete process.env.ORBIT_GITHUB_MCP_FIXTURE;
+    else process.env.ORBIT_GITHUB_MCP_FIXTURE = originalFixture;
+  }
 });

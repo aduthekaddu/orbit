@@ -1,4 +1,4 @@
-import { redactionSecrets } from "@/lib/connections";
+import { installRedactionSecrets } from "@/lib/connections";
 import { getSettings } from "@/lib/settings";
 import { checkGithub, githubMcpTarget } from "@/lib/tools/github";
 import { getSession, unauthorized } from "@/lib/session";
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: "Check the GitHub URL." }, { status: 400 });
   }
   try {
-    return Response.json(await checkGithub(getSettings(), parsed.data, request.signal, redactionSecrets(session.user.id)));
+    return Response.json(await checkGithub(getSettings(), parsed.data, request.signal, installRedactionSecrets()));
   } catch (error) {
     if (request.signal.aborted) return new Response(null, { status: 499 });
     throw error;
