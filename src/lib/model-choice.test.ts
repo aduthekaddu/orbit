@@ -149,9 +149,10 @@ test("a connection with no model to use resolves to no-model", () => {
   assert.deepEqual(resolveChoice(NO_MODEL, chat("chat-no-model", NO_MODEL)), { ok: false, reason: "no-model" });
 });
 
-test("a connection whose key cannot be decrypted resolves to key-unreadable", () => {
-  const result = resolveChoice(ONE, chat("chat-unreadable"), { connectionId: "conn-unreadable", model: "m", effort: "low" });
-  assert.deepEqual(result, { ok: false, reason: "key-unreadable" });
+test("a connection whose key cannot be decrypted resolves to key-unreadable and keeps the choice for the chip", () => {
+  const requested = { connectionId: "conn-unreadable", model: "m", effort: "low" } as const;
+  const result = resolveChoice(ONE, chat("chat-unreadable"), requested);
+  assert.deepEqual(result, { ok: false, reason: "key-unreadable", choice: requested });
 });
 
 // A send resolves its choice, then waits for the reply slot and streams, so a delete can land between any two steps.
