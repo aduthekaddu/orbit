@@ -1,5 +1,4 @@
-import { normalizeBaseUrl } from "@/lib/base-url";
-import { REASONING_EFFORTS, getSettings, saveSettings, toPublicSettings } from "@/lib/settings";
+import { REASONING_EFFORTS, getSettings, matchesSavedBaseUrl, resolveSettingsUrls, saveSettings, toPublicSettings } from "@/lib/settings";
 import { githubMcpTarget } from "@/lib/tools/github";
 import { getSession, unauthorized } from "@/lib/session";
 import { LIMITS, r } from "@/lib/route-schema";
@@ -32,11 +31,15 @@ export async function PUT(request: Request) {
     return Response.json({ error: "Check the URLs, model, and reasoning effort." }, { status: 400 });
   }
   const current = getSettings();
+  const resolvedUrls = resolveSettingsUrls(parsed.data, current);
+  if (!resolvedUrls.ok) {
+    return Response.json({ error: resolvedUrls.error }, { status: 400 });
+  }
   const nextKey = parsed.data.apiKey?.trim() ?? "";
   if (!nextKey && !current?.apiKey) {
     return Response.json({ error: "An API key is required." }, { status: 400 });
   }
-  if (!nextKey && current && normalizeBaseUrl(current.baseUrl) !== normalizeBaseUrl(parsed.data.baseUrl)) {
+  if (!nextKey && current && !matchesSavedBaseUrl(resolvedUrls.baseUrl, current)) {
     return Response.json({ error: "Base URL changed. Enter the API key for the new provider." }, { status: 400 });
   }
   const saved = saveSettings(parsed.data);

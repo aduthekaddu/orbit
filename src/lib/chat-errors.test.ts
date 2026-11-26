@@ -4,7 +4,7 @@ import { format } from "node:util";
 import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { getTableColumns } from "drizzle-orm";
-import { CREDENTIAL_NOUNS, logProviderError, REDACTED, Redactor, streamErrorMessage, type SettingsLabels, type StoredCredentials } from "./chat-errors";
+import { CREDENTIAL_NOUNS, logProviderError, REDACTED, Redactor, redactUrl, streamErrorMessage, type SettingsLabels, type StoredCredentials } from "./chat-errors";
 import { settings } from "./db/schema";
 import { renderUiTool } from "./genui/tool";
 import { createRunCodeTool } from "./tools/run-code";
@@ -323,4 +323,271 @@ test("a key of one repeated character is matched in time that grows with the tex
 test("a key that overlaps its own next copy is masked to the end of that copy", () => {
   const key = "made-up-made-up-made-up";
   assert.equal(only({ apiKey: key }).text(`${key}-made-up`), REDACTED);
+});
+
+test("percent-encoded forms of a stored credential are masked in text and withheld in diagnostics", () => {
+  const key = "made+up/provider=key&01";
+  const redactor = only({ apiKey: key });
+  const encoded = encodeURIComponent(key);
+  const partial = "made%2bup%2fprovider=key&01";
+  assert.equal(redactor.text(`url?k=${encoded}`), "url?k=[redacted]");
+  assert.equal(redactor.text(`url?k=${partial}`), "url?k=[redacted]");
+  assert.equal(redactor.diagnostic(`failed ${encoded}`), REDACTED);
+  assert.equal(redactor.diagnostic(`failed ${partial}`), REDACTED);
+  const hyphen = "made-up-provider-key";
+  const partialHyphen = "made%2dup-provider-key";
+  assert.equal(only({ apiKey: hyphen }).text(partialHyphen), REDACTED);
+});
+
+test("base64 and Basic-auth base64 forms of a stored credential are masked in text and withheld in diagnostics", () => {
+  const key = "made-up-provider-key";
+  const redactor = only({ apiKey: key });
+  const plainB64 = Buffer.from(key).toString("base64");
+  const urlB64 = Buffer.from(key).toString("base64url");
+  assert.equal(redactor.text(`token=${plainB64}`), "token=[redacted]");
+  assert.equal(redactor.text(`token=${urlB64}`), "token=[redacted]");
+  assert.equal(redactor.diagnostic(`Authorization: Bearer ${plainB64}`), REDACTED);
+  for (const user of ["", "a", "ab", "abc", "user"]) {
+    const basic = Buffer.from(`${user}:${key}`).toString("base64");
+    const masked = redactor.text(`Authorization: Basic ${basic}`);
+    assert.equal(masked.includes(basic), false, `Basic auth for ${user} was not masked: ${masked}`);
+    assert.match(masked, /\[redacted\]/);
+    const leftover = masked.replace("Authorization: Basic ", "").replace("[redacted]", "");
+    assert.equal(Buffer.from(leftover, "base64").toString("utf8").includes("made"), false);
+    assert.equal(redactor.diagnostic(`Authorization: Basic ${basic}`), REDACTED);
+  }
+});
+
+test("JSON unicode escapes and nested-JSON quote escapes of a stored credential are masked", () => {
+  const key = "made-up-provider-key";
+  const redactor = only({ apiKey: key });
+  const unicodeEscaped = `\\u006dade-up\\u002dprovider-key`;
+  const doubleUnicodeEscaped = `\\\\u006dade-up\\\\u002dprovider-key`;
+  assert.equal(redactor.text(`{"k":"${unicodeEscaped}"}`), `{"k":"[redacted]"}`);
+  assert.equal(redactor.text(`{\\"k\\":\\"${doubleUnicodeEscaped}\\"}`), `{\\"k\\":\\"[redacted]\\"}`);
+  assert.equal(redactor.diagnostic(`failed ${unicodeEscaped}`), REDACTED);
+
+  const quotedKey = 'made-up"provider"key';
+  const quotedRedactor = only({ apiKey: quotedKey });
+  const innerJson = JSON.stringify({ secret: quotedKey });
+  const nestedJson = JSON.stringify({ body: innerJson });
+  const maskedInner = quotedRedactor.text(innerJson);
+  const maskedNested = quotedRedactor.text(nestedJson);
+  assert.equal(maskedInner, '{"secret":"[redacted]"}');
+  assert.equal(JSON.parse(maskedNested).body, '{"secret":"[redacted]"}');
+  assert.equal(quotedRedactor.diagnostic(nestedJson), REDACTED);
+});
+
+test("a stored credential split by terminal escape codes is masked", () => {
+  const key = "made-up-provider-key";
+  const redactor = only({ apiKey: key });
+  const colored = "before made-up\u001b[31m-provider-key after";
+  assert.equal(redactor.text(colored), "before [redacted] after");
+  assert.equal(redactor.diagnostic(colored), REDACTED);
+});
+
+test("stream redactor masks incomplete trailing unicode and percent escapes split across chunks", () => {
+  const key = "made-up-provider-key";
+  const redactor = only({ apiKey: key });
+  const stream = redactor.createStream();
+  const fullUnicode = [...key].map((ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`).join("");
+  const part1 = stream.push(`${fullUnicode.slice(0, -1)}`);
+  const part2 = stream.push(`${fullUnicode.slice(-1)}!`);
+  const part3 = stream.flush();
+  assert.equal(part1 + part2 + part3, "[redacted]!");
+
+  const pctStream = redactor.createStream();
+  const p1 = pctStream.push(`${key.slice(0, -1)}%7`);
+  const p2 = pctStream.push("9!");
+  const p3 = pctStream.flush();
+  assert.equal(p1 + p2 + p3, "[redacted]!");
+});
+
+test("stream redactor runs in linear time on repeated keys, rebuilt keys, and long single-character runs", () => {
+  const key = "made-up-provider-key";
+  const redactor = only({ apiKey: key });
+  const repeatedStream = redactor.createStream();
+  const started = performance.now();
+  const bulk = repeatedStream.push(`${key} `.repeat(2_000)) + repeatedStream.flush();
+  const elapsed = performance.now() - started;
+  assert.equal(bulk.includes(key), false);
+  assert.equal(bulk, `${REDACTED} `.repeat(2_000));
+  assert.ok(elapsed < 500, `streaming 2,000 repeated keys took ${elapsed.toFixed(0)} ms`);
+
+  const rebuiltKey = "]made-up-key";
+  const rebuiltStream = only({ apiKey: rebuiltKey }).createStream();
+  const rebuiltStart = performance.now();
+  const rebuiltOut = rebuiltStream.push(rebuiltKey + "made-up-key".repeat(4_000)) + rebuiltStream.flush();
+  const rebuiltElapsed = performance.now() - rebuiltStart;
+  assert.equal(rebuiltOut.includes(rebuiltKey), false);
+  assert.ok(rebuiltElapsed < 500, `streaming rebuilt key took ${rebuiltElapsed.toFixed(0)} ms`);
+
+  const longRunStream = redactor.createStream();
+  const runStart = performance.now();
+  const runOut = longRunStream.push("x".repeat(200_000)) + longRunStream.flush();
+  const runElapsed = performance.now() - runStart;
+  assert.equal(runOut.length, 200_000);
+  assert.ok(runElapsed < 500, `streaming 200,000 repeated chars took ${runElapsed.toFixed(0)} ms`);
+});
+
+test("a plus-containing key is still percent-decoded when another stored credential contains a space", () => {
+  const redactor = only({ apiKey: "made+up+provider+key", tavilyApiKey: "made up tavily key" });
+  assert.equal(redactor.text("made+up%2Bprovider+key"), REDACTED);
+  assert.equal(redactor.text("made+up+tavily+key"), REDACTED);
+});
+
+test("URL credential extraction covers long usernames paired with passwords and masks bare query tokens", () => {
+  const withTokenUser = new Redactor({
+    apiKey: "",
+    tavilyApiKey: "",
+    githubToken: "",
+    baseUrl: "https://ghp_secret_token_0001:x-oauth-basic@example.com/v1",
+  });
+  assert.equal(withTokenUser.text("leaked ghp_secret_token_0001"), "leaked [redacted]");
+  assert.equal(withTokenUser.diagnostic("err ghp_secret_token_0001"), REDACTED);
+
+  const withShortUser = new Redactor({
+    apiKey: "",
+    tavilyApiKey: "",
+    githubToken: "",
+    baseUrl: "https://user:pass-secret-0001@example.com/v1",
+  });
+  assert.equal(withShortUser.diagnostic("invalid user input"), "invalid user input");
+  assert.equal(withShortUser.diagnostic("invalid pass-secret-0001"), REDACTED);
+
+  const masked = redactUrl("https://example.com/v1?pass-secret-0001&debug", withShortUser);
+  assert.equal(masked, "https://example.com/v1?[redacted]&debug");
+});
+
+test("redactUrl keeps non-credential query values and fragments while masking userinfo, credential params, and stored credentials", () => {
+  const redactor = new Redactor({
+    apiKey: "made-up-provider-key-0001",
+    tavilyApiKey: "sk-short9",
+    githubToken: "",
+    baseUrl: "https://user:url-pass-0001@example.com/v1?api_key=q-secret-01&format=json&language=en#top",
+  });
+  assert.equal(
+    redactUrl("http://127.0.0.1:8888/search?format=json&language=en#top", redactor),
+    "http://127.0.0.1:8888/search?format=json&language=en#top",
+  );
+  assert.equal(
+    redactUrl("https://user:url-pass-0001@example.com/v1?api_key=q-secret-01&format=json&k=made-up-provider-key-0001&s=sk-short9#top", redactor),
+    "https://[redacted]@example.com/v1?api_key=[redacted]&format=json&k=[redacted]&s=[redacted]#top",
+  );
+  assert.equal(
+    redactUrl("https://example.com/v1#made-up-provider-key-0001", redactor),
+    "https://example.com/v1#[redacted]",
+  );
+  assert.equal(
+    redactUrl("https://example.com/v1#sk-short9", redactor),
+    "https://example.com/v1#[redacted]",
+  );
+  assert.equal(
+    redactUrl("https://example.com/v1#access_token=oauth-secret&tab=overview", redactor),
+    "https://example.com/v1#access_token=[redacted]&tab=overview",
+  );
+});
+
+test("stream redactor masks Basic-auth and misaligned base64 forms at byte offsets 0, 1, and 2 across chunk sizes", () => {
+  const key = "made-up-provider-key-0001";
+  const redactor = only({ apiKey: key });
+  for (const user of ["", "u", "us", "use", "user", "orbit"]) {
+    const basic = Buffer.from(`${user}:${key}`).toString("base64");
+    const samples = [
+      basic,
+      `Authorization: Basic ${basic} ok`,
+      `before ${Buffer.from(`${user}:${key}:tail`).toString("base64")} after`,
+      `url ${Buffer.from(`${user}:${key}`).toString("base64url")} done`,
+    ];
+    for (const input of samples) {
+      const expected = redactor.text(input);
+      assert.ok(expected.includes(REDACTED), `text() did not mask ${user} in ${input}`);
+      for (const size of [1, 4, input.length]) {
+        const stream = redactor.createStream();
+        let out = "";
+        for (let i = 0; i < input.length; i += size) out += stream.push(input.slice(i, i + size));
+        out += stream.flush();
+        assert.equal(out, expected, `stream mismatch for user=${JSON.stringify(user)} size=${size}`);
+      }
+    }
+  }
+});
+
+test("property: createStream matches text() across random inputs, encodings, base64 offsets, and random chunk boundaries", () => {
+  const keys = [
+    "made-up-provider-key-0001",
+    'made+up/quote"key=0002',
+    "made up space key 0003",
+    "made-up-utf8-key-🔑-04",
+  ];
+  const redactor = new Redactor({
+    apiKey: keys[0],
+    tavilyApiKey: keys[1],
+    githubToken: keys[2],
+    baseUrl: `https://user:${encodeURIComponent(keys[3])}@example.com/v1`,
+  });
+
+  const makeRng = (seed: number) => {
+    let state = seed >>> 0;
+    return () => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      return state / 0x100000000;
+    };
+  };
+
+  const pick = <T,>(rng: () => number, items: readonly T[]): T => items[Math.floor(rng() * items.length)]!;
+  const noisePool = ["hello ", "world", "1234", "%", "%2", "%2F", "\\", "\\u00", "\\n", "=", "==", "dXNl", "🔑", "made-up-", "\u001b[31m", "\u001b[0m", " ", ":"];
+
+  const encodeVariant = (rng: () => number, key: string): string => {
+    const kind = Math.floor(rng() * 9);
+    if (kind === 0) return key;
+    if (kind === 1) return encodeURIComponent(key);
+    if (kind === 2) return encodeURIComponent(encodeURIComponent(key));
+    if (kind === 3) {
+      const prefix = pick(rng, ["", "u:", "us:", "use:", "user:", "x", "xy"]);
+      const suffix = pick(rng, ["", "!", "ab", "xyz"]);
+      return Buffer.from(prefix + key + suffix, "utf8").toString(rng() < 0.5 ? "base64" : "base64url");
+    }
+    if (kind === 4) {
+      const prefix = pick(rng, ["", "a:", "ab:", "user:"]);
+      return Buffer.from(prefix + key, "utf8").toString("base64").replaceAll("/", "\\/");
+    }
+    if (kind === 5) {
+      return [...key].map((ch, idx) => (idx % 3 === 0 ? `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}` : ch)).join("");
+    }
+    if (kind === 6) {
+      return JSON.stringify(JSON.stringify({ k: key }));
+    }
+    if (kind === 7) {
+      const cut = 1 + Math.floor(rng() * (key.length - 1));
+      return `${key.slice(0, cut)}\u001b[31m${key.slice(cut)}`;
+    }
+    const second = pick(rng, keys);
+    return Buffer.from(`${key}:${second}`, "utf8").toString("base64");
+  };
+
+  for (const seed of [101, 202, 303]) {
+    const rng = makeRng(seed);
+    for (let trial = 0; trial < 150; trial++) {
+      const pieces: string[] = [];
+      const count = 3 + Math.floor(rng() * 8);
+      for (let p = 0; p < count; p++) {
+        if (rng() < 0.45) pieces.push(encodeVariant(rng, pick(rng, keys)));
+        else pieces.push(pick(rng, noisePool));
+      }
+      const input = pieces.join("");
+      const expected = redactor.text(input);
+      const stream = redactor.createStream();
+      let out = "";
+      let pos = 0;
+      while (pos < input.length) {
+        const maxStep = rng() < 0.7 ? 8 : 24;
+        const step = 1 + Math.floor(rng() * maxStep);
+        out += stream.push(input.slice(pos, pos + step));
+        pos += step;
+      }
+      out += stream.flush();
+      assert.equal(out, expected, `seed=${seed} trial=${trial} input=${JSON.stringify(input)}`);
+    }
+  }
 });

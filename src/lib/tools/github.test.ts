@@ -8,6 +8,7 @@ import { startMockMcp } from "../../../scripts/qa/mock-mcp.mjs";
 import { eventually } from "../eventually.mjs";
 
 process.env.ORBIT_GITHUB_MCP_FIXTURE = "1";
+import { Redactor, redactUrl } from "../chat-errors";
 import { githubLinks } from "./github-links";
 import { checkGithub, githubTools, openGithubTurn } from "./github";
 
@@ -473,6 +474,23 @@ test("check with a submitted token also rejects a login that decodes to the stor
     const url = `${mock.url}?escaped-login=${encodeURIComponent(stored)}`;
     const checked = await checkGithub(githubSettings(stored, url), { token: mock.token });
     assert.deepEqual(checked, { ok: false, error: "GitHub did not return a login." });
+  });
+});
+
+test("check resolves a masked saved MCP URL back to the stored URL", { timeout: 20_000 }, async () => {
+  await withMock(async (mock) => {
+    const stored = githubSettings(mock.token, `${mock.url}?token=mcp-secret-01&escaped-login=custom-user`);
+    const maskedUrl = redactUrl(stored.githubMcpUrl, new Redactor(stored));
+    assert.equal(maskedUrl, `${mock.url}?token=[redacted]&escaped-login=custom-user`);
+    const checked = await checkGithub(stored, { mcpUrl: maskedUrl });
+    assert.deepEqual(checked, { ok: true, login: "custom-user" });
+
+    const editedSameOrigin = await checkGithub(stored, { mcpUrl: `${mock.url}?token=[redacted]&escaped-login=edited-user` });
+    assert.deepEqual(editedSameOrigin, { ok: true, login: "edited-user" });
+
+    const unresolvable = await checkGithub(stored, { mcpUrl: `${mock.url}?api_key=[redacted]` });
+    assert.equal(unresolvable.ok, false);
+    if (!unresolvable.ok) assert.match(unresolvable.error, /GitHub MCP URL/i);
   });
 });
 

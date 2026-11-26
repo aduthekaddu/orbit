@@ -1,6 +1,6 @@
 import { createMCPClient, type MCPClient } from "@ai-sdk/mcp";
 import type { Tool } from "ai";
-import { REDACTED, Redactor, type StoredCredentials } from "../chat-errors";
+import { REDACTED, Redactor, resolveMaskedUrl, type StoredCredentials } from "../chat-errors";
 import { githubLogin } from "./github-links";
 
 export const DEFAULT_GITHUB_MCP_URL = "https://api.githubcopilot.com/mcp/";
@@ -508,13 +508,17 @@ export async function githubTools(
   }
 }
 
-export async function openGithubTurn(settings: GithubSettings, signal?: AbortSignal, options?: { setupMs?: number }): Promise<McpToolSet> {
+export async function openGithubTurn(
+  settings: GithubSettings,
+  signal?: AbortSignal,
+  options?: { setupMs?: number; redact?: Redactor },
+): Promise<McpToolSet> {
   if (!settings.githubToken) return emptySet();
   try {
-    return await githubTools(settings, { signal, setupMs: options?.setupMs });
+    return await githubTools(settings, { signal, setupMs: options?.setupMs, redact: options?.redact });
   } catch (error) {
     if (signal?.aborted) throw error;
-    const redact = new Redactor(settings);
+    const redact = options?.redact ?? new Redactor(settings);
     redact.logError("github tools unavailable", githubFailureText(error, redact));
     return emptySet();
   }
@@ -526,10 +530,20 @@ export async function checkGithub(
   submitted: { token?: string; mcpUrl?: string } = {},
   signal?: AbortSignal,
 ): Promise<{ ok: true; login: string } | { ok: false; error: string }> {
+  const storedRedact = new Redactor(stored);
+  const resolvedMcp = resolveMaskedUrl({
+    submitted: submitted.mcpUrl,
+    saved: stored.githubMcpUrl,
+    redact: storedRedact,
+    normalize: (value) => value.trim(),
+    fieldLabel: "GitHub MCP URL",
+    displaySaved: resolveGithubMcpUrl(stored.githubMcpUrl),
+  });
+  if (!resolvedMcp.ok) return { ok: false, error: resolvedMcp.error };
   const settings = {
     ...stored,
     githubToken: submitted.token?.trim() || stored.githubToken,
-    githubMcpUrl: submitted.mcpUrl ?? stored.githubMcpUrl,
+    githubMcpUrl: resolvedMcp.url,
   };
   const redact = new Redactor(stored, settings);
   if (!settings.githubToken.trim()) return { ok: false, error: "Add a GitHub token." };
