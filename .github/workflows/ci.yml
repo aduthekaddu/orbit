@@ -41,10 +41,10 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
       - name: Lint the React hooks
-        if: matrix.node == '22'
+        if: matrix.node == '24'
         run: npm run lint -- --format github
       - name: Check the TLA+ models
-        if: matrix.node == '22'
+        if: matrix.node == '24'
         run: scripts/ci/tlc.sh
       - name: Pull the pinned sandbox images
         run: |
@@ -117,6 +117,11 @@ jobs:
         run: scripts/qa/assert-docker-context.sh
       - name: Build the image
         run: docker build --tag orbit:ci .
+      - name: Require the image to run the Dockerfile's Node major
+        run: |
+          major="$(sed -n 's/^FROM node:\([0-9]*\)-.*/\1/p' Dockerfile)"
+          test -n "$major"
+          docker run --rm --entrypoint node orbit:ci -v | grep -xE "v${major}\.[0-9]+\.[0-9]+"
       - name: Start the image
         run: docker run --detach --name orbit-ci --publish 127.0.0.1:3210:3210 orbit:ci
       - name: Require a non-root server process
