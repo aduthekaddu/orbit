@@ -5,6 +5,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";
 import { LOCAL_AUTH_URL, resolveAuthBaseUrl, resolveTrustedOrigins } from "./auth-origins";
+import { Redactor } from "./chat-errors";
 import { seedConnection } from "./connections";
 import { getDb, signupOpen } from "./db";
 import { account, session, user, verification } from "./db/schema";
@@ -52,9 +53,15 @@ function createAuth() {
               throw new APIError("FORBIDDEN", { message: "Signup is closed" });
             }
           },
-          // The first account takes the provider the install was set up with. Resolving a chat retries the pending row.
+          // The first account takes the provider the install was set up with. The account exists by now, so a failure
+          // must not fail the signup: it is logged, and resolving a chat retries the pending row.
           after: async (created) => {
-            seedConnection(created.id, "pending-or-env");
+            try {
+              seedConnection(created.id, "pending-or-env");
+            } catch (error) {
+              const redact = new Redactor(null, { apiKey: readEnv("ORBIT_API_KEY"), baseUrl: readEnv("ORBIT_BASE_URL") });
+              redact.logError("connection seed failed", error instanceof Error ? error.message : String(error));
+            }
           },
         },
       },
