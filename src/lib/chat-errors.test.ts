@@ -455,9 +455,37 @@ test("URL credential extraction covers long usernames paired with passwords and 
   assert.equal(withShortUser.diagnostic("invalid user input"), "invalid user input");
   assert.equal(withShortUser.diagnostic("invalid pass-secret-0001"), REDACTED);
 
-  const masked = redactUrl("https://example.com/v1?bare-query-secret-0001", withShortUser);
-  assert.equal(masked.includes("bare-query-secret-0001"), false, masked);
-  assert.equal(masked, "https://example.com/v1?[redacted]");
+  const masked = redactUrl("https://example.com/v1?pass-secret-0001&debug", withShortUser);
+  assert.equal(masked, "https://example.com/v1?[redacted]&debug");
+});
+
+test("redactUrl keeps non-credential query values and fragments while masking userinfo, credential params, and stored credentials", () => {
+  const redactor = new Redactor({
+    apiKey: "made-up-provider-key-0001",
+    tavilyApiKey: "sk-short9",
+    githubToken: "",
+    baseUrl: "https://user:url-pass-0001@example.com/v1?api_key=q-secret-01&format=json&language=en#top",
+  });
+  assert.equal(
+    redactUrl("http://127.0.0.1:8888/search?format=json&language=en#top", redactor),
+    "http://127.0.0.1:8888/search?format=json&language=en#top",
+  );
+  assert.equal(
+    redactUrl("https://user:url-pass-0001@example.com/v1?api_key=q-secret-01&format=json&k=made-up-provider-key-0001&s=sk-short9#top", redactor),
+    "https://[redacted]@example.com/v1?api_key=[redacted]&format=json&k=[redacted]&s=[redacted]#top",
+  );
+  assert.equal(
+    redactUrl("https://example.com/v1#made-up-provider-key-0001", redactor),
+    "https://example.com/v1#[redacted]",
+  );
+  assert.equal(
+    redactUrl("https://example.com/v1#sk-short9", redactor),
+    "https://example.com/v1#[redacted]",
+  );
+  assert.equal(
+    redactUrl("https://example.com/v1#access_token=oauth-secret&tab=overview", redactor),
+    "https://example.com/v1#access_token=[redacted]&tab=overview",
+  );
 });
 
 test("stream redactor masks Basic-auth and misaligned base64 forms at byte offsets 0, 1, and 2 across chunk sizes", () => {

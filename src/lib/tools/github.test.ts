@@ -353,9 +353,9 @@ test("check with a submitted token also rejects a login that decodes to the stor
 
 test("check resolves a masked saved MCP URL back to the stored URL", { timeout: 20_000 }, async () => {
   await withMock(async (mock) => {
-    const stored = githubSettings(mock.token, `${mock.url}?escaped-login=custom-user`);
+    const stored = githubSettings(mock.token, `${mock.url}?token=mcp-secret-01&escaped-login=custom-user`);
     const maskedUrl = redactUrl(stored.githubMcpUrl, new Redactor(stored));
-    assert.equal(maskedUrl, `${mock.url}?escaped-login=[redacted]`);
+    assert.equal(maskedUrl, `${mock.url}?token=[redacted]&escaped-login=custom-user`);
     const checked = await checkGithub(stored, { mcpUrl: maskedUrl });
     assert.deepEqual(checked, { ok: true, login: "custom-user" });
   });

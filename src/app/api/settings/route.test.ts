@@ -77,12 +77,12 @@ test("GET and PUT /api/settings mask userinfo, query credentials, and stored key
   assert.equal(get.status, 200);
   const getRaw = await get.text();
   for (const raw of [putRaw, getRaw]) {
-    for (const secret of ["proxyuser", "url-pass-secret-01", "url-query-secret-01", "other-param-02", "searxuser", "searx-pass-01", "searx-token-01", PROVIDER_KEY]) {
+    for (const secret of ["proxyuser", "url-pass-secret-01", "url-query-secret-01", "searxuser", "searx-pass-01", "searx-token-01", PROVIDER_KEY]) {
       assert.equal(raw.includes(secret), false, `settings response leaked ${secret}: ${raw}`);
     }
   }
   const shown = JSON.parse(getRaw) as { baseUrl: string; searxngUrl: string };
-  assert.equal(shown.baseUrl, "https://[redacted]@example.com/v1/[redacted]?api_key=[redacted]&extra=[redacted]");
+  assert.equal(shown.baseUrl, "https://[redacted]@example.com/v1/[redacted]?api_key=[redacted]&extra=other-param-02");
   assert.equal(shown.searxngUrl, "http://[redacted]@127.0.0.1:8888?token=[redacted]");
 
   // Re-submitting the masked URLs when changing another field keeps the real URLs and API key on the server.
