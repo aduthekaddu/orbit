@@ -6,6 +6,7 @@ import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test, { after, before } from "node:test";
+import { setModelHidden } from "./connections";
 import { getDb } from "./db";
 import { ensureChat } from "./messages";
 import { cachedCaps } from "./model-list";
@@ -210,6 +211,12 @@ test("another user's connection is not found", async () => {
     asUser(ONE);
   }
   assert.equal((await list()).find((connection) => connection.id === openaiId)?.label, "Local");
+});
+
+test("hiding a model on another user's connection writes nothing and answers not found", () => {
+  const hidden = setModelHidden(TWO, openaiId, "fixture-model", true);
+  assert.deepEqual(sql("select count(*) as n from hidden_models where user_id = ?", TWO), { n: 0 });
+  assert.equal(hidden, false);
 });
 
 test("a new base URL without a key is rejected, and the saved key goes nowhere", async () => {

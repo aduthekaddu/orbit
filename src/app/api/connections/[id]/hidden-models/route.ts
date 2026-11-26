@@ -21,6 +21,6 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   if (!connection) return Response.json({ error: "Not found" }, { status: 404 });
   const parsed = putSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Check the model." }, { status: 400 });
-  setModelHidden(session.user.id, connection.id, parsed.data.modelId, parsed.data.hidden);
+  if (!setModelHidden(session.user.id, connection.id, parsed.data.modelId, parsed.data.hidden)) return Response.json({ error: "Not found" }, { status: 404 });
   return Response.json({ hidden: hiddenModelIds(session.user.id, connection.id) });
 }

@@ -185,13 +185,14 @@ export function hiddenModelIds(userId: string, connectionId: string): string[] {
     .map((row) => row.modelId);
 }
 
-export function setModelHidden(userId: string, connectionId: string, modelId: string, hidden: boolean) {
-  const db = getDb();
-  if (hidden) {
-    db.insert(hiddenModels).values({ userId, connectionId, modelId }).onConflictDoNothing().run();
-    return;
-  }
-  db.delete(hiddenModels).where(and(eq(hiddenModels.userId, userId), eq(hiddenModels.connectionId, connectionId), eq(hiddenModels.modelId, modelId))).run();
+/** False, with nothing written, when this user has no such connection. */
+export function setModelHidden(userId: string, connectionId: string, modelId: string, hidden: boolean): boolean {
+  return getDb().transaction((tx) => {
+    if (!tx.select({ id: providerConnections.id }).from(providerConnections).where(owned(userId, connectionId)).get()) return false;
+    if (hidden) tx.insert(hiddenModels).values({ userId, connectionId, modelId }).onConflictDoNothing().run();
+    else tx.delete(hiddenModels).where(and(eq(hiddenModels.userId, userId), eq(hiddenModels.connectionId, connectionId), eq(hiddenModels.modelId, modelId))).run();
+    return true;
+  });
 }
 
 export function getModelDefaults(userId: string): ModelDefaults {
