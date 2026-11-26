@@ -149,6 +149,7 @@ async function main() {
       return response;
     };
 
+    const { Redactor } = await import("../../src/lib/chat-errors.ts");
     const { db } = await import("../../src/lib/db/index.ts");
     const schema = await import("../../src/lib/db/schema.ts");
     const { createChat, persistIncoming } = await import("../../src/lib/messages.ts");
@@ -173,10 +174,11 @@ async function main() {
       { chat: "B", text: best.right },
       { chat: "C", text: unrelated.right },
     ];
+    const redact = new Redactor(null);
     seeds.forEach((seed, index) => {
       const chat = createChat("qa-user");
       const id = crypto.randomUUID();
-      persistIncoming(chat.id, [{ id, role: "user", parts: [{ type: "text", text: seed.text }] }]);
+      persistIncoming(chat.id, [{ id, role: "user", parts: [{ type: "text", text: seed.text }] }], redact);
       db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(base + index * 60_000, id);
       line(`seeded chat ${seed.chat}`, JSON.stringify(seed.text));
     });
