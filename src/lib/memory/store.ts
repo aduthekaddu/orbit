@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import { memories } from "../db/schema";
@@ -265,7 +265,15 @@ export function updateMemory(id: string, input: MemoryWrite): MemoryView | null 
   const clear = db.$client.prepare("DELETE FROM memories_vec WHERE rowid = cast(? AS integer)");
   const run = db.$client.transaction(() => {
     if (current.text !== text) clear.run(current.rowid);
-    db.update(memories).set({ text, textNorm, kind, source: input.source }).where(eq(memories.id, id)).run();
+    db.update(memories)
+      .set({
+        text,
+        textNorm,
+        kind,
+        source: sql`CASE WHEN ${memories.textNorm} = ${textNorm} THEN ${memories.source} ELSE ${input.source} END`,
+      })
+      .where(eq(memories.id, id))
+      .run();
   });
   run();
   return getMemory(id);
