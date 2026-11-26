@@ -89,10 +89,11 @@ function ReplyStatus({ kind }: { kind: "reconnecting" | "lost" }) {
 function AssistantMessage() {
   const reply = useReplyLink();
   const running = useAuiState((s) => s.message.status?.type === "running");
+  const threadRunning = useAuiState((s) => s.thread.isRunning);
   const sdkFailed = useAuiState((s) => s.message.status?.type === "incomplete" && s.message.status.reason === "error");
   const last = useAuiState((s) => s.message.isLast);
   const reconnecting = last && reply.kind === "reconnecting";
-  const lost = last && reply.kind === "lost";
+  const lost = last && !threadRunning && reply.kind === "lost";
   const failed = sdkFailed || lost;
   const busy = reply.kind === "reconnecting" || reply.kind === "stopping";
   const messageId = useAuiState((s) => s.message.id);
@@ -154,17 +155,21 @@ function AssistantMessage() {
 function UserMessage() {
   const reply = useReplyLink();
   const chat = useAISDKChat();
+  const running = useAuiState((s) => s.thread.isRunning);
+  const busy = running || reply.kind === "reconnecting" || reply.kind === "stopping";
   const id = useAuiState((s) => s.message.id);
   const last = useAuiState((s) => s.message.isLast);
   const editing = useAuiState((s) => s.message.composer.isEditing);
-  if (editing) return <UserEditComposer />;
+  const reconnecting = last && reply.kind === "reconnecting";
+  const lost = last && !running && reply.kind === "lost";
+  if (editing) return <UserEditComposer busy={busy} />;
   return (
     <MessagePrimitive.Root data-turn-id={id} data-message-id={id} tabIndex={-1} className="group/message mx-auto flex w-full scroll-mt-6 outline-none max-w-widget animate-rise flex-col items-end gap-1.5">
       <div className="flex w-full items-end justify-end gap-1.5">
         <ActionBarPrimitive.Root className={cn("flex", hoverActionsClass)}>
           <CopyAction />
           <IconAction label="Edit">
-            <ActionBarPrimitive.Edit disabled={reply.kind === "reconnecting" || reply.kind === "stopping"} className={iconActionClass}>
+            <ActionBarPrimitive.Edit disabled={busy} className={iconActionClass}>
               <PencilSimpleIcon />
             </ActionBarPrimitive.Edit>
           </IconAction>
@@ -174,8 +179,8 @@ function UserMessage() {
         </div>
       </div>
       <BranchPicker />
-      {last && (reply.kind === "reconnecting" || reply.kind === "lost") && <ReplyStatus kind={reply.kind} />}
-      {last && reply.kind === "lost" && (
+      {(reconnecting || lost) && <ReplyStatus kind={reconnecting ? "reconnecting" : "lost"} />}
+      {lost && (
         <Button variant="outline" size="xs" onClick={() => void chat?.regenerate({ messageId: id })}>
           <ArrowClockwiseIcon weight="regular" />
           Retry
@@ -186,14 +191,18 @@ function UserMessage() {
 }
 
 // The edit keeps the bubble's shape and place, so it reads as changing this message, not writing a new one.
-function UserEditComposer() {
-  const { kind } = useReplyLink();
-  const busy = kind === "reconnecting" || kind === "stopping";
+function UserEditComposer({ busy }: { busy: boolean }) {
   const id = useAuiState((s) => s.message.id);
   const editTarget = useEditTarget();
   return (
     <MessagePrimitive.Root className="mx-auto flex w-full max-w-widget animate-rise justify-end">
-      <ComposerPrimitive.Root onSubmit={() => editTarget(id)} className="flex max-w-[85%] min-w-64 flex-col overflow-hidden rounded-2xl border border-primary/40 bg-surface-raised">
+      <ComposerPrimitive.Root
+        onSubmit={(event) => {
+          if (busy) return event.preventDefault();
+          editTarget(id);
+        }}
+        className="flex max-w-[85%] min-w-64 flex-col overflow-hidden rounded-2xl border border-primary/40 bg-surface-raised"
+      >
         <ComposerPrimitive.Input
           autoFocus
           rows={1}
@@ -204,7 +213,7 @@ function UserEditComposer() {
         />
         <div className="flex items-center justify-end gap-1 px-2 py-2">
           <ComposerPrimitive.Cancel onClick={() => editTarget(null)} className={buttonVariants({ variant: "ghost", size: "xs" })}>Cancel</ComposerPrimitive.Cancel>
-          <ComposerPrimitive.Send className={buttonVariants({ size: "xs" })}>Send</ComposerPrimitive.Send>
+          <ComposerPrimitive.Send disabled={busy} className={buttonVariants({ size: "xs" })}>Send</ComposerPrimitive.Send>
         </div>
       </ComposerPrimitive.Root>
     </MessagePrimitive.Root>
