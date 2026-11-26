@@ -257,7 +257,7 @@ function readMarkdown({ sample, lastWords }) {
     composer: font(composer),
     code: font(reply.querySelector("pre")),
     language: font(language),
-    chip: font(composer?.closest("form")?.querySelector('a[href="/settings"]')),
+    chip: font(composer?.closest("form")?.querySelector("[data-model-chip]")),
     groupLabel: font(document.querySelector("aside nav h2")),
   };
 }

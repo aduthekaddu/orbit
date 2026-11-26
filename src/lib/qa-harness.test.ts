@@ -8,9 +8,9 @@ import path from "node:path";
 import test, { after } from "node:test";
 import { eventually as waitUntil } from "./eventually.mjs";
 
-// These tests copy verify.mjs, ci-e2e.sh, the mocks and src/lib/sandbox/owner.mjs into a scratch checkout and run them.
+// These tests copy verify.mjs, ci-e2e.sh, the mocks, connect-provider.mjs and src/lib/sandbox/owner.mjs into a scratch checkout and run them.
 // A stub app stands in for Orbit, so no build is needed. Reverting any of those scripts to fixed ports turns a test here red.
-// verify.mjs imports owner.mjs, so a checkout that omits it fails every launch and cleanup that loads verify.mjs.
+// verify.mjs imports owner.mjs and connect-provider.mjs, so a checkout that omits either fails every launch and cleanup that loads verify.mjs.
 
 const repo = process.cwd();
 
@@ -169,6 +169,7 @@ class Checkout {
       ".agents/skills/verify-orbit/verify.mjs",
       "scripts/qa/mock-provider.mjs",
       "scripts/qa/mock-ollama.mjs",
+      "scripts/qa/connect-provider.mjs",
       "scripts/qa/ci-e2e.sh",
       "src/lib/sandbox/owner.mjs",
     ]) {

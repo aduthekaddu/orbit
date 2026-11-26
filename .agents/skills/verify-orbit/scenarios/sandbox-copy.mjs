@@ -5,10 +5,10 @@ const channels = [
   { label: "Copy standard error", saved: (part) => part.output.stderr, done: "Standard error copied" },
 ];
 
-export default async function sandboxCopy({ page, origin, mockUrl, step, shot }) {
+export default async function sandboxCopy({ page, origin, useProvider, step, shot }) {
   const context = page.context();
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
-  await page.request.put(`${origin}/api/settings`, { data: { baseUrl: mockUrl, apiKey: "test-key-not-real", model: "mock-genui", reasoningEffort: "low" } });
+  await useProvider();
   const { id } = await (await page.request.post(`${origin}/api/chats`)).json();
   await page.goto(`${origin}/c/${id}`);
   const composer = page.getByPlaceholder("Ask anything");

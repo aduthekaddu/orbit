@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { ownerFromEnv, parseSandboxOwner } from "../../../src/lib/sandbox/owner.mjs";
+import { connectProvider } from "../../../scripts/qa/connect-provider.mjs";
 
 const PORT = parsePort(process.env.ORBIT_VERIFY_PORT);
 const ORIGIN = `http://127.0.0.1:${PORT}`;
@@ -532,30 +533,23 @@ async function startMock() {
   }
 }
 
+function mockProvider(baseUrl) {
+  return { label: "Mock", baseUrl, apiKey: FAKE_KEY, model: MOCK_MODEL, effort: "low" };
+}
+
+function signedSend(cookies) {
+  return (urlPath, init) => request(urlPath, { ...init, cookies });
+}
+
 // Reuses a connection to this mock, so a second launch adds none.
 async function connectMock(mock) {
   const cookies = await signInVerify();
-  const baseUrl = `http://127.0.0.1:${mock.port}/v1`;
-  const listed = await request("/api/connections", { cookies });
-  if (listed.status !== 200) fail(`listing connections returned ${listed.status}`);
-  let connection = JSON.parse(listed.text).find((item) => item.kind === "openai-compatible" && item.baseUrl === baseUrl);
-  if (!connection) {
-    const created = await request("/api/connections", {
-      method: "POST",
-      cookies,
-      json: { kind: "openai-compatible", label: "Mock", baseUrl, apiKey: FAKE_KEY },
-    });
-    if (created.status !== 201) fail(`adding the mock connection returned ${created.status}`);
-    connection = JSON.parse(created.text);
+  try {
+    const { connection } = await connectProvider(signedSend(cookies), mockProvider(`http://127.0.0.1:${mock.port}/v1`));
+    console.log(`connection kind=${connection.kind} model=${MOCK_MODEL} keySet=yes`);
+  } catch (error) {
+    fail(`connecting the mock failed: ${error instanceof Error ? error.message : String(error)}`);
   }
-  if (connection.keySet !== true || "apiKey" in connection) fail("the mock connection response is not keySet without a key");
-  const defaults = await request("/api/preferences/model", {
-    method: "PUT",
-    cookies,
-    json: { connectionId: connection.id, model: MOCK_MODEL, effort: "low" },
-  });
-  if (defaults.status !== 200) fail(`setting the default model returned ${defaults.status}`);
-  console.log(`connection kind=${connection.kind} model=${MOCK_MODEL} keySet=yes`);
 }
 
 async function stopMock() {
@@ -758,81 +752,96 @@ async function driveSignup() {
 
 async function driveSettings() {
   assertOurServer();
+  const mock = await startMock();
+  const baseUrl = `http://127.0.0.1:${mock.port}/v1`;
   const cookies = await signInVerify();
+  const send = signedSend(cookies);
+  const body = (response) => {
+    try {
+      return JSON.parse(response.text);
+    } catch {
+      return {};
+    }
+  };
+  const responses = [];
+  const track = async (urlPath, init) => {
+    const response = await send(urlPath, init);
+    responses.push(response.text);
+    return response;
+  };
   const page = await request("/settings", { cookies });
-  const saved = await request("/api/settings", {
-    method: "PUT",
-    cookies,
-    json: {
-      baseUrl: "https://example.com/v1",
-      apiKey: FAKE_KEY,
-      model: "example-model",
-      reasoningEffort: "low",
-    },
+  const before = body(await track("/api/preferences/model"));
+  const unreachable = await track("/api/connections", {
+    method: "POST",
+    json: { kind: "openai-compatible", label: "Unreachable", baseUrl: `http://127.0.0.1:${PORT}/no-provider/v1`, apiKey: FAKE_KEY },
   });
-  const savedBody = JSON.parse(saved.text);
-  const read = await request("/api/settings", { cookies });
-  const readBody = JSON.parse(read.text);
-  const changed = await request("/api/settings", {
-    method: "PUT",
-    cookies,
-    json: {
-      baseUrl: "https://other.example/v1",
-      model: "example-model",
-      reasoningEffort: "low",
-    },
+  const saved = await track("/api/connections", {
+    method: "POST",
+    json: { kind: "openai-compatible", label: "Drive", baseUrl, apiKey: FAKE_KEY },
   });
-  let changedError = "";
-  try {
-    changedError = JSON.parse(changed.text).error ?? "";
-  } catch {
-    changedError = "";
+  const connection = body(saved);
+  const id = connection.id ?? "none";
+  const listed = await track("/api/connections");
+  const listedIds = Array.isArray(body(listed)) ? body(listed).map((item) => item.id) : [];
+  const models = await track(`/api/connections/${id}/models`);
+  const modelIds = (body(models).models ?? []).map((model) => model.id);
+  const renamed = await track(`/api/connections/${id}`, { method: "PATCH", json: { label: "Drive renamed" } });
+  const moved = await track(`/api/connections/${id}`, { method: "PATCH", json: { baseUrl: `${baseUrl.replace(/\/v1$/, "")}/other/v1` } });
+  const afterMove = body(await track("/api/connections")).find?.((item) => item.id === id);
+  const defaults = await track("/api/preferences/model", { method: "PUT", json: { connectionId: id, model: MOCK_MODEL, effort: "high" } });
+  const badEffort = await track("/api/preferences/model", { method: "PUT", json: { connectionId: id, model: MOCK_MODEL, effort: "turbo" } });
+  const settings = await track("/api/settings");
+  const removed = await track(`/api/connections/${id}`, { method: "DELETE" });
+  const afterDelete = body(await track("/api/connections"));
+  const defaultsAfterDelete = body(await track("/api/preferences/model"));
+  if (before.connectionId && before.model && before.effort) {
+    await send("/api/preferences/model", { method: "PUT", json: before });
   }
-  const labels = ["Base URL", "API key", "Model", "Save"];
-  const pageHasLabels = labels.every((label) => page.text.includes(label));
+  const dataDir = path.join(sandbox, "data");
+  const dbHasKey = ["orbit.db", "orbit.db-wal"].some((name) => {
+    const file = path.join(dataDir, name);
+    return fs.existsSync(file) && fs.readFileSync(file).includes(FAKE_KEY);
+  });
+  const responseHasKey = responses.some((text) => text.includes(FAKE_KEY) || text.includes('"apiKey"'));
+  const settingsFields = Object.keys(body(settings)).sort().join(",");
+  const pageHasSections = ["Connections", "Default model"].every((label) => page.text.includes(label));
   const lines = [
     `settings page status ${page.status}`,
-    `settings page has labels ${pageHasLabels ? "yes" : "no"}`,
-    `save status ${saved.status}`,
-    `save has apiKey ${Object.prototype.hasOwnProperty.call(savedBody, "apiKey") ? "yes" : "no"}`,
-    `save keySet ${savedBody.keySet === true ? "yes" : "no"}`,
-    `save baseUrl ${savedBody.baseUrl ?? "none"}`,
-    `save model ${savedBody.model ?? "none"}`,
-    `save reasoningEffort ${savedBody.reasoningEffort ?? "none"}`,
-    `read status ${read.status}`,
-    `read has apiKey ${Object.prototype.hasOwnProperty.call(readBody, "apiKey") ? "yes" : "no"}`,
-    `read keySet ${readBody.keySet === true ? "yes" : "no"}`,
-    `read baseUrl ${readBody.baseUrl ?? "none"}`,
-    `read model ${readBody.model ?? "none"}`,
-    `read reasoningEffort ${readBody.reasoningEffort ?? "none"}`,
-    `read contains key text ${read.text.includes(FAKE_KEY) ? "yes" : "no"}`,
-    `base change without key status ${changed.status}`,
-    `base change without key error ${changedError || "none"}`,
+    `settings page has Connections and Default model ${pageHasSections ? "yes" : "no"}`,
+    `unreachable provider status ${unreachable.status} error ${body(unreachable).error ?? "none"}`,
+    `save status ${saved.status} kind ${connection.kind ?? "none"} keySet ${connection.keySet === true ? "yes" : "no"} baseUrl ${connection.baseUrl ?? "none"}`,
+    `list status ${listed.status} has connection ${listedIds.includes(id) ? "yes" : "no"} count ${listedIds.length}`,
+    `models status ${models.status} count ${modelIds.length} has ${MOCK_MODEL} ${modelIds.includes(MOCK_MODEL) ? "yes" : "no"}`,
+    `rename status ${renamed.status} label ${body(renamed).label ?? "none"}`,
+    `base change without key status ${moved.status} error ${body(moved).error ?? "none"}`,
+    `base after rejected change ${afterMove?.baseUrl ?? "none"}`,
+    `defaults status ${defaults.status} model ${body(defaults).model ?? "none"} effort ${body(defaults).effort ?? "none"} names connection ${body(defaults).connectionId === id ? "yes" : "no"}`,
+    `unknown effort status ${badEffort.status}`,
+    `settings fields ${settingsFields}`,
+    `delete status ${removed.status} listed after ${Array.isArray(afterDelete) && afterDelete.some((item) => item.id === id) ? "yes" : "no"}`,
+    `defaults after delete connection ${defaultsAfterDelete.connectionId ?? "none"}`,
+    `any response has the key or an apiKey field ${responseHasKey ? "yes" : "no"}`,
+    `database file has the key ${dbHasKey ? "yes" : "no"}`,
   ];
   writeEvidence("settings", lines);
-  if (page.status !== 200 || !pageHasLabels) fail("settings page missing status or labels");
-  if (
-    saved.status !== 200 ||
-    savedBody.keySet !== true ||
-    savedBody.baseUrl !== "https://example.com/v1" ||
-    savedBody.model !== "example-model" ||
-    savedBody.reasoningEffort !== "low"
-  ) {
-    fail("settings save did not return the saved public values");
-  }
-  if (
-    read.status !== 200 ||
-    readBody.keySet !== true ||
-    readBody.baseUrl !== "https://example.com/v1" ||
-    readBody.model !== "example-model" ||
-    readBody.reasoningEffort !== "low"
-  ) {
-    fail("settings read did not return the saved public values");
-  }
-  if ("apiKey" in savedBody || "apiKey" in readBody || read.text.includes(FAKE_KEY)) fail("settings leaked the key");
-  if (changed.status !== 400 || !changedError.toLowerCase().includes("api key")) {
-    fail(`base URL change without a key returned ${changed.status}`);
-  }
+  const checks = [
+    [unreachable.status === 502, "a provider that cannot list models was saved"],
+    [saved.status === 201 && connection.keySet === true && connection.baseUrl === baseUrl, "the connection save did not return the public connection"],
+    [listed.status === 200 && listedIds.includes(id), "the saved connection is not listed"],
+    [models.status === 200 && modelIds.includes(MOCK_MODEL), "the connection's models did not load"],
+    [renamed.status === 200 && body(renamed).label === "Drive renamed", "the label change did not save"],
+    [moved.status === 400 && /api key/i.test(body(moved).error ?? "") && afterMove?.baseUrl === baseUrl, "a base URL change without a key was not rejected"],
+    [defaults.status === 200 && body(defaults).connectionId === id && body(defaults).effort === "high", "the default model did not save"],
+    [badEffort.status === 400, "an unknown effort was accepted"],
+    [settings.status === 200 && !/baseUrl|keySet|model|reasoningEffort/.test(settingsFields), "GET /api/settings still has provider fields"],
+    [removed.status === 200 && Array.isArray(afterDelete) && !afterDelete.some((item) => item.id === id), "the connection was not deleted"],
+    [defaultsAfterDelete.connectionId !== id, "the defaults still name the deleted connection"],
+    [!responseHasKey, "a response leaked the key"],
+    [!dbHasKey, "the database file holds the key in plain text"],
+    [page.status === 200 && pageHasSections, "the settings page has no Connections or Default model section"],
+  ];
+  const failed = checks.find(([ok]) => !ok);
+  if (failed) fail(failed[1]);
   console.log("drive settings passed");
 }
 
@@ -945,7 +954,10 @@ async function browse(scenario) {
   };
   try {
     const run = (await import(scenarioPath)).default;
-    const context = { page, origin: ORIGIN, step, shot };
+    // With no baseUrl, useProvider connects the mock and makes it the default model.
+    const useProvider = (provider = {}) =>
+      connectProvider(signedSend(cookies), provider.baseUrl ? provider : { ...mockProvider(mockUrl()), ...provider });
+    const context = { page, origin: ORIGIN, step, shot, useProvider };
     // Only a scenario that reads mockUrl needs the mock, so the check runs on that read.
     Object.defineProperty(context, "mockUrl", { enumerable: true, get: mockUrl });
     await run(context);
@@ -1186,9 +1198,9 @@ async function localBrowserSignin(lines) {
     }
     const settings = await page.goto(`${ORIGIN}/settings`, { waitUntil: "domcontentloaded" });
     const settingsPath = new URL(page.url()).pathname;
-    const hasLabels = settingsPath === "/settings" && (await page.getByText("Base URL").count()) > 0;
+    const hasLabels = settingsPath === "/settings" && (await page.getByText("SearXNG URL").count()) > 0;
     lines.push(`local settings status ${settings?.status() ?? 0} path ${settingsPath}`);
-    lines.push(`local settings has Base URL ${hasLabels ? "yes" : "no"}`);
+    lines.push(`local settings has SearXNG URL ${hasLabels ? "yes" : "no"}`);
     const dir = path.join(evidenceRoot, "public");
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, "local-settings.png");

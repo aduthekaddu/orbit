@@ -1,14 +1,11 @@
-export default async function artifactsReal({ page, origin, step, shot }) {
+export default async function artifactsReal({ page, origin, useProvider, step, shot }) {
   const { ORBIT_API_KEY, ORBIT_BASE_URL, ORBIT_MODEL } = process.env;
   if (!ORBIT_API_KEY || !ORBIT_BASE_URL || !ORBIT_MODEL) {
     throw new Error('ORBIT_API_KEY, ORBIT_BASE_URL and ORBIT_MODEL are required');
   }
   await page.setViewportSize({ width: 1440, height: 900 });
-  const settings = await page.request.put(`${origin}/api/settings`, {
-    data: { baseUrl: ORBIT_BASE_URL, apiKey: ORBIT_API_KEY, model: ORBIT_MODEL, reasoningEffort: 'low' },
-  });
-  if (settings.status() !== 200) throw new Error(`provider settings returned ${settings.status()}`);
-  step('real provider settings saved without printing credentials', true);
+  await useProvider({ baseUrl: ORBIT_BASE_URL, apiKey: ORBIT_API_KEY, model: ORBIT_MODEL });
+  step('real provider connected without printing credentials', true);
   const response = await page.request.post(`${origin}/api/chats`);
   const { id } = await response.json();
   await page.goto(`${origin}/c/${id}`);

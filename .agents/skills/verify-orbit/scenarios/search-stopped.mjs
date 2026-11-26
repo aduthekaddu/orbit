@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { startMockSearxng } from "../../../../scripts/qa/mock-searxng.mjs";
 
-export default async function searchStopped({ page, origin, mockUrl, step, shot }) {
+export default async function searchStopped({ page, origin, useProvider, step, shot }) {
   const created = await page.request.post(`${origin}/api/chats`);
   assert.equal(created.status(), 201);
   const { id } = await created.json();
@@ -38,9 +38,8 @@ export default async function searchStopped({ page, origin, mockUrl, step, shot 
   await shot("stopped-reloaded");
   const mock = await startMockSearxng();
   try {
-    const saved = await page.request.put(`${origin}/api/settings`, { data: {
-      baseUrl: mockUrl, model: "mock-genui", reasoningEffort: "low", searxngUrl: mock.url, tavilyApiKey: null,
-    } });
+    await useProvider();
+    const saved = await page.request.put(`${origin}/api/settings`, { data: { searxngUrl: mock.url, tavilyApiKey: null } });
     assert.equal(saved.status(), 200);
     const { id: liveId } = await (await page.request.post(`${origin}/api/chats`)).json();
     await page.goto(`${origin}/c/${liveId}`);

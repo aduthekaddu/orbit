@@ -5,8 +5,8 @@ const cases = [
   { scenario: "run-ruby", reason: "javascript", program: "puts 1" },
 ];
 
-export default async function sandboxValidation({ page, origin, mockUrl, step, shot }) {
-  await page.request.put(`${origin}/api/settings`, { data: { baseUrl: mockUrl, apiKey: "test-key-not-real", model: "mock-genui", reasoningEffort: "low" } });
+export default async function sandboxValidation({ page, origin, useProvider, step, shot }) {
+  await useProvider();
   const cards = page.locator('[data-tool-name="run_code"]');
   const failed = page.locator('[data-tool-name="run_code"] [data-tool-status="failed"]');
   for (const { scenario, reason, program } of cases) {

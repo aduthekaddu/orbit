@@ -1,12 +1,10 @@
 import { eventually } from "../../../../src/lib/eventually.mjs";
 import { startMockSearxng, searchFixtures } from "../../../../scripts/qa/mock-searxng.mjs";
 
-export default async function searchTool({ page, origin, mockUrl, step, shot }) {
+export default async function searchTool({ page, origin, useProvider, step, shot }) {
   const mock = await startMockSearxng();
   try {
-    await page.request.put(`${origin}/api/settings`, {
-      data: { baseUrl: mockUrl, apiKey: "test-key-not-real", model: "mock-genui", reasoningEffort: "low" },
-    });
+    await useProvider();
     await page.goto(`${origin}/settings`);
     const field = page.getByLabel("SearXNG URL", { exact: true });
     const present = await field.isVisible();
@@ -39,7 +37,7 @@ export default async function searchTool({ page, origin, mockUrl, step, shot }) 
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await page.getByText("Saved", { exact: true }).waitFor();
     const removed = await (await page.request.get(`${origin}/api/settings`)).json();
-    step("Remove and Save clear the stored Tavily key", removed.tavilyKeySet === false && removed.keySet === true);
+    step("Remove and Save clear the stored Tavily key", removed.tavilyKeySet === false);
     await page.reload();
     step("the removed Tavily key stays absent after reload", await page.getByLabel("Tavily key", { exact: true }).getAttribute("placeholder") === "" && await remove.count() === 0);
     await shot("key-removed");
