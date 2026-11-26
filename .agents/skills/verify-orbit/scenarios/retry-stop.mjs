@@ -21,10 +21,12 @@ export default async function retryStop({ page, origin, step, shot }) {
   const ended = await page.getByRole("button", { name: "Send" }).waitFor({ timeout: 3_000 }).then(() => true, () => false);
   const replyText = (target) => target.evaluate(element => {
     const copy = element.cloneNode(true);
-    copy.querySelectorAll("[data-branch-picker], button").forEach(node => node.remove());
+    copy.querySelectorAll("[data-branch-picker], [data-reply-end], button").forEach(node => node.remove());
     return copy.textContent.trim();
   });
   const seen = await replyText(reply);
+  const stopped = reply.locator('[data-reply-end="stopped"]');
+  await stopped.waitFor({ timeout: 5_000 });
   step("Stop ends the stream early", ended && !seen.includes("word50"), `ended=${ended} text "${seen}"`);
   step("reply text visible at stop", seen.includes("word3"), `text was "${seen}"`);
 
@@ -38,5 +40,6 @@ export default async function retryStop({ page, origin, step, shot }) {
   const savedText = (await saved.count()) > 0 ? await replyText(saved.last()) : "";
   await shot("after-reload");
   step("reply text survives reload", savedText.includes(seen), `before stop "${seen}", after reload "${savedText}"`);
+  step("Stopped survives reload", await saved.last().locator('[data-reply-end="stopped"]').isVisible());
   step("one reply after reload", (await saved.count()) === 1, `found ${await saved.count()} replies`);
 }
