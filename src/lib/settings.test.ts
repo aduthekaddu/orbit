@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test, { before, after } from "node:test";
+import { seedTestConnection } from "./connection-fixture";
 import { getDb } from "./db";
 import * as settings from "./settings";
 import { toolsFor } from "./tools";
@@ -127,4 +128,18 @@ test("public settings say whether the server enabled the code sandbox and expose
     if (original.docker === undefined) delete process.env.DOCKER_HOST;
     else process.env.DOCKER_HOST = original.docker;
   }
+});
+
+// The settings page renders toPublicSettings(getSettings()) and passes nothing else.
+test("a provider key copied into a SearXNG URL is masked where the page shows it, and resending the masked URL keeps it", () => {
+  const key = "made-up-connection-key-0001";
+  const searxngUrl = `http://127.0.0.1:8888/k/${key}`;
+  getDb().$client.prepare("insert into user (id, name, email, email_verified) values ('u-settings', 'Settings', 'settings@orbit.local', 0)").run();
+  seedTestConnection("u-settings", { apiKey: key, model: "m" });
+  settings.saveSettings({ searxngUrl });
+
+  const shown = settings.toPublicSettings(settings.getSettings());
+  assert.equal(JSON.stringify(shown).includes(key), false, `the page gets the key: ${JSON.stringify(shown)}`);
+  settings.saveSettings({ searxngUrl: shown.searxngUrl });
+  assert.equal(settings.getSettings().searxngUrl, searxngUrl, "resending the masked URL changed the saved URL");
 });

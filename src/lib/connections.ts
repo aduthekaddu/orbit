@@ -68,16 +68,25 @@ function secretsOf(connection: ProviderConnection, apiKey: string): ConnectionSe
   return { apiKey, baseUrl: connection.kind === "openai-compatible" ? connection.baseUrl : undefined };
 }
 
-/** Every key and base URL of this user's connections that this server can decrypt, read per request. */
-export function redactionSecrets(userId: string): ConnectionSecrets[] {
-  return listConnections(userId).flatMap((connection) => {
+function decryptableSecrets(connections: ProviderConnection[]): ConnectionSecrets[] {
+  return connections.flatMap((connection) => {
     try {
-      return [secretsOf(connection, connectionApiKey(userId, connection.id))];
+      return [secretsOf(connection, connectionApiKey(connection.userId, connection.id))];
     } catch (error) {
       if (error instanceof SecretUnreadable) return [];
       throw error;
     }
   });
+}
+
+/** Every key and base URL of this user's connections that this server can decrypt, read per request. */
+export function redactionSecrets(userId: string): ConnectionSecrets[] {
+  return decryptableSecrets(listConnections(userId));
+}
+
+/** The same for every connection of the install, for the settings row, which no single user owns. */
+export function installRedactionSecrets(): ConnectionSecrets[] {
+  return decryptableSecrets(getDb().select(columns).from(providerConnections).all().map((row) => connectionRow.parse(row)));
 }
 
 export function toPublicConnection(connection: ProviderConnection, redact: Redactor): PublicConnection {

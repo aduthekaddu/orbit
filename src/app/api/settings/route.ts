@@ -1,4 +1,3 @@
-import { redactionSecrets } from "@/lib/connections";
 import { getSettings, resolveSettingsUrls, saveSettings, toPublicSettings } from "@/lib/settings";
 import { githubMcpTarget } from "@/lib/tools/github";
 import { getSession, unauthorized } from "@/lib/session";
@@ -17,7 +16,7 @@ const putSchema = r.object({
 export async function GET() {
   const session = await getSession();
   if (!session) return unauthorized();
-  return Response.json(toPublicSettings(getSettings(), redactionSecrets(session.user.id)));
+  return Response.json(toPublicSettings(getSettings()));
 }
 
 export async function PUT(request: Request) {
@@ -31,5 +30,5 @@ export async function PUT(request: Request) {
   if (!resolvedUrls.ok) {
     return Response.json({ error: resolvedUrls.error }, { status: 400 });
   }
-  return Response.json(saveSettings(parsed.data, redactionSecrets(session.user.id)));
+  return Response.json(saveSettings(parsed.data));
 }

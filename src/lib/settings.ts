@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { Redactor, redactUrl, resolveMaskedUrl } from "./chat-errors";
-import type { ConnectionSecrets } from "./connections";
+import { installRedactionSecrets } from "./connections";
 import { getDb } from "./db";
 import { sandboxEnabled } from "./sandbox/enabled";
 import { settings } from "./db/schema";
@@ -30,8 +30,14 @@ export function getSettings(): SettingsRecord {
   return { searxngUrl: row.searxngUrl, tavilyApiKey: row.tavilyApiKey, githubToken: row.githubToken, githubMcpUrl: row.githubMcpUrl };
 }
 
-export function toPublicSettings(row: SettingsRecord, connectionSecrets: readonly ConnectionSecrets[] = []): PublicSettings {
-  const redact = new Redactor(row, ...connectionSecrets);
+// A provider key copied into a settings URL must stay off the page too, and the masked URL the page sends back must
+// match the saved one, so showing and saving both mask with every connection secret.
+function settingsRedactor(row: SettingsRecord) {
+  return new Redactor(row, ...installRedactionSecrets());
+}
+
+export function toPublicSettings(row: SettingsRecord): PublicSettings {
+  const redact = settingsRedactor(row);
   return {
     searxngUrl: redactUrl(row.searxngUrl, redact),
     tavilyKeySet: Boolean(row.tavilyApiKey),
@@ -48,7 +54,7 @@ export type ResolvedSettingsUrls =
   | { ok: false; error: string };
 
 export function resolveSettingsUrls(input: { searxngUrl?: string; githubMcpUrl?: string }, current: SettingsRecord): ResolvedSettingsUrls {
-  const currentRedact = new Redactor(current);
+  const currentRedact = settingsRedactor(current);
   const searx = resolveMaskedUrl({
     submitted: input.searxngUrl,
     saved: current.searxngUrl,
@@ -69,10 +75,7 @@ export function resolveSettingsUrls(input: { searxngUrl?: string; githubMcpUrl?:
   return { ok: true, searxngUrl: searx.url, githubMcpUrl: mcp.url };
 }
 
-export function saveSettings(
-  input: { searxngUrl?: string; tavilyApiKey?: string | null; githubToken?: string | null; githubMcpUrl?: string },
-  connectionSecrets: readonly ConnectionSecrets[] = [],
-) {
+export function saveSettings(input: { searxngUrl?: string; tavilyApiKey?: string | null; githubToken?: string | null; githubMcpUrl?: string }) {
   const current = getSettings();
   const resolved = resolveSettingsUrls(input, current);
   if (!resolved.ok) throw new Error(resolved.error);
@@ -85,5 +88,5 @@ export function saveSettings(
     updatedAt: new Date(),
   };
   getDb().insert(settings).values(values).onConflictDoUpdate({ target: settings.id, set: values }).run();
-  return toPublicSettings(values, connectionSecrets);
+  return toPublicSettings(values);
 }
