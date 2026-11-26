@@ -33,18 +33,35 @@ function copyMigrations(dir: string, lastIdx: number | null) {
 }
 
 // Each open is its own process, like a server start, so the migrations folder and the environment are the ones under test.
-function boot(install: Install, env: Record<string, string> = {}, script = "const { getDb } = await import(process.argv[1]); getDb();") {
+function spawnBoot(install: Install, env: Record<string, string>, script: string) {
   const childEnv: NodeJS.ProcessEnv = { ...process.env, ORBIT_DATA_DIR: install.dataDir };
   for (const name of SEED_ENV) delete childEnv[name];
   Object.assign(childEnv, env);
-  const result = spawnSync(
+  return spawnSync(
     process.execPath,
     ["--import", "tsx", "-e", `process.chdir(process.argv[4]); ${script}`, dbUrl, connectionsUrl, secretsUrl, install.dir],
     { cwd: repo, env: childEnv, encoding: "utf8", timeout: 60_000 },
   );
+}
+
+function boot(install: Install, env: Record<string, string> = {}, script = "const { getDb } = await import(process.argv[1]); getDb();") {
+  const result = spawnBoot(install, env, script);
   assert.equal(result.status, 0, result.stderr || result.stdout);
   return result.stdout.trim();
 }
+
+// Runs the migrations the way getDb does, then dies like a crashed server before anything else touches the file.
+const MIGRATE_THEN_CRASH = `const { createRequire } = await import("node:module");
+const require = createRequire(process.argv[1]);
+const Database = require("better-sqlite3");
+const { drizzle } = require("drizzle-orm/better-sqlite3");
+const { migrate } = require("drizzle-orm/better-sqlite3/migrator");
+const { registerMigrationFunctions } = await import(process.argv[1]);
+const sqlite = new Database(process.env.ORBIT_DATA_DIR + "/orbit.db");
+sqlite.pragma("journal_mode = WAL");
+registerMigrationFunctions(sqlite);
+migrate(drizzle(sqlite), { migrationsFolder: "drizzle" });
+process.kill(process.pid, "SIGKILL");`;
 
 function preSliceInstall(name: string, env: Record<string, string> = {}): Install {
   const dir = fs.mkdtempSync(path.join(process.env.ORBIT_DATA_DIR!, `${name}-`));
@@ -152,6 +169,34 @@ test("a signed-up install moves its provider into one encrypted connection and k
   assert.equal(upgraded.defaultKey, "SET NULL", "user_preferences.default_connection_id");
   assert.equal(upgraded.integrity, "ok");
   assert.deepEqual(upgraded.foreignKeyErrors, []);
+});
+
+test("a server that dies after the upgrade commits leaves no plain key in its files once it opens the database again", () => {
+  const key = "sk-made-up-crash-key-0001";
+  const install = preSliceInstall("crash");
+  withDb(install, (db) => {
+    db.prepare("insert into user (id, name, email, email_verified) values ('u-crash', 'Crash', 'crash@orbit.local', 0)").run();
+    db.prepare("insert into settings (id, base_url, api_key, model, reasoning_effort, updated_at) values (1, 'http://127.0.0.1:9/v1', ?, 'mock-genui', 'low', 0)").run(key);
+  });
+  copyMigrations(install.dir, null);
+  const crashed = spawnBoot(install, {}, MIGRATE_THEN_CRASH);
+  assert.equal(crashed.signal, "SIGKILL", crashed.stderr || crashed.stdout);
+  assert.notDeepEqual(holdsKey(install, key), [], "the committed upgrade alone leaves the plain key in the files");
+
+  // The reopened server reads its own files while it runs, before closing the database checkpoints the WAL.
+  const running = boot(
+    install,
+    {},
+    `const { getDb } = await import(process.argv[1]); getDb();
+     const fs = await import("node:fs");
+     const files = ["orbit.db", "orbit.db-wal"].filter((name) => {
+       const file = process.env.ORBIT_DATA_DIR + "/" + name;
+       return fs.existsSync(file) && fs.readFileSync(file).includes(${JSON.stringify(key)});
+     });
+     console.log(JSON.stringify(files));`,
+  );
+  assert.deepEqual(JSON.parse(running.split("\n").at(-1)!), [], "the reopened server still holds the plain key in its files");
+  assert.equal(withDb(install, (db) => columns(db, "settings").includes("api_key")), false, "the upgrade committed before the crash");
 });
 
 test("provider_connections needs a base URL for openai-compatible and forbids one for anthropic", () => {

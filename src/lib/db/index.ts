@@ -48,17 +48,21 @@ export function registerMigrationFunctions(sqlite: Database.Database) {
   sqlite.function("orbit_url_host", { deterministic: true }, urlHostLabel);
 }
 
-function hasProviderColumns(sqlite: Database.Database) {
-  return sqlite.prepare("select 1 from pragma_table_info('settings') where name = 'api_key'").get() !== undefined;
+const SCRUB_PENDING = 1;
+
+// Migration 0015 drops the plain key with its column and sets user_version to SCRUB_PENDING in the same transaction.
+// SQLite leaves the old bytes in free space and the WAL, so every open scrubs until a checkpoint copies the whole WAL
+// back, which also covers a crash between the migration and the scrub, and a reader that kept the checkpoint busy.
+function scrubDroppedSecrets(sqlite: Database.Database) {
+  if (sqlite.pragma("user_version", { simple: true }) !== SCRUB_PENDING) return;
+  sqlite.exec("VACUUM");
+  const [checkpoint] = sqlite.pragma("wal_checkpoint(TRUNCATE)") as { busy: number; log: number; checkpointed: number }[];
+  if (checkpoint.busy === 0 && checkpoint.log === checkpoint.checkpointed) sqlite.pragma("user_version = 0");
 }
 
-// Migration 0015 drops the plain key with its column, but SQLite leaves the old bytes in free pages and the WAL.
 function migrateAndScrub(db: ReturnType<typeof drizzle<typeof schema>>, sqlite: Database.Database, migrationsFolder: string) {
-  const heldProvider = hasProviderColumns(sqlite);
   migrate(db, { migrationsFolder });
-  if (!heldProvider || hasProviderColumns(sqlite)) return;
-  sqlite.exec("VACUUM");
-  sqlite.pragma("wal_checkpoint(TRUNCATE)");
+  scrubDroppedSecrets(sqlite);
 }
 
 function openDb() {
