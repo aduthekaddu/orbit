@@ -84,6 +84,25 @@ export async function startMockMcp({ port = 0 } = {}) {
   let callCount = 0;
   let closeCount = 0;
   let startHold;
+  const methodHolds = new Map();
+  let initResponseHold;
+  const pendingReleases = new Set();
+
+  const makeHold = () => {
+    let arrive = () => {};
+    let release = () => {};
+    const arrived = new Promise((resolve) => {
+      arrive = resolve;
+    });
+    const wait = new Promise((resolve) => {
+      release = () => {
+        pendingReleases.delete(release);
+        resolve();
+      };
+    });
+    pendingReleases.add(release);
+    return { arrived, arrive, wait, release };
+  };
 
   const server = http.createServer(async (request, response) => {
     const chunks = [];
@@ -114,6 +133,13 @@ export async function startMockMcp({ port = 0 } = {}) {
     if (method === "tools/list") listCount += 1;
     if (method === "tools/call") callCount += 1;
     if (startHold && (method === "server/discover" || method === "initialize")) await startHold;
+    const methodHold = method ? methodHolds.get(method) : undefined;
+    if (methodHold) {
+      methodHolds.delete(method);
+      methodHold.arrive();
+      await methodHold.wait;
+      if (request.destroyed || response.destroyed) return;
+    }
     const mode = url.searchParams.get("mode");
     if (mode === "bad-request") {
       response.writeHead(400, { "content-type": "application/json" });
@@ -170,8 +196,14 @@ export async function startMockMcp({ port = 0 } = {}) {
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       enableJsonResponse: true,
-      onsessioninitialized(id) {
+      async onsessioninitialized(id) {
         sessions.set(id, { transport });
+        if (initResponseHold) {
+          const hold = initResponseHold;
+          initResponseHold = undefined;
+          hold.arrive();
+          await hold.wait;
+        }
       },
       onsessionclosed(id) {
         sessions.delete(id);
@@ -206,7 +238,30 @@ export async function startMockMcp({ port = 0 } = {}) {
         release();
       };
     },
+    holdMethod: (name) => {
+      const hold = makeHold();
+      methodHolds.set(name, hold);
+      return {
+        arrived: hold.arrived,
+        release: () => {
+          if (methodHolds.get(name) === hold) methodHolds.delete(name);
+          hold.release();
+        },
+      };
+    },
+    holdInitializeResponse: () => {
+      const hold = makeHold();
+      initResponseHold = hold;
+      return {
+        arrived: hold.arrived,
+        release: () => {
+          if (initResponseHold === hold) initResponseHold = undefined;
+          hold.release();
+        },
+      };
+    },
     close: () => new Promise((resolve) => {
+      for (const release of [...pendingReleases]) release();
       for (const timer of timers) clearTimeout(timer);
       timers.clear();
       server.closeAllConnections();
