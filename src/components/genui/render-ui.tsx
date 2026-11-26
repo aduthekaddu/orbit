@@ -49,7 +49,7 @@ function Fallback({ error, raw }: { error: string; raw: unknown }) {
   );
 }
 
-const surface = "rounded-xl border bg-card p-4 text-card-foreground shadow-card max-sm:p-3";
+const surface = "rounded-xl border bg-card p-4 text-card-foreground shadow-card [overflow-wrap:anywhere] max-sm:p-3";
 
 function Building() {
   return (

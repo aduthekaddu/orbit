@@ -99,10 +99,14 @@ function MetricView({
   );
 }
 
+/** A text column whose longest cell passes this many characters wraps. Shorter columns stay on one line. */
+const WRAP_AFTER = 32;
+
 function TableView({ columns, rows }: { columns: string[]; rows: Cell[][] }) {
   const [expanded, setExpanded] = useState(false);
   const toggle = useRef<HTMLButtonElement>(null);
   const numeric = useMemo(() => numericColumns(rows), [rows]);
+  const wrapping = useMemo(() => columns.map((_, index) => rows.some((row) => String(row[index] ?? "").length > WRAP_AFTER)), [columns, rows]);
   const capped = rows.length > TABLE_ROW_CAP;
   const shown = expanded || !capped ? rows : rows.slice(0, TABLE_ROW_CAP);
   return (
@@ -133,7 +137,7 @@ function TableView({ columns, rows }: { columns: string[]; rows: Cell[][] }) {
                     key={cellIndex}
                     className={cn(
                       "px-3 py-2 align-top text-foreground",
-                      numeric[cellIndex] ? "text-right whitespace-nowrap tabular-nums" : "max-w-80 min-w-28 [overflow-wrap:anywhere]",
+                      numeric[cellIndex] ? "text-right whitespace-nowrap tabular-nums" : wrapping[cellIndex] ? "max-w-80 min-w-48 [overflow-wrap:anywhere]" : "whitespace-nowrap",
                     )}
                   >
                     {formatValue(cell)}
