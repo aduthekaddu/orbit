@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { normalizeBaseUrl } from "./base-url";
+import { Redactor, redactUrl, resolveMaskedUrl } from "./chat-errors";
 import { getDb } from "./db";
 import { sandboxEnabled } from "./sandbox/enabled";
 import { settings } from "./db/schema";
@@ -52,17 +53,65 @@ export function getSettings(): SettingsRecord | null {
 }
 
 export function toPublicSettings(row: SettingsRecord | null): PublicSettings {
+  const redact = new Redactor(row);
   return {
-    baseUrl: row?.baseUrl ?? "",
+    baseUrl: row ? redactUrl(row.baseUrl, redact) : "",
     model: row?.model ?? "",
     reasoningEffort: row?.reasoningEffort ?? "medium",
     keySet: Boolean(row?.apiKey),
-    searxngUrl: row?.searxngUrl ?? "",
+    searxngUrl: row ? redactUrl(row.searxngUrl, redact) : "",
     tavilyKeySet: Boolean(row?.tavilyApiKey),
     githubTokenSet: Boolean(row?.githubToken),
-    githubMcpUrl: resolveGithubMcpUrl(row?.githubMcpUrl),
+    githubMcpUrl: redactUrl(resolveGithubMcpUrl(row?.githubMcpUrl), redact),
     sandbox: sandboxEnabled(),
   };
+}
+
+export function matchesSavedBaseUrl(submitted: string, current: SettingsRecord): boolean {
+  const normalized = normalizeBaseUrl(submitted);
+  if (normalized === normalizeBaseUrl(current.baseUrl)) return true;
+  if (!current.baseUrl) return false;
+  const masked = redactUrl(current.baseUrl, new Redactor(current));
+  return normalized === normalizeBaseUrl(masked);
+}
+
+const trimSearx = (value: string) => value.trim().replace(/\/+$/, "");
+
+export type ResolvedSettingsUrls =
+  | { ok: true; baseUrl: string; searxngUrl: string; githubMcpUrl: string }
+  | { ok: false; error: string };
+
+export function resolveSettingsUrls(
+  input: { baseUrl: string; searxngUrl?: string; githubMcpUrl?: string },
+  current: SettingsRecord | null,
+): ResolvedSettingsUrls {
+  const currentRedact = new Redactor(current);
+  const base = resolveMaskedUrl({
+    submitted: input.baseUrl,
+    saved: current?.baseUrl ?? "",
+    redact: currentRedact,
+    normalize: normalizeBaseUrl,
+    fieldLabel: "Base URL",
+  });
+  if (!base.ok) return base;
+  const searx = resolveMaskedUrl({
+    submitted: input.searxngUrl,
+    saved: current?.searxngUrl ?? "",
+    redact: currentRedact,
+    normalize: trimSearx,
+    fieldLabel: "SearXNG URL",
+  });
+  if (!searx.ok) return searx;
+  const mcp = resolveMaskedUrl({
+    submitted: input.githubMcpUrl,
+    saved: current?.githubMcpUrl ?? "",
+    redact: currentRedact,
+    normalize: (value) => value.trim(),
+    fieldLabel: "GitHub MCP URL",
+    displaySaved: resolveGithubMcpUrl(current?.githubMcpUrl),
+  });
+  if (!mcp.ok) return mcp;
+  return { ok: true, baseUrl: base.url, searxngUrl: searx.url, githubMcpUrl: mcp.url };
 }
 
 export function saveSettings(input: {
@@ -76,18 +125,19 @@ export function saveSettings(input: {
   reasoningEffort: ReasoningEffort;
 }) {
   const current = getSettings();
-  const baseUrl = normalizeBaseUrl(input.baseUrl);
-  const sameSavedBase = current !== null && normalizeBaseUrl(current.baseUrl) === baseUrl;
+  const resolved = resolveSettingsUrls(input, current);
+  if (!resolved.ok) throw new Error(resolved.error);
+  const sameSavedBase = current !== null && normalizeBaseUrl(resolved.baseUrl) === normalizeBaseUrl(current.baseUrl);
   const requestedKey = input.apiKey?.trim() ?? "";
   const apiKey = requestedKey || (sameSavedBase ? current.apiKey : "");
   const values = {
     id: 1,
-    baseUrl,
+    baseUrl: resolved.baseUrl,
     apiKey,
-    searxngUrl: input.searxngUrl?.trim().replace(/\/+$/, "") ?? current?.searxngUrl ?? "",
+    searxngUrl: resolved.searxngUrl,
     tavilyApiKey: input.tavilyApiKey === null ? "" : input.tavilyApiKey?.trim() || current?.tavilyApiKey || "",
     githubToken: input.githubToken === null ? "" : input.githubToken?.trim() || current?.githubToken || "",
-    githubMcpUrl: input.githubMcpUrl === undefined ? current?.githubMcpUrl ?? "" : input.githubMcpUrl.trim(),
+    githubMcpUrl: resolved.githubMcpUrl,
     model: input.model.trim(),
     reasoningEffort: input.reasoningEffort,
     updatedAt: new Date(),

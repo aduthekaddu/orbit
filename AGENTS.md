@@ -29,7 +29,7 @@ Orbit is a self-hosted chat app for one user: Next.js App Router, the AI SDK, as
 ## Gotchas
 
 - Auth trusts `BETTER_AUTH_URL` plus `ORBIT_TRUSTED_ORIGINS`. A server on any other port needs that port in `ORBIT_TRUSTED_ORIGINS`, or sign-in fails.
-- The Docker image runs Node 22. The dev machine may run a newer Node, so avoid APIs added after 22.
+- The Docker image runs Node 24. CI still tests Node 22, and the dev machine may run a newer Node, so avoid APIs added after 22.
 - The json-render packages are `@json-render/core` and `@json-render/react`. The unscoped `json-render` on npm is a different, unpublished package.
 
 ## Git and pull requests

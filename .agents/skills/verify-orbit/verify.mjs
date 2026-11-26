@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +16,7 @@ const verifyDir = path.join(repoRoot, ".verify");
 const sandbox = path.join(verifyDir, "sandbox");
 const statePath = path.join(verifyDir, "server.json");
 const logPath = path.join(verifyDir, "server.log");
+const serverLockPath = path.join(verifyDir, "server.lock.db");
 const mockStatePath = path.join(verifyDir, "mock.json");
 const mockLogPath = path.join(verifyDir, "mock.log");
 const mockLockPath = path.join(verifyDir, "mock.lock.db");
@@ -190,21 +192,41 @@ async function request(urlPath, { method = "GET", json, cookies, redirect = "man
   };
 }
 
-async function waitReady() {
+function portInUse(pid) {
+  return `port ${PORT} is in use by pid ${pid} cwd ${procCwd(pid) || "unknown"}. Stop that server before launch.`;
+}
+
+function serverListening(serverPid, listeners = listenerPids()) {
+  return listeners.some((pid) => {
+    const [, , group] = procStat(pid);
+    return Number(group) === serverPid;
+  });
+}
+
+async function waitReady(serverPid) {
   const deadline = Date.now() + 45_000;
-  let last = "no response";
+  let last = "the server has not bound the port";
   while (Date.now() < deadline) {
-    try {
-      // The sandbox server listens on loopback, so plain http is intended.
-      const response = await fetch(`${ORIGIN}/api/setup`); // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request
-      const text = await response.text();
-      if (response.ok) {
-        const body = JSON.parse(text);
-        if (typeof body.signupOpen === "boolean") return body;
+    const listeners = listenerPids();
+    if (!startTime(serverPid)) {
+      const [listener] = listeners;
+      throw new Error(listener ? portInUse(listener) : `server pid ${serverPid} exited before it was ready. Log: ${logPath}`);
+    }
+    // npm starts Next.js in its process group. Only that group's listener can make this launch ready.
+    if (serverListening(serverPid, listeners)) {
+      try {
+        const signal = AbortSignal.timeout(Math.max(1, deadline - Date.now()));
+        // The sandbox server listens on loopback, so plain http is intended.
+        const response = await fetch(`${ORIGIN}/api/setup`, { signal }); // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request
+        const text = await response.text();
+        if (response.ok) {
+          const body = JSON.parse(text);
+          if (typeof body.signupOpen === "boolean" && serverListening(serverPid)) return body;
+        }
+        last = `status ${response.status}`;
+      } catch (error) {
+        last = error instanceof Error ? error.name : "fetch failed";
       }
-      last = `status ${response.status}`;
-    } catch (error) {
-      last = error instanceof Error ? error.name : "fetch failed";
     }
     await sleep(250);
   }
@@ -218,7 +240,7 @@ function assertOurServer() {
   }
 }
 
-async function launch({ mock }) {
+async function launchServer() {
   const state = readState();
   if (state && alive(state.pid) && procCwd(state.pid) === sandbox) {
     if (state.port !== PORT) {
@@ -240,11 +262,11 @@ async function launch({ mock }) {
     if (!state.sandboxOwner || owner && state.sandboxOwner !== owner) {
       fail(`sandbox owner mismatch. Running=${state.sandboxOwner ?? "unknown"} requested=${owner ?? "any"}. Run node .agents/skills/verify-orbit/verify.mjs cleanup, then launch again.`);
     }
-    console.log(`already starting or running pid=${state.pid} origin=${ORIGIN}`);
+    await waitReady(state.pid);
+    console.log(`already running pid=${state.pid} origin=${ORIGIN}`);
   } else {
     await startServer();
   }
-  if (mock) await startMock();
 }
 
 function publicUrlEnv() {
@@ -254,14 +276,12 @@ function publicUrlEnv() {
 async function startServer() {
   const listeners = listenerPids();
   if (listeners.length > 0) {
-    const owner = listeners[0];
-    fail(`port ${PORT} is in use by pid ${owner} cwd ${procCwd(owner) || "unknown"}. Stop that server before launch.`);
+    fail(portInUse(listeners[0]));
   }
   if (!fs.existsSync(path.join(repoRoot, ".next"))) {
     fail("missing .next. Run npm run build in the repo before launch.");
   }
   makeSandbox();
-  fs.mkdirSync(verifyDir, { recursive: true });
   const logFd = fs.openSync(logPath, "w");
   const sandboxEnabled = process.env.ORBIT_SANDBOX === "on";
   // Scenarios and leftover checks find this server's sandbox containers by this owner.
@@ -287,15 +307,17 @@ async function startServer() {
     detached: true,
     stdio: ["ignore", logFd, logFd],
   });
-  child.unref();
   fs.closeSync(logFd);
-  fs.writeFileSync(statePath, JSON.stringify({ pid: child.pid, port: PORT, sandbox, origin: ORIGIN, sandboxEnabled, sandboxOwner, ollamaUrl: process.env.ORBIT_OLLAMA_URL ?? "", publicUrl: publicUrlEnv() }, null, 2));
+  await once(child, "spawn");
+  child.unref();
   try {
-    const ready = await waitReady();
+    fs.writeFileSync(statePath, JSON.stringify({ pid: child.pid, port: PORT, sandbox, origin: ORIGIN, sandboxEnabled, sandboxOwner, ollamaUrl: process.env.ORBIT_OLLAMA_URL ?? "", publicUrl: publicUrlEnv() }, null, 2));
+    const ready = await waitReady(child.pid);
     console.log(`ready origin=${ORIGIN} pid=${child.pid} signupOpen=${ready.signupOpen ? "yes" : "no"}`);
   } catch (error) {
     killGroup(child.pid, "SIGTERM");
-    fail(error instanceof Error ? error.message : "launch failed");
+    if (!startTime(child.pid)) fs.rmSync(statePath, { force: true });
+    throw error;
   }
 }
 
@@ -303,17 +325,21 @@ function validPid(pid) {
   return Number.isInteger(pid) && pid > 0;
 }
 
+function procStat(pid) {
+  if (!validPid(pid)) return [];
+  try {
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+    return stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+  } catch {
+    return [];
+  }
+}
+
 // Field 22 of /proc/<pid>/stat is the start time in clock ticks since boot. A pid with its start time names one process.
 // A zombie (state Z) keeps its stat file but runs nothing, so it has no start time here.
 function startTime(pid) {
-  if (!validPid(pid)) return "";
-  try {
-    const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
-    const [state, ...rest] = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-    return state === "Z" || state === "X" ? "" : (rest[18] ?? "");
-  } catch {
-    return "";
-  }
+  const fields = procStat(pid);
+  return fields[0] === "Z" || fields[0] === "X" ? "" : (fields[19] ?? "");
 }
 
 function procCmdline(pid) {
@@ -404,11 +430,10 @@ function isSqliteBusy(error) {
   return code === "SQLITE_BUSY" || code === "SQLITE_BUSY_SNAPSHOT" || /database is locked/i.test(String(error?.message ?? error));
 }
 
-// Serializes mock state inspection, stale-record reclamation, publication, and cleanup in one checkout.
 // The OS owns SQLite's exclusive lock, so a killed holder releases it when the process exits.
-async function withMockLock(run, timeoutMs = 30_000) {
+async function withLock(lockPath, run, timeoutMs = 30_000) {
   fs.mkdirSync(verifyDir, { recursive: true });
-  const sqlite = new Database(mockLockPath);
+  const sqlite = new Database(lockPath);
   const deadline = Date.now() + timeoutMs;
   try {
     sqlite.pragma("busy_timeout = 0");
@@ -418,7 +443,7 @@ async function withMockLock(run, timeoutMs = 30_000) {
         break;
       } catch (error) {
         if (!isSqliteBusy(error)) throw error;
-        if (Date.now() >= deadline) throw new Error(`timed out waiting for mock lock at ${mockLockPath}`);
+        if (Date.now() >= deadline) throw new Error(`timed out waiting for lock at ${lockPath}`);
         await sleep(25);
       }
     }
@@ -485,7 +510,7 @@ async function spawnMock() {
 async function startMock() {
   let mock;
   try {
-    mock = await withMockLock(async () => {
+    mock = await withLock(mockLockPath, async () => {
       const state = readState(mockStatePath);
       if (isRunning(state)) {
         console.log(`mock already running pid=${state.pid}`);
@@ -517,7 +542,7 @@ async function startMock() {
 async function stopMock() {
   if (!fs.existsSync(verifyDir)) return;
   try {
-    await withMockLock(async () => {
+    await withLock(mockLockPath, async () => {
       const state = readState(mockStatePath);
       if (isRunning(state)) {
         await stopRunningMock(state);
@@ -1194,7 +1219,12 @@ const command = process.argv[2];
 const feature = process.argv[3];
 
 if (command === "launch") {
-  await launch({ mock: process.argv.includes("--mock") });
+  try {
+    await withLock(serverLockPath, launchServer, 60_000);
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
+  if (process.argv.includes("--mock")) await startMock();
 } else if (command === "doctor") {
   await doctor();
 } else if (command === "cleanup") {

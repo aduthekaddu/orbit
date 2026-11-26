@@ -6,6 +6,7 @@ export default async function sandboxScroll({ page, origin, step, shot }) {
   const { id } = await (await page.request.post(`${origin}/api/chats`)).json();
   const repo = fileURLToPath(new URL("../../../..", import.meta.url));
   const saved = spawnSync(process.execPath, ["--require", "tsx/cjs", "-e", `
+    const { Redactor } = require(${JSON.stringify(`${repo}/src/lib/chat-errors.ts`)});
     const { finishChatReply, planChatWrite } = require(${JSON.stringify(`${repo}/src/lib/messages.ts`)});
     const { runCodeToEnd } = require(${JSON.stringify(`${repo}/src/lib/sandbox/run.ts`)});
     const Docker = require("dockerode");
@@ -16,11 +17,12 @@ export default async function sandboxScroll({ page, origin, step, shot }) {
       const { output, cleanup } = await runCodeToEnd(new Docker(), input);
       if (cleanup !== "removed") process.exit(1);
       if (output.exitCode !== 0 || !output.stdout.endsWith("END-STDOUT\\n")) process.exit(1);
-      const plan = planChatWrite(chat, [{ id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: "Show the full program and its output." }] }]);
+      const redact = new Redactor(null);
+      const plan = planChatWrite(chat, [{ id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: "Show the full program and its output." }] }], redact);
       if ("error" in plan || !finishChatReply(plan, [
         { type: "tool-run_code", toolCallId: "long-output", state: "output-available", input, output },
         { type: "tool-run_code", toolCallId: "long-error", state: "output-error", input: { language: "python", code: "pass" }, errorText: "Long framework failure\\n" + "x".repeat(8000) + "\\nEND-ERROR" }
-      ])) process.exit(1);
+      ], redact)) process.exit(1);
     })().catch(() => process.exit(1));
   `, id], fixtureProcessOptions(repo));
   if (saved.status !== 0) throw new Error("could not save real Docker output for the scrolling check");

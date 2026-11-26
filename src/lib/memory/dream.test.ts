@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test, { before, after } from "node:test";
 import Database from "better-sqlite3";
+import { Redactor } from "../chat-errors";
 import { getDb } from "../db";
 import * as schema from "../db/schema";
 import { createChat, finishChatReply, listMessages, persistIncoming, planChatWrite } from "../messages";
@@ -12,6 +13,8 @@ import * as dream from "./dream";
 import * as embed from "./embed";
 import { startMockOllama } from "./ollama-harness";
 import * as store from "./store";
+
+const redact = new Redactor(null);
 
 const dataDir = dataDirectory();
 const requestLog = path.join(dataDir, "mock-requests.jsonl");
@@ -89,7 +92,7 @@ function resetChats() {
 function seedChat(text: string, createdAt: number) {
   const chat = createChat("dream-user");
   const messageId = crypto.randomUUID();
-  assert.equal(persistIncoming(chat.id, [{ id: messageId, role: "user", parts: [{ type: "text", text }] }]), "ok");
+  assert.equal(persistIncoming(chat.id, [{ id: messageId, role: "user", parts: [{ type: "text", text }] }], redact), "ok");
   getDb().$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(createdAt, messageId);
   return { chatId: chat.id, messageId };
 }
@@ -99,11 +102,22 @@ function seedChat(text: string, createdAt: number) {
 function seedReply(chatId: string, text: string, createdAt: number, messageId: string = crypto.randomUUID()) {
   const prompt = listMessages(chatId).find((message) => message.role === "user");
   assert.ok(prompt, "chat has no prompt to reply to");
-  const plan = planChatWrite(chatId, [prompt, { id: messageId, role: "assistant", parts: [] }]);
+  const plan = planChatWrite(chatId, [prompt, { id: messageId, role: "assistant", parts: [] }], redact);
   if ("error" in plan) assert.fail(`write refused: ${plan.error}`);
-  assert.equal(finishChatReply(plan, [{ type: "text", text }]), true);
+  assert.equal(finishChatReply(plan, [{ type: "text", text }], redact), true);
   getDb().$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(createdAt, messageId);
   return messageId;
+}
+
+// One row of a busy chat, through the app's write path, at a chosen time.
+async function seedRow(chatId: string, n: number, role: "user" | "assistant", text: string, createdAt: number) {
+  const id = `m${String(n).padStart(3, "0")}`;
+  if (role === "assistant") {
+    await seedReply(chatId, text, createdAt, id);
+    return;
+  }
+  assert.equal(persistIncoming(chatId, [{ id, role: "user", parts: [{ type: "text", text }] }], redact), "ok");
+  getDb().$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(createdAt, id);
 }
 
 function at(date: string, hour: number): number {
@@ -135,6 +149,7 @@ test("a run adds facts the user stated", async () => {
   assert.equal(row.added, 3);
   assert.equal(row.merged, 0);
   assert.deepEqual(memoryTexts().sort(), ["I live in Lisbon", "I prefer dark mode", "My bike is blue"].sort());
+  for (const memory of store.listMemories()) assert.partialDeepStrictEqual(memory, { source: "dream" });
   assert.equal(row.chatIds.includes(first.chatId) && row.chatIds.includes(second.chatId) && row.chatIds.includes(third.chatId), true);
   assert.equal(row.error, null);
   assert.equal(api.formatDreamStatus(row).includes("I live in Lisbon"), false);
@@ -197,7 +212,8 @@ test("a near-duplicate candidate merges into the older memory", async () => {
   const api = requireDream();
   await resetChats();
   const db = getDb();
-  const saved = store.saveMemory({ text: "Deploy targets Fly.io", kind: "fact" });
+  const original = { text: "Deploy targets Fly.io", kind: "fact", source: "user" } as const;
+  const saved = store.saveMemory(original);
   db.$client.prepare("UPDATE memories SET created_at = ? WHERE id = ?").run(Date.parse("2099-06-01T08:00:00Z"), saved.id);
   assert.equal((await embed.embedPending()).ok, true);
   const date = "2099-06-01";
@@ -206,7 +222,10 @@ test("a near-duplicate candidate merges into the older memory", async () => {
   const row = await api.runDream({ manual: true, date, now: new Date(at(date, 16)) });
   assert.ok(row);
   assert.equal(memoryTexts().length, before);
-  assert.equal(store.getMemory(saved.id)?.text, "I host everything on Fly.io for production deploys");
+  assert.partialDeepStrictEqual(store.getMemory(saved.id), {
+    text: "I host everything on Fly.io for production deploys",
+    source: "dream",
+  });
   assert.equal(row.merged >= 1, true);
   assert.equal(row.chatIds.includes(chat.chatId), true);
 });
@@ -229,6 +248,82 @@ test("a failed chat leaves the night done and the next night retries that chat",
   assert.ok(next);
   assert.equal(next.chatIds.includes(bad.chatId), true);
   assert.equal(next.chatIds.includes(good.chatId), false);
+});
+
+test("a busy chat's whole window is read, and the next night reads nothing new", async () => {
+  const api = requireDream();
+  await resetChats();
+  fs.writeFileSync(requestLog, "");
+  const date = "2099-10-01";
+  const chat = createChat("dream-user");
+  const early = "Message five: I play the cello";
+  const late = "Message 110: my cat is called Tofu";
+  for (let n = 1; n <= 120; n += 1) {
+    const role: "user" | "assistant" = n === 5 || n === 110 || n % 2 === 1 ? "user" : "assistant";
+    const text = n === 5 ? early : n === 110 ? late : `filler ${n}`;
+    await seedRow(chat.id, n, role, text, at(date, 12) + n * 60_000);
+  }
+  const row = await api.runDream({ manual: true, date, now: new Date(at(date, 16)) });
+  assert.ok(row);
+  assert.equal(row.state, "done");
+  const read = new Set(
+    fs
+      .readFileSync(requestLog, "utf8")
+      .split("\n")
+      .filter((line) => line.includes('"scenario":"dream"'))
+      .flatMap((line) => [...line.matchAll(/msg (m\d{3}) user:/g)].map((match) => match[1])),
+  );
+  assert.equal(read.size, 61);
+  assert.equal(read.has("m110"), true);
+  assert.equal(memoryTexts().includes(early), true);
+  assert.equal(memoryTexts().includes(late), true);
+  const second = await api.runDream({ manual: true, date: "2099-10-02", now: new Date(at("2099-10-02", 16)) });
+  assert.ok(second);
+  assert.equal(second.chatIds.includes(chat.id), false);
+  assert.equal(memoryTexts().includes(late), true);
+});
+
+test("messages that share one timestamp are read past the 100th row", async () => {
+  const api = requireDream();
+  await resetChats();
+  const date = "2099-10-03";
+  const chat = createChat("dream-user");
+  const late = "Message 105: my cat is called Tofu";
+  for (let n = 1; n <= 105; n += 1) {
+    await seedRow(chat.id, n, "user", n === 105 ? late : `filler ${n}`, at(date, 14));
+  }
+  const row = await api.runDream({ manual: true, date, now: new Date(at(date, 16)) });
+  assert.ok(row);
+  assert.equal(row.state, "done");
+  assert.equal(memoryTexts().includes(late), true);
+});
+
+test("a failed page applies nothing and the retry reads the whole window", async () => {
+  const api = requireDream();
+  await resetChats();
+  const db = getDb();
+  const date = "2099-10-04";
+  const chat = createChat("dream-user");
+  const early = "Message five: I play the cello";
+  const late = "Message 110: my cat is called Tofu";
+  for (let n = 1; n <= 120; n += 1) {
+    const role: "user" | "assistant" = n === 5 || n === 110 || n % 2 === 1 ? "user" : "assistant";
+    const text = n === 5 ? early : n === 110 ? `[qa:dream-fail] ${late}` : `filler ${n}`;
+    await seedRow(chat.id, n, role, text, at(date, 12) + n * 60_000);
+  }
+  const row = await api.runDream({ manual: true, date, now: new Date(at(date, 16)) });
+  assert.ok(row);
+  assert.equal(row.state, "done");
+  assert.deepEqual(row.retryChatIds, [chat.id]);
+  assert.deepEqual(memoryTexts(), []);
+  db.$client.prepare("UPDATE messages SET parts = ? WHERE id = ?").run(JSON.stringify([{ type: "text", text: late }]), "m110");
+  const retry = await api.runDream({ manual: true, date: "2099-10-05", now: new Date(at("2099-10-05", 16)) });
+  assert.ok(retry);
+  assert.equal(retry.state, "done");
+  assert.equal(retry.chatIds.includes(chat.id), true);
+  assert.deepEqual(retry.retryChatIds, []);
+  assert.equal(memoryTexts().includes(early), true);
+  assert.equal(memoryTexts().includes(late), true);
 });
 
 test("a night that fails before its chats keeps them for the next night", async () => {
@@ -303,7 +398,7 @@ test("two runs started at once produce one claim", async () => {
   assert.equal(requests.length, 1);
 });
 
-test("an Ollama outage skips model calls and recovery reads the newest 100 messages", async () => {
+test("an Ollama outage skips model calls and recovery reads all the messages the failed nights missed", async () => {
   const api = requireDream();
   await resetChats();
   fs.writeFileSync(requestLog, "");
@@ -324,7 +419,7 @@ test("an Ollama outage skips model calls and recovery reads the newest 100 messa
     }
     const db = getDb();
     const newestId = crypto.randomUUID();
-    assert.equal(persistIncoming(chatId, [{ id: newestId, role: "user", parts: [{ type: "text", text: "I live in Porto" }] }]), "ok");
+    assert.equal(persistIncoming(chatId, [{ id: newestId, role: "user", parts: [{ type: "text", text: "I live in Porto" }] }], redact), "ok");
     db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(start + 100, newestId);
 
     for (const night of [date, "2099-07-03"]) {
@@ -345,7 +440,8 @@ test("an Ollama outage skips model calls and recovery reads the newest 100 messa
   const recovered = await api.runDream({ date: recoveryDate, now: new Date(at(recoveryDate, 16)) });
   assert.equal(recovered?.state, "done");
   assert.deepEqual(recovered?.retryChatIds, []);
-  assert.deepEqual(memoryTexts(), ["I live in Porto"]);
+  assert.equal(recovered?.added, 2);
+  assert.deepEqual(memoryTexts(), ["I live in Lisbon", "I live in Porto"]);
 });
 
 test("a cached query embed failure does not fail a night with Ollama back", async () => {
@@ -373,7 +469,7 @@ test("a failed final embed pass marks the run failed", async (t) => {
   const api = requireDream();
   await resetChats();
   const date = "2099-07-07";
-  const unembedded = store.saveMemory({ text: "I keep a kayak in the garage", kind: "fact" });
+  const unembedded = store.saveMemory({ text: "I keep a kayak in the garage", kind: "fact", source: "tool" });
   const { chatId } = await seedChat("I paddle on Sundays", at(date, 12));
   const fetchLive = globalThis.fetch;
   t.mock.method(globalThis, "fetch", (url: string, init?: RequestInit) => {
@@ -438,4 +534,26 @@ test("a live lease keeps the night after its start time is three hours old", asy
   const before = api.getRun(date);
   assert.equal(api.tryClaim({ date, owner: "worker-b", now, chatIds: [] }), false);
   assert.deepEqual(api.getRun(date), before);
+});
+
+test("dream masks stored credentials before embedding and saving memories", async () => {
+  const api = requireDream();
+  await resetChats();
+  assert.ok(ollama);
+  const db = getDb();
+  const secret = "test-key-not-real";
+  const date = "2099-05-09";
+  // Seed a pre-redaction user message directly (as rows saved before #202 can look) so the mock dream model echoes the key.
+  await seedChat(`My provider credential is ${secret} in production`, at(date, 12));
+  const row = await api.runDream({ manual: true, date, now: new Date(at(date, 16)) });
+  assert.ok(row);
+  assert.equal(row.state, "done");
+  assert.equal(row.added, 1);
+  const saved = memoryTexts();
+  assert.deepEqual(saved, ["My provider credential is [redacted] in production"]);
+  assert.equal(store.listMemories().some((memory) => memory.text.includes(secret)), false);
+  const received = (await (await fetch(`${ollama.url}/qa/received`)).json()) as string[];
+  assert.equal(received.some((entry) => entry.includes(secret)), false, `Ollama received unmasked key: ${JSON.stringify(received)}`);
+  assert.equal(db.$client.prepare("SELECT count(*) AS n FROM memories_vec").get() !== undefined, true);
+  assert.equal(store.listMemories()[0]?.embedded, true);
 });

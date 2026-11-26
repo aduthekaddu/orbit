@@ -9,6 +9,7 @@ import { getDb } from "../db";
 import { eventually } from "../eventually.mjs";
 
 process.env.ORBIT_GITHUB_MCP_FIXTURE = "1";
+import { Redactor, redactUrl } from "../chat-errors";
 import { githubLinks } from "./github-links";
 import { checkGithub, githubTools, openGithubTurn } from "./github";
 import { toolsForTurn } from "./index";
@@ -159,6 +160,132 @@ test("abort closes the client", { timeout: 20_000 }, async () => {
       listRequestSeen(mock).finally(() => controller.abort()),
     ]);
     await noOpenSessions(mock);
+  });
+});
+
+test("aborting after initialize answers during notifications/initialized closes the MCP session", { timeout: 10_000 }, async () => {
+  await withMock(async (mock) => {
+    const hold = mock.holdMethod("notifications/initialized");
+    const controller = new AbortController();
+    try {
+      const pending = openGithubTurn(githubSettings(mock.token, mock.url), controller.signal, { setupMs: 5_000 });
+      await hold.arrived;
+      assert.equal(mock.openSessions(), 1);
+      controller.abort();
+      await assert.rejects(pending, (error: unknown) => {
+        const name = error instanceof Error ? error.name : "";
+        return name === "AbortError" || (error instanceof Error && /abort/i.test(error.message));
+      });
+      await noOpenSessions(mock);
+      assert.equal(mock.closeCount(), 1);
+    } finally {
+      hold.release();
+    }
+  });
+});
+
+test("aborting while initialize is answering closes the MCP session once the response lands", { timeout: 10_000 }, async () => {
+  await withMock(async (mock) => {
+    const hold = mock.holdInitializeResponse();
+    const controller = new AbortController();
+    try {
+      const pending = openGithubTurn(githubSettings(mock.token, mock.url), controller.signal, { setupMs: 5_000 });
+      await hold.arrived;
+      assert.equal(mock.openSessions(), 1);
+      controller.abort();
+      await assert.rejects(pending, (error: unknown) => {
+        const name = error instanceof Error ? error.name : "";
+        return name === "AbortError" || (error instanceof Error && /abort/i.test(error.message));
+      });
+      hold.release();
+      await noOpenSessions(mock);
+      assert.equal(mock.closeCount(), 1);
+    } finally {
+      hold.release();
+    }
+  });
+});
+
+test("a setup deadline during notifications/initialized stops the turn and closes the MCP session", { timeout: 10_000 }, async () => {
+  await withMock(async (mock) => {
+    const logs: string[] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => {
+      logs.push(args.map(String).join(" "));
+    };
+    const hold = mock.holdMethod("notifications/initialized");
+    try {
+      const pending = openGithubTurn(githubSettings(mock.token, mock.url), undefined, { setupMs: 120 });
+      await hold.arrived;
+      assert.equal(mock.openSessions(), 1);
+      const opened = await pending;
+      assert.deepEqual(opened.tools, {});
+      await opened.close();
+      await noOpenSessions(mock);
+      assert.equal(mock.closeCount(), 1);
+      assert.equal(logs.length, 1);
+      assert.doesNotMatch(logs[0], new RegExp(mock.token));
+    } finally {
+      hold.release();
+      console.error = original;
+    }
+  });
+});
+
+test("a setup deadline during initialize stops the turn and closes the MCP session once the response lands", { timeout: 10_000 }, async () => {
+  await withMock(async (mock) => {
+    const logs: string[] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => {
+      logs.push(args.map(String).join(" "));
+    };
+    const hold = mock.holdInitializeResponse();
+    try {
+      const pending = openGithubTurn(githubSettings(mock.token, mock.url), undefined, { setupMs: 120 });
+      await hold.arrived;
+      assert.equal(mock.openSessions(), 1);
+      const opened = await pending;
+      assert.deepEqual(opened.tools, {});
+      await opened.close();
+      hold.release();
+      await noOpenSessions(mock);
+      assert.equal(mock.closeCount(), 1);
+      assert.equal(logs.length, 1);
+      assert.doesNotMatch(logs[0], new RegExp(mock.token));
+    } finally {
+      hold.release();
+      console.error = original;
+    }
+  });
+});
+
+test("aborting a warm turn during its handshake closes the MCP session", { timeout: 10_000 }, async () => {
+  await withMock(async (mock) => {
+    const first = await githubTools(githubSettings(mock.token, mock.url));
+    await first.close();
+    await noOpenSessions(mock);
+    const closesBefore = mock.closeCount();
+
+    const hold = mock.holdInitializeResponse();
+    const controller = new AbortController();
+    try {
+      const warm = await openGithubTurn(githubSettings(mock.token, mock.url), controller.signal, { setupMs: 5_000 });
+      const call = warm.tools.github_list_issues?.execute?.(
+        { owner: "aduthekaddu", repo: "orbit" },
+        { ...toolOptions, abortSignal: controller.signal },
+      );
+      assert.ok(call);
+      await hold.arrived;
+      assert.equal(mock.openSessions(), 1);
+      controller.abort();
+      await assert.rejects(call);
+      await warm.close();
+      hold.release();
+      await noOpenSessions(mock);
+      assert.equal(mock.closeCount(), closesBefore + 1);
+    } finally {
+      hold.release();
+    }
   });
 });
 
@@ -353,6 +480,23 @@ test("check with a submitted token also rejects a login that decodes to the stor
     const url = `${mock.url}?escaped-login=${encodeURIComponent(stored)}`;
     const checked = await checkGithub(githubSettings(stored, url), { token: mock.token });
     assert.deepEqual(checked, { ok: false, error: "GitHub did not return a login." });
+  });
+});
+
+test("check resolves a masked saved MCP URL back to the stored URL", { timeout: 20_000 }, async () => {
+  await withMock(async (mock) => {
+    const stored = githubSettings(mock.token, `${mock.url}?token=mcp-secret-01&escaped-login=custom-user`);
+    const maskedUrl = redactUrl(stored.githubMcpUrl, new Redactor(stored));
+    assert.equal(maskedUrl, `${mock.url}?token=[redacted]&escaped-login=custom-user`);
+    const checked = await checkGithub(stored, { mcpUrl: maskedUrl });
+    assert.deepEqual(checked, { ok: true, login: "custom-user" });
+
+    const editedSameOrigin = await checkGithub(stored, { mcpUrl: `${mock.url}?token=[redacted]&escaped-login=edited-user` });
+    assert.deepEqual(editedSameOrigin, { ok: true, login: "edited-user" });
+
+    const unresolvable = await checkGithub(stored, { mcpUrl: `${mock.url}?api_key=[redacted]` });
+    assert.equal(unresolvable.ok, false);
+    if (!unresolvable.ok) assert.match(unresolvable.error, /GitHub MCP URL/i);
   });
 });
 

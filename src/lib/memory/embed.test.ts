@@ -76,7 +76,7 @@ test("embed gives up after 5 seconds when Ollama accepts and never answers", asy
 
 test("a hung Ollama does not stall a second status check", async () => {
   const { embed, store } = modules();
-  const saved = store.saveMemory({ text: "Hangsearch token stays searchable", kind: "fact" });
+  const saved = store.saveMemory({ text: "Hangsearch token stays searchable", kind: "fact", source: "tool" });
   const server = http.createServer(() => {});
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
   const address = server.address();
@@ -103,7 +103,7 @@ test("a hung Ollama does not stall a second status check", async () => {
 test("embedPending fills vectors after Ollama comes back", async () => {
   const { embed, store, mock } = modules();
   process.env.ORBIT_OLLAMA_URL = "http://127.0.0.1:9";
-  const saved = store.saveMemory({ text: "Pending embedtoken until Ollama returns", kind: "fact" });
+  const saved = store.saveMemory({ text: "Pending embedtoken until Ollama returns", kind: "fact", source: "tool" });
   assert.equal(store.getMemory(saved.id)?.embedded, false);
   const failed = await embed.embedPending();
   assert.equal(failed.ok, false);
@@ -120,7 +120,7 @@ test("questions reach Ollama as search_query and saved memories as search_docume
   process.env.ORBIT_OLLAMA_URL = mock.url;
   const question = "Prefixcheck where do these notes live?";
   const memoryText = "Prefixcheck notes live in a shoebox";
-  store.saveMemory({ text: memoryText, kind: "fact" });
+  store.saveMemory({ text: memoryText, kind: "fact", source: "tool" });
   assert.equal((await embed.embedQuery(question)).ok, true);
   assert.equal((await embed.embedPending()).ok, true);
   const received = (await (await fetch(`${mock.url}/qa/received`)).json()) as string[];

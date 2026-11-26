@@ -1,15 +1,16 @@
 {
-  "src/app/api/chat/route.ts POST": "7072d3cced27a29cfb1fbf07dc03242dc3d070d62e95c4935d0d9c92fce510f3",
+  "src/app/api/chat/route.ts POST": "df18c6cb826b706f479395d6d769cbaeeb37695117a1afc89fe26b42bdbf2ddc",
   "src/lib/chat-parts.ts replaceTextParts": "065af95baa15a5abefb0ef7912537991ec768de615b08102da21958ca443b309",
   "src/lib/chat-tree.ts isPath": "6079fdb2e7244ec44b62f930b2a810625f0f50ca50d255b313e6765874b30ca8",
   "src/lib/genui/spec.ts assistantHasVisiblePart": "63b6266e47c3e0ad37fab2719d8cdbbf669635f01defd0f3ae7b6822c74b00ae",
   "src/lib/genui/spec.ts settleInterruptedParts": "621627203d26c0dc23e1601106f8c15d93489c9e6e70a1b89fa615cf0f597284",
-  "src/lib/messages.ts finishChatReply": "0f20863352e7cd36b13f06bb69e48e0deec81da29fe684f0aa42517dec375aa8",
-  "src/lib/messages.ts insertMessage": "20a07264eeff296d477733e9899aa58cbb6838c27e0fd033c30534edcbd759aa",
+  "src/lib/messages.ts finishChatReply": "6d8359c5d2c180718595e7f24b9de3f5326bc1799f69be68376c5c96742a91f6",
+  "src/lib/messages.ts insertMessage": "857558396cfa53829fd6330a60c2a8e4cfca251a797ae17c895e7a415a3a4911",
+  "src/lib/messages.ts matchesIncomingBody": "c97e93082e7ecc92fd4570379b01f18e539c86a9eea483941a6e157d05a150fd",
   "src/lib/messages.ts messageRepository": "872a9c3ed1b1a150027cb46b9e3b0c2364390eb4059dcd82e300ed92a62898f8",
-  "src/lib/messages.ts persistIncoming": "0710f582217c0e6764cbf6a17dac175dceed97b2b06d8a0691620e09fec57013",
-  "src/lib/messages.ts planChatWrite": "926b36447279e1aba28b138e39d3152bfadf8361610da69380dab09e01f56797",
+  "src/lib/messages.ts persistIncoming": "c72be58faf5d35b322140ad17bad980ffb1af05e5bb5da3906706a35335886d5",
+  "src/lib/messages.ts planChatWrite": "a7dffabc1fadc309eee9678a35899c5d3f4c2439f80b825731f6c202564427d9",
   "src/lib/messages.ts savedText": "19eb076594fd20202b80ca4e2cff0c1e63576d48b6917e35f34991799257c892",
   "src/lib/messages.ts unchanged": "eb0497aedcd5adf965c95e8c250effc5457117d249567cd96e0c8c0d14d6225f",
-  "src/lib/messages.ts updateMessageText": "2d102518ed1f98b9948241621be80943ddf73232f5cada42cd123833b1b631fe"
+  "src/lib/messages.ts updateMessageText": "6cf39833f741d93265a676eb417a0838c7335276c7901ca4095e07b05d953f2b"
 }

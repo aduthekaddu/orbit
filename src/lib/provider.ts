@@ -1,5 +1,6 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { normalizeBaseUrl } from "./base-url";
+import { Redactor } from "./chat-errors";
 import type { ReasoningEffort } from "./settings";
 
 export const OPENCODE_GO_BASE_URL = "https://opencode.ai/inference/go/openai/v1";
@@ -21,18 +22,27 @@ export function credentialsForModelList(input: {
   requestedBaseUrl?: string;
   requestedApiKey?: string;
   savedBaseUrl?: string;
+  savedPublicBaseUrl?: string;
   savedApiKey?: string;
 }): { baseUrl: string; apiKey: string } | null {
   const requestedBaseUrl = nonempty(input.requestedBaseUrl);
   const requestedApiKey = nonempty(input.requestedApiKey);
   const savedBaseUrl = nonempty(input.savedBaseUrl);
+  const savedPublicBaseUrl = nonempty(input.savedPublicBaseUrl);
   const savedApiKey = nonempty(input.savedApiKey);
   const baseUrl = requestedBaseUrl ?? savedBaseUrl;
   if (!baseUrl) return null;
-  const sameSavedBase = savedBaseUrl !== undefined && normalizeBaseUrl(baseUrl) === normalizeBaseUrl(savedBaseUrl);
+  const normalized = normalizeBaseUrl(baseUrl);
+  const matchesMaskedSaved =
+    requestedBaseUrl !== undefined &&
+    savedBaseUrl !== undefined &&
+    savedPublicBaseUrl !== undefined &&
+    normalized === normalizeBaseUrl(savedPublicBaseUrl);
+  const sameSavedBase =
+    (savedBaseUrl !== undefined && normalized === normalizeBaseUrl(savedBaseUrl)) || matchesMaskedSaved;
   const apiKey = requestedApiKey ?? (sameSavedBase ? savedApiKey : undefined);
   if (!apiKey) return null;
-  return { baseUrl, apiKey };
+  return { baseUrl: matchesMaskedSaved ? savedBaseUrl! : baseUrl, apiKey };
 }
 
 export function openCodeSessionHeader(baseUrl: string, chatId: string): Record<string, string> | undefined {
@@ -202,30 +212,48 @@ function rememberModels(baseUrl: string, models: ListedModel[], now = Date.now()
   }
 }
 
+function redactModels(models: ListedModel[], redact: Redactor): ListedModel[] {
+  const unique = new Map<string, ListedModel>();
+  for (const model of models) {
+    const id = redact.text(model.id);
+    if (!unique.has(id)) unique.set(id, { ...model, id });
+  }
+  return [...unique.values()].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function modelsEndpoint(baseUrl: string): string {
+  const url = new URL(baseUrl);
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}/models`;
+  url.username = "";
+  url.password = "";
+  return url.toString();
+}
+
 /** Null means no endpoint answered. An empty array means the provider has no models. */
-export async function listModels(baseUrl: string, apiKey: string): Promise<ListedModel[] | null> {
+export async function listModels(baseUrl: string, apiKey: string, redact?: Redactor): Promise<ListedModel[] | null> {
   const base = normalizeBaseUrl(baseUrl);
+  const mask = redact ?? new Redactor({ apiKey, tavilyApiKey: "", githubToken: "", baseUrl });
   const session = openCodeSessionHeader(base, "models");
   let primary: ListedModel[] | null = null;
   try {
-    primary = await fetchModels(`${base}/models`, apiKey, session);
+    primary = await fetchModels(modelsEndpoint(base), apiKey, session);
   } catch {
     primary = null;
   }
   if (primary && primary.length > 0) {
     rememberModels(base, primary);
-    return primary;
+    return redactModels(primary, mask);
   }
   if (base === OPENCODE_GO_BASE_URL) {
     const fallback = await fetchModels(OPENCODE_GO_MODELS_URL, apiKey, { "x-opencode-session": "models" });
     if (fallback) {
       rememberModels(base, fallback);
-      return fallback;
+      return redactModels(fallback, mask);
     }
   }
   if (primary) {
     rememberModels(base, primary);
-    return primary;
+    return redactModels(primary, mask);
   }
   return null;
 }

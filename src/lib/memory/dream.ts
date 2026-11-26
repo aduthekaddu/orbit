@@ -1,5 +1,6 @@
 import { generateObject } from "ai";
 import { z } from "zod";
+import { Redactor } from "../chat-errors";
 import { getDb } from "../db";
 import { orbitModel } from "../provider";
 import { getSettings } from "../settings";
@@ -100,6 +101,17 @@ function windowStart(date: string): number {
   return localMidnight(date, systemTimeZone());
 }
 
+// Where a retried chat's unread rows begin: the window start of the night it first failed. Every
+// run since that night holds the chat in retryChatIds and reached done, so the oldest such row
+// carries the start, which the retried night's own window start no longer reaches back to.
+function retryWindowStart(date: string, chatId: string): number | null {
+  let first: MemoryRun | null = null;
+  for (let run = previousRun(date); run?.retryChatIds.includes(chatId); run = previousRun(run.date)) {
+    first = run;
+  }
+  return first ? windowStart(first.date) : null;
+}
+
 function changedChatIds(date: string, end: number): string[] {
   const start = windowStart(date);
   const rows = getDb().$client
@@ -124,24 +136,29 @@ function failOwned(date: string, owner: string, message: string) {
 
 type ChatMessage = { id: string; role: string; parts: string; createdAt: number };
 
-function loadMessages(chatId: string, start: number, end: number, inherited: boolean): ChatMessage[] {
-  const client = getDb().$client;
-  if (inherited) {
-    return client
-      .prepare(
-        `SELECT id, role, parts, created_at AS createdAt FROM messages
-         WHERE chat_id = ? AND created_at <= ? AND role IN ('user', 'assistant')
-         ORDER BY created_at DESC LIMIT 100`,
-      )
-      .all(chatId, end) as ChatMessage[];
+const PAGE = 100;
+
+// The window in full, oldest first. Pages on (createdAt, id), because a cursor on createdAt alone
+// skips rows that share the last row's timestamp. A null id keeps the first page inside the
+// window's exclusive start.
+function loadWindow(chatId: string, start: number, end: number): ChatMessage[] {
+  const page = getDb().$client.prepare(
+    `SELECT id, role, parts, created_at AS createdAt FROM messages
+     WHERE chat_id = ? AND created_at > ? AND created_at <= ? AND role IN ('user', 'assistant')
+       AND (created_at > ? OR (created_at = ? AND id > ?))
+     ORDER BY created_at, id LIMIT ?`,
+  );
+  const all: ChatMessage[] = [];
+  let cursorAt = start;
+  let cursorId: string | null = null;
+  for (;;) {
+    const rows = page.all(chatId, start, end, cursorAt, cursorAt, cursorId, PAGE) as ChatMessage[];
+    all.push(...rows);
+    if (rows.length < PAGE) return all;
+    const last = rows[rows.length - 1];
+    cursorAt = last.createdAt;
+    cursorId = last.id;
   }
-  return client
-    .prepare(
-      `SELECT id, role, parts, created_at AS createdAt FROM messages
-       WHERE chat_id = ? AND created_at > ? AND created_at <= ? AND role IN ('user', 'assistant')
-       ORDER BY created_at LIMIT 100`,
-    )
-    .all(chatId, start, end) as ChatMessage[];
 }
 
 function messageText(parts: string): string {
@@ -216,7 +233,7 @@ function applyCandidatesWithSource(chatId: string, prepared: Prepared[]): { adde
       merged += 1;
       if (memory && candidate.createdAt > memory.createdAt.getTime() && text.length > memory.text.length) {
         try {
-          const updated = updateMemory(memory.id, { text, kind: candidate.kind });
+          const updated = updateMemory(memory.id, { text, kind: candidate.kind, source: "dream" });
           if (updated) rememberVector(updated.id, updated.text, candidate.vector);
         } catch (error) {
           if (!(error instanceof MemoryRejected)) throw error;
@@ -228,6 +245,7 @@ function applyCandidatesWithSource(chatId: string, prepared: Prepared[]): { adde
     const saved = saveMemory({
       text,
       kind: candidate.kind,
+      source: "dream",
       sourceChatId: sourceChat(candidate.sourceMessageId) === chatId ? chatId : null,
       sourceMessageId: sourceChat(candidate.sourceMessageId) === chatId ? candidate.sourceMessageId : null,
     });
@@ -265,34 +283,48 @@ export async function dreamChat(chatId: string, input: { date: string; owner: st
   if (run.doneChatIds.includes(chatId)) return "done";
   if (run.retryChatIds.includes(chatId)) return "retry";
   if (!renew(input.date, input.owner)) return "lost";
-  const inherited = new Set(previousRun(input.date)?.retryChatIds ?? []);
-  const messages = loadMessages(chatId, windowStart(input.date), run.startedAt.getTime(), inherited.has(chatId)).sort(
-    (left, right) => left.createdAt - right.createdAt,
-  );
+  const start = retryWindowStart(input.date, chatId) ?? windowStart(input.date);
+  const messages = loadWindow(chatId, start, run.startedAt.getTime());
   const known = new Set(messages.filter((message) => message.role === "user").map((message) => message.id));
   const createdAt = new Map(messages.map((message) => [message.id, message.createdAt]));
   let candidates: Candidate[] = [];
+  let redact: Redactor;
   try {
     const settings = getSettings();
     if (!settings?.baseUrl || !settings.apiKey || !settings.model) throw new Error("No provider is saved");
-    const generated = await generateObject({
-      model: orbitModel({
-        baseUrl: settings.baseUrl,
-        apiKey: settings.apiKey,
-        model: settings.model,
-        chatId,
-      }),
-      schema: candidateList,
-      prompt: promptFor(messages),
-      maxRetries: 0,
-      abortSignal: AbortSignal.timeout(60_000),
-    });
-    candidates = generated.object.candidates;
+    redact = new Redactor(settings);
+    for (let offset = 0; offset < messages.length; offset += PAGE) {
+      if (!renew(input.date, input.owner)) return "lost";
+      const generated = await generateObject({
+        model: orbitModel({
+          baseUrl: settings.baseUrl,
+          apiKey: settings.apiKey,
+          model: settings.model,
+          chatId,
+        }),
+        schema: candidateList,
+        prompt: promptFor(messages.slice(offset, offset + PAGE)),
+        maxRetries: 0,
+        abortSignal: AbortSignal.timeout(60_000),
+      });
+      candidates.push(...generated.object.candidates);
+    }
   } catch (error) {
     if (error instanceof Error && error.message === "No provider is saved") throw error;
     return finishChat(input.date, input.owner, chatId, "retry", () => ({ added: 0, merged: 0 }));
   }
-  const accepted = candidates.filter((candidate) => known.has(candidate.sourceMessageId));
+  // Mask before embedding so credentials never reach Ollama and the stored text matches the embedded text.
+  const accepted = candidates
+    .filter((candidate) => known.has(candidate.sourceMessageId))
+    .flatMap((candidate) => {
+      try {
+        const text = redact.text(cleanMemoryText(redact.text(candidate.text)));
+        return [{ ...candidate, text }];
+      } catch (error) {
+        if (error instanceof MemoryRejected) return [];
+        throw error;
+      }
+    });
   const embedded = await embed(accepted.map((candidate) => candidate.text), "document");
   if (!embedded.ok) return finishChat(input.date, input.owner, chatId, "retry", () => ({ added: 0, merged: 0 }));
   const prepared: Prepared[] = accepted.flatMap((candidate, index) => {
