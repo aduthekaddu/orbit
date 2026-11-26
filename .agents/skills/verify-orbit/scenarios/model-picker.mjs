@@ -32,7 +32,38 @@ function modelRequests(since) {
 const holdsKey = (text) => KEYS.some((key) => text.includes(key));
 const words = (text) => text.match(/\bword\d+\b/g) ?? [];
 
-export default async function modelPicker({ page, origin, mockUrl, step, shot }) {
+// The part of a control that shows its state needs 3:1 against the surface around it.
+async function selectedEffortContrast(grid) {
+  await grid.evaluate((root) => Promise.all(root.getAnimations({ subtree: true }).map((animation) => animation.finished)));
+  return grid.evaluate((root) => {
+    const channels = (color) => (color.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+    const luminance = (color) =>
+      channels(color)
+        .map((value) => value / 255)
+        .map((value) => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4))
+        .reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+    const ratio = (a, b) => {
+      const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+      return (high + 0.05) / (low + 0.05);
+    };
+    let surface = root.parentElement;
+    while (surface && getComputedStyle(surface).backgroundColor === "rgba(0, 0, 0, 0)") surface = surface.parentElement;
+    const background = surface ? getComputedStyle(surface).backgroundColor : "";
+    const on = root.querySelector("[role=radio][data-state=on]");
+    const off = [...root.querySelectorAll("[role=radio][data-state=off]")].find((element) => !element.disabled);
+    if (!on || !off) return { selected: Boolean(on), unselected: Boolean(off) };
+    return {
+      selected: on.textContent.trim(),
+      background,
+      selectedBorder: Number(ratio(getComputedStyle(on).borderTopColor, background).toFixed(2)),
+      unselectedBorder: Number(ratio(getComputedStyle(off).borderTopColor, background).toFixed(2)),
+    };
+  });
+}
+
+const standsOut = (measured) => measured.selectedBorder >= 3 && measured.unselectedBorder < measured.selectedBorder;
+
+export default async function modelPicker({ page, origin, mockUrl, step, shot, useProvider }) {
   const browser = page.context().browser();
   const bodies = [];
   const watch = (target) => target.on("response", (response) => bodies.push(response.text().catch(() => "")));
@@ -149,6 +180,8 @@ export default async function modelPicker({ page, origin, mockUrl, step, shot })
   await option(popover, "claude-opus-5-5").click();
   step("None is disabled", await effort(popover, "None").isDisabled(), "None is enabled for claude-opus-5-5");
   await effort(popover, "High").click();
+  const popoverEffort = await selectedEffortContrast(popover.getByRole("radiogroup", { name: "Effort", exact: true }));
+  step("the selected effort stands out in the popover", standsOut(popoverEffort), JSON.stringify(popoverEffort));
   await shot("popover");
   await closePicker();
 
@@ -223,7 +256,18 @@ export default async function modelPicker({ page, origin, mockUrl, step, shot })
     const replyId = await (await posted).headerValue("x-resumable-stream-id");
     await page.getByText(/\bword8\b/).waitFor({ timeout: 15_000 });
     const beforeDrop = words(await replyText(lastReply())).length;
+    const earlierLabels = (await page.locator("[data-reply-label]").count()) - 1;
+    let resume;
+    const resumeHeld = new Promise((resolve) => (resume = resolve));
+    await page.route("**/api/chats/*/stream**", async (route) => {
+      await resumeHeld;
+      await route.continue();
+    });
     front.drop();
+    const reconnecting = await visible(page.getByRole("status").filter({ hasText: "Reconnecting" }), 10_000);
+    const labelsWhileReconnecting = await page.locator("[data-reply-label]").evaluateAll((elements) => elements.filter((element) => element.checkVisibility()).length);
+    resume();
+    step("reply labels stay while a reply reconnects", reconnecting && earlierLabels >= 2 && labelsWhileReconnecting >= earlierLabels, `reconnecting shown ${reconnecting}, ${labelsWhileReconnecting} labels visible of ${earlierLabels} earlier replies`);
     await page.getByText(/\bword50\b/).waitFor({ timeout: 30_000 });
     const resumedLabel = (await visible(labelOf(lastReply()), 15_000)) ? (await labelOf(lastReply()).innerText()).trim() : "";
     const shownWords = words(await replyText(lastReply()));
@@ -237,6 +281,7 @@ export default async function modelPicker({ page, origin, mockUrl, step, shot })
     step("reconnect makes no new provider call", slow.length === 1, `${slow.length} model requests for the reply`);
     step("the resumed reply shows its label", resumedLabel === "mock-reasoner · Extra high", `label reads ${resumedLabel}`);
   } finally {
+    await page.unroute("**/api/chats/*/stream**");
     await front.close();
   }
 
@@ -257,8 +302,16 @@ export default async function modelPicker({ page, origin, mockUrl, step, shot })
       const box = await sheet.boundingBox();
       if (width === 390) {
         step("bottom sheet on phone", Boolean(box && Math.round(box.width) === width && Math.abs(box.y + box.height - height) <= 1 && box.height <= height * 0.8 + 1), `sheet ${JSON.stringify(box)}`);
-        const rows = await sheet.locator("[data-model-option]").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().height));
+        const rowHeights = () => sheet.locator("[data-model-option]").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().height));
+        const rows = await rowHeights();
         step("rows are at least 44px", rows.length > 0 && rows.every((rowHeight) => rowHeight >= 44), `row heights ${JSON.stringify(rows)}`);
+        const textSize = await phone.evaluate(() => document.documentElement.dataset.textSize ?? null);
+        await phone.evaluate(() => (document.documentElement.dataset.textSize = "sm"));
+        const smallRows = await rowHeights();
+        await phone.evaluate((size) => (size === null ? delete document.documentElement.dataset.textSize : (document.documentElement.dataset.textSize = size)), textSize);
+        step("rows are at least 44px at Small text size", smallRows.length > 0 && smallRows.every((rowHeight) => rowHeight >= 44), `row heights ${JSON.stringify(smallRows)}`);
+        const sheetEffort = await selectedEffortContrast(sheet.getByRole("radiogroup", { name: "Effort", exact: true }));
+        step("the selected effort stands out in the sheet", standsOut(sheetEffort), JSON.stringify(sheetEffort));
       } else {
         const cells = await sheet.getByRole("radio").evaluateAll((elements) => elements.map((element) => {
           const rect = element.getBoundingClientRect();
@@ -321,6 +374,14 @@ export default async function modelPicker({ page, origin, mockUrl, step, shot })
 
   await page.goto(`${origin}/settings`);
   await page.getByRole("heading", { name: "Connections" }).waitFor();
+  const defaultsForm = page.locator("form[aria-labelledby=default-model-heading]");
+  await defaultsForm.locator("#default-connection").click();
+  await page.getByRole("option", { name: "Anthropic", exact: true }).click();
+  await defaultsForm.locator("[role=combobox][aria-labelledby=default-model-label]").click();
+  await page.getByRole("option", { name: "claude-opus-5-5", exact: true }).click();
+  const settingsEffort = await selectedEffortContrast(defaultsForm.getByRole("radiogroup", { name: "Effort", exact: true }));
+  step("the selected effort stands out in Settings", standsOut(settingsEffort), JSON.stringify(settingsEffort));
+  await shot("settings-default-model");
   await page.getByRole("button", { name: "Delete Anthropic", exact: true }).click();
   await page.getByRole("heading", { name: "Delete Anthropic?" }).waitFor();
   const [deleted] = await Promise.all([
@@ -329,6 +390,8 @@ export default async function modelPicker({ page, origin, mockUrl, step, shot })
   ]);
   await page.locator(`[data-connection-row='${anthropic.id}']`).waitFor({ state: "detached" });
   step("Delete asks once and removes the connection", deleted.ok(), `DELETE returned ${deleted.status()}`);
+  const saveAfterDelete = defaultsForm.getByRole("button", { name: "Save", exact: true });
+  step("deleting the chosen connection clears the default model draft", await saveAfterDelete.isDisabled(), "Save is enabled with the deleted connection's model");
   await page.goto(`${origin}/c/${anthropicChat}`);
   await labelOf(lastReply()).waitFor({ timeout: 20_000 });
   const oldLabels = (await page.locator("[data-reply-label]").allInnerTexts()).map((text) => text.trim());
@@ -365,6 +428,15 @@ export default async function modelPicker({ page, origin, mockUrl, step, shot })
   await composer.waitFor();
   const brokenChip = await visible(chip, 10_000);
   step("a chat whose key cannot be read shows the chip", brokenChip, "no chip on the chat");
+  await page.goto(`${origin}/settings`);
+  const brokenRow = page.locator(`[data-connection-row='${spareId}']`);
+  await brokenRow.waitFor();
+  const marked = await visible(brokenRow.getByText("Key unreadable", { exact: true }), 5_000);
+  const otherMarked = await page.locator(`[data-connection-row='${mock.id}']`).getByText("Key unreadable", { exact: true }).count();
+  step("Settings marks the connection whose key cannot be read", marked && otherMarked === 0, `marked ${marked}, other rows marked ${otherMarked}`);
+  await shot("settings-key-unreadable");
+  await page.goto(`${origin}/c/${brokenChat}`);
+  await composer.waitFor();
   if (brokenChip) {
     await composer.fill("[qa:plain] with a broken key");
     await composer.press("Enter");
@@ -383,6 +455,44 @@ export default async function modelPicker({ page, origin, mockUrl, step, shot })
     }
   }
   await api("DELETE", `/api/connections/${spareId}`);
+
+  const gone = (await api("POST", "/api/connections", { kind: "openai-compatible", label: "Gone", baseUrl: mockUrl, apiKey: SPARE_KEY })).json();
+  const mountedChat = await openChat();
+  await pick("mock-reasoner", "Medium", gone.id);
+  before = await replyIds();
+  await composer.fill("[qa:slow] answer while the connection goes");
+  await composer.press("Enter");
+  await page.getByText(/\bword8\b/).waitFor({ timeout: 15_000 });
+  await api("DELETE", `/api/connections/${gone.id}`);
+  await nextReply(before);
+  const followed = await eventually(() => chip.innerText(), (text) => text === "mock-genui", { timeoutMs: 10_000, what: "the chip to show the defaults" }).then(() => true, () => false);
+  step("a mounted chat drops a choice whose connection is gone", followed, `chip reads ${await chip.innerText()} in /c/${mountedChat}`);
+  since = logLines().length;
+  const afterGone = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/chat");
+  before = await replyIds();
+  await composer.fill("[qa:plain] after the connection went");
+  await composer.press("Enter");
+  const afterGoneStatus = (await afterGone).status();
+  const afterGoneReply = afterGoneStatus === 200 ? await nextReply(before) : null;
+  requests = modelRequests(since);
+  step("the next send uses the defaults", afterGoneStatus === 200 && requests.length === 1 && requests[0].body.model === "mock-genui" && afterGoneReply?.label === "mock-genui", `POST /api/chat ${afterGoneStatus}, requests ${JSON.stringify(requests.map((line) => line.body.model))}`);
+
+  await api("DELETE", `/api/connections/${mock.id}`);
+  const none = (await api("GET", "/api/connections")).json();
+  await page.goto(`${origin}/c/${reasonerChat}`);
+  await labelOf(lastReply()).waitFor({ timeout: 20_000 });
+  picker = await openPicker();
+  const addConnection = picker.getByRole("link", { name: "Add connection", exact: true });
+  const offered = none.length === 0 && (await visible(addConnection, 5_000));
+  await picker.evaluate((element) => Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished)));
+  await shot("no-connection");
+  if (offered) {
+    await addConnection.click();
+    await page.waitForURL((url) => url.pathname === "/settings");
+  }
+  const setup = offered && (await visible(page.getByRole("button", { name: "Add", exact: true }), 10_000));
+  step("a chat with history and no connection leads to setup", setup, `connections ${none.length}, Add connection offered ${offered}`);
+  await useProvider();
 
   const texts = await Promise.all(bodies);
   const leakedBodies = texts.filter(holdsKey).length;
