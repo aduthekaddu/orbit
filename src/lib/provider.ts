@@ -1,5 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { wrapLanguageModel } from "ai";
+import { fallbackHistory } from "./anthropic-fallback";
 import { anthropicBaseUrl, normalizeBaseUrl } from "./base-url";
 import type { ProviderConnection } from "./connections";
 
@@ -77,7 +79,9 @@ export function languageModelFor(options: {
   fetch?: typeof fetch;
 }) {
   const { connection, apiKey, model, chatId } = options;
-  if (connection.kind === "anthropic") return createAnthropic({ apiKey, baseURL: anthropicBaseUrl(), fetch: options.fetch })(model);
+  if (connection.kind === "anthropic") {
+    return wrapLanguageModel({ model: createAnthropic({ apiKey, baseURL: anthropicBaseUrl(), fetch: options.fetch })(model), middleware: fallbackHistory });
+  }
   return orbitModel({ baseUrl: connection.baseUrl, apiKey, model, chatId, fetch: options.fetch, onDropped: options.onDropped });
 }
 

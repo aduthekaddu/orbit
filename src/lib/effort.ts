@@ -59,12 +59,13 @@ export function sentEffort(requested: Effort, levels: readonly Effort[] | null):
 }
 
 function anthropicOptions(sent: Effort | null): JsonOptions {
-  const cacheControl = { type: "ephemeral" } as const;
-  if (sent === null) return { cacheControl } satisfies AnthropicLanguageModelOptions;
-  if (sent === "none") return { cacheControl, thinking: { type: "disabled" } } satisfies AnthropicLanguageModelOptions;
+  // The API accepts the default fallbacks for a model that has none, so every call asks for them.
+  const base = { cacheControl: { type: "ephemeral" }, fallbacks: "default" } as const;
+  if (sent === null) return { ...base } satisfies AnthropicLanguageModelOptions;
+  if (sent === "none") return { ...base, thinking: { type: "disabled" } } satisfies AnthropicLanguageModelOptions;
   // Current Claude models omit thinking text unless asked, which reads as a long pause. Edit reply rewrites an earlier
   // assistant turn, so a replayed thinking block can stop matching its prefix, and drop_block keeps that from failing.
-  return { cacheControl, effort: sent, thinking: { type: "adaptive", display: "summarized", blockBinding: { prefixMismatchBehavior: "drop_block" } } } satisfies AnthropicLanguageModelOptions;
+  return { ...base, effort: sent, thinking: { type: "adaptive", display: "summarized", blockBinding: { prefixMismatchBehavior: "drop_block" } } } satisfies AnthropicLanguageModelOptions;
 }
 
 export function effortCallOptions(kind: ConnectionKind, requested: Effort, levels: Effort[] | null): { sent: Effort | null; options: EffortCallOptions } {

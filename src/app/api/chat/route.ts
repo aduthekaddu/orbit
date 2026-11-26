@@ -1,5 +1,6 @@
 import { convertToModelMessages, stepCountIs, streamText, toUIMessageStream, type UIMessage, type UIMessageChunk } from "ai";
 import { after } from "next/server";
+import { fallbackModel } from "@/lib/anthropic-fallback";
 import { ARTIFACT_INSTRUCTIONS } from "@/lib/artifacts/detect";
 import { logProviderError, streamErrorMessage } from "@/lib/chat-errors";
 import { redactUIMessageStream } from "@/lib/chat-stream-redactor";
@@ -198,9 +199,11 @@ export async function POST(request: Request) {
     let dropped = false;
     const warnings: { type: string; feature?: string }[] = [];
     let reply: ReplyRecord = { connectionId: connection.id, model: choice.model, effort: effort.sent === null ? null : choice.effort, effortOutcome: null };
+    // A response can name the model asked for and still hand the reply to a fallback model partway through.
+    let fellBackTo: string | null = null;
     // The model that wrote the reply can differ from the one asked for, so the record takes the response's model id.
     const recordReply = (modelId?: string) => {
-      reply = { ...reply, model: modelId || reply.model, effortOutcome: effortOutcome({ sent: effort.sent, requested: choice.effort, dropped, warnings }) };
+      reply = { ...reply, model: fellBackTo ?? (modelId || reply.model), effortOutcome: effortOutcome({ sent: effort.sent, requested: choice.effort, dropped, warnings }) };
       return reply;
     };
     const stopped = createStoppedRuns();
@@ -256,6 +259,7 @@ export async function POST(request: Request) {
       messageMetadata: ({ part }) => {
         if (part.type === "start") return { reply };
         if (part.type === "start-step") warnings.push(...part.warnings);
+        if (part.type === "custom") fellBackTo = fallbackModel(part) ?? fellBackTo;
         if (part.type === "finish-step") return { reply: recordReply(part.response.modelId) };
         if (part.type === "finish") return { reply: recordReply() };
         return undefined;
