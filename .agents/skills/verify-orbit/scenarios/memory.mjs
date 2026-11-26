@@ -88,8 +88,13 @@ function measureInside(element, { selector, clipped }) {
 async function openMemoryLine(line) {
   await line.locator(":scope > summary").click();
   await eventually(() => line.evaluate((root) => root.open), Boolean, { timeoutMs: 2_000, what: "the memory line to open" });
-  // The caret turns on open. Let that transition end so a screenshot shows the open state, not its first frame.
-  await line.evaluate((root) => Promise.all(root.getAnimations({ subtree: true }).filter((animation) => animation instanceof CSSTransition).map((animation) => animation.finished)));
+  // The caret turns on open, and a line whose preview hides shrinks under the pointer, which cancels the hover
+  // transitions and starts their reverse. A cancelled transition rejects `finished`, so settle each round and look again.
+  // Let every transition end so a screenshot shows the open state, not its first frame.
+  await line.evaluate(async (root) => {
+    const running = () => root.getAnimations({ subtree: true }).filter((animation) => animation instanceof CSSTransition);
+    for (let round = 0; round < 5 && running().length > 0; round += 1) await Promise.allSettled(running().map((animation) => animation.finished));
+  });
 }
 
 async function memoryBody(line) {
