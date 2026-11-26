@@ -442,8 +442,12 @@ function chunk(choices, extra = {}) {
   };
 }
 
+// A real provider names the model that answered in each chunk, and Orbit labels the reply with it.
+const answeringModel = new WeakMap();
+
 function send(res, payload) {
-  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  const named = payload.object === "chat.completion.chunk" ? { ...payload, model: answeringModel.get(res) ?? MODEL } : payload;
+  res.write(`data: ${JSON.stringify(named)}\n\n`);
 }
 
 function start(res) {
@@ -822,6 +826,7 @@ const server = http.createServer((req, res) => {
     fs.mkdirSync(path.dirname(requestLog), { recursive: true });
     const headers = Object.fromEntries(LOGGED_HEADERS.map((name) => [name, req.headers[name] ?? null]));
     fs.appendFileSync(requestLog, `${JSON.stringify({ at: new Date().toISOString(), scenario, headers, body })}\n`);
+    if (typeof body.model === "string") answeringModel.set(res, body.model);
     if (route === "anthropic") {
       claudeReply(res, body, raw, scenario);
       return;

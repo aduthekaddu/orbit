@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { eventually } from "../../../../src/lib/eventually.mjs";
+import { settingsSave } from "../../../../scripts/qa/settings-save.mjs";
 
 // Reading checks for long replies (slice 14). Theme passes run at text size md and check prose, headings,
 // line length, contrast, and sideways scroll. Text size passes run in dark and check root size, line height,
@@ -425,7 +426,7 @@ export default async function reading({ page, origin, step, shot }) {
     await settle(view.page);
     scans["empty chat"] = await view.page.evaluate(scanPage, null);
     await view.page.goto(`${origin}/settings`);
-    await view.page.getByRole("button", { name: "Save" }).waitFor({ timeout: 15_000 });
+    await settingsSave(view.page).waitFor({ timeout: 15_000 });
     await settle(view.page);
     scans.settings = await view.page.evaluate(scanPage, null);
     scans.memory = await readMemory(view);

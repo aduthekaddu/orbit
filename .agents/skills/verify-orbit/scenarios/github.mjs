@@ -1,5 +1,6 @@
 import { eventually } from "../../../../src/lib/eventually.mjs";
 import { startMockMcp } from "../../../../scripts/qa/mock-mcp.mjs";
+import { settingsSave } from "../../../../scripts/qa/settings-save.mjs";
 
 const ISSUE = "https://github.com/aduthekaddu/orbit/issues/7";
 export default async function github({ page, origin, useProvider, step, shot }) {
@@ -76,7 +77,7 @@ export default async function github({ page, origin, useProvider, step, shot }) 
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto(`${origin}/settings`);
     await page.getByRole("button", { name: "Remove GitHub token", exact: true }).click();
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await settingsSave(page).click();
     const savedLabel = await page.getByText("Saved", { exact: true }).waitFor({ timeout: 10_000 }).then(() => true, () => false);
     const removedText = await (await page.request.get(`${origin}/api/settings`)).text();
     const removed = JSON.parse(removedText);

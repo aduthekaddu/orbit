@@ -1,4 +1,5 @@
 import { eventually } from "../../../../src/lib/eventually.mjs";
+import { replyText } from "../../../../scripts/qa/reply-text.mjs";
 export default async function retryStop({ page, origin, step, shot }) {
   const created = await page.request.post(`${origin}/api/chats`);
   const { id } = await created.json();
@@ -19,11 +20,6 @@ export default async function retryStop({ page, origin, step, shot }) {
 
   await page.getByRole("button", { name: "Stop" }).click();
   const ended = await page.getByRole("button", { name: "Send" }).waitFor({ timeout: 3_000 }).then(() => true, () => false);
-  const replyText = (target) => target.evaluate(element => {
-    const copy = element.cloneNode(true);
-    copy.querySelectorAll("[data-branch-picker], [data-reply-end], button").forEach(node => node.remove());
-    return copy.textContent.trim();
-  });
   const seen = await replyText(reply);
   const stopped = reply.locator('[data-reply-end="stopped"]');
   await stopped.waitFor({ timeout: 5_000 });

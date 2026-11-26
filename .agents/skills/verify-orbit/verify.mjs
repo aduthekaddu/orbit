@@ -769,7 +769,6 @@ async function driveSettings() {
     responses.push(response.text);
     return response;
   };
-  const page = await request("/settings", { cookies });
   const before = body(await track("/api/preferences/model"));
   const unreachable = await track("/api/connections", {
     method: "POST",
@@ -782,6 +781,8 @@ async function driveSettings() {
   const connection = body(saved);
   const id = connection.id ?? "none";
   const listed = await track("/api/connections");
+  // Default model shows only once a connection exists.
+  const page = await request("/settings", { cookies });
   const listedIds = Array.isArray(body(listed)) ? body(listed).map((item) => item.id) : [];
   const models = await track(`/api/connections/${id}/models`);
   const modelIds = (body(models).models ?? []).map((model) => model.id);

@@ -1,3 +1,4 @@
+import { replyText } from "../../../../scripts/qa/reply-text.mjs";
 export default async function artifactReview({ page, origin, step, shot }) {
   await page.setViewportSize({ width: 1440, height: 900 });
   const reply = page.locator('[data-message-role="assistant"]').last();
@@ -83,7 +84,7 @@ export default async function artifactReview({ page, origin, step, shot }) {
       await page.getByRole('button', { name: 'Save', exact: true }).click();
       await later.waitFor({ state: 'hidden' });
       await page.frameLocator('iframe').getByRole('heading', { name: 'Second edited', exact: true }).waitFor({ timeout: 5000 });
-      step('the earlier block keeps its shortened code', (await reply.innerText()).includes('<h1>F</h1>'));
+      step('the earlier block keeps its shortened code', (await replyText(reply)).includes('<h1>F</h1>'));
       await page.reload();
       await page.frameLocator('iframe').getByRole('heading', { name: 'Second edited', exact: true }).waitFor({ timeout: 5000 });
       step('the shortened preview survives reload', true);

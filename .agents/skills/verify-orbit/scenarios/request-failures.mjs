@@ -1,4 +1,5 @@
 import { eventually } from "../../../../src/lib/eventually.mjs";
+import { settingsForm, settingsSave } from "../../../../scripts/qa/settings-save.mjs";
 
 // Fails each browser request with page.route and checks what the screen shows.
 
@@ -83,8 +84,7 @@ export default async function requestFailures({ page, origin, step, shot }) {
   const sawPending = await disabled(newChat);
   // A full page.goto would destroy the app's JS context and the pending answer with it, so the step must navigate in-app.
   await page.getByRole("link", { name: "Settings" }).click();
-  const searchForm = page.locator("form").filter({ has: page.getByLabel("SearXNG URL", { exact: true }) });
-  const saveButton = searchForm.getByRole("button", { name: "Save", exact: true });
+  const saveButton = settingsSave(page);
   await saveButton.waitFor({ timeout: 10_000 });
   await Promise.all(heldCreates.splice(0).map((route) => route.continue().catch(() => {})));
   await page.unrouteAll({ behavior: "ignoreErrors" });
@@ -130,7 +130,7 @@ export default async function requestFailures({ page, origin, step, shot }) {
   });
   await saveButton.click();
   const savePending = await disabled(saveButton);
-  await searchForm.evaluate((form) => form.requestSubmit());
+  await settingsForm(page).evaluate((form) => form.requestSubmit());
   const saveRequests = heldSaves.length;
   await Promise.all(heldSaves.splice(0).map((route) => route.continue().catch(() => {})));
   await page.unrouteAll({ behavior: "ignoreErrors" });

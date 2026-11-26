@@ -1,3 +1,4 @@
+import { replyText } from "../../../../scripts/qa/reply-text.mjs";
 export default async function longMessage({ page, origin, step, shot }) {
   const created = await page.request.post(`${origin}/api/chats`);
   const { id } = await created.json();
@@ -27,5 +28,5 @@ export default async function longMessage({ page, origin, step, shot }) {
   await next.press("Enter");
   const reply = page.locator('[data-message-role="assistant"]').last();
   await reply.waitFor({ timeout: 30_000 });
-  step("a short message still gets a reply", (await reply.textContent())?.trim().length > 0);
+  step("a short message still gets a reply", (await replyText(reply)).length > 0);
 }

@@ -1,5 +1,6 @@
 import { eventually } from "../../../../src/lib/eventually.mjs";
 import { startMockSearxng, searchFixtures } from "../../../../scripts/qa/mock-searxng.mjs";
+import { settingsSave } from "../../../../scripts/qa/settings-save.mjs";
 
 export default async function searchTool({ page, origin, useProvider, step, shot }) {
   const mock = await startMockSearxng();
@@ -15,7 +16,7 @@ export default async function searchTool({ page, origin, useProvider, step, shot
     }
     await field.fill(mock.url);
     await page.getByLabel("Tavily key", { exact: true }).fill("test-tavily-key-not-real");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await settingsSave(page).click();
     await page.getByText("Saved", { exact: true }).waitFor();
     await shot("settings");
     const settings = await page.request.get(`${origin}/api/settings`);
@@ -23,7 +24,7 @@ export default async function searchTool({ page, origin, useProvider, step, shot
     const publicSettings = JSON.parse(publicText);
     step("Search settings save without exposing either key", publicSettings.searxngUrl === mock.url && publicSettings.tavilyKeySet === true && !("tavilyApiKey" in publicSettings) && !("apiKey" in publicSettings) && !publicText.includes("test-tavily-key-not-real") && !publicText.includes("test-key-not-real"));
     await page.getByLabel("Tavily key", { exact: true }).fill("");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await settingsSave(page).click();
     await page.getByText("Saved", { exact: true }).waitFor();
     const kept = await (await page.request.get(`${origin}/api/settings`)).json();
     step("a blank Tavily key keeps the stored key", kept.tavilyKeySet === true);
@@ -34,7 +35,7 @@ export default async function searchTool({ page, origin, useProvider, step, shot
       return;
     }
     await remove.click();
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await settingsSave(page).click();
     await page.getByText("Saved", { exact: true }).waitFor();
     const removed = await (await page.request.get(`${origin}/api/settings`)).json();
     step("Remove and Save clear the stored Tavily key", removed.tavilyKeySet === false);
