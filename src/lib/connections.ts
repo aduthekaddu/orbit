@@ -5,7 +5,7 @@ import { normalizeBaseUrl } from "./base-url";
 import { Redactor, redactUrl, resolveMaskedUrl } from "./chat-errors";
 import { getDb, urlHostLabel } from "./db";
 import { chats, hiddenModels, pendingConnection, providerConnections, userPreferences } from "./db/schema";
-import { isEffort, type Effort } from "./effort";
+import { DEFAULT_EFFORT, isEffort, type Effort } from "./effort";
 import { readEnv } from "./env";
 import { listModels } from "./model-list";
 import { decryptSecret, encryptSecret, SecretUnreadable } from "./secrets";
@@ -230,9 +230,9 @@ export function seedConnection(userId: string, from: "pending" | "pending-or-env
       const envBaseUrl = from === "pending-or-env" ? readEnv("ORBIT_BASE_URL") : undefined;
       const envApiKey = from === "pending-or-env" ? readEnv("ORBIT_API_KEY") : undefined;
       const source = pending
-        ? { baseUrl: pending.baseUrl, ciphertext: pending.apiKeyCiphertext, model: pending.model, effort: isEffort(pending.effort) ? pending.effort : "medium" }
+        ? { baseUrl: pending.baseUrl, ciphertext: pending.apiKeyCiphertext, model: pending.model, effort: isEffort(pending.effort) ? pending.effort : DEFAULT_EFFORT }
         : envBaseUrl && envApiKey
-          ? { baseUrl: envBaseUrl, ciphertext: encryptSecret(envApiKey), model: readEnv("ORBIT_MODEL") ?? null, effort: "medium" as const }
+          ? { baseUrl: envBaseUrl, ciphertext: encryptSecret(envApiKey), model: readEnv("ORBIT_MODEL") ?? null, effort: DEFAULT_EFFORT }
           : null;
       if (!source) return;
       const id = randomUUID();

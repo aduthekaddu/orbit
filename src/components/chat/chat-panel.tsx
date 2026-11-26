@@ -22,7 +22,6 @@ export function ChatPanel({
   chatId,
   initialHistory,
   focusMessageId,
-  ready,
   choice: initialChoice,
   choiceLevels = null,
   connections,
@@ -32,7 +31,6 @@ export function ChatPanel({
   chatId: string;
   initialHistory: ReturnType<typeof toRepository>;
   focusMessageId: string | null;
-  ready: boolean;
   choice: ModelChoice | null;
   choiceLevels?: Effort[] | null;
   connections: PublicConnection[];
@@ -113,7 +111,7 @@ export function ChatPanel({
                     setChoice(next);
                   }}
                 >
-                  <Thread ready={ready} focusMessageId={focusMessageId} hasHistory={initialHistory.messages.length > 0} />
+                  <Thread ready={choice !== null} focusMessageId={focusMessageId} hasHistory={initialHistory.messages.length > 0} />
                 </ModelChoiceProvider>
               </ArtifactWorkspace>
             </StoppedRunSync>

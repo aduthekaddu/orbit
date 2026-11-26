@@ -22,7 +22,7 @@ function firstPaint(messages: StoredMessage[], liveReplyId?: string, choice: Mod
     <AppRouterContext.Provider value={router}>
       <PathnameContext.Provider value="/c/c1">
         <SearchParamsContext.Provider value={new URLSearchParams()}>
-          <ChatPanel chatId="c1" initialHistory={toRepository(messages, messages.at(-1)?.id ?? null)} focusMessageId={null} ready choice={choice} connections={connections} liveReplyId={liveReplyId} />
+          <ChatPanel chatId="c1" initialHistory={toRepository(messages, messages.at(-1)?.id ?? null)} focusMessageId={null} choice={choice} connections={connections} liveReplyId={liveReplyId} />
         </SearchParamsContext.Provider>
       </PathnameContext.Provider>
     </AppRouterContext.Provider>,
@@ -52,6 +52,7 @@ test("the composer chip names the chat's model and effort and opens the picker i
   assert.doesNotMatch(html, /href="\/settings"/);
 });
 
-test("a chat with no choice shows no chip", () => {
-  assert.doesNotMatch(firstPaint(saved, undefined, null), /data-model-chip/);
+test("a chat whose choice cannot resolve still shows a chip that opens the picker", () => {
+  const html = firstPaint(saved, undefined, null);
+  assert.match(html, /<button type="button" data-model-chip="true"[^>]*aria-haspopup="dialog"[^>]*>.*Model</);
 });

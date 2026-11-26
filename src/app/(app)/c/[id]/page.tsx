@@ -38,7 +38,6 @@ export default async function ChatPage({
   const liveReplyId = active && selectedHead === active.promptId ? active.replyId : null;
   const restorePending = active ? liveReplyId !== null : selectedHead === saved.headId;
   const resolved = resolveChoice(session.user.id, chat);
-  const ready = resolved.ok;
   if (!resolved.ok && repository.messages.length === 0) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto pt-[8vh] scrollbar-thin">
@@ -54,7 +53,7 @@ export default async function ChatPage({
   }
   return (
     <div className="min-h-0 flex-1">
-      <ChatPanel key={`${id}:${focusMessageId ?? ""}`} chatId={id} focusMessageId={focusMessageId} initialHistory={repository} ready={ready} choice={resolved.ok ? resolved.choice : null} choiceLevels={resolved.ok ? effortLevels(resolved.connection.kind, cachedCaps(resolved.connection.id, resolved.choice.model)) : null} connections={publicConnections(session.user.id)} liveReplyId={liveReplyId} restorePending={restorePending} />
+      <ChatPanel key={`${id}:${focusMessageId ?? ""}`} chatId={id} focusMessageId={focusMessageId} initialHistory={repository} choice={resolved.ok || resolved.reason === "key-unreadable" ? resolved.choice : null} choiceLevels={resolved.ok ? effortLevels(resolved.connection.kind, cachedCaps(resolved.connection.id, resolved.choice.model)) : null} connections={publicConnections(session.user.id)} liveReplyId={liveReplyId} restorePending={restorePending} />
     </div>
   );
 }

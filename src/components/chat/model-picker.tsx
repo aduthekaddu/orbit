@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useDesktop } from "@/components/use-desktop";
 import { listOf, loadedList, useModelLists, type ModelLists } from "@/components/use-model-lists";
 import type { PublicConnection } from "@/lib/connections";
-import { effortLevels, type Effort } from "@/lib/effort";
+import { DEFAULT_EFFORT, effortLevels, type Effort } from "@/lib/effort";
 import type { ModelChoice } from "@/lib/model-choice";
 import type { ListedModel } from "@/lib/model-list";
 import { choiceLabel, modelLevels, SEARCH_AFTER_ROWS, shownModels, switchModel, type ModelList } from "@/lib/model-picker";
@@ -20,12 +20,12 @@ import type { Loaded } from "@/lib/request-json";
 import { cn } from "@/lib/utils";
 
 type Picker = {
-  choice: ModelChoice;
+  choice: ModelChoice | null;
   choose: (choice: ModelChoice) => void;
   connections: PublicConnection[];
   lists: ModelLists;
   load: (connectionId: string) => void;
-  firstLevels: FirstLevels;
+  firstLevels: FirstLevels | null;
 };
 
 // The levels the server knew for the chat's first choice, so the chip reads right before the list loads.
@@ -41,7 +41,8 @@ function usePicker() {
   return picker;
 }
 
-/** The chat's pending choice. It starts from the chat's pinned choice or the defaults, and every send carries it. */
+/** The chat's pending choice. It starts from the chat's pinned choice or the defaults, and every send carries it.
+ * It is null when neither resolves, and the chip still opens the picker so the user can pick a model. */
 export function ModelChoiceProvider({
   choice,
   onChoose,
@@ -61,15 +62,15 @@ export function ModelChoiceProvider({
   useEffect(() => {
     if (firstLevels) load(firstLevels.connectionId);
   }, [firstLevels, load]);
-  if (!choice || !firstLevels) return children;
   return <PickerContext.Provider value={{ choice, choose: onChoose, connections, lists, load, firstLevels }}>{children}</PickerContext.Provider>;
 }
 
 function choiceLevels({ choice, connections, lists, firstLevels }: Picker): Effort[] | null {
+  if (!choice) return [];
   const connection = connections.find((item) => item.id === choice.connectionId);
   const list = loadedList(listOf(lists, choice.connectionId));
   if (connection && list) return modelLevels(connection.kind, list, choice.model);
-  return firstLevels.connectionId === choice.connectionId && firstLevels.model === choice.model ? firstLevels.levels : null;
+  return firstLevels?.connectionId === choice.connectionId && firstLevels.model === choice.model ? firstLevels.levels : null;
 }
 
 const chipClass =
@@ -82,7 +83,7 @@ export function ModelChip() {
   if (!picker) return <span />;
   const { choice, connections, load } = picker;
   const levels = choiceLevels(picker);
-  const label = choiceLabel(choice.model, levels?.length === 0 ? null : choice.effort);
+  const label = choice ? choiceLabel(choice.model, levels?.length === 0 ? null : choice.effort) : "Model";
 
   function openChange(next: boolean) {
     setOpen(next);
@@ -155,12 +156,12 @@ function PickerPanel({ layout }: { layout: Layout }) {
             choice={choice}
             layout={layout}
             onRetry={() => load(connection.id)}
-            onPick={(model) => choose(switchModel(choice.effort, connection.id, model.id, effortLevels(connection.kind, model.caps)))}
+            onPick={(model) => choose(switchModel(choice?.effort ?? DEFAULT_EFFORT, connection.id, model.id, effortLevels(connection.kind, model.caps)))}
           />
         ))}
       </div>
       <div className="border-t p-2">
-        <EffortGrid aria-label="Effort" value={choice.effort} levels={levels} onChange={(effort) => choose({ ...choice, effort })} className={layout === "sheet" ? "[&>button]:h-11" : undefined} />
+        <EffortGrid aria-label="Effort" value={choice?.effort ?? DEFAULT_EFFORT} levels={levels} onChange={(effort) => choice && choose({ ...choice, effort })} className={layout === "sheet" ? "[&>button]:h-11" : undefined} />
       </div>
       <div className="flex justify-end border-t px-2 py-1.5">
         <Button asChild variant="ghost" size="xs" className="text-muted-foreground hover:text-foreground">
@@ -183,7 +184,7 @@ function ConnectionGroup({
   connection: PublicConnection;
   list: Loaded<ModelList>;
   query: string;
-  choice: ModelChoice;
+  choice: ModelChoice | null;
   layout: Layout;
   onPick: (model: ListedModel) => void;
   onRetry: () => void;
@@ -215,7 +216,7 @@ function ConnectionGroup({
         <ul>
           {models.map((model) => (
             <li key={model.id}>
-              <ModelRow model={model} current={choice.connectionId === connection.id && choice.model === model.id} layout={layout} onPick={() => onPick(model)} />
+              <ModelRow model={model} current={choice?.connectionId === connection.id && choice.model === model.id} layout={layout} onPick={() => onPick(model)} />
             </li>
           ))}
         </ul>

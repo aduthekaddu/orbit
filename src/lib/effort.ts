@@ -5,6 +5,8 @@ import type { ModelCaps } from "./model-list";
 
 export const EFFORTS = ["none", "low", "medium", "high", "xhigh", "max"] as const;
 export type Effort = (typeof EFFORTS)[number];
+/** The effort when nothing saved names one. */
+export const DEFAULT_EFFORT: Effort = "medium";
 export type EffortOutcome = "applied" | "adjusted" | "ignored";
 export const EFFORT_OUTCOMES = ["applied", "adjusted", "ignored"] as const satisfies readonly EffortOutcome[];
 

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { connectionApiKey, getConnection, getModelDefaults, listConnections, seedConnection, type ProviderConnection } from "./connections";
 import { getDb } from "./db";
 import { chats, providerConnections } from "./db/schema";
-import { EFFORTS, type Effort, type EffortOutcome } from "./effort";
+import { DEFAULT_EFFORT, EFFORTS, type Effort, type EffortOutcome } from "./effort";
 import { SecretUnreadable } from "./secrets";
 
 export type ModelChoice = { connectionId: string; model: string; effort: Effort };
@@ -12,7 +12,9 @@ export type ReplyRecord = { connectionId: string | null; model: string; effort: 
 
 export type ResolvedChoice =
   | { ok: true; choice: ModelChoice; connection: ProviderConnection }
-  | { ok: false; reason: "no-connection" | "no-model" | "key-unreadable" };
+  | { ok: false; reason: "no-connection" | "no-model" }
+  // The choice is known, so the chat can still name it and the route can say which key to re-enter.
+  | { ok: false; reason: "key-unreadable"; choice: ModelChoice };
 
 type ChatColumns = { connectionId: string | null; model: string | null; reasoningEffort: string | null };
 
@@ -51,7 +53,7 @@ function fromDefaults(userId: string): ResolvedChoice {
   const connection = defaults.connectionId ? getConnection(userId, defaults.connectionId) : (listConnections(userId)[0] ?? null);
   if (!connection) return { ok: false, reason: "no-connection" };
   if (!defaults.connectionId || !defaults.model) return { ok: false, reason: "no-model" };
-  return { ok: true, connection, choice: { connectionId: connection.id, model: defaults.model, effort: defaults.effort ?? "medium" } };
+  return { ok: true, connection, choice: { connectionId: connection.id, model: defaults.model, effort: defaults.effort ?? DEFAULT_EFFORT } };
 }
 
 function readable(userId: string, resolved: ResolvedChoice): ResolvedChoice {
@@ -60,7 +62,7 @@ function readable(userId: string, resolved: ResolvedChoice): ResolvedChoice {
     connectionApiKey(userId, resolved.connection.id);
     return resolved;
   } catch (error) {
-    if (error instanceof SecretUnreadable) return { ok: false, reason: "key-unreadable" };
+    if (error instanceof SecretUnreadable) return { ok: false, reason: "key-unreadable", choice: resolved.choice };
     throw error;
   }
 }

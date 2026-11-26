@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { listOf, loadedList, type ModelLists } from "@/components/use-model-lists";
 import type { ModelDefaults, PublicConnection } from "@/lib/connections";
-import type { Effort } from "@/lib/effort";
+import { DEFAULT_EFFORT, type Effort } from "@/lib/effort";
 import { CUSTOM_OPTION, NO_OPTION, modelDefaultsBody, modelLevels, selectedOptionIndex, showsModelInput, switchModel } from "@/lib/model-picker";
 import { requestJson, useLatestRequest } from "@/lib/request-json";
 import { idleSubmit, submitTransition } from "@/lib/submit-state";
@@ -32,7 +32,7 @@ export function DefaultModelSettings({
   const named = connections.some((connection) => connection.id === defaults.connectionId);
   const [picked, setPicked] = useState(named ? defaults.connectionId : null);
   const [model, setModel] = useState(named ? (defaults.model ?? "") : "");
-  const [effort, setEffort] = useState<Effort>(defaults.effort ?? "medium");
+  const [effort, setEffort] = useState<Effort>(defaults.effort ?? DEFAULT_EFFORT);
   const [customMode, setCustomMode] = useState(false);
   const [save, dispatchSave] = useReducer(submitTransition, idleSubmit);
   const latestSave = useLatestRequest();
