@@ -104,23 +104,3 @@ export async function outboundSessionHeader(baseUrl: string, chatId: string): Pr
   await generateText({ model, prompt: "ping" });
   return seen;
 }
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
-
-function reasoningFlag(metadata: unknown): boolean | null {
-  const record = asRecord(metadata);
-  if (!record) return null;
-  const capabilities = asRecord(record.capabilities);
-  const reasoning = capabilities && "reasoning" in capabilities ? capabilities.reasoning : "reasoning" in record ? record.reasoning : undefined;
-  if (typeof reasoning === "boolean") return reasoning;
-  const reasoningRecord = asRecord(reasoning);
-  if (reasoningRecord && typeof reasoningRecord.supported === "boolean") return reasoningRecord.supported;
-  return null;
-}
-
-export function reasoningAllowed(metadata: unknown): boolean {
-  return reasoningFlag(metadata) !== false;
-}

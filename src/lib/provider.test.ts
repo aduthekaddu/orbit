@@ -3,7 +3,7 @@ import test from "node:test";
 import { generateText } from "ai";
 import type { ProviderConnection } from "./connections";
 import { effortCallOptions } from "./effort";
-import { languageModelFor, OPENCODE_GO_BASE_URL, orbitModel, outboundSessionHeader, reasoningAllowed } from "./provider";
+import { languageModelFor, OPENCODE_GO_BASE_URL, orbitModel, outboundSessionHeader } from "./provider";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -16,19 +16,6 @@ function chatReply() {
     usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
   });
 }
-
-test("reasoning metadata that says no turns reasoning off", () => {
-  assert.equal(reasoningAllowed({ capabilities: { reasoning: false } }), false);
-  assert.equal(reasoningAllowed({ capabilities: { reasoning: { supported: false } } }), false);
-  assert.equal(reasoningAllowed({ reasoning: false }), false);
-});
-
-test("missing or positive reasoning metadata keeps reasoning on", () => {
-  assert.equal(reasoningAllowed({ id: "plain" }), true);
-  assert.equal(reasoningAllowed({ capabilities: { reasoning: { supported: true, effort: ["max"] } } }), true);
-  assert.equal(reasoningAllowed({ reasoning: true }), true);
-  assert.equal(reasoningAllowed(null), true);
-});
 
 test("the OpenCode session header goes only to OpenCode", async () => {
   assert.equal(await outboundSessionHeader(OPENCODE_GO_BASE_URL, "chat-1"), "chat-1");
