@@ -20,7 +20,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   try {
     apiKey = connectionApiKey(session.user.id, connection.id);
   } catch (error) {
-    if (error instanceof SecretUnreadable) return Response.json({ error: `Re-enter the API key for ${connection.label}.` }, { status: 400 });
+    if (error instanceof SecretUnreadable) return Response.json({ error: "Re-enter the API key." }, { status: 400 });
     throw error;
   }
   const models = await listModels(connection, apiKey, requestRedactor(session.user.id));

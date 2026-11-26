@@ -242,6 +242,34 @@ test("resending the masked base URL keeps the saved URL and key", async () => {
   assert.ok(provider.slice(from).some((request) => request.path === "/v1/models" && request.headers.authorization === `Bearer ${OPENAI_KEY}`), "the saved key and URL were not used");
 });
 
+test("a label that holds the API key is refused on create and edit, so no plain copy is stored", async () => {
+  const before = await list();
+  const pasted = await create({ kind: "anthropic", label: `Claude ${ANTHROPIC_KEY}`, apiKey: ANTHROPIC_KEY });
+  assert.equal(pasted.status, 400, pasted.text);
+  assert.equal((await list()).length, before.length, "the connection was saved");
+  const renamed = await patch(openaiId, { label: `Local ${OPENAI_KEY}` });
+  assert.equal(renamed.status, 400, renamed.text);
+  const NEW_KEY = "made-up-anthropic-key-0002";
+  const rekeyed = await patch(anthropicId, { label: `Claude ${NEW_KEY}`, apiKey: NEW_KEY });
+  assert.equal(rekeyed.status, 400, rekeyed.text);
+  assert.deepEqual(await list(), before, "a refused edit changed a connection");
+  assert.deepEqual(sql("select count(*) as n from provider_connections where label like '%made-up%'"), { n: 0 });
+});
+
+test("an unreadable key's error does not name the connection", async () => {
+  const LABEL = "Label that is not in the error";
+  getDb()
+    .$client.prepare("insert into provider_connections (id, user_id, kind, label, base_url, api_key_ciphertext, created_at) values ('conn-unreadable', ?, 'anthropic', ?, null, 'v1.AAAAAAAAAAAAAAAA.AAAAAAAAAAAAAAAAAAAAAA.AAAA', 0)")
+    .run(ONE, LABEL);
+  try {
+    const listed = await modelsOf("conn-unreadable");
+    assert.equal(listed.status, 400, listed.text);
+    assert.equal(listed.text.includes(LABEL), false, listed.text);
+  } finally {
+    getDb().$client.prepare("delete from provider_connections where id = 'conn-unreadable'").run();
+  }
+});
+
 test("a hidden model stays listed and is named in hidden until it is shown again", async () => {
   assert.equal((await hide(openaiId, "openai/gpt-5", true)).status, 200);
   const hidden = (await modelsOf(openaiId)).json() as { models: { id: string }[]; hidden: string[] };

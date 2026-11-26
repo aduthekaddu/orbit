@@ -104,9 +104,17 @@ export type ConnectionWrite =
   | { ok: false; reason: "not-found" | "unreachable" | "key-required" }
   | { ok: false; reason: "invalid"; error: string };
 
+const LABEL_HOLDS_KEY = { ok: false, reason: "invalid", error: "Take the API key out of the label." } as const;
+
+// The label is stored in plain text and shown even when the key cannot be read, so it must not repeat the key.
+function labelHoldsKey(label: string, apiKey: string) {
+  return new Redactor(null, { apiKey }).text(label) !== label;
+}
+
 export async function addConnection(userId: string, input: NewConnection, redact: Redactor): Promise<ConnectionWrite> {
   const base = { id: randomUUID(), userId, label: input.label.trim(), createdAt: new Date() };
   const connection: ProviderConnection = input.kind === "anthropic" ? { ...base, kind: "anthropic" } : { ...base, kind: "openai-compatible", baseUrl: normalizeBaseUrl(input.baseUrl) };
+  if (labelHoldsKey(connection.label, input.apiKey)) return LABEL_HOLDS_KEY;
   if (!(await listModels(connection, input.apiKey, redact))) return { ok: false, reason: "unreachable" };
   getDb()
     .insert(providerConnections)
@@ -137,6 +145,7 @@ export async function updateConnection(userId: string, id: string, patch: Connec
     if (moved && !apiKey) return { ok: false, reason: "key-required" };
     next = { ...next, kind: "openai-compatible", baseUrl: moved ? normalizeBaseUrl(resolved.url) : current.baseUrl };
   }
+  if (labelHoldsKey(next.label, apiKey ?? connectionApiKeyOrEmpty(userId, id))) return LABEL_HOLDS_KEY;
   if (apiKey && !(await listModels(next, apiKey, redact))) return { ok: false, reason: "unreachable" };
   getDb()
     .update(providerConnections)

@@ -33,6 +33,7 @@ export async function POST(request: Request) {
   const parsed = postSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Check the label, base URL, and API key." }, { status: 400 });
   const saved = await addConnection(session.user.id, parsed.data, requestRedactor(session.user.id));
+  if (!saved.ok && saved.reason === "invalid") return Response.json({ error: saved.error }, { status: 400 });
   if (!saved.ok) return Response.json({ error: "Could not reach the provider." }, { status: 502 });
   const redact = new Redactor(null, ...redactionSecrets(session.user.id));
   return Response.json(toPublicConnection(saved.connection, redact), { status: 201 });
