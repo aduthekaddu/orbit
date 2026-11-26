@@ -1,7 +1,7 @@
 import { convertToModelMessages, stepCountIs, streamText, toUIMessageStream, type UIMessage, type UIMessageChunk } from "ai";
 import { after } from "next/server";
 import { ARTIFACT_INSTRUCTIONS } from "@/lib/artifacts/detect";
-import { logProviderError, Redactor, streamErrorMessage } from "@/lib/chat-errors";
+import { logProviderError, streamErrorMessage } from "@/lib/chat-errors";
 import { redactUIMessageStream } from "@/lib/chat-stream-redactor";
 import { RENDER_UI_SYSTEM } from "@/lib/genui/catalog";
 import { assistantHasVisiblePart, settleInterruptedParts } from "@/lib/genui/spec";
@@ -10,7 +10,7 @@ import { attachMemoryNotes, quotedMemoryNotes, recall, REMEMBER_INSTRUCTIONS } f
 import { toolsForTurn } from "@/lib/tools";
 import { answerStepFor, CHAT_STEP_LIMIT } from "@/lib/tools/answer-step";
 import { createStoppedRuns } from "@/lib/tools/stopped-runs";
-import { connectionApiKey, getConnection, redactionSecrets } from "@/lib/connections";
+import { connectionApiKey, getConnection } from "@/lib/connections";
 import { EFFORTS, effortCallOptions, effortLevels, effortOutcome, titleCallOptions } from "@/lib/effort";
 import { ensureChat, finishChatReply, getChatForUser, planChatWrite, redactChatTitle, storedAssistantParts, storedMessageCount, storedMessageIds, textFromParts, touchChat } from "@/lib/messages";
 import { chatChoice, resolveChoice, sameChoice, setChatChoice, type ReplyRecord } from "@/lib/model-choice";
@@ -19,7 +19,7 @@ import { languageModelFor } from "@/lib/provider";
 import { settleReasoningTimes, stampReasoningTimes, stripOrbitTiming } from "@/lib/reasoning-time";
 import { bindReplyPlan, releaseReplyRun, replyResponse, reserveReplyRun, startReplyRun, type ReplyEndPart, type ReplyEndReason } from "@/lib/reply-runs";
 import { startChatTitle } from "@/lib/titles";
-import { getSettings } from "@/lib/settings";
+import { getSettings, requestRedactor } from "@/lib/settings";
 import { LIMITS, r, readJsonBody } from "@/lib/route-schema";
 import { getSession, unauthorized } from "@/lib/session";
 
@@ -120,7 +120,7 @@ export async function POST(request: Request) {
   const apiKey = connectionApiKey(userId, connection.id);
 
   const settings = getSettings();
-  const redact = new Redactor(settings, ...redactionSecrets(userId));
+  const redact = requestRedactor(userId, settings);
   const chat = ensureChat(parsed.data.id, userId);
   if (!chat) return Response.json({ error: "Not found" }, { status: 404 });
 

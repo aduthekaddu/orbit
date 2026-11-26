@@ -1,12 +1,12 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { Redactor } from "../chat-errors";
-import { connectionApiKey, redactionSecrets } from "../connections";
+import { connectionApiKey } from "../connections";
 import { getDb } from "../db";
 import { user } from "../db/schema";
 import { resolveChoice } from "../model-choice";
 import { languageModelFor } from "../provider";
-import { getSettings } from "../settings";
+import { requestRedactor } from "../settings";
 import { embed, embedPending } from "./embed";
 import { parseRun, storedRow, transition, unfinishedChatIds, type MemoryRun, type RunEvent } from "./run-state";
 import { localMidnight, localStamp, systemTimeZone } from "./schedule";
@@ -303,7 +303,7 @@ export async function dreamChat(chatId: string, input: { date: string; owner: st
   try {
     const account = dreamAccount();
     if (!account) throw new Error("No provider is saved");
-    redact = new Redactor(getSettings(), ...redactionSecrets(account.userId));
+    redact = requestRedactor(account.userId);
     const apiKey = connectionApiKey(account.userId, account.connection.id);
     for (let offset = 0; offset < messages.length; offset += PAGE) {
       if (!renew(input.date, input.owner)) return "lost";

@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { Redactor, redactUrl, resolveMaskedUrl } from "./chat-errors";
-import { installRedactionSecrets } from "./connections";
+import { installRedactionSecrets, redactionSecrets } from "./connections";
 import { getDb } from "./db";
 import { sandboxEnabled } from "./sandbox/enabled";
 import { settings } from "./db/schema";
@@ -28,6 +28,11 @@ export function getSettings(): SettingsRecord {
   const row = getDb().select().from(settings).where(eq(settings.id, 1)).get();
   if (!row) return NO_SETTINGS;
   return { searxngUrl: row.searxngUrl, tavilyApiKey: row.tavilyApiKey, githubToken: row.githubToken, githubMcpUrl: row.githubMcpUrl };
+}
+
+/** One request's redactor: the settings credentials and every decrypted connection key and base URL of the user. */
+export function requestRedactor(userId: string, row: SettingsRecord = getSettings()) {
+  return new Redactor(row, ...redactionSecrets(userId));
 }
 
 // A provider key copied into a settings URL must stay off the page too, and the masked URL the page sends back must
