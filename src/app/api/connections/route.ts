@@ -1,6 +1,7 @@
 import { Redactor } from "@/lib/chat-errors";
 import { addConnection, publicConnections, redactionSecrets, toPublicConnection } from "@/lib/connections";
 import { LIMITS, r } from "@/lib/route-schema";
+import { getSettings } from "@/lib/settings";
 import { getSession, unauthorized } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
   if (!session) return unauthorized();
   const parsed = postSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Check the label, base URL, and API key." }, { status: 400 });
-  const saved = await addConnection(session.user.id, parsed.data);
+  const saved = await addConnection(session.user.id, parsed.data, new Redactor(getSettings(), ...redactionSecrets(session.user.id)));
   if (!saved.ok) return Response.json({ error: "Could not reach the provider." }, { status: 502 });
   const redact = new Redactor(null, ...redactionSecrets(session.user.id));
   return Response.json(toPublicConnection(saved.connection, redact), { status: 201 });

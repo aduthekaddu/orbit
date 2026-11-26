@@ -1,6 +1,7 @@
 import { Redactor } from "@/lib/chat-errors";
 import { deleteConnection, redactionSecrets, toPublicConnection, updateConnection } from "@/lib/connections";
 import { LIMITS, r } from "@/lib/route-schema";
+import { getSettings } from "@/lib/settings";
 import { getSession, unauthorized } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -23,7 +24,7 @@ export async function PATCH(request: Request, context: Context) {
   if (!params.success) return Response.json({ error: "Not found" }, { status: 404 });
   const parsed = patchSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Check the label, base URL, and API key." }, { status: 400 });
-  const saved = await updateConnection(session.user.id, params.data.id, parsed.data);
+  const saved = await updateConnection(session.user.id, params.data.id, parsed.data, new Redactor(getSettings(), ...redactionSecrets(session.user.id)));
   if (saved.ok) return Response.json(toPublicConnection(saved.connection, new Redactor(null, ...redactionSecrets(session.user.id))));
   if (saved.reason === "not-found") return Response.json({ error: "Not found" }, { status: 404 });
   if (saved.reason === "key-required") return Response.json({ error: "Base URL changed. Enter the API key for the new provider." }, { status: 400 });

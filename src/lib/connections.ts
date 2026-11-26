@@ -95,10 +95,10 @@ export type ConnectionWrite =
   | { ok: false; reason: "not-found" | "unreachable" | "key-required" }
   | { ok: false; reason: "invalid"; error: string };
 
-export async function addConnection(userId: string, input: NewConnection): Promise<ConnectionWrite> {
+export async function addConnection(userId: string, input: NewConnection, redact: Redactor): Promise<ConnectionWrite> {
   const base = { id: randomUUID(), userId, label: input.label.trim(), createdAt: new Date() };
   const connection: ProviderConnection = input.kind === "anthropic" ? { ...base, kind: "anthropic" } : { ...base, kind: "openai-compatible", baseUrl: normalizeBaseUrl(input.baseUrl) };
-  if (!(await listModels(connection, input.apiKey))) return { ok: false, reason: "unreachable" };
+  if (!(await listModels(connection, input.apiKey, redact))) return { ok: false, reason: "unreachable" };
   getDb()
     .insert(providerConnections)
     .values({ ...connection, baseUrl: connection.kind === "anthropic" ? null : connection.baseUrl, apiKeyCiphertext: encryptSecret(input.apiKey) })
@@ -107,7 +107,7 @@ export async function addConnection(userId: string, input: NewConnection): Promi
 }
 
 // A new base URL needs a new key, so the saved key never goes to another host. Resending the masked URL keeps both.
-export async function updateConnection(userId: string, id: string, patch: ConnectionPatch): Promise<ConnectionWrite> {
+export async function updateConnection(userId: string, id: string, patch: ConnectionPatch, redact: Redactor): Promise<ConnectionWrite> {
   const current = getConnection(userId, id);
   if (!current) return { ok: false, reason: "not-found" };
   if (current.kind === "anthropic" && patch.baseUrl !== undefined) return { ok: false, reason: "invalid", error: "An Anthropic connection has no base URL." };
@@ -128,7 +128,7 @@ export async function updateConnection(userId: string, id: string, patch: Connec
     if (moved && !apiKey) return { ok: false, reason: "key-required" };
     next = { ...next, kind: "openai-compatible", baseUrl: moved ? normalizeBaseUrl(resolved.url) : current.baseUrl };
   }
-  if (apiKey && !(await listModels(next, apiKey))) return { ok: false, reason: "unreachable" };
+  if (apiKey && !(await listModels(next, apiKey, redact))) return { ok: false, reason: "unreachable" };
   getDb()
     .update(providerConnections)
     .set({

@@ -8,14 +8,19 @@ import { pathToFileURL } from "node:url";
 import test, { after, before } from "node:test";
 import { getDb } from "./db";
 import { ensureChat } from "./messages";
+import { cachedCaps } from "./model-list";
 import { dataDirectory } from "./paths";
 import { getPreferences, savePreferences } from "./preferences";
+import { saveSettings } from "./settings";
 
 const ONE = "u-connections-one";
 const TWO = "u-connections-two";
 const OPENAI_KEY = "made-up-openai-key-0001";
 const ANTHROPIC_KEY = "made-up-anthropic-key-0001";
 const URL_SECRET = "url-pass-secret-01";
+const TAVILY_KEY = "made-up-tavily-key-0001";
+// A provider can repeat any credential it was sent, or that the user gave it, in a model id.
+const ECHOED = [OPENAI_KEY, ANTHROPIC_KEY, TAVILY_KEY];
 const CLEARED_ENV = ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL", "ORBIT_SECRET_KEY", "ORBIT_ANTHROPIC_BASE_URL"];
 
 type Seen = { path: string; headers: http.IncomingHttpHeaders };
@@ -83,7 +88,7 @@ before(async () => {
       };
     }
     if (req.headers.authorization !== `Bearer ${OPENAI_KEY}`) return null;
-    return { object: "list", data: [{ id: "fixture-model" }, { id: "openai/gpt-5" }] };
+    return { object: "list", data: [{ id: "fixture-model" }, { id: "openai/gpt-5" }, ...ECHOED.map((secret) => ({ id: `echo-${secret}` }))] };
   });
   elsewhereBase = await listen(elsewhere, () => ({ object: "list", data: [{ id: "elsewhere-model" }] }));
   process.env.ORBIT_ANTHROPIC_BASE_URL = `${providerBase}/v1`;
@@ -97,6 +102,7 @@ before(async () => {
     db.$client.prepare("insert into user (id, name, email, email_verified) values (?, ?, ?, 0)").run(id, id, `${id}@orbit.local`);
   }
   asUser(ONE);
+  saveSettings({ tavilyApiKey: TAVILY_KEY });
 
   collection = await import("../app/api/connections/route");
   item = await import("../app/api/connections/[id]/route");
@@ -238,6 +244,17 @@ test("a hidden model stays listed and is named in hidden until it is shown again
   assert.deepEqual(((await modelsOf(openaiId)).json() as { hidden: string[] }).hidden, []);
 });
 
+test("a model id that repeats a credential of the user is masked before the list is cached or returned", async () => {
+  const listed = await modelsOf(openaiId);
+  assert.equal(listed.status, 200, listed.text);
+  for (const secret of ECHOED) {
+    assert.equal(listed.text.includes(secret), false, `the list returned ${secret}`);
+    assert.equal(cachedCaps(openaiId, `echo-${secret}`), null, `the caps cache holds the plain id echo-${secret}`);
+  }
+  assert.ok((listed.json().models as { id: string }[]).some((model) => model.id === "echo-[redacted]"), listed.text);
+  assert.ok(cachedCaps(openaiId, "echo-[redacted]"), "the masked id has no cached caps");
+});
+
 test("deleting a connection clears the chats and defaults that use it, and old replies keep their model and effort", async () => {
   savePreferences(ONE, { theme: "light", accent: "rose" });
   assert.equal((await setDefaults({ connectionId: openaiId, model: "fixture-model", effort: "high" })).status, 200);
@@ -273,6 +290,6 @@ test("deleting a connection clears the chats and defaults that use it, and old r
 test("no response in this file carried a key", () => {
   assert.ok(bodies.length > 0);
   for (const body of bodies) {
-    for (const secret of [OPENAI_KEY, ANTHROPIC_KEY, URL_SECRET]) assert.equal(body.includes(secret), false, `a response carried ${secret}: ${body}`);
+    for (const secret of [OPENAI_KEY, ANTHROPIC_KEY, TAVILY_KEY, URL_SECRET]) assert.equal(body.includes(secret), false, `a response carried ${secret}: ${body}`);
   }
 });

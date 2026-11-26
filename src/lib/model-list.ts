@@ -211,19 +211,24 @@ export function cachedCaps(connectionId: string, modelId: string, now = Date.now
   return hit.caps;
 }
 
-function masked(models: ListedModel[], redact: Redactor): ListedModel[] {
+function masked(models: ListedModel[], redactors: Redactor[]): ListedModel[] {
+  const mask = (text: string) => redactors.reduce((value, redact) => redact.text(value), text);
   const unique = new Map<string, ListedModel>();
   for (const model of models) {
-    const id = redact.text(model.id);
-    if (!unique.has(id)) unique.set(id, { ...model, id, label: redact.text(model.label) });
+    const id = mask(model.id);
+    if (!unique.has(id)) unique.set(id, { ...model, id, label: mask(model.label) });
   }
   return [...unique.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
-/** Null means no endpoint answered. An empty array means the provider has no models. */
-export async function listModels(connection: ProviderConnection, apiKey: string): Promise<ListedModel[] | null> {
+/**
+ * Null means no endpoint answered. An empty array means the provider has no models. A provider can repeat a credential
+ * in a model id, so ids and labels are masked with this key and `redact`, the request's Redactor, before they are cached.
+ */
+export async function listModels(connection: ProviderConnection, apiKey: string, redact: Redactor): Promise<ListedModel[] | null> {
   const models = connection.kind === "anthropic" ? await listAnthropicModels(apiKey) : await listOpenAiModels(connection.baseUrl, apiKey);
   if (!models) return null;
-  rememberCaps(connection.id, models);
-  return masked(models, new Redactor({ apiKey, baseUrl: connection.kind === "anthropic" ? undefined : connection.baseUrl }));
+  const shown = masked(models, [new Redactor({ apiKey, baseUrl: connection.kind === "anthropic" ? undefined : connection.baseUrl }), redact]);
+  rememberCaps(connection.id, shown);
+  return shown;
 }

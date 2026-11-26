@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import test, { after, before, type TestContext } from "node:test";
+import { Redactor } from "./chat-errors";
 import type { ProviderConnection } from "./connections";
 import { EFFORTS, effortLevels, type Effort } from "./effort";
 import { cachedCaps, listModels, type ListedModel } from "./model-list";
@@ -10,6 +11,7 @@ import { OPENCODE_GO_BASE_URL, OPENCODE_GO_MODELS_URL } from "./provider";
 type Seen = { path: string; params: URLSearchParams; headers: http.IncomingHttpHeaders };
 
 const ANTHROPIC_KEY = "anthropic-made-up-key-0001";
+const NO_REDACTOR = new Redactor(null);
 const seen: Seen[] = [];
 let server: http.Server;
 let base = "";
@@ -132,7 +134,7 @@ function inEffortOrder(levels: readonly Effort[] | null) {
 
 test("an Anthropic model list parses into context, images, and effort levels, following every page", async () => {
   const from = seen.length;
-  const models = await listModels(anthropic("conn-claude"), ANTHROPIC_KEY);
+  const models = await listModels(anthropic("conn-claude"), ANTHROPIC_KEY, NO_REDACTOR);
   assert.deepEqual(models?.map((model: ListedModel) => model.id).sort(), ["claude-haiku-4-5", "claude-opus-5", "claude-opus-5-5"]);
 
   const opus = byId(models, "claude-opus-5-5");
@@ -162,7 +164,7 @@ test("an Anthropic model list parses into context, images, and effort levels, fo
 });
 
 test("None is disabled for claude-opus-5-5, whose list entry says thinking cannot be turned off", async () => {
-  const models = await listModels(anthropic("conn-claude-levels"), ANTHROPIC_KEY);
+  const models = await listModels(anthropic("conn-claude-levels"), ANTHROPIC_KEY, NO_REDACTOR);
   const levels = effortLevels("anthropic", byId(models, "claude-opus-5-5").caps);
   assert.ok(levels);
   assert.equal(levels.includes("none"), false);
@@ -171,7 +173,7 @@ test("None is disabled for claude-opus-5-5, whose list entry says thinking canno
 
 test("an OpenRouter-style entry gets its badges, and a capability the list does not name stays unknown", async () => {
   const from = seen.length;
-  const models = await listModels(openai("conn-router"), "router-key");
+  const models = await listModels(openai("conn-router"), "router-key", NO_REDACTOR);
   assert.deepEqual(byId(models, "router/reasoner").caps, { images: true, tools: true, reasoning: true, contextTokens: 131072, efforts: null });
   assert.equal(byId(models, "window-model").caps.contextTokens, 32768);
   assert.deepEqual(byId(models, "plain-model").caps, { images: null, tools: null, reasoning: null, contextTokens: null, efforts: null });
@@ -183,8 +185,8 @@ test("an OpenRouter-style entry gets its badges, and a capability the list does 
 });
 
 test("two connections with the same base URL keep separate cached caps", async () => {
-  await listModels(openai("conn-a"), "key-a");
-  await listModels(openai("conn-b"), "key-b");
+  await listModels(openai("conn-a"), "key-a", NO_REDACTOR);
+  await listModels(openai("conn-b"), "key-b", NO_REDACTOR);
   assert.equal(cachedCaps("conn-a", "shared-model")?.reasoning, false);
   assert.equal(cachedCaps("conn-b", "shared-model")?.reasoning, true);
   assert.equal(cachedCaps("conn-b", "shared-model")?.contextTokens, 8192);
@@ -194,7 +196,7 @@ test("a cache miss answers with no caps and sends no model-list request", async 
   const from = seen.length;
   assert.equal(cachedCaps("conn-never-listed", "shared-model"), null);
   assert.equal(cachedCaps("conn-a", "not-in-the-list"), null);
-  await listModels(openai("conn-sentinel"), "empty-key");
+  await listModels(openai("conn-sentinel"), "empty-key", NO_REDACTOR);
   assert.deepEqual(
     seen.slice(from).map((request) => request.headers.authorization),
     ["Bearer empty-key"],
@@ -203,9 +205,9 @@ test("a cache miss answers with no caps and sends no model-list request", async 
 });
 
 test("a list that fails is null, and a provider with no models is an empty list", async () => {
-  assert.equal(await listModels(openai("conn-failing"), "failing-key"), null);
-  assert.equal(await listModels(anthropic("conn-claude-bad-key"), "wrong-anthropic-key"), null);
-  assert.deepEqual(await listModels(openai("conn-empty"), "empty-key"), []);
+  assert.equal(await listModels(openai("conn-failing"), "failing-key", NO_REDACTOR), null);
+  assert.equal(await listModels(anthropic("conn-claude-bad-key"), "wrong-anthropic-key", NO_REDACTOR), null);
+  assert.deepEqual(await listModels(openai("conn-empty"), "empty-key", NO_REDACTOR), []);
 });
 
 function json(body: unknown, status = 200) {
@@ -227,7 +229,7 @@ test("a throwing OpenCode primary falls back to the Go model list with the saved
     if (url === OPENCODE_GO_MODELS_URL) return json([{ id: "from-fallback", capabilities: { reasoning: false } }]);
     return json({ error: "unexpected" }, 500);
   });
-  const listed = await listModels(at(OPENCODE_GO_BASE_URL, "conn-opencode"), "saved-secret");
+  const listed = await listModels(at(OPENCODE_GO_BASE_URL, "conn-opencode"), "saved-secret", NO_REDACTOR);
   assert.deepEqual(listed?.map((model) => model.id), ["from-fallback"]);
   const requests = fetch.mock.calls.map((call) => ({
     url: String(call.arguments[0]),
@@ -244,11 +246,11 @@ test("a throwing model list or an error status returns null", async (t) => {
   const thrown = mockFetch(t, () => {
     throw new Error("down");
   });
-  assert.equal(await listModels(at("https://other.example/v1", "conn-down"), "saved-secret"), null);
+  assert.equal(await listModels(at("https://other.example/v1", "conn-down"), "saved-secret", NO_REDACTOR), null);
   assert.deepEqual(thrown.mock.calls.map((c) => String(c.arguments[0])), ["https://other.example/v1/models"]);
   thrown.mock.restore();
   const denied = mockFetch(t, () => json({ error: "unauthorized" }, 401));
-  assert.equal(await listModels(at("https://denied.example/v1", "conn-denied"), "saved-secret"), null);
+  assert.equal(await listModels(at("https://denied.example/v1", "conn-denied"), "saved-secret", NO_REDACTOR), null);
   assert.deepEqual(denied.mock.calls.map((c) => String(c.arguments[0])), ["https://denied.example/v1/models"]);
 });
 
@@ -274,7 +276,7 @@ for (const [index, { shape, body, models }] of payloads.entries()) {
   test(`the model list reads ${shape}`, async (t) => {
     const url = `https://payload-${index}.example/v1`;
     const fetch = mockFetch(t, (requested) => (requested === `${url}/models` ? json(body) : json({ error: "unexpected" }, 500)));
-    const listed = await listModels(at(url, `conn-payload-${index}`), "saved-secret");
+    const listed = await listModels(at(url, `conn-payload-${index}`), "saved-secret", NO_REDACTOR);
     assert.deepEqual(listed?.map((model) => ({ id: model.id, reasoning: model.caps.reasoning })) ?? null, models);
     assert.deepEqual(fetch.mock.calls.map((c) => String(c.arguments[0])), [`${url}/models`]);
   });
