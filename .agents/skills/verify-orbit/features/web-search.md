@@ -1,6 +1,6 @@
 # Web search
 
-This recipe checks search settings, the tool call, the model's answer, and saved cards in Chrome. It uses the local model fixture and a local SearXNG fixture. It does not call Tavily or public search engines.
+This recipe checks search settings, the tool call, the model's answer, and saved search lines in Chrome. It uses the local model fixture and a local SearXNG fixture. It does not call Tavily or public search engines.
 
 ## Run
 
@@ -31,8 +31,8 @@ Require each printed check to pass.
 - The saved line and its three links survive reload. The line is closed again after reload.
 - The line fits at 390 by 844 without page overflow.
 - Stop changes an unfinished line to "Search stopped". Reload preserves it.
-- A completed stopped-search result shows Cancelled and keeps that status after reload.
-- A search stopped and then followed by a new message before the saved result arrives stays Cancelled, not Failed.
+- A completed stopped-search result reads "Search stopped" and keeps it after reload.
+- A search stopped and then followed by a new message before the saved result arrives stays "Search stopped", not "Search failed".
 - A search failure shows Failed, and the model still answers.
 - Repeated searches use four tool steps and leave the fifth step for an answer with a source link.
 - The fifth step can render a requested card or artifact. Both survive reload.
