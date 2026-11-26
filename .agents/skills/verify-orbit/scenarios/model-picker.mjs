@@ -262,9 +262,12 @@ export default async function modelPicker({ page, origin, mockUrl, step, shot })
       } else {
         const cells = await sheet.getByRole("radio").evaluateAll((elements) => elements.map((element) => {
           const rect = element.getBoundingClientRect();
-          return { name: element.textContent.trim(), left: rect.left, right: rect.right, fits: element.scrollWidth <= element.clientWidth };
+          const text = document.createRange();
+          text.selectNodeContents(element);
+          const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
+          return { name: element.textContent.trim(), left: rect.left, right: rect.right, fits: element.scrollWidth <= element.clientWidth, oneLine: text.getBoundingClientRect().height <= lineHeight + 0.5 };
         }));
-        step("effort grid fits at 360", cells.length === EFFORT_LABELS.length && cells.every((cell) => cell.left >= 0 && cell.right <= width && cell.fits), `cells ${JSON.stringify(cells)}`);
+        step("effort grid fits at 360", cells.length === EFFORT_LABELS.length && cells.every((cell) => cell.left >= 0 && cell.right <= width && cell.fits && cell.oneLine), `cells ${JSON.stringify(cells)}`);
       }
       await shot(`sheet-${width}`, phone);
       await phone.keyboard.press("Escape");

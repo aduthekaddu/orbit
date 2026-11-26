@@ -59,7 +59,8 @@ export default async function modelPickerReal({ page, origin, step, shot }) {
     step("summarized thinking shows", thought > 0, "no Thought for button on the reply");
     step("the label names the model", labelText.startsWith(MODEL) && labelText.endsWith("· High"), `label reads ${labelText}`);
     const serverLog = path.join(repoRoot, ".verify", "server.log");
-    step("no key in the server log", !fs.existsSync(serverLog) || !fs.readFileSync(serverLog, "utf8").includes(apiKey), "the server log holds the key");
+    const logged = fs.existsSync(serverLog) ? fs.readFileSync(serverLog, "utf8") : null;
+    step("no key in the server log", logged !== null && !logged.includes(apiKey), logged === null ? `no server log at ${serverLog}` : "the server log holds the key");
   } finally {
     await page.request.delete(`${origin}/api/connections/${connection.id}`, { headers: { origin } });
   }
