@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Chat } from "@ai-sdk/react";
+import { RESUMABLE_STREAM_ID_HEADER as ASSISTANT_UI_STREAM_ID_HEADER } from "@assistant-ui/react-ai-sdk";
 import type { UIMessage } from "ai";
 import { orbitChatTransport } from "./chat-transport";
+import { RESUMABLE_STREAM_ID_HEADER } from "./reply-runs";
 
 function send(response: Response) {
   const transport = orbitChatTransport("c1", { api: "http://orbit.test/api/chat", fetch: async () => response });
@@ -47,12 +49,13 @@ test("resuming a reply requests its chat and reply ids with the SDK abort signal
   assert.equal(requested?.signal.aborted, true);
 });
 
-test("sending a message reports the reply id from the stream response header", async () => {
+test("the server, transport, and assistant-ui agree on the reply id header", async () => {
+  assert.equal(RESUMABLE_STREAM_ID_HEADER, ASSISTANT_UI_STREAM_ID_HEADER);
   const ids: string[] = [];
   const transport = orbitChatTransport("c1", {
     api: "http://orbit.test/api/chat",
     fetch: async () => new Response("data: [DONE]\n\n", {
-      headers: { "x-resumable-stream-id": "reply-id" },
+      headers: { [RESUMABLE_STREAM_ID_HEADER]: "reply-id" },
     }),
     onReplyId: (id) => ids.push(id),
   });

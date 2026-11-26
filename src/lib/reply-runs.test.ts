@@ -156,3 +156,58 @@ test("a read failure after finish still ends the reply with an error", async () 
   }), () => null);
   assert.deepEqual(await readAll(watchReply(run)), [{ type: "error", errorText: "The reply was interrupted." }]);
 });
+
+test("the replay budget evicts the oldest ended run and leaves the running reply intact", async () => {
+  const live = await reserve("live");
+  const finish = { type: "finish", finishReason: "stop" } as const;
+  const delta = { type: "text-delta", id: "answer", delta: "x".repeat(1024 * 1024) } as const;
+  const stream = (close: boolean) => new ReadableStream<UIMessageChunk>({
+    start(controller) {
+      for (let i = 0; i < 22; i++) controller.enqueue(delta);
+      if (close) {
+        controller.enqueue(finish);
+        controller.close();
+      } else {
+        live.controller.signal.addEventListener("abort", () => controller.close(), { once: true });
+      }
+    },
+  });
+  startReplyRun(live, stream(false), () => null);
+  const liveReader = watchReply(live).getReader();
+  try {
+    assert.deepEqual((await liveReader.read()).value, delta);
+    for (const chatId of ["oldest", "second", "newest"]) {
+      const run = await reserve(chatId);
+      startReplyRun(run, stream(true), () => null);
+      await run.done;
+      if (chatId === "second") assert.ok(findReplyRun("oldest", "user", "reply-oldest"));
+    }
+    assert.equal(findReplyRun("oldest", "user", "reply-oldest"), null);
+    assert.ok(findReplyRun("second", "user", "reply-second"));
+    assert.ok(findReplyRun("newest", "user", "reply-newest"));
+    assert.equal(findReplyRun("live", "user")?.run, live);
+    assert.deepEqual((await liveReader.read()).value, delta);
+  } finally {
+    await liveReader.cancel();
+    await discardReplyRun("live");
+  }
+});
+
+test("an ended reply remains replayable for ten minutes", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const run = await reserve();
+  const finish = { type: "finish", finishReason: "stop" } as const;
+  startReplyRun(run, new ReadableStream({
+    start(controller) {
+      controller.enqueue(finish);
+      controller.close();
+    },
+  }), () => null);
+  await run.done;
+  t.mock.timers.tick(10 * 60_000 - 1);
+  const replay = findReplyRun("chat", "user", "reply-chat");
+  assert.ok(replay);
+  assert.deepEqual(await readAll(watchReply(replay.run)), [finish]);
+  t.mock.timers.tick(1);
+  assert.equal(findReplyRun("chat", "user", "reply-chat"), null);
+});
