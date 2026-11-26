@@ -51,6 +51,9 @@ Static theme values in `@theme`:
 | --- | --- | --- |
 | `--container-chat` | `var(--chat-column)` | `max-w-chat` |
 | `--container-page` | `42.5rem` | `max-w-page` |
+| `--spacing-picker` | `24rem` | `w-picker`, the model picker popover |
+| `--spacing-picker-height` | `60vh` | `max-h-picker-height`, the popover and each model list in Settings |
+| `--spacing-sheet-height` | `80dvh` | `max-h-sheet-height`, the bottom sheet |
 | `--text-prose` | `1rem`, line height `1.65` | `text-prose` |
 | `--text-field` | `max(1rem, 16px)`, line height `1.5rem` | `text-field` |
 | `--text-code` | `0.875rem`, line height `1.5rem` | `text-code` |
@@ -82,7 +85,7 @@ Utilities: `num` (Geist Mono, tabular figures), `shimmer`, `scrollbar-none`, `sc
 
 ## Components
 
-`src/components/ui/` holds shadcn-style primitives on individual `@radix-ui/react-*` packages: `Button`, `Input`, `Label`, `Slider`, `Tooltip`, `ToggleGroup`, `Select`, `Dialog`, `Skeleton`, `Kbd`. Each sets `data-slot` for styling from a parent.
+`src/components/ui/` holds shadcn-style primitives on individual `@radix-ui/react-*` packages: `Button`, `Input`, `Label`, `Slider`, `Tooltip`, `ToggleGroup`, `Select`, `Dialog`, `Popover`, `Sheet`, `Switch`, `Skeleton`, `Kbd`. Each sets `data-slot` for styling from a parent. `Sheet` is a bottom sheet on the Dialog primitives, built like the chat drawer: full width, `bg-popover`, rounded top corners, at most `max-h-sheet-height`, sliding up from the bottom edge. It focuses itself on open instead of its first field, so a phone keyboard does not cover it. `Switch` is a `role="switch"` button. `DESKTOP_QUERY` and `useDesktop()` in `src/components/use-desktop.ts` are the one 48rem breakpoint test for script.
 
 `OrbitMark` (`src/components/orbit-mark.tsx`) is the app's only loading indicator. Pass `busy` while the assistant is thinking or streaming and the moon travels the ring, passing behind the planet on the far side. `tone` is `"accent"` (sun ring and moon) or `"mono"` (muted). It is `aria-hidden`, so pair it with a status label where the state matters to a screen reader.
 
@@ -90,7 +93,26 @@ Appearance (`src/components/settings/appearance-settings.tsx`) is the first card
 
 `ThreadMap` (`src/components/chat/thread-map.tsx`) is a rail of ticks on the thread's right edge, one per prompt, shown from three prompts when the thread is at least 52rem wide. Ticks for turns in view are brighter and the current turn is sun. Hovering or focusing the rail opens the prompt list. A row jumps to its prompt and moves focus there. `Alt+Up` and `Alt+Down` step between prompts when focus is outside a text field. The current-turn math lives in `src/lib/thread-map.ts`.
 
-A chat with no provider and no messages shows the provider form in place, so the first run never leaves the chat. Saving refreshes the route and the composer appears.
+A chat whose model choice does not resolve and that has no messages shows the first run in place, so it never leaves the chat. With no connection it shows the add connection form, kind first. Then it shows the default model card. Saving that refreshes the route and the composer appears. When the saved key cannot be read, it shows the connections card, so the key can be entered again.
+
+### Model picker
+
+The composer chip is a `button` (`data-model-chip`) in `font-mono text-meta`, reading `model · Effort`, such as `claude-opus-5-5 · High`, or the model alone when the model takes no effort. It truncates at the end and never pushes Send out of the row. It opens the picker: a `Popover` anchored above the chip on desktop (`w-picker`, at most `max-h-picker-height` or the room above the chip, `shadow-float`), and a `Sheet` under 48rem. Both hold the same panel:
+
+- Models grouped under each connection's label, hidden models left out. A search field shows when the lists hold more than 8 rows. Each row shows the model id, its badges, and a check on the current one. Rows are at least 44px tall in the sheet.
+- A model list that is still loading shows skeleton rows. One that failed shows its error and **Retry** inside its group. A loaded list with nothing to show says `No models`.
+- Under the list, the effort grid: 3 by 2, `None` to `Max`. Levels the model does not take are disabled, and all six are when it takes none. Picking a model that does not take the current effort moves it to the nearest level it takes. The selected level is a raised surface.
+- **Manage** goes to `/settings#models`.
+
+The choice is the chat's own until the next send pins it. Picking a model keeps the picker open, so the effort can follow.
+
+**Badges.** Phosphor icons at 14px, `regular`, each with an `aria-label`: images, tools, reasoning. Then the context size in `num`, such as `200K` or `1M`. A capability the provider did not report gets no badge.
+
+**Reply label.** Each assistant reply with a record shows `model · Effort` at the right end of its action row, in `font-mono text-meta text-muted-foreground`. It sits outside the action bar, so it stays visible when older action bars hide on hover devices. An effort the provider changed reads `High (adjusted)` or `High (ignored)`. A reply with no effort shows the model alone. No tooltip.
+
+### Model settings
+
+After Appearance, Settings has three cards. **Connections** lists each connection's label with its kind and host under it, and **Edit** and **Delete** on the row. **Add** opens a dialog that asks the kind first; an Anthropic connection has no base URL field. **Delete** asks once in a dialog. Errors show inside the dialog. **Default model** holds the connection select, the model select with a **Custom** option for typing an id (a text field alone when the list is empty or failed), the effort grid, and **Save**. **Models** (`#models`) lists every model of each connection with its badges and a show or hide `Switch`. Each connection's heading shows its list status: `Checking`, `N models`, or `Failed`.
 
 `ScrollFade` (`src/components/ui/scroll-fade.tsx`) wraps anything that scrolls on one axis and fades the edge that has more content behind it. Pass `fade` as the color of the surface behind the content. Code blocks, markdown tables, and the command palette use it. A cut line or row without a fade reads as a layout bug.
 
