@@ -44,13 +44,7 @@ function createdKey() {
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const temporary = `${file}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
   try {
-    const fd = fs.openSync(temporary, "wx", 0o600);
-    try {
-      fs.writeSync(fd, randomBytes(32).toString("hex"));
-      fs.fsyncSync(fd);
-    } finally {
-      fs.closeSync(fd);
-    }
+    fs.writeFileSync(temporary, randomBytes(32).toString("hex"), { mode: 0o600, flag: "wx", flush: true });
     fs.linkSync(temporary, file);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
