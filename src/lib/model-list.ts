@@ -52,13 +52,14 @@ const anthropicPage = z.object({
 type AnthropicEntry = z.infer<typeof anthropicPage>["data"][number];
 
 // The Models API names each effort level, and whether thinking can be turned off, which is the None level. None is
-// offered only when the entry says so. Without effort capabilities the levels are unknown, so the route sends the
-// chosen effort and reports what the provider did with it.
+// offered only when the entry says so. Without effort capabilities the other levels are unknown, so the route sends the
+// chosen effort and reports what the provider did with it, unless the entry rules out None.
 function anthropicEfforts(capabilities: AnthropicEntry["capabilities"]): Effort[] | null {
   const effort = capabilities?.effort;
-  if (!effort) return null;
+  const canTurnOffThinking = capabilities?.thinking?.types?.disabled?.supported;
+  if (!effort) return canTurnOffThinking === false ? EFFORTS.filter((level) => level !== "none") : null;
   const levels = EFFORTS.filter((level) => level !== "none" && supported.parse(effort[level])?.supported === true);
-  return capabilities?.thinking?.types?.disabled?.supported === true ? ["none", ...levels] : levels;
+  return canTurnOffThinking === true ? ["none", ...levels] : levels;
 }
 
 function anthropicModel(entry: AnthropicEntry): ListedModel {
@@ -214,19 +215,21 @@ export function cachedCaps(connectionId: string, modelId: string, now = Date.now
   return hit.caps;
 }
 
+// A masked id is not the provider's name for the model, so a model whose id holds a credential is left out.
 function masked(models: ListedModel[], redactors: Redactor[]): ListedModel[] {
   const mask = (text: string) => redactors.reduce((value, redact) => redact.text(value), text);
   const unique = new Map<string, ListedModel>();
   for (const model of models) {
-    const id = mask(model.id);
-    if (!unique.has(id)) unique.set(id, { ...model, id, label: mask(model.label) });
+    if (mask(model.id) !== model.id || unique.has(model.id)) continue;
+    unique.set(model.id, { ...model, label: mask(model.label) });
   }
   return [...unique.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
 /**
  * Null means no endpoint answered. An empty array means the provider has no models. A provider can repeat a credential
- * in a model id, so ids and labels are masked with this key and `redact`, the request's Redactor, before they are cached.
+ * in a model id, so models whose id holds this key or a secret `redact` knows are dropped, and labels are masked,
+ * before the list is cached.
  */
 export async function listModels(connection: ProviderConnection, apiKey: string, redact: Redactor): Promise<ListedModel[] | null> {
   const models = connection.kind === "anthropic" ? await listAnthropicModels(apiKey) : await listOpenAiModels(connection.baseUrl, apiKey);

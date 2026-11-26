@@ -279,15 +279,15 @@ test("a hidden model stays listed and is named in hidden until it is shown again
   assert.deepEqual(((await modelsOf(openaiId)).json() as { hidden: string[] }).hidden, []);
 });
 
-test("a model id that repeats a credential of the user is masked before the list is cached or returned", async () => {
+test("a model id that repeats a credential of the user is dropped before the list is cached or returned", async () => {
   const listed = await modelsOf(openaiId);
   assert.equal(listed.status, 200, listed.text);
   for (const secret of ECHOED) {
     assert.equal(listed.text.includes(secret), false, `the list returned ${secret}`);
     assert.equal(cachedCaps(openaiId, `echo-${secret}`), null, `the caps cache holds the plain id echo-${secret}`);
   }
-  assert.ok((listed.json().models as { id: string }[]).some((model) => model.id === "echo-[redacted]"), listed.text);
-  assert.ok(cachedCaps(openaiId, "echo-[redacted]"), "the masked id has no cached caps");
+  assert.deepEqual((listed.json().models as { id: string }[]).map((model) => model.id), ["fixture-model", "openai/gpt-5"], "a masked id would be sent back under the wrong name");
+  assert.equal(cachedCaps(openaiId, "echo-[redacted]"), null, "the caps cache holds a masked id");
 });
 
 test("deleting a connection clears the chats and defaults that use it, and old replies keep their model and effort", async () => {

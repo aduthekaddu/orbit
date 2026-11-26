@@ -184,6 +184,7 @@ test("an Anthropic entry that names its effort levels but not whether thinking c
           },
         },
         { id: "claude-no-effort", capabilities: { thinking: { supported: true, types: { disabled: { supported: true } } } } },
+        { id: "claude-always-thinks", capabilities: { thinking: { supported: true, types: { disabled: { supported: false } } } } },
       ],
       has_more: false,
     }),
@@ -193,6 +194,11 @@ test("an Anthropic entry that names its effort levels but not whether thinking c
   assert.deepEqual(inEffortOrder(silent.caps.efforts), ["low", "medium", "high", "max"]);
   assert.deepEqual(inEffortOrder(effortLevels("anthropic", silent.caps)), ["low", "medium", "high", "max"]);
   assert.equal(byId(models, "claude-no-effort").caps.efforts, null, "with no effort capabilities the levels are unknown");
+  assert.deepEqual(
+    inEffortOrder(effortLevels("anthropic", byId(models, "claude-always-thinks").caps)),
+    ["low", "medium", "high", "xhigh", "max"],
+    "an entry that says thinking cannot be turned off never offers None",
+  );
 });
 
 test("an OpenRouter-style entry gets its badges, and a capability the list does not name stays unknown", async () => {
