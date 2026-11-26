@@ -60,10 +60,10 @@ function upgrade(install: Install) {
   boot(install);
 }
 
-function withDb<T>(install: Install, use: (db: Database.Database) => T): T {
+function withDb<T>(install: Install, read: (db: Database.Database) => T): T {
   const db = new Database(install.dbFile);
   try {
-    return use(db);
+    return read(db);
   } finally {
     db.close();
   }

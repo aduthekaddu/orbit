@@ -11,6 +11,7 @@ import { startMockMcp, type MockMcp } from "../../../../scripts/qa/mock-mcp.mjs"
 import { getDb } from "@/lib/db";
 import * as schema from "@/lib/db/schema";
 import * as messages from "@/lib/messages";
+import { seedTestConnection } from "@/lib/connection-fixture";
 import { saveSettings } from "@/lib/settings";
 
 const PROVIDER_KEY = "made-up-provider-key-0001";
@@ -116,14 +117,11 @@ before(async () => {
   closeDb = () => db.$client.close();
   const now = new Date();
   db.insert(schema.user).values({ id: USER_ID, name: "Route", email: "route@orbit.local", emailVerified: false, createdAt: now, updatedAt: now }).run();
+  seedTestConnection(USER_ID, { baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: PROVIDER_KEY, model: "mock" });
   saveSettings({
-    baseUrl: `http://127.0.0.1:${port}/v1`,
-    apiKey: PROVIDER_KEY,
     tavilyApiKey: TAVILY_KEY,
     githubToken: github.token,
     githubMcpUrl: `${github.url}?mode=error-token&echo=${encodeURIComponent(`${TAVILY_KEY} and ${PROVIDER_KEY}`)}`,
-    model: "mock",
-    reasoningEffort: "medium",
   });
   route = await import("./route");
   ({ PATCH: editReply } = await import("../chats/[id]/messages/[messageId]/route"));

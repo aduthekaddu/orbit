@@ -39,6 +39,15 @@ export function urlHostLabel(raw: unknown): string {
   }
 }
 
+/** The SQL functions the migrations call. They must exist on the connection before migrate runs. */
+export function registerMigrationFunctions(sqlite: Database.Database) {
+  // Migration 0004 calls this to clean saved code output the way new saves do.
+  sqlite.function("orbit_clean_output", { deterministic: true }, (text) => (typeof text === "string" ? stripTerminalControls(text) : null));
+  // Migration 0014 calls these to move the provider key out of settings, encrypted.
+  sqlite.function("orbit_encrypt_secret", (text) => (typeof text === "string" ? encryptSecret(text) : null));
+  sqlite.function("orbit_url_host", { deterministic: true }, urlHostLabel);
+}
+
 function hasProviderColumns(sqlite: Database.Database) {
   return sqlite.prepare("select 1 from pragma_table_info('settings') where name = 'api_key'").get() !== undefined;
 }
@@ -67,11 +76,7 @@ function openDb() {
     sqlite.pragma("journal_mode = WAL");
     sqlite.pragma("foreign_keys = ON");
     sqliteVec.load(sqlite);
-    // Migration 0004 calls this to clean saved code output the way new saves do.
-    sqlite.function("orbit_clean_output", { deterministic: true }, (text) => (typeof text === "string" ? stripTerminalControls(text) : null));
-    // Migration 0014 calls these to move the provider key out of settings, encrypted.
-    sqlite.function("orbit_encrypt_secret", (text) => (typeof text === "string" ? encryptSecret(text) : null));
-    sqlite.function("orbit_url_host", { deterministic: true }, urlHostLabel);
+    registerMigrationFunctions(sqlite);
 
     restrictDbFile(dataDir, "orbit.db");
     restrictDbFile(dataDir, "orbit.db-wal");

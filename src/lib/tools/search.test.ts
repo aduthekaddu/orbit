@@ -224,16 +224,9 @@ test("web_search masks stored credentials in titles, URLs, snippets, and queries
       },
     ],
   });
-  const tools = toolsFor({
-    baseUrl: "http://127.0.0.1:9/v1",
-    apiKey: providerKey,
-    model: "mock",
-    reasoningEffort: "low",
-    searxngUrl: local.url,
-    tavilyApiKey: tavilyKey,
-    githubToken,
-    githubMcpUrl: "",
-  });
+  const settings = { searxngUrl: local.url, tavilyApiKey: tavilyKey, githubToken, githubMcpUrl: "" };
+  const { Redactor } = await import("../chat-errors");
+  const tools = toolsFor(settings, undefined, undefined, new Redactor(settings, { apiKey: providerKey, baseUrl: "http://127.0.0.1:9/v1" }));
   const execute = tools.web_search?.execute;
   assert.ok(execute);
   const output = (await execute({ query: `lookup ${providerKey}` }, { toolCallId: "s1", messages: [], context: {} })) as {

@@ -42,10 +42,6 @@ test("search-only environment settings seed a row without a model provider", () 
 
 test("public settings report a GitHub token without returning it", () => {
   const row = {
-    baseUrl: "https://example.com/v1",
-    apiKey: "test-provider-key-not-real",
-    model: "test-model",
-    reasoningEffort: "medium" as const,
     searxngUrl: "",
     tavilyApiKey: "",
     githubToken: "good-token",
@@ -60,10 +56,6 @@ test("public settings report a GitHub token without returning it", () => {
 
 test("public settings expose search configuration without either key", () => {
   const row = {
-    baseUrl: "https://example.com/v1",
-    apiKey: "test-provider-key-not-real",
-    model: "test-model",
-    reasoningEffort: "medium" as const,
     searxngUrl: "http://127.0.0.1:8888",
     tavilyApiKey: "test-tavily-key-not-real",
     githubToken: "",
@@ -71,19 +63,16 @@ test("public settings expose search configuration without either key", () => {
   };
   const value = settings.toPublicSettings(row);
   assert.deepEqual(value, {
-    baseUrl: "https://example.com/v1", model: "test-model", reasoningEffort: "medium", keySet: true,
     searxngUrl: "http://127.0.0.1:8888", tavilyKeySet: true, githubTokenSet: false, githubMcpUrl: "https://api.githubcopilot.com/mcp/", sandbox: false,
   });
-  assert.equal(JSON.stringify(value).includes(row.apiKey), false);
   assert.equal(JSON.stringify(value).includes(row.tavilyApiKey), false);
 });
 
 test("an explicit GitHub token removal clears the stored token", async () => {
-  const provider = { baseUrl: "https://example.com/v1", apiKey: "test-provider-key-not-real", model: "test-model", reasoningEffort: "medium" as const };
-  settings.saveSettings({ ...provider, githubToken: "good-token", githubMcpUrl: "https://api.githubcopilot.com/mcp/" });
-  const removed = settings.saveSettings({ ...provider, githubToken: null });
+  settings.saveSettings({ githubToken: "good-token", githubMcpUrl: "https://api.githubcopilot.com/mcp/" });
+  const removed = settings.saveSettings({ githubToken: null });
   assert.equal(removed.githubTokenSet, false);
-  assert.equal(settings.getSettings()?.githubToken, "");
+  assert.equal(settings.getSettings().githubToken, "");
   assert.equal(JSON.stringify(removed).includes("good-token"), false);
   const stored = settings.getSettings();
   assert.ok(stored);
@@ -93,30 +82,27 @@ test("an explicit GitHub token removal clears the stored token", async () => {
 });
 
 test("a blank GitHub token keeps the stored token and an empty MCP URL uses the default", () => {
-  const provider = { baseUrl: "https://example.com/v1", apiKey: "test-provider-key-not-real", model: "test-model", reasoningEffort: "medium" as const };
-  settings.saveSettings({ ...provider, githubToken: "good-token", githubMcpUrl: "http://127.0.0.1:9/mcp" });
-  const cleared = settings.saveSettings({ ...provider, githubToken: "  ", githubMcpUrl: "" });
-  assert.equal(settings.getSettings()?.githubToken, "good-token");
-  assert.equal(settings.getSettings()?.githubMcpUrl, "");
+  settings.saveSettings({ githubToken: "good-token", githubMcpUrl: "http://127.0.0.1:9/mcp" });
+  const cleared = settings.saveSettings({ githubToken: "  ", githubMcpUrl: "" });
+  assert.equal(settings.getSettings().githubToken, "good-token");
+  assert.equal(settings.getSettings().githubMcpUrl, "");
   assert.equal(cleared.githubTokenSet, true);
   assert.equal(cleared.githubMcpUrl, "https://api.githubcopilot.com/mcp/");
   assert.equal(JSON.stringify(cleared).includes("good-token"), false);
 });
 
 test("blank and omitted Tavily keys retain the saved key", () => {
-  const provider = { baseUrl: "https://example.com/v1", apiKey: "test-provider-key-not-real", model: "test-model", reasoningEffort: "medium" as const };
-  settings.saveSettings({ ...provider, searxngUrl: "http://127.0.0.1:8888", tavilyApiKey: "test-tavily-key-not-real" });
-  settings.saveSettings({ ...provider, searxngUrl: "", tavilyApiKey: "  " });
-  assert.equal(settings.getSettings()?.tavilyApiKey, "test-tavily-key-not-real");
-  assert.equal(settings.getSettings()?.searxngUrl, "");
-  settings.saveSettings(provider);
-  assert.equal(settings.getSettings()?.tavilyApiKey, "test-tavily-key-not-real");
+  settings.saveSettings({ searxngUrl: "http://127.0.0.1:8888", tavilyApiKey: "test-tavily-key-not-real" });
+  settings.saveSettings({ searxngUrl: "", tavilyApiKey: "  " });
+  assert.equal(settings.getSettings().tavilyApiKey, "test-tavily-key-not-real");
+  assert.equal(settings.getSettings().searxngUrl, "");
+  settings.saveSettings({});
+  assert.equal(settings.getSettings().tavilyApiKey, "test-tavily-key-not-real");
 });
 
 test("an explicit Tavily removal clears the key and disables its search backend", async () => {
-  const provider = { baseUrl: "https://example.com/v1", model: "test-model", reasoningEffort: "medium" as const };
-  settings.saveSettings({ ...provider, apiKey: "test-provider-key-not-real", searxngUrl: "", tavilyApiKey: "test-tavily-key-not-real" });
-  const saved = settings.saveSettings({ ...provider, tavilyApiKey: null });
+  settings.saveSettings({ searxngUrl: "", tavilyApiKey: "test-tavily-key-not-real" });
+  const saved = settings.saveSettings({ tavilyApiKey: null });
   assert.equal(saved.tavilyKeySet, false);
   const row = settings.getSettings();
   assert.ok(row);
@@ -131,7 +117,7 @@ test("public settings say whether the server enabled the code sandbox and expose
     for (const value of [undefined, "off", "true", "ON", "on"]) {
       if (value === undefined) delete process.env.ORBIT_SANDBOX;
       else process.env.ORBIT_SANDBOX = value;
-      const body = settings.toPublicSettings(null) as { sandbox?: boolean };
+      const body = settings.toPublicSettings(settings.getSettings());
       assert.equal(body.sandbox, value === "on", `ORBIT_SANDBOX=${value}`);
       assert.equal(JSON.stringify(body).includes("private-proxy-not-real"), false);
     }

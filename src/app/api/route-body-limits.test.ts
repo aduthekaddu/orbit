@@ -11,7 +11,8 @@ import { getDb } from "@/lib/db";
 import * as schema from "@/lib/db/schema";
 import * as chatStore from "@/lib/messages";
 import { LIMITS } from "@/lib/route-schema";
-import { getSettings, saveSettings } from "@/lib/settings";
+import { seedTestConnection } from "@/lib/connection-fixture";
+import { connectionApiKey } from "@/lib/connections";
 
 const redact = new Redactor(null);
 
@@ -48,8 +49,9 @@ const hooks = registerHooks({
 });
 
 let chatRoute: typeof import("./chat/route");
-let settingsRoute: typeof import("./settings/route");
-let modelsRoute: typeof import("./models/route");
+let connectionsRoute: typeof import("./connections/route");
+let connectionRoute: typeof import("./connections/[id]/route");
+let connectionId = "";
 let closeDb: () => void;
 let dbPath = "";
 let provider: http.Server;
@@ -92,15 +94,10 @@ before(async () => {
   closeDb = () => db.$client.close();
   const now = new Date();
   db.insert(schema.user).values({ id: USER_ID, name: "Limits", email: "limits@orbit.local", emailVerified: false, createdAt: now, updatedAt: now }).run();
-  saveSettings({
-    baseUrl: `http://127.0.0.1:${port}/v1`,
-    apiKey: PROVIDER_KEY,
-    model: "mock",
-    reasoningEffort: "medium",
-  });
+  connectionId = seedTestConnection(USER_ID, { baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: PROVIDER_KEY, model: "mock" });
   chatRoute = await import("./chat/route");
-  settingsRoute = await import("./settings/route");
-  modelsRoute = await import("./models/route");
+  connectionsRoute = await import("./connections/route");
+  connectionRoute = await import("./connections/[id]/route");
 });
 
 after(async () => {
@@ -334,22 +331,26 @@ test("a request body over the size cap is refused before it is parsed", async ()
   assert.equal(chatStore.storedMessageCount("c-huge"), 0);
 });
 
-test("an 80,000 letter API key is refused by settings and leaves the saved key alone", async () => {
-  const response = await settingsRoute.PUT(postJson("/api/settings", "PUT", {
+test("an 80,000 letter API key is refused by a new connection before any provider request", async () => {
+  const before = providerRequests;
+  const response = await connectionsRoute.POST(postJson("/api/connections", "POST", {
+    kind: "openai-compatible",
+    label: "Long",
     baseUrl: "http://127.0.0.1:9/v1",
     apiKey: EIGHTY_THOUSAND_LETTERS,
-    model: "mock",
-    reasoningEffort: "medium",
   }));
   assert.equal(response.status, 400);
-  assert.equal(getSettings()?.apiKey, PROVIDER_KEY);
+  assert.equal(providerRequests, before);
 });
 
-test("an 80,000 letter API key is refused by the model list before any provider request", async () => {
+test("an 80,000 letter API key is refused by a connection edit and leaves the saved key alone", async () => {
   const before = providerRequests;
-  const response = await modelsRoute.POST(postJson("/api/models", "POST", { apiKey: EIGHTY_THOUSAND_LETTERS }));
+  const response = await connectionRoute.PATCH(postJson(`/api/connections/${connectionId}`, "PATCH", { apiKey: EIGHTY_THOUSAND_LETTERS }), {
+    params: Promise.resolve({ id: connectionId }),
+  });
   assert.equal(response.status, 400);
   assert.equal(providerRequests, before);
+  assert.equal(connectionApiKey(USER_ID, connectionId), PROVIDER_KEY);
 });
 
 test("the test database stays in the runner-managed ORBIT_DATA_DIR", () => {

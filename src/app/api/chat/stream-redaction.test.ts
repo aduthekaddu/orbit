@@ -11,6 +11,7 @@ import { MockLanguageModelV4 } from "ai/test";
 import { getDb, type OrbitDb } from "@/lib/db";
 import * as schema from "@/lib/db/schema";
 import * as messages from "@/lib/messages";
+import { seedTestConnection } from "@/lib/connection-fixture";
 import { saveSettings } from "@/lib/settings";
 
 const PROVIDER_KEY = "made-up-provider-key-0001";
@@ -33,9 +34,7 @@ const stubs: Record<string, string> = {
   "@/lib/session": `exports.getSession = async () => ({ user: { id: ${JSON.stringify(USER_ID)} } });
 exports.unauthorized = () => Response.json({ error: "Unauthorized" }, { status: 401 });`,
   "next/server": `exports.after = (task) => { globalThis.__orbitStreamAfter.push(Promise.resolve(typeof task === "function" ? task() : task)); };`,
-  "@/lib/provider": `exports.orbitModel = () => globalThis.__orbitStreamModel();
-exports.modelAllowsReasoning = () => true;
-exports.reasoningOptions = () => ({});`,
+  "@/lib/provider": `exports.languageModelFor = () => globalThis.__orbitStreamModel();`,
 };
 
 const stubUrls = Object.fromEntries(
@@ -71,14 +70,11 @@ function finishChunk(unified: "stop" | "tool-calls" = "stop") {
 }
 
 function setCredentials(keys?: { apiKey?: string; tavilyApiKey?: string; githubToken?: string }) {
+  seedTestConnection(USER_ID, { apiKey: keys?.apiKey ?? PROVIDER_KEY, model: "mock" });
   saveSettings({
-    baseUrl: "http://127.0.0.1:9/v1",
-    apiKey: keys?.apiKey ?? PROVIDER_KEY,
     tavilyApiKey: keys?.tavilyApiKey ?? TAVILY_KEY,
     githubToken: keys?.githubToken ?? GITHUB_TOKEN,
     githubMcpUrl: "https://api.githubcopilot.com/mcp/",
-    model: "mock",
-    reasoningEffort: "medium",
   });
 }
 

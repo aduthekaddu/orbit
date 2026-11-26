@@ -5,6 +5,7 @@ import path from "node:path";
 import test, { before, after } from "node:test";
 import Database from "better-sqlite3";
 import { Redactor } from "../chat-errors";
+import { seedTestConnection } from "../connection-fixture";
 import { getDb } from "../db";
 import * as schema from "../db/schema";
 import { createChat, finishChatReply, listMessages, persistIncoming, planChatWrite } from "../messages";
@@ -62,16 +63,7 @@ before(async () => {
   provider = await startMockProvider();
   const db = getDb();
   db.insert(schema.user).values({ id: "dream-user", name: "Dream", email: "dream@orbit.local", emailVerified: true }).run();
-  db.insert(schema.settings)
-    .values({
-      id: 1,
-      baseUrl: provider.url,
-      apiKey: "test-key-not-real",
-      model: "mock-genui",
-      reasoningEffort: "medium",
-      updatedAt: new Date(),
-    })
-    .run();
+  seedTestConnection("dream-user", { baseUrl: provider.url, apiKey: "test-key-not-real", model: "mock-genui" });
 });
 
 after(async () => {
@@ -336,8 +328,7 @@ test("a night that fails before its chats keeps them for the next night", async 
   assert.ok(first);
   assert.equal(first.state, "done");
   assert.deepEqual(first.retryChatIds, [bad.chatId]);
-  const saved = db.$client.prepare("SELECT base_url AS baseUrl FROM settings WHERE id = 1").get() as { baseUrl: string };
-  db.$client.prepare("UPDATE settings SET base_url = '' WHERE id = 1").run();
+  db.$client.prepare("UPDATE user_preferences SET default_model = NULL WHERE user_id = 'dream-user'").run();
   try {
     const second = await api.runDream({ manual: true, date: "2099-08-02", now: new Date(at("2099-08-02", 16)) });
     assert.ok(second);
@@ -345,7 +336,7 @@ test("a night that fails before its chats keeps them for the next night", async 
     assert.equal(second.error, "No provider is saved");
     assert.deepEqual(second.retryChatIds, [bad.chatId]);
   } finally {
-    db.$client.prepare("UPDATE settings SET base_url = ? WHERE id = 1").run(saved.baseUrl);
+    db.$client.prepare("UPDATE user_preferences SET default_model = 'mock-genui' WHERE user_id = 'dream-user'").run();
   }
   const third = await api.runDream({ date: "2099-08-03", now: new Date(at("2099-08-03", 16)) });
   assert.ok(third);

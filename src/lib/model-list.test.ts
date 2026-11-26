@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import test, { after, before } from "node:test";
+import test, { after, before, type TestContext } from "node:test";
 import type { ProviderConnection } from "./connections";
 import { EFFORTS, effortLevels, type Effort } from "./effort";
 import { cachedCaps, listModels, type ListedModel } from "./model-list";
+import { OPENCODE_GO_BASE_URL, OPENCODE_GO_MODELS_URL } from "./provider";
 
 type Seen = { path: string; params: URLSearchParams; headers: http.IncomingHttpHeaders };
 
@@ -206,3 +207,75 @@ test("a list that fails is null, and a provider with no models is an empty list"
   assert.equal(await listModels(anthropic("conn-claude-bad-key"), "wrong-anthropic-key"), null);
   assert.deepEqual(await listModels(openai("conn-empty"), "empty-key"), []);
 });
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+}
+
+function mockFetch(t: TestContext, respond: (url: string) => Response) {
+  return t.mock.method(globalThis, "fetch", async (input: string | URL | Request) => respond(String(input)));
+}
+
+function at(baseUrl: string, id: string): ProviderConnection {
+  return { id, userId: "u-models", kind: "openai-compatible", label: "Fixture", baseUrl, createdAt: new Date() };
+}
+
+test("a throwing OpenCode primary falls back to the Go model list with the saved key", async (t) => {
+  const fetch = t.mock.method(globalThis, "fetch", async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url === `${OPENCODE_GO_BASE_URL}/models`) throw new Error("primary down");
+    if (url === OPENCODE_GO_MODELS_URL) return json([{ id: "from-fallback", capabilities: { reasoning: false } }]);
+    return json({ error: "unexpected" }, 500);
+  });
+  const listed = await listModels(at(OPENCODE_GO_BASE_URL, "conn-opencode"), "saved-secret");
+  assert.deepEqual(listed?.map((model) => model.id), ["from-fallback"]);
+  const requests = fetch.mock.calls.map((call) => ({
+    url: String(call.arguments[0]),
+    authorization: new Headers((call.arguments[1] as RequestInit | undefined)?.headers).get("authorization"),
+  }));
+  assert.deepEqual(requests, [
+    { url: `${OPENCODE_GO_BASE_URL}/models`, authorization: "Bearer saved-secret" },
+    { url: OPENCODE_GO_MODELS_URL, authorization: "Bearer saved-secret" },
+  ]);
+  assert.equal(cachedCaps("conn-opencode", "from-fallback")?.reasoning, false);
+});
+
+test("a throwing model list or an error status returns null", async (t) => {
+  const thrown = mockFetch(t, () => {
+    throw new Error("down");
+  });
+  assert.equal(await listModels(at("https://other.example/v1", "conn-down"), "saved-secret"), null);
+  assert.deepEqual(thrown.mock.calls.map((c) => String(c.arguments[0])), ["https://other.example/v1/models"]);
+  thrown.mock.restore();
+  const denied = mockFetch(t, () => json({ error: "unauthorized" }, 401));
+  assert.equal(await listModels(at("https://denied.example/v1", "conn-denied"), "saved-secret"), null);
+  assert.deepEqual(denied.mock.calls.map((c) => String(c.arguments[0])), ["https://denied.example/v1/models"]);
+});
+
+const payloads = [
+  {
+    shape: "a { data } body",
+    body: { data: [{ id: "b" }, { id: "a", capabilities: { reasoning: false } }] },
+    models: [
+      { id: "a", reasoning: false },
+      { id: "b", reasoning: null },
+    ],
+  },
+  { shape: "a { models } body", body: { models: [{ id: "m", reasoning: true }] }, models: [{ id: "m", reasoning: true }] },
+  { shape: "plain string ids", body: ["plain-id"], models: [{ id: "plain-id", reasoning: null }] },
+  { shape: "a name in place of an id", body: [{ name: "named" }], models: [{ id: "named", reasoning: null }] },
+  { shape: "an empty { data } body", body: { data: [] }, models: [] },
+  { shape: "an empty top-level array", body: [], models: [] },
+  { shape: "JSON that is not a model list", body: { object: "error", message: "upstream changed" }, models: null },
+  { shape: "an object with no model array", body: { object: "list" }, models: null },
+];
+
+for (const [index, { shape, body, models }] of payloads.entries()) {
+  test(`the model list reads ${shape}`, async (t) => {
+    const url = `https://payload-${index}.example/v1`;
+    const fetch = mockFetch(t, (requested) => (requested === `${url}/models` ? json(body) : json({ error: "unexpected" }, 500)));
+    const listed = await listModels(at(url, `conn-payload-${index}`), "saved-secret");
+    assert.deepEqual(listed?.map((model) => ({ id: model.id, reasoning: model.caps.reasoning })) ?? null, models);
+    assert.deepEqual(fetch.mock.calls.map((c) => String(c.arguments[0])), [`${url}/models`]);
+  });
+}

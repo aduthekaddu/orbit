@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CUSTOM_OPTION, NO_OPTION, modelOptionIndex, selectedOptionIndex, showsModelInput, type ModelOption } from "./model-picker";
+import { CUSTOM_OPTION, NO_OPTION, modelOptionIndex, selectedOptionIndex, showsModelInput } from "./model-picker";
 
-const models: ModelOption[] = [
-  { id: "__custom__", reasoning: null },
-  { id: "gpt-4", reasoning: null },
-];
+const models = [{ id: "__custom__" }, { id: "gpt-4" }];
 
 test("a listed model id is addressed by its position", () => {
   assert.equal(modelOptionIndex(models, "__custom__"), 0);
