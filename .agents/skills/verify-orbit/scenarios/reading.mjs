@@ -17,6 +17,8 @@ const TEXT_SIZES = [["sm", 15], ["md", 16], ["lg", 18], ["xl", 20]];
 const DEFAULTS = { theme: "dark", textSize: "md", replyFont: "sans", chatWidth: "normal", accent: "sun" };
 const SWEEP_REM = [34, 35, 36, 37, 38, 39, 40];
 const PROMPT = "[qa:markdown] Write a deploy guide for Orbit.";
+// Saved so the memory page has text to measure, and deleted again so later scenarios on this server never recall them.
+const MEMORY_NOTES = ["I deploy Orbit with Caddy on a small server", "My backups run every night at two"];
 const LAST_WORDS = "only a guess about the future";
 // The tour's method: characters per line is the box width over the mean character width of this string in
 // the same font. It reads about 100 for 14px Geist in the 680px column on main, as the tour did.
@@ -333,7 +335,7 @@ export default async function reading({ page, origin, step, shot }) {
   }
 
   const emptyId = (await (await page.request.post(`${origin}/api/chats`)).json()).id;
-  for (const note of ["I deploy Orbit with Caddy on a small server", "My backups run every night at two"]) {
+  for (const note of MEMORY_NOTES) {
     await send(page, origin, `[qa:remember] ${note}`, "Saved.");
   }
   const memories = await eventually(
@@ -578,6 +580,9 @@ export default async function reading({ page, origin, step, shot }) {
   } finally {
     const reset = await page.request.patch(`${origin}/api/preferences`, { data: DEFAULTS });
     step("preferences return to the defaults", reset.status() === 200, `status ${reset.status()}`);
+    const saved = ((await (await page.request.get(`${origin}/api/memories`)).json()).memories ?? []).filter((row) => MEMORY_NOTES.some((note) => row.text?.includes(note)));
+    const removed = await Promise.all(saved.map(async (row) => (await page.request.delete(`${origin}/api/memories/${row.id}`)).status()));
+    step("the memories this scenario saved are deleted", removed.every((status) => status === 200), `statuses ${removed.join(", ") || "none saved"}`);
     for (const view of views) await view.context.close();
     save();
   }

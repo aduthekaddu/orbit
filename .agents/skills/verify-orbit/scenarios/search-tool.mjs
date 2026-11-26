@@ -59,7 +59,8 @@ export default async function searchTool({ page, origin, mockUrl, step, shot }) 
     step("search card shows three source links", await done.getByRole("link").count() === 3);
     const answer = page.locator('[data-message-role="assistant"]').last().getByRole("link", { name: "Orbit guide", exact: true }).last();
     await answer.waitFor({ timeout: 10_000 });
-    step("the model answers from the first result URL", await answer.getAttribute("href") === searchFixtures[0].url && mock.requests.includes("orbit"));
+    const answerHref = await answer.getAttribute("href");
+    step("the model answers from the first result URL", answerHref === searchFixtures[0].url && mock.requests.includes("orbit"), `href ${answerHref}, searches ${JSON.stringify(mock.requests)}`);
     step("source links open safely", await done.getByRole("link").first().getAttribute("target") === "_blank" && await done.getByRole("link").first().getAttribute("rel") === "noopener noreferrer nofollow");
     await page.getByRole("button", { name: "Send", exact: true }).waitFor();
     await shot("done");
