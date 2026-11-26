@@ -406,7 +406,7 @@ test("two runs started at once produce one claim", async () => {
   assert.equal(requests.length, 1);
 });
 
-test("an Ollama outage skips model calls and recovery reads the newest 100 messages", async () => {
+test("an Ollama outage skips model calls and recovery reads all the messages the failed nights missed", async () => {
   const api = requireDream();
   await resetChats();
   fs.writeFileSync(requestLog, "");
@@ -449,7 +449,8 @@ test("an Ollama outage skips model calls and recovery reads the newest 100 messa
   const recovered = await api.runDream({ date: recoveryDate, now: new Date(at(recoveryDate, 16)) });
   assert.equal(recovered?.state, "done");
   assert.deepEqual(recovered?.retryChatIds, []);
-  assert.deepEqual(memoryTexts(), ["I live in Porto"]);
+  assert.equal(recovered?.added, 2);
+  assert.deepEqual(memoryTexts(), ["I live in Lisbon", "I live in Porto"]);
 });
 
 test("a cached query embed failure does not fail a night with Ollama back", async () => {
