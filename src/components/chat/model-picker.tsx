@@ -25,11 +25,11 @@ type Picker = {
   connections: PublicConnection[];
   lists: ModelLists;
   load: (connectionId: string) => void;
-  firstLevels: FirstLevels | null;
+  known: KnownLevels | null;
 };
 
-// The levels the server knew for the chat's first choice, so the chip reads right before the list loads.
-type FirstLevels = { connectionId: string; model: string; levels: Effort[] | null };
+// The levels the server knew for the choice it resolved, so the chip reads right before the list loads.
+type KnownLevels = { connectionId: string; model: string; levels: Effort[] | null };
 
 type Layout = "popover" | "sheet";
 
@@ -47,30 +47,30 @@ export function ModelChoiceProvider({
   choice,
   onChoose,
   connections,
-  levels,
+  known,
   children,
 }: {
   choice: ModelChoice | null;
   onChoose: (choice: ModelChoice) => void;
   connections: PublicConnection[];
-  levels: Effort[] | null;
+  known: KnownLevels | null;
   children: ReactNode;
 }) {
   const { lists, load } = useModelLists();
-  const [firstLevels] = useState<FirstLevels | null>(() => choice && { connectionId: choice.connectionId, model: choice.model, levels });
+  const knownConnection = known?.connectionId;
   // The route knows a model's levels only after its list loads once since the server started.
   useEffect(() => {
-    if (firstLevels) load(firstLevels.connectionId);
-  }, [firstLevels, load]);
-  return <PickerContext.Provider value={{ choice, choose: onChoose, connections, lists, load, firstLevels }}>{children}</PickerContext.Provider>;
+    if (knownConnection) load(knownConnection);
+  }, [knownConnection, load]);
+  return <PickerContext.Provider value={{ choice, choose: onChoose, connections, lists, load, known }}>{children}</PickerContext.Provider>;
 }
 
-function choiceLevels({ choice, connections, lists, firstLevels }: Picker): Effort[] | null {
+function choiceLevels({ choice, connections, lists, known }: Picker): Effort[] | null {
   if (!choice) return [];
   const connection = connections.find((item) => item.id === choice.connectionId);
   const list = loadedList(listOf(lists, choice.connectionId));
   if (connection && list) return modelLevels(connection.kind, list, choice.model);
-  return firstLevels?.connectionId === choice.connectionId && firstLevels.model === choice.model ? firstLevels.levels : null;
+  return known?.connectionId === choice.connectionId && known.model === choice.model ? known.levels : null;
 }
 
 const chipClass =

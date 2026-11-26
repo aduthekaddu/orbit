@@ -104,7 +104,7 @@ The composer chip is a `button` (`data-model-chip`) in `font-mono text-meta`, re
 - Under the list, the effort grid: 3 by 2, `None` to `Max`. Levels the model does not take are disabled, and all six are when it takes none. Picking a model that does not take the current effort moves it to the nearest level it takes. The selected level is a raised surface.
 - **Manage** goes to `/settings#models`.
 
-The choice is the chat's own until the next send pins it. Picking a model keeps the picker open, so the effort can follow.
+The choice is the chat's own until the next send pins it. Picking a model keeps the picker open, so the effort can follow. A pick whose connection is deleted is dropped, and the chat falls back to its pinned choice or the defaults as the page last resolved them.
 
 **Badges.** Phosphor icons at 14px, `regular`, each with an `aria-label`: images, tools, reasoning. Then the context size in `num`, such as `200K` or `1M`. A capability the provider did not report gets no badge.
 

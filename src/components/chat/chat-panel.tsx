@@ -22,7 +22,7 @@ export function ChatPanel({
   chatId,
   initialHistory,
   focusMessageId,
-  choice: initialChoice,
+  choice: resolvedChoice,
   choiceLevels = null,
   connections,
   liveReplyId = null,
@@ -39,8 +39,14 @@ export function ChatPanel({
 }) {
   const router = useRouter();
   const editMessageId = useRef<string | null>(null);
-  const [choice, setChoice] = useState(initialChoice);
-  const sendChoice = useRef(initialChoice);
+  // A pick in the picker holds until its connection is gone. Without one the chat uses the choice the page resolved,
+  // its pinned choice or the defaults, which a refresh can change.
+  const [picked, setPicked] = useState<ModelChoice | null>(null);
+  const choice = picked && connections.some((connection) => connection.id === picked.connectionId) ? picked : resolvedChoice;
+  const sendChoice = useRef(choice);
+  useEffect(() => {
+    sendChoice.current = choice;
+  }, [choice]);
   const [stopped, setStopped] = useState<string[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const link = useMemo(() => createReplyLink(chatId, () => router.refresh()), [chatId, router]);
@@ -105,11 +111,8 @@ export function ChatPanel({
                 <ModelChoiceProvider
                   choice={choice}
                   connections={connections}
-                  levels={choiceLevels}
-                  onChoose={(next) => {
-                    sendChoice.current = next;
-                    setChoice(next);
-                  }}
+                  known={resolvedChoice && { connectionId: resolvedChoice.connectionId, model: resolvedChoice.model, levels: choiceLevels }}
+                  onChoose={setPicked}
                 >
                   <Thread ready={choice !== null} focusMessageId={focusMessageId} hasHistory={initialHistory.messages.length > 0} />
                 </ModelChoiceProvider>
