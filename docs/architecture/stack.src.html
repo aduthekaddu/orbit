@@ -163,7 +163,7 @@ path.aws { stroke: var(--color-ink); stroke-width:1.6; fill:none; }
       <div class="kicker">orbit / architecture / 2026-11</div>
       <h1>Orbit</h1>
     </div>
-    <p class="lede">One Next.js process on 127.0.0.1:3210. The dashed box is planned work.</p>
+    <p class="lede">One Next.js process on 127.0.0.1:3210. The dashed box holds optional services.</p>
   </header>
   <div class="scroller">
   <div class="canvas">
@@ -174,7 +174,7 @@ path.aws { stroke: var(--color-ink); stroke-width:1.6; fill:none; }
       <div class="g-label"><img src="%%ICON_docker%%" alt="">Docker container</div>
     </div>
     <div class="group ga-nested" style="left:70px; top:460px; width:880px; height:210px;">
-      <div class="g-label">Planned</div>
+      <div class="g-label">Optional</div>
     </div>
     <svg class="edges" viewBox="0 0 1000 700" aria-hidden="true">
       <defs>
@@ -195,8 +195,10 @@ path.aws { stroke: var(--color-ink); stroke-width:1.6; fill:none; }
       <text class="el" x="405" y="243" text-anchor="middle">chats, settings</text>
       <path class="n" d="M344 320 H426" marker-end="url(#ar)"/>
       <path class="n" d="M494 320 H576" marker-end="url(#ar)"/>
-      <path class="n dash" d="M480 226 V270 H720 V514" marker-end="url(#ar)"/>
-      <text class="el" x="730" y="400">tool calls</text>
+      <path class="n dash" d="M480 226 V270 H790 V454" marker-end="url(#ar)"/>
+      <text class="el" x="800" y="400">tools, embeddings</text>
+      <path class="n dash" d="M194 550 H205 V168 H274" marker-end="url(#ar)"/>
+      <text class="el" x="199" y="454" text-anchor="end">tunnel</text>
     </svg>
     <div class="node" style="left:34px;top:120px">
       <div class="tile"><img src="%%ICON_assistantui%%" alt=""></div>
@@ -231,35 +233,35 @@ path.aws { stroke: var(--color-ink); stroke-width:1.6; fill:none; }
       <div class="name"><span>LLM provider</span></div><div class="role"><span>openai-compatible</span></div>
     </div>
     <div class="node" style="left:94px;top:520px">
-      <div class="tile"><img src="%%ICON_searxng%%" alt=""></div>
-      <div class="name"><span>SearXNG</span></div><div class="role"><span>search · slice 7</span></div>
+      <div class="tile"><img src="%%ICON_cloudflare%%" alt=""></div>
+      <div class="name"><span>Cloudflare</span></div><div class="role"><span>public tunnel</span></div>
     </div>
     <div class="node" style="left:234px;top:520px">
-      <div class="tile"><img src="%%ICON_tavily%%" alt=""></div>
-      <div class="name"><span>Tavily</span></div><div class="role"><span>search · slice 7</span></div>
+      <div class="tile"><img src="%%ICON_searxng%%" alt=""></div>
+      <div class="name"><span>SearXNG</span></div><div class="role"><span>web search</span></div>
     </div>
     <div class="node" style="left:374px;top:520px">
-      <div class="tile"><img src="%%ICON_sandbox%%" alt=""></div>
-      <div class="name"><span>Docker sandbox</span></div><div class="role"><span>run code · slice 8</span></div>
+      <div class="tile"><img src="%%ICON_tavily%%" alt=""></div>
+      <div class="name"><span>Tavily</span></div><div class="role"><span>web search</span></div>
     </div>
     <div class="node" style="left:514px;top:520px">
-      <div class="tile"><img src="%%ICON_ollama%%" alt=""></div>
-      <div class="name"><span>Ollama</span></div><div class="role"><span>embeddings · slice 10</span></div>
+      <div class="tile"><img src="%%ICON_sandbox%%" alt=""></div>
+      <div class="name"><span>Docker sandbox</span></div><div class="role"><span>run code</span></div>
     </div>
     <div class="node" style="left:654px;top:520px">
-      <div class="tile"><img src="%%ICON_github%%" alt=""></div>
-      <div class="name"><span>GitHub MCP</span></div><div class="role"><span>repo tools · slice 9</span></div>
+      <div class="tile"><img src="%%ICON_ollama%%" alt=""></div>
+      <div class="name"><span>Ollama</span></div><div class="role"><span>embeddings</span></div>
     </div>
     <div class="node" style="left:794px;top:520px">
-      <div class="tile"><img src="%%ICON_cloudflare%%" alt=""></div>
-      <div class="name"><span>Cloudflare</span></div><div class="role"><span>tunnel · slice 12</span></div>
+      <div class="tile"><img src="%%ICON_github%%" alt=""></div>
+      <div class="name"><span>GitHub MCP</span></div><div class="role"><span>repo tools</span></div>
     </div>
   </div>
   </div>
   <div class="legend">
     <span><span class="sw"></span>request path</span>
     <span><span class="sw n"></span>internal</span>
-    <span><span class="sw n dash"></span>planned</span>
+    <span><span class="sw n dash"></span>optional</span>
   </div>
   <div class="foot">
     <span>orbit</span>
