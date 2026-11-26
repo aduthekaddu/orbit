@@ -229,12 +229,40 @@ test("delete removes the memory from the table, the text index, and the vector i
   assert.equal(row.n, 0);
 });
 
+for (const { name, original, edit } of [
+  {
+    name: "edit the kind",
+    original: { text: "My desk is oak", kind: "fact", source: "tool" },
+    edit: { text: "My desk is oak", kind: "preference" },
+  },
+  {
+    name: "save identical text",
+    original: { text: "My desk is walnut", kind: "fact", source: "dream" },
+    edit: { text: "My desk is walnut", kind: "fact" },
+  },
+  {
+    name: "edit whitespace and capitalization",
+    original: { text: "My desk is maple", kind: "fact", source: "tool" },
+    edit: { text: "  My desk is   Maple\n", kind: "fact" },
+  },
+] as const) {
+  test(`memory attribution stays the same when you ${name}`, () => {
+    const { store } = requireStore();
+    const saved = store.saveMemory(original);
+    store.updateMemory(saved.id, { ...edit, source: "user" });
+    const updated = store.getMemory(saved.id);
+    assert.equal(updated?.kind, edit.kind);
+    assert.equal(updated?.source, original.source);
+  });
+}
+
 test("editing the text clears the vector until embeddings run again", async () => {
   const { store, embed } = requireStore();
   const saved = store.saveMemory({ text: "Original embedclear token", kind: "fact", source: "tool" });
   assert.equal((await embed.embedPending()).ok, true);
   const updated = store.updateMemory(saved.id, { text: "Rewritten embedclear token", kind: "preference", source: "user" });
   assert.equal(updated?.kind, "preference");
+  assert.equal(updated?.source, "user");
   assert.equal(updated?.embedded, false);
   assert.equal(store.listMemories("Original").length, 0);
   assert.equal(store.listMemories("Rewritten").length, 1);
