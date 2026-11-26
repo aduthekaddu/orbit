@@ -263,7 +263,7 @@ const partial: UIMessageChunk[] = [
   { type: "text-delta", id: "text", delta: "partial" },
 ];
 
-function sdkFixture(t: TestContext, reconnect: (signal?: AbortSignal | null) => Response | Promise<Response>, send = () => streamResponse(partial, {
+function sdkFixture(t: TestContext, reconnect: (signal?: AbortSignal | null) => Response | Promise<Response>, send: (signal?: AbortSignal | null) => Response | Promise<Response> = () => streamResponse(partial, {
   "x-resumable-stream-id": "a1",
 })) {
   const browserState = browser(t);
@@ -271,7 +271,7 @@ function sdkFixture(t: TestContext, reconnect: (signal?: AbortSignal | null) => 
   const link = createReplyLink("chat", refresh);
   const request = t.mock.fn(reconnect);
   const transport = orbitChatTransport("chat", {
-    fetch: async (_input, init) => init?.method === "GET" ? request(init.signal) : send(),
+    fetch: async (_input, init) => init?.method === "GET" ? request(init.signal) : send(init?.signal),
     onReplyId: link.accept,
     onReconnectResponse: link.reconnectResponse,
   });
@@ -557,4 +557,135 @@ test("headers arriving before Stop is confirmed let the same replay finish", asy
   t.mock.timers.tick(1_500);
   assert.deepEqual(link.getSnapshot().state, { kind: "attached", replyId: null });
   assert.equal(request.mock.callCount(), 1);
+});
+
+test("Stop cancels a reply before its response headers arrive", async (t) => {
+  const sendResponse = Promise.withResolvers<Response>();
+  const sendStarted = Promise.withResolvers<void>();
+  const { chat, link, stored, refresh } = sdkFixture(t, () => new Response(null, { status: 204 }), () => {
+    sendStarted.resolve();
+    return sendResponse.promise;
+  });
+  t.after(() => sendResponse.resolve(streamResponse([{ type: "abort" }], { "x-resumable-stream-id": "a1" })));
+  const fetch = t.mock.method(globalThis, "fetch", async () => Response.json({ ok: true, stopped: true }));
+  const sending = chat.sendMessage({ text: "question" });
+  await sendStarted.promise;
+  try {
+    await link.stop();
+    assert.equal(fetch.mock.callCount(), 1);
+    assert.equal(fetch.mock.calls[0]?.arguments[0], "/api/chats/chat/stop");
+    assert.equal(link.getSnapshot().state.kind, "stopping");
+    sendResponse.resolve(streamResponse([{ type: "abort" }], { "x-resumable-stream-id": "a1" }));
+    await sending;
+    assert.deepEqual(link.getSnapshot().state, { kind: "attached", replyId: null });
+    assert.equal(stored.get(key), undefined);
+    assert.equal(refresh.mock.callCount(), 1);
+  } finally {
+    sendResponse.resolve(streamResponse([{ type: "abort" }], { "x-resumable-stream-id": "a1" }));
+    await sending;
+  }
+});
+
+test("Stop aborts a stalled pre-header send when the server has no active reply", async (t) => {
+  const sendStarted = Promise.withResolvers<void>();
+  const sendResponse = Promise.withResolvers<Response>();
+  let sendSignal: AbortSignal | null | undefined;
+  const { chat, link, refresh } = sdkFixture(t, () => new Response(null, { status: 204 }), (signal) => {
+    sendSignal = signal;
+    signal?.addEventListener("abort", () => sendResponse.reject(signal.reason), { once: true });
+    sendStarted.resolve();
+    return sendResponse.promise;
+  });
+  t.after(() => sendResponse.resolve(streamResponse([{ type: "abort" }])));
+  const fetch = t.mock.method(globalThis, "fetch", async () => Response.json({ ok: true, stopped: false }));
+  const sending = chat.sendMessage({ text: "question" });
+  await sendStarted.promise;
+  try {
+    await link.stop();
+    assert.equal(fetch.mock.callCount(), 1);
+    assert.equal(sendSignal?.aborted, true);
+    await sending;
+    assert.deepEqual(link.getSnapshot().state, { kind: "attached", replyId: null });
+    assert.equal(refresh.mock.callCount(), 1);
+  } finally {
+    sendResponse.resolve(streamResponse([{ type: "abort" }]));
+    await sending;
+  }
+});
+
+test("Stop retries against the server when headers arrive while a pre-header stop sees no run", async (t) => {
+  const sendStarted = Promise.withResolvers<void>();
+  const sendResponse = Promise.withResolvers<Response>();
+  const firstStop = Promise.withResolvers<Response>();
+  let finishStream = () => {};
+  const stream = new ReadableStream<UIMessageChunk>({
+    start(controller) {
+      for (const chunk of partial) controller.enqueue(chunk);
+      finishStream = () => {
+        controller.enqueue({ type: "abort" });
+        controller.close();
+      };
+    },
+  });
+  const { chat, link } = sdkFixture(t, () => new Response(null, { status: 204 }), () => {
+    sendStarted.resolve();
+    return sendResponse.promise;
+  });
+  let stops = 0;
+  const fetch = t.mock.method(globalThis, "fetch", () => {
+    stops += 1;
+    if (stops === 1) return firstStop.promise;
+    return Promise.resolve(Response.json({ ok: true, stopped: true }));
+  });
+  t.after(() => {
+    firstStop.resolve(Response.json({ ok: true, stopped: false }));
+    sendResponse.resolve(createUIMessageStreamResponse({ stream, headers: { "x-resumable-stream-id": "a1" } }));
+    finishStream();
+  });
+  const sending = chat.sendMessage({ text: "question" });
+  await sendStarted.promise;
+  try {
+    const stopping = link.stop();
+    assert.equal(link.getSnapshot().state.kind, "stopping");
+    sendResponse.resolve(createUIMessageStreamResponse({ stream, headers: { "x-resumable-stream-id": "a1" } }));
+    await streaming(chat);
+    assert.equal(link.getSnapshot().state.kind, "stopping");
+    firstStop.resolve(Response.json({ ok: true, stopped: false }));
+    await stopping;
+    assert.equal(fetch.mock.callCount(), 2);
+    assert.equal(link.getSnapshot().state.kind, "stopping");
+    finishStream();
+    await sending;
+    assert.deepEqual(link.getSnapshot().state, { kind: "attached", replyId: null });
+  } finally {
+    firstStop.resolve(Response.json({ ok: true, stopped: false }));
+    sendResponse.resolve(createUIMessageStreamResponse({ stream, headers: { "x-resumable-stream-id": "a1" } }));
+    finishStream();
+    await sending;
+  }
+});
+
+test("a failed pre-header Stop reports an error and leaves Stop retryable", async (t) => {
+  const sendStarted = Promise.withResolvers<void>();
+  const sendResponse = Promise.withResolvers<Response>();
+  const { chat, link } = sdkFixture(t, () => new Response(null, { status: 204 }), () => {
+    sendStarted.resolve();
+    return sendResponse.promise;
+  });
+  t.after(() => sendResponse.resolve(streamResponse([{ type: "abort" }], { "x-resumable-stream-id": "a1" })));
+  const fetch = t.mock.method(globalThis, "fetch", async () => new Response(null, { status: 500 }));
+  const sending = chat.sendMessage({ text: "question" });
+  await sendStarted.promise;
+  try {
+    await link.stop();
+    assert.equal(fetch.mock.callCount(), 1);
+    assert.deepEqual(link.getSnapshot().state, { kind: "attached", replyId: null });
+    assert.equal(link.getSnapshot().stopError, "Could not stop");
+    sendResponse.resolve(streamResponse([{ type: "abort" }], { "x-resumable-stream-id": "a1" }));
+    await sending;
+    assert.equal(link.getSnapshot().stopError, "");
+  } finally {
+    sendResponse.resolve(streamResponse([{ type: "abort" }], { "x-resumable-stream-id": "a1" }));
+    await sending;
+  }
 });

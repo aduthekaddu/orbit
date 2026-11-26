@@ -165,7 +165,96 @@ async function editWhilePending({ page, origin, step, shot }) {
   }
 }
 
+async function stopBeforeHeaders({ page, origin, step, shot }) {
+  const id = await openChat(page, origin);
+  const stop = button(page, "Stop");
+  const releaseServer = Promise.withResolvers();
+  await page.exposeFunction("releasePreHeaderStop", () => releaseServer.promise);
+  await page.evaluate(() => {
+    const nativeFetch = window.fetch;
+    let firstPost = true;
+    window.fetch = async (input, init) => {
+      if (!firstPost || input !== "/api/chat" || init?.method !== "POST") return nativeFetch(input, init);
+      firstPost = false;
+      const response = await nativeFetch(input, init);
+      await window.releasePreHeaderStop();
+      return response;
+    };
+  });
+
+  const primary = page.waitForResponse((response) => chatPost(response.request()), { timeout: 10_000 });
+  try {
+    await send(page, "[qa:slow] Stop before response headers arrive");
+    assert.equal((await primary).status(), 200);
+    await stop.waitFor({ timeout: 10_000 });
+    const enabledBeforeHeaders = await stop.isEnabled();
+    await shot("stop-before-headers");
+    let stopStatus = null;
+    let stopBody = null;
+    if (enabledBeforeHeaders) {
+      const stopReply = page.waitForResponse(
+        (response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/chats/${id}/stop`,
+        { timeout: 10_000 },
+      );
+      await stop.click();
+      const response = await stopReply;
+      stopStatus = response.status();
+      stopBody = await response.json();
+    }
+    releaseServer.resolve();
+    const returnedToSend = await button(page, "Send").waitFor({ timeout: 10_000 }).then(() => true, () => false);
+    const saved = await (await page.request.get(`${origin}/api/chats/${id}`)).json();
+    const sawWord50 = JSON.stringify(saved.messages).includes("word50");
+    step("Stop cancels a server-side send before response headers arrive",
+      enabledBeforeHeaders && stopStatus === 200 && stopBody?.stopped === true && returnedToSend && !sawWord50,
+      `Stop enabled=${enabledBeforeHeaders}, stop HTTP=${stopStatus}, stopped=${stopBody?.stopped}, returnedToSend=${returnedToSend}, sawWord50=${sawWord50}`);
+  } finally {
+    releaseServer.resolve();
+  }
+
+  const stalledId = await openChat(page, origin);
+  const holdNetwork = Promise.withResolvers();
+  const chatUrl = "**/api/chat";
+  let requestAborted = false;
+  const routeHandler = async (route) => {
+    route.request().failure();
+    await holdNetwork.promise;
+    await route.abort().catch(() => {});
+  };
+  const onFailed = (request) => {
+    if (chatPost(request)) requestAborted = true;
+  };
+  await page.route(chatUrl, routeHandler);
+  page.on("requestfailed", onFailed);
+  try {
+    await send(page, "[qa:slow] Stop a send stalled before reaching the server");
+    await stop.waitFor({ timeout: 10_000 });
+    const enabledWhenStalled = await stop.isEnabled();
+    let stopStatus = null;
+    let stopBody = null;
+    if (enabledWhenStalled) {
+      const stopReply = page.waitForResponse(
+        (response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/chats/${stalledId}/stop`,
+        { timeout: 10_000 },
+      );
+      await stop.click();
+      const response = await stopReply;
+      stopStatus = response.status();
+      stopBody = await response.json();
+    }
+    const returnedToSend = await button(page, "Send").waitFor({ timeout: 5_000 }).then(() => true, () => false);
+    step("Stop aborts a stalled send that has not reached the server",
+      enabledWhenStalled && stopStatus === 200 && stopBody?.stopped === false && returnedToSend && requestAborted,
+      `Stop enabled=${enabledWhenStalled}, stop HTTP=${stopStatus}, stopped=${stopBody?.stopped}, returnedToSend=${returnedToSend}, aborted=${requestAborted}`);
+  } finally {
+    holdNetwork.resolve();
+    await page.unroute(chatUrl, routeHandler);
+    page.off("requestfailed", onFailed);
+  }
+}
+
 export default async function replyActions(context) {
+  await stopBeforeHeaders(context);
   await retryWhilePending(context);
   await editWhilePending(context);
 }
