@@ -20,7 +20,7 @@ The drive does three things:
 
 - **Public root.** `GET <public>/` with no Access cookie must answer `302` with a `Location` on `cloudflareaccess.com`.
 - **Public API.** `GET <public>/api/chats` with no Access cookie must not answer `200`.
-- **Local sign-in.** Chrome opens `http://127.0.0.1:<port>/login`, signs in as `verify@orbit.local`, lands on `/c/<id>`, then opens `/settings` and finds `Base URL`. On an empty sandbox the drive first creates that account. `GET /api/setup` answers without a session, so it does not count as sign-in proof.
+- **Local sign-in.** Chrome opens `http://127.0.0.1:<port>/login`, signs in as `verify@orbit.local`, lands on `/c/<id>`, then opens `/settings` and finds `SearXNG URL`. On an empty sandbox the drive first creates that account. `GET /api/setup` answers without a session, so it does not count as sign-in proof.
 
 When the tunnel is not up, the drive skips both public checks, still runs local sign-in, and exits 0 with `skipped the public checks`. The tunnel counts as not up when `GET <public>/` gets no DNS answer, fails TLS, or answers `530`, which Cloudflare sends for a tunnel with no connector. Any other answer runs the public checks, so a reachable URL without Access still fails.
 

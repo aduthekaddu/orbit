@@ -32,7 +32,7 @@ The server labels its sandbox containers with an owner: `ORBIT_SANDBOX_OWNER` if
 
 A second launch in the same checkout waits for the first to finish starting the server. It reuses the sandbox server when the requested port, sandbox mode and any `ORBIT_SANDBOX_OWNER` match its recorded ones. A mismatch or unknown recorded mode exits with a cleanup instruction and leaves the server and data in place. Run `cleanup`, then launch with the intended `ORBIT_VERIFY_PORT` and `ORBIT_SANDBOX` values.
 
-`launch --mock` also starts `scripts/qa/mock-provider.mjs` and saves settings for it as `verify@orbit.local`. The mock binds a free port that the OS picks and prints it on its first stdout line. Launch reads that line from the mock's own pipe and then writes `.verify/mock.json` once, with the pid, its start time, and the port. Every later command trusts the record only while that pid still has that start time. Two checkouts on one host share no mock port. Give each its own `ORBIT_VERIFY_PORT`. Done when it also prints `mock ready` and `settings baseUrl=http://127.0.0.1:<mock port>/v1 model=mock-genui keySet=yes`. A browse scenario that needs the mock URL reads `mockUrl` from its context. With no mock running, that read fails the scenario and names `launch --mock`. That account blocks `drive signup` and `drive chat` on the same sandbox.
+`launch --mock` also starts `scripts/qa/mock-provider.mjs` before the server, passes the server `ORBIT_ANTHROPIC_BASE_URL=http://127.0.0.1:<mock port>/v1`, then signs in as `verify@orbit.local`, adds a connection to the mock with `POST /api/connections`, and makes `mock-genui` at `low` the default model with `PUT /api/preferences/model`. The mock binds a free port that the OS picks and prints it on its first stdout line. Launch reads that line from the mock's own pipe and then writes `.verify/mock.json` once, with the pid, its start time, and the port. Every later command trusts the record only while that pid still has that start time. Two checkouts on one host share no mock port. Give each its own `ORBIT_VERIFY_PORT`. Done when it also prints `mock ready` and `connection kind=openai-compatible model=mock-genui keySet=yes`. A second launch reuses that connection. A browse scenario that needs the mock URL reads `mockUrl` from its context. With no mock running, that read fails the scenario and names `launch --mock`. That account blocks `drive signup` and `drive chat` on the same sandbox.
 
 ## Doctor
 
@@ -54,15 +54,15 @@ The helper is the harness. Prefer the commands below over ad hoc curls. Page che
 
 Feature recipes live in `features/`. Read `features/README.md` first. Drive one feature from that map. A proof that uses a different entry point does not cover the ones you skipped.
 
-`drive chat` runs `scripts/smoke.ts` with cwd `.verify/sandbox` and `ORBIT_QA_ORIGIN` set to the sandbox origin. Run on its own, smoke calls `http://127.0.0.1:3210`. It needs `ORBIT_BASE_URL` and `ORBIT_API_KEY` in the environment. The helper redacts those values in its output. If they are missing, the command fails before any provider call.
+`drive chat` runs `scripts/smoke.ts` with cwd `.verify/sandbox` and `ORBIT_QA_ORIGIN` set to the sandbox origin. Run on its own, smoke calls `http://127.0.0.1:3210`. It needs `ORBIT_BASE_URL` and `ORBIT_API_KEY` in the environment, and reads `ORBIT_MODEL` when set (default `deepseek-v4.1-flash`). Smoke adds a connection from them, or reuses one with that base URL, and makes that model the default. The helper redacts those values in its output. If they are missing, the command fails before any provider call.
 
 ## Evidence
 
-Each drive writes `.verify/evidence/<feature>/summary.txt`. Each browse run writes `.verify/evidence/<scenario>/summary.txt` with its `PASS` and `FAIL` lines, plus one PNG per screenshot. Signup records the statuses, the redirect, the chat list count, and the `user` and `chats` row counts. Signin records the statuses and the redirect location. Settings records the statuses and the key-leak checks. Chat records the smoke exit code and the redacted log. No file records cookies or key values.
+Each drive writes `.verify/evidence/<feature>/summary.txt`. Each browse run writes `.verify/evidence/<scenario>/summary.txt` with its `PASS` and `FAIL` lines, plus one PNG per screenshot. Signup records the statuses, the redirect, the chat list count, and the `user` and `chats` row counts. Signin records the statuses and the redirect location. Settings records each connection request's status and the key-leak checks. Chat records the smoke exit code and the redacted log. No file records cookies or key values.
 
 A proof shows the request and the state after it. For signup, that is the page text, the signup status, the redirect to `/c/<id>`, the composer page, `GET /api/chats`, a logged-out 401, the `user` and `chats` row counts, and a second signup status 403. A final screen with no prior action is not proof.
 
-The settings drive uses the fake key `test-key-not-real` and checks that the response has no `apiKey` field and does not contain that key. It does not call a provider.
+The settings drive uses the fake key `test-key-not-real` against the mock provider, because adding a connection lists its models first. It starts the mock when none runs. It checks that no response has an `apiKey` field or that key, and that `orbit.db` and its WAL file do not hold it.
 
 ## Cleanup
 
