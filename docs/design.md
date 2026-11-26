@@ -54,6 +54,8 @@ Static theme values in `@theme`:
 | `--spacing-picker` | `24rem` | `w-picker`, the model picker popover |
 | `--spacing-picker-height` | `60vh` | `max-h-picker-height`, the popover and each model list in Settings |
 | `--spacing-sheet-height` | `80dvh` | `max-h-sheet-height`, the bottom sheet |
+| `--spacing-touch` | `max(2.75rem, 44px)` | `min-h-touch`, `h-touch`, rows and cells in the sheet, 44px at every text size |
+| `--ring-width-focus` | `3px` | `ring-focus`, the focus ring width |
 | `--text-prose` | `1rem`, line height `1.65` | `text-prose` |
 | `--text-field` | `max(1rem, 16px)`, line height `1.5rem` | `text-field` |
 | `--text-code` | `0.875rem`, line height `1.5rem` | `text-code` |
@@ -99,7 +101,7 @@ A chat whose model choice does not resolve and that has no messages shows the fi
 
 The composer chip is a `button` (`data-model-chip`) in `font-mono text-meta`, reading `model · Effort`, such as `claude-opus-5-5 · High`, or the model alone when the model takes no effort. It truncates at the end and never pushes Send out of the row. It opens the picker: a `Popover` anchored above the chip on desktop (`w-picker`, at most `max-h-picker-height` or the room above the chip, `shadow-float`), and a `Sheet` under 48rem. Both hold the same panel:
 
-- Models grouped under each connection's label, hidden models left out. A search field shows when the lists hold more than 8 rows. Each row shows the model id, its badges, and a check on the current one. Rows are at least 44px tall in the sheet.
+- Models grouped under each connection's label, hidden models left out. A search field shows when the lists hold more than 8 rows. Each row shows the model id, its badges, and a check on the current one. Rows are at least 44px tall in the sheet at every text size (`min-h-touch`).
 - A model list that is still loading shows skeleton rows. One that failed shows its error and **Retry** inside its group. A loaded list with nothing to show says `No models`. With no connection at all, the list holds one **Add connection** link to `/settings#connections`, so a chat with history reaches setup too.
 - Under the list, the effort grid: 3 by 2, `None` to `Max`. Levels the model does not take are disabled, and all six are when it takes none. Picking a model that does not take the current effort moves it to the nearest level it takes. The selected level is a raised surface.
 - **Manage** goes to `/settings#models`.
@@ -108,7 +110,7 @@ The choice is the chat's own until the next send pins it. Picking a model keeps 
 
 **Badges.** Phosphor icons at 14px, `regular`, each with an `aria-label`: images, tools, reasoning. Then the context size in `num`, such as `200K` or `1M`. A capability the provider did not report gets no badge.
 
-**Reply label.** Each assistant reply with a record shows `model · Effort` at the right end of its action row, in `font-mono text-meta text-muted-foreground`. It sits outside the action bar, so it stays visible when older action bars hide on hover devices. An effort the provider changed reads `High (adjusted)` or `High (ignored)`. A reply with no effort shows the model alone. No tooltip.
+**Reply label.** Each assistant reply with a record shows `model · Effort` at the right end of its action row, in `font-mono text-meta text-muted-foreground`. It sits outside the action bar, so it stays visible when older action bars hide on hover devices and while a reply stops or reconnects. An effort the provider changed reads `High (adjusted)` or `High (ignored)`. A reply with no effort shows the model alone. No tooltip.
 
 ### Model settings
 

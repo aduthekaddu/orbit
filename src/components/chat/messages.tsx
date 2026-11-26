@@ -126,26 +126,28 @@ function AssistantMessage() {
           )}
         </>
       )}
-      {!editing && !busy && (
+      {!editing && (
         <div className={cn("mt-1 -ml-1.5 flex h-7 items-center", failed && "mt-2 ml-0")}>
-          <ActionBarPrimitive.Root hideWhenRunning className={cn("flex gap-0.5", !last && !failed && hoverActionsClass)}>
-            {text && <CopyAction />}
-            {text && !failed && <EditAction onClick={() => setEditing(true)} />}
-            {failed ? (
-              <ActionBarPrimitive.Reload asChild>
-                <Button variant="outline" size="xs">
-                  <ArrowClockwiseIcon weight="regular" />
-                  Retry
-                </Button>
-              </ActionBarPrimitive.Reload>
-            ) : (
-              <IconAction label="Regenerate">
-                <ActionBarPrimitive.Reload className={iconActionClass}>
-                  <ArrowClockwiseIcon />
+          {busy ? null : (
+            <ActionBarPrimitive.Root hideWhenRunning className={cn("flex gap-0.5", !last && !failed && hoverActionsClass)}>
+              {text && <CopyAction />}
+              {text && !failed && <EditAction onClick={() => setEditing(true)} />}
+              {failed ? (
+                <ActionBarPrimitive.Reload asChild>
+                  <Button variant="outline" size="xs">
+                    <ArrowClockwiseIcon weight="regular" />
+                    Retry
+                  </Button>
                 </ActionBarPrimitive.Reload>
-              </IconAction>
-            )}
-          </ActionBarPrimitive.Root>
+              ) : (
+                <IconAction label="Regenerate">
+                  <ActionBarPrimitive.Reload className={iconActionClass}>
+                    <ArrowClockwiseIcon />
+                  </ActionBarPrimitive.Reload>
+                </IconAction>
+              )}
+            </ActionBarPrimitive.Root>
+          )}
           <ReplyLabel />
         </div>
       )}

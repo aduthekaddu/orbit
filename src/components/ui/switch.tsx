@@ -18,7 +18,7 @@ function Switch({
       data-state={checked ? "checked" : "unchecked"}
       onClick={() => onCheckedChange(!checked)}
       className={cn(
-        "group inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border p-0.5 transition-colors duration-150 ease-orbit outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=unchecked]:bg-surface-sunken",
+        "group inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border p-0.5 transition-colors duration-150 ease-orbit outline-none focus-visible:ring-focus focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=unchecked]:bg-surface-sunken",
         className,
       )}
       {...props}

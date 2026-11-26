@@ -199,7 +199,7 @@ export function ConnectionForm({
                 setKind(option);
                 if (option === "anthropic" && !label) setLabel(KIND_LABELS.anthropic);
               }}
-              className="cursor-pointer rounded-lg border bg-surface-sunken px-4 py-3 text-left text-sm transition-colors duration-150 ease-orbit outline-none hover:border-border-strong hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className="cursor-pointer rounded-lg border bg-surface-sunken px-4 py-3 text-left text-sm transition-colors duration-150 ease-orbit outline-none hover:border-border-strong hover:bg-accent focus-visible:ring-focus focus-visible:ring-ring/50"
             >
               {KIND_LABELS[option]}
             </button>

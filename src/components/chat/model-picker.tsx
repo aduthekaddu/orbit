@@ -74,7 +74,7 @@ function choiceLevels({ choice, connections, lists, known }: Picker): Effort[] |
 }
 
 const chipClass =
-  "min-w-0 cursor-pointer rounded-full border px-2 py-0.5 font-mono text-meta text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:border-border-strong hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:border-border-strong data-[state=open]:text-foreground";
+  "min-w-0 cursor-pointer rounded-full border px-2 py-0.5 font-mono text-meta text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:border-border-strong hover:text-foreground focus-visible:ring-focus focus-visible:ring-ring/50 data-[state=open]:border-border-strong data-[state=open]:text-foreground";
 
 export function ModelChip() {
   const picker = useContext(PickerContext);
@@ -168,7 +168,7 @@ function PickerPanel({ layout }: { layout: Layout }) {
         ))}
       </div>
       <div className="border-t p-2">
-        <EffortGrid aria-label="Effort" value={choice?.effort ?? DEFAULT_EFFORT} levels={levels} onChange={(effort) => choice && choose({ ...choice, effort })} className={layout === "sheet" ? "[&>button]:h-11" : undefined} />
+        <EffortGrid aria-label="Effort" value={choice?.effort ?? DEFAULT_EFFORT} levels={levels} onChange={(effort) => choice && choose({ ...choice, effort })} className={layout === "sheet" ? "[&>button]:h-touch" : undefined} />
       </div>
       <div className="flex justify-end border-t px-2 py-1.5">
         <Button asChild variant="ghost" size="xs" className="text-muted-foreground hover:text-foreground">
@@ -244,7 +244,7 @@ function ModelRow({ model, current, layout, onPick }: { model: ListedModel; curr
       onClick={onPick}
       className={cn(
         "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 text-left text-sm outline-none transition-colors duration-150 ease-orbit hover:bg-accent focus-visible:bg-accent",
-        layout === "sheet" ? "min-h-11" : "min-h-8",
+        layout === "sheet" ? "min-h-touch" : "min-h-8",
       )}
     >
       <span className="min-w-0 flex-1 truncate">{model.id}</span>
