@@ -1,9 +1,4 @@
 import http from "node:http";
-import { eventually } from "../../../../src/lib/eventually.mjs";
-
-function cspHas(response, directive) {
-  return response.headers()["content-security-policy"]?.split(";").some(value => value.trim() === directive);
-}
 
 // An HTML preview must not load another URL into its own frame, because the URL carries whatever
 // the artifact code puts in it (#132). A local probe stands in for the outside host.
@@ -28,7 +23,7 @@ export default async function artifactNavigation({ page, origin, step, shot }) {
     step("the probe logs a page visit from the browser", requests.includes("/control"), JSON.stringify(requests));
 
     const setup = await page.request.get(`${origin}/api/setup`);
-    step("the setup API response has the API policy", setup.ok() && cspHas(setup, "default-src 'none'") && !cspHas(setup, "frame-src 'none'"));
+    step("the setup API response has no page CSP", setup.ok() && setup.headers()["content-security-policy"] === undefined);
 
     await page.setViewportSize({ width: 1440, height: 900 });
     const { id } = await (await page.request.post(`${origin}/api/chats`)).json();
@@ -39,17 +34,12 @@ export default async function artifactNavigation({ page, origin, step, shot }) {
       ),
       page.getByRole("link", { name: "Back to chats" }).click(),
     ]);
-    step("Back to chats loads a document with the page CSP", chatDocument.ok() && cspHas(chatDocument, "frame-src 'none'"));
+    step("Back to chats loads a document with the page CSP", chatDocument.ok() && chatDocument.headers()["content-security-policy"]?.split(";").some((directive) => directive.trim() === "frame-src 'none'"));
     const composer = page.getByPlaceholder("Ask anything");
     const reply = page.locator('[data-message-role="assistant"]').last();
     const panel = page.getByRole("complementary", { name: "Artifact", exact: true });
-    const send = page.getByRole("button", { name: "Send", exact: true });
-    await eventually(async () => {
-      await composer.fill("");
-      await composer.fill("[qa:artifact-html]");
-      return send.isEnabled();
-    }, Boolean, { timeoutMs: 10_000, what: "the composer to accept a prompt" });
-    await send.click();
+    await composer.fill("[qa:artifact-html]");
+    await composer.press("Enter");
     await reply.getByRole("button", { name: "Regenerate", exact: true }).waitFor({ timeout: 30_000 });
     await reply.locator('[data-status="complete"]').waitFor({ timeout: 30_000 });
     await reply.getByRole("button", { name: "Preview", exact: true }).click();

@@ -4,7 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
-- Orbit pages and API responses now block framing, restrict referrer information to the same origin, and send `nosniff`. Pages restrict where resources can load, and artifact previews still run in Orbit. Responses omit `X-Powered-By`. (#133)
+- Orbit pages now refuse to be framed by other pages. Every response outside `/s/` sends `nosniff` and a same-origin referrer rule, and none names Next.js in `X-Powered-By`. (#133)
 - Signed-out requests to paths such as `/api/authors` now get the same sign-in check as other API requests. (#134)
 - A refreshed session cookie now reaches the browser on page and API responses, so daily use keeps a session rolling forward past 7 days without a forced sign-in. (#119)
 - The hook lint in CI is a required check. A failing `rules-of-hooks` or `exhaustive-deps` finding now fails the job. (#145)
