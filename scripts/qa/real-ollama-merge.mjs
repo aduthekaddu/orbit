@@ -159,7 +159,8 @@ async function main() {
     const { addConnection, saveModelDefaults } = await import("../../src/lib/connections.ts");
 
     db.insert(schema.user).values({ id: "qa-user", name: "QA", email: "qa@orbit.local", emailVerified: true }).run();
-    const added = await addConnection("qa-user", { kind: "openai-compatible", label: "Mock", baseUrl: provider.url, apiKey: "mock-key-not-real" });
+    const redact = new Redactor(null);
+    const added = await addConnection("qa-user", { kind: "openai-compatible", label: "Mock", baseUrl: provider.url, apiKey: "mock-key-not-real" }, redact);
     if (!added.ok) throw new Error(`adding the mock connection failed: ${added.reason}`);
     saveModelDefaults("qa-user", { connectionId: added.connection.id, model: "mock-genui", effort: "medium" });
 
@@ -170,7 +171,6 @@ async function main() {
       { chat: "B", text: best.right },
       { chat: "C", text: unrelated.right },
     ];
-    const redact = new Redactor(null);
     seeds.forEach((seed, index) => {
       const chat = createChat("qa-user");
       const id = crypto.randomUUID();
