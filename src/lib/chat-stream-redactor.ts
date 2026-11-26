@@ -5,6 +5,7 @@ type TextEndChunk = Extract<UIMessageChunk, { type: "text-end" }>;
 type TextStartChunk = Extract<UIMessageChunk, { type: "text-start" }>;
 type ReasoningEndChunk = Extract<UIMessageChunk, { type: "reasoning-end" }>;
 type ReasoningStartChunk = Extract<UIMessageChunk, { type: "reasoning-start" }>;
+type DeltaProviderMetadata = Extract<UIMessageChunk, { type: "text-delta" }>["providerMetadata"];
 
 type ClosedSegment<S extends UIMessageChunk, E extends UIMessageChunk> = {
   id: string;
@@ -12,14 +13,25 @@ type ClosedSegment<S extends UIMessageChunk, E extends UIMessageChunk> = {
   lookbehind?: string;
   inSpan?: boolean;
   tail: string;
+  providerMetadata?: DeltaProviderMetadata;
+  interleaved: UIMessageChunk[];
   end: E;
+  afterEnd: UIMessageChunk[];
+};
+
+type ActiveSegment<S extends UIMessageChunk> = {
+  id: string;
+  start?: S;
+  stream: StreamRedactor;
+  providerMetadata?: DeltaProviderMetadata;
+  interleaved: UIMessageChunk[];
 };
 
 type DeltaChannel<S extends UIMessageChunk, E extends UIMessageChunk> = {
   kind: "text" | "reasoning";
   // Segments whose end chunk arrived, held briefly in case the next chunk opens another part of the same kind.
   closed: ClosedSegment<S, E>[];
-  active: { id: string; start?: S; stream: StreamRedactor } | null;
+  active: ActiveSegment<S> | null;
   pendingBuffer: string;
 };
 
@@ -48,10 +60,28 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
     kind: "text" | "reasoning",
     id: string,
     delta: string,
+    providerMetadata?: DeltaProviderMetadata,
   ) => {
-    if (!delta) return;
-    if (kind === "text") controller.enqueue({ type: "text-delta", id, delta });
-    else controller.enqueue({ type: "reasoning-delta", id, delta });
+    if (!delta && providerMetadata === undefined) return;
+    const metadata = providerMetadata !== undefined ? { providerMetadata } : {};
+    if (kind === "text") controller.enqueue({ type: "text-delta", id, delta, ...metadata });
+    else controller.enqueue({ type: "reasoning-delta", id, delta, ...metadata });
+  };
+
+  const emitClosedSegments = <S extends UIMessageChunk, E extends UIMessageChunk>(
+    channel: DeltaChannel<S, E>,
+    masked: readonly string[],
+    controller: TransformStreamDefaultController<UIMessageChunk>,
+  ) => {
+    for (let i = 0; i < channel.closed.length; i++) {
+      const seg = channel.closed[i];
+      if (seg.start) controller.enqueue(seg.start);
+      emitDelta(controller, channel.kind, seg.id, masked[i], seg.providerMetadata);
+      for (const item of seg.interleaved) controller.enqueue(item);
+      controller.enqueue(seg.end);
+      for (const item of seg.afterEnd) controller.enqueue(item);
+    }
+    channel.closed = [];
   };
 
   const resolveClosedIntoActive = <S extends UIMessageChunk, E extends UIMessageChunk>(
@@ -62,13 +92,7 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
     const first = channel.closed[0];
     const segments = [...channel.closed.map((seg) => seg.tail), channel.pendingBuffer];
     const masked = redact.maskSegments(segments, { lookbehind: first.lookbehind, inSpan: first.inSpan });
-    for (let i = 0; i < channel.closed.length; i++) {
-      const seg = channel.closed[i];
-      if (seg.start) controller.enqueue(seg.start);
-      emitDelta(controller, channel.kind, seg.id, masked[i]);
-      controller.enqueue(seg.end);
-    }
-    channel.closed = [];
+    emitClosedSegments(channel, masked, controller);
     if (channel.active.start) {
       controller.enqueue(channel.active.start);
       channel.active.start = undefined;
@@ -76,7 +100,12 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
     const nextText = masked[masked.length - 1];
     channel.pendingBuffer = "";
     const out = channel.active.stream.push(nextText);
-    emitDelta(controller, channel.kind, channel.active.id, out);
+    if (out) {
+      emitDelta(controller, channel.kind, channel.active.id, out, channel.active.providerMetadata);
+      channel.active.providerMetadata = undefined;
+    }
+    for (const item of channel.active.interleaved) controller.enqueue(item);
+    channel.active.interleaved = [];
   };
 
   const flushChannel = <S extends UIMessageChunk, E extends UIMessageChunk>(
@@ -89,31 +118,20 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
       if (channel.active) {
         const segments = [...channel.closed.map((seg) => seg.tail), channel.pendingBuffer];
         const masked = redact.maskSegments(segments, prefix);
-        for (let i = 0; i < channel.closed.length; i++) {
-          const seg = channel.closed[i];
-          if (seg.start) controller.enqueue(seg.start);
-          emitDelta(controller, channel.kind, seg.id, masked[i]);
-          controller.enqueue(seg.end);
-        }
-        channel.closed = [];
+        emitClosedSegments(channel, masked, controller);
         if (channel.active.start) {
           controller.enqueue(channel.active.start);
           channel.active.start = undefined;
         }
         const tail = channel.active.stream.flush(masked[masked.length - 1]);
-        emitDelta(controller, channel.kind, channel.active.id, tail);
+        emitDelta(controller, channel.kind, channel.active.id, tail, channel.active.providerMetadata);
+        for (const item of channel.active.interleaved) controller.enqueue(item);
         channel.active = null;
         channel.pendingBuffer = "";
         return;
       }
       const masked = redact.maskSegments(channel.closed.map((seg) => seg.tail), prefix);
-      for (let i = 0; i < channel.closed.length; i++) {
-        const seg = channel.closed[i];
-        if (seg.start) controller.enqueue(seg.start);
-        emitDelta(controller, channel.kind, seg.id, masked[i]);
-        controller.enqueue(seg.end);
-      }
-      channel.closed = [];
+      emitClosedSegments(channel, masked, controller);
       return;
     }
     if (channel.active) {
@@ -122,10 +140,35 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
         channel.active.start = undefined;
       }
       const tail = channel.active.stream.flush(channel.pendingBuffer);
-      emitDelta(controller, channel.kind, channel.active.id, tail);
+      emitDelta(controller, channel.kind, channel.active.id, tail, channel.active.providerMetadata);
+      for (const item of channel.active.interleaved) controller.enqueue(item);
       channel.active = null;
       channel.pendingBuffer = "";
     }
+  };
+
+  const flushIfClosedOnly = <S extends UIMessageChunk, E extends UIMessageChunk>(
+    channel: DeltaChannel<S, E>,
+    controller: TransformStreamDefaultController<UIMessageChunk>,
+  ) => {
+    if (channel.closed.length > 0 && !channel.active) flushChannel(channel, controller);
+  };
+
+  const enqueueMidStream = (
+    chunk: UIMessageChunk,
+    controller: TransformStreamDefaultController<UIMessageChunk>,
+  ) => {
+    flushIfClosedOnly(textChannel, controller);
+    flushIfClosedOnly(reasoningChannel, controller);
+    if (textChannel.closed.length > 0 && textChannel.active) {
+      textChannel.active.interleaved.push(chunk);
+      return;
+    }
+    if (reasoningChannel.closed.length > 0 && reasoningChannel.active) {
+      reasoningChannel.active.interleaved.push(chunk);
+      return;
+    }
+    controller.enqueue(chunk);
   };
 
   const flushToolInput = (toolCallId: string, controller: TransformStreamDefaultController<UIMessageChunk>) => {
@@ -150,12 +193,12 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
     const safe = redactObjectField(chunk, redact);
     if (channel.active) flushChannel(channel, controller);
     if (channel.closed.length > 0 && hold > 0) {
-      channel.active = { id: safe.id, start: safe, stream: redact.createStream() };
+      channel.active = { id: safe.id, start: safe, stream: redact.createStream(), interleaved: [] };
       channel.pendingBuffer = "";
       return;
     }
     flushChannel(channel, controller);
-    channel.active = { id: safe.id, stream: redact.createStream() };
+    channel.active = { id: safe.id, stream: redact.createStream(), interleaved: [] };
     channel.pendingBuffer = "";
     controller.enqueue(safe);
   };
@@ -164,14 +207,18 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
     channel: DeltaChannel<S, E>,
     id: string,
     delta: string,
+    providerMetadata: DeltaProviderMetadata,
     controller: TransformStreamDefaultController<UIMessageChunk>,
   ) => {
     if (channel.active && channel.active.id !== id) {
       flushChannel(channel, controller);
     }
     if (!channel.active) {
-      channel.active = { id, stream: redact.createStream() };
+      channel.active = { id, stream: redact.createStream(), interleaved: [] };
       channel.pendingBuffer = "";
+    }
+    if (providerMetadata !== undefined) {
+      channel.active.providerMetadata = redact.value(providerMetadata) as DeltaProviderMetadata;
     }
     if (channel.closed.length > 0) {
       channel.pendingBuffer += delta;
@@ -182,7 +229,13 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
       return;
     }
     const out = channel.active.stream.push(delta);
-    emitDelta(controller, channel.kind, channel.active.id, out);
+    if (out) {
+      emitDelta(controller, channel.kind, channel.active.id, out, channel.active.providerMetadata);
+      channel.active.providerMetadata = undefined;
+    } else if (!delta && providerMetadata !== undefined && !channel.active.start) {
+      emitDelta(controller, channel.kind, channel.active.id, "", channel.active.providerMetadata);
+      channel.active.providerMetadata = undefined;
+    }
   };
 
   const handleEnd = <S extends TextStartChunk | ReasoningStartChunk, E extends TextEndChunk | ReasoningEndChunk>(
@@ -191,7 +244,7 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
     controller: TransformStreamDefaultController<UIMessageChunk>,
   ) => {
     const safe = redactObjectField(chunk, redact);
-    if (!channel.active) {
+    if (!channel.active || channel.active.id !== safe.id) {
       flushChannel(channel, controller);
       controller.enqueue(safe);
       return;
@@ -206,7 +259,10 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
         id: channel.active.id,
         start: channel.active.start,
         tail: channel.pendingBuffer,
+        providerMetadata: channel.active.providerMetadata,
+        interleaved: channel.active.interleaved,
         end: safe,
+        afterEnd: [],
       });
       channel.active = null;
       channel.pendingBuffer = "";
@@ -218,7 +274,10 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
       lookbehind,
       inSpan,
       tail,
+      providerMetadata: channel.active.providerMetadata,
+      interleaved: channel.active.interleaved,
       end: safe,
+      afterEnd: [],
     });
     channel.active = null;
     channel.pendingBuffer = "";
@@ -228,28 +287,30 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
     transform(chunk, controller) {
       switch (chunk.type) {
         case "text-start":
-          flushChannel(reasoningChannel, controller);
+          flushIfClosedOnly(reasoningChannel, controller);
           handleStart(textChannel, chunk, controller);
           return;
         case "text-delta":
-          handleDelta(textChannel, chunk.id, chunk.delta, controller);
+          flushIfClosedOnly(reasoningChannel, controller);
+          handleDelta(textChannel, chunk.id, chunk.delta, chunk.providerMetadata, controller);
           return;
         case "text-end":
           handleEnd(textChannel, chunk, controller);
           return;
         case "reasoning-start":
-          flushChannel(textChannel, controller);
+          flushIfClosedOnly(textChannel, controller);
           handleStart(reasoningChannel, chunk, controller);
           return;
         case "reasoning-delta":
-          handleDelta(reasoningChannel, chunk.id, chunk.delta, controller);
+          flushIfClosedOnly(textChannel, controller);
+          handleDelta(reasoningChannel, chunk.id, chunk.delta, chunk.providerMetadata, controller);
           return;
         case "reasoning-end":
           handleEnd(reasoningChannel, chunk, controller);
           return;
         case "tool-input-start": {
-          flushChannel(textChannel, controller);
-          flushChannel(reasoningChannel, controller);
+          flushIfClosedOnly(textChannel, controller);
+          flushIfClosedOnly(reasoningChannel, controller);
           toolInputs.set(chunk.toolCallId, redact.createStream());
           controller.enqueue(redactObjectField(chunk, redact));
           return;
@@ -265,8 +326,8 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
           return;
         }
         case "tool-input-available":
-          flushChannel(textChannel, controller);
-          flushChannel(reasoningChannel, controller);
+          flushIfClosedOnly(textChannel, controller);
+          flushIfClosedOnly(reasoningChannel, controller);
           flushToolInput(chunk.toolCallId, controller);
           controller.enqueue({
             ...redactObjectField(chunk, redact),
@@ -274,8 +335,8 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
           });
           return;
         case "tool-input-error":
-          flushChannel(textChannel, controller);
-          flushChannel(reasoningChannel, controller);
+          flushIfClosedOnly(textChannel, controller);
+          flushIfClosedOnly(reasoningChannel, controller);
           flushToolInput(chunk.toolCallId, controller);
           controller.enqueue({
             ...redactObjectField(chunk, redact),
@@ -284,24 +345,24 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
           });
           return;
         case "tool-output-available":
-          flushChannel(textChannel, controller);
-          flushChannel(reasoningChannel, controller);
+          flushIfClosedOnly(textChannel, controller);
+          flushIfClosedOnly(reasoningChannel, controller);
           controller.enqueue({
             ...redactObjectField(chunk, redact),
             output: redact.value(chunk.output),
           });
           return;
         case "tool-output-error":
-          flushChannel(textChannel, controller);
-          flushChannel(reasoningChannel, controller);
+          flushIfClosedOnly(textChannel, controller);
+          flushIfClosedOnly(reasoningChannel, controller);
           controller.enqueue({
             ...redactObjectField(chunk, redact),
             errorText: redact.diagnostic(chunk.errorText),
           });
           return;
         case "tool-approval-request":
-          flushChannel(textChannel, controller);
-          flushChannel(reasoningChannel, controller);
+          flushIfClosedOnly(textChannel, controller);
+          flushIfClosedOnly(reasoningChannel, controller);
           controller.enqueue({
             ...chunk,
             ...(chunk.approvalDescriptor !== undefined ? { approvalDescriptor: redact.value(chunk.approvalDescriptor) } : {}),
@@ -310,12 +371,17 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
           });
           return;
         case "tool-approval-response":
-          flushChannel(textChannel, controller);
-          flushChannel(reasoningChannel, controller);
+          flushIfClosedOnly(textChannel, controller);
+          flushIfClosedOnly(reasoningChannel, controller);
           controller.enqueue({
             ...redactObjectField(chunk, redact),
             ...(chunk.reason !== undefined ? { reason: redact.text(chunk.reason) } : {}),
           });
+          return;
+        case "tool-output-denied":
+          flushIfClosedOnly(textChannel, controller);
+          flushIfClosedOnly(reasoningChannel, controller);
+          controller.enqueue(redactObjectField(chunk, redact));
           return;
         case "error":
           flushAll(controller);
@@ -329,29 +395,48 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
           });
           return;
         case "source-url":
-          flushChannel(textChannel, controller);
-          flushChannel(reasoningChannel, controller);
-          controller.enqueue({
-            ...redactObjectField(chunk, redact),
-            url: redact.text(chunk.url),
-          });
+          enqueueMidStream(
+            {
+              ...redactObjectField(chunk, redact),
+              url: redact.text(chunk.url),
+            },
+            controller,
+          );
           return;
         case "source-document":
-          flushChannel(textChannel, controller);
-          flushChannel(reasoningChannel, controller);
-          controller.enqueue({
-            ...redactObjectField(chunk, redact),
-            ...(chunk.filename !== undefined ? { filename: redact.text(chunk.filename) } : {}),
-          });
+          enqueueMidStream(
+            {
+              ...redactObjectField(chunk, redact),
+              ...(chunk.filename !== undefined ? { filename: redact.text(chunk.filename) } : {}),
+            },
+            controller,
+          );
           return;
         case "file":
         case "reasoning-file":
-          flushChannel(textChannel, controller);
-          flushChannel(reasoningChannel, controller);
-          controller.enqueue({
-            ...redactObjectField(chunk, redact),
-            url: redact.text(chunk.url),
-          });
+          enqueueMidStream(
+            {
+              ...redactObjectField(chunk, redact),
+              url: redact.text(chunk.url),
+            },
+            controller,
+          );
+          return;
+        case "message-metadata": {
+          const safe = redactObjectField(chunk, redact);
+          if (textChannel.closed.length > 0 && !textChannel.active) {
+            textChannel.closed[textChannel.closed.length - 1].afterEnd.push(safe);
+            return;
+          }
+          if (reasoningChannel.closed.length > 0 && !reasoningChannel.active) {
+            reasoningChannel.closed[reasoningChannel.closed.length - 1].afterEnd.push(safe);
+            return;
+          }
+          enqueueMidStream(safe, controller);
+          return;
+        }
+        case "custom":
+          enqueueMidStream(redactObjectField(chunk, redact), controller);
           return;
         case "steering-message":
           flushAll(controller);
@@ -361,7 +446,6 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
           });
           return;
         case "start":
-        case "message-metadata":
         case "start-step":
         case "finish-step":
         case "reset-step":
@@ -369,21 +453,13 @@ export function redactUIMessageStream(redact: Redactor): TransformStream<UIMessa
           flushAll(controller);
           controller.enqueue(redactObjectField(chunk, redact));
           return;
-        case "tool-output-denied":
-        case "custom":
-          flushChannel(textChannel, controller);
-          flushChannel(reasoningChannel, controller);
-          controller.enqueue(redactObjectField(chunk, redact));
-          return;
         default: {
-          flushChannel(textChannel, controller);
-          flushChannel(reasoningChannel, controller);
           const record = chunk as Record<string, unknown>;
           if ("data" in record) {
-            controller.enqueue({ ...redactObjectField(record, redact), data: redact.value(record.data) } as UIMessageChunk);
+            enqueueMidStream({ ...redactObjectField(record, redact), data: redact.value(record.data) } as UIMessageChunk, controller);
             return;
           }
-          controller.enqueue(redactObjectField(record, redact) as UIMessageChunk);
+          enqueueMidStream(redactObjectField(record, redact) as UIMessageChunk, controller);
         }
       }
     },
