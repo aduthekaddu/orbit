@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- The chat composer waits for the page to become interactive so the first prompt cannot be lost while the page loads. (#229)
 - The Docker image runs Node.js 24 LTS instead of Node.js 22, and `@types/node` and Dependabot now follow that line. (#53)
 - verify-orbit reports ready only for the server that bound the requested port. Concurrent launches in one checkout share the sandbox server. (#193)
 - The test suite fails a `package.json` dependency override whose package has left the lockfile or whose removal is not tracked in CONTRIBUTING.md, so a dead override cannot go unnoticed. (#146)
