@@ -115,29 +115,31 @@ function urlSecrets(rawUrl: string | undefined): string[] {
   return found;
 }
 
+function redactSinglePair(pair: string, redact: Redactor): string {
+  const eq = pair.indexOf("=");
+  if (eq === -1) {
+    const decoded = safeDecodeComponent(pair.replace(/\+/g, " "));
+    if (redact.isStoredSecret(pair) || redact.isStoredSecret(decoded)) return REDACTED;
+    return redact.text(pair);
+  }
+  const rawKey = pair.slice(0, eq);
+  const rawValue = pair.slice(eq + 1);
+  const decodedKey = safeDecodeComponent(rawKey.replace(/\+/g, " "));
+  const decodedValue = safeDecodeComponent(rawValue.replace(/\+/g, " "));
+  const safeKey = redact.isStoredSecret(rawKey) || redact.isStoredSecret(decodedKey) ? REDACTED : redact.text(rawKey);
+  if (
+    rawValue !== "" &&
+    (isCredentialQueryParam(decodedKey) || redact.isStoredSecret(rawValue) || redact.isStoredSecret(decodedValue))
+  ) {
+    return `${safeKey}=${REDACTED}`;
+  }
+  return `${safeKey}=${redact.text(rawValue)}`;
+}
+
 function redactQueryPairs(raw: string, redact: Redactor): string {
   return raw
     .split("&")
-    .map((pair) => {
-      const eq = pair.indexOf("=");
-      if (eq === -1) {
-        const decoded = safeDecodeComponent(pair.replace(/\+/g, " "));
-        if (redact.isStoredSecret(pair) || redact.isStoredSecret(decoded)) return REDACTED;
-        return redact.text(pair);
-      }
-      const rawKey = pair.slice(0, eq);
-      const rawValue = pair.slice(eq + 1);
-      const decodedKey = safeDecodeComponent(rawKey.replace(/\+/g, " "));
-      const decodedValue = safeDecodeComponent(rawValue.replace(/\+/g, " "));
-      const safeKey = redact.isStoredSecret(rawKey) || redact.isStoredSecret(decodedKey) ? REDACTED : redact.text(rawKey);
-      if (
-        rawValue !== "" &&
-        (isCredentialQueryParam(decodedKey) || redact.isStoredSecret(rawValue) || redact.isStoredSecret(decodedValue))
-      ) {
-        return `${safeKey}=${REDACTED}`;
-      }
-      return `${safeKey}=${redact.text(rawValue)}`;
-    })
+    .map((pair) => redactSinglePair(pair, redact))
     .join("&");
 }
 
@@ -149,6 +151,13 @@ function redactFragment(rawHash: string, redact: Redactor): string {
   if (redact.isStoredSecret(raw) || redact.isStoredSecret(decoded)) return `#${REDACTED}`;
   if (raw.includes("=")) return `#${redactQueryPairs(raw, redact)}`;
   return `#${redact.text(raw)}`;
+}
+
+function hasExplicitRootSlash(raw: string): boolean {
+  const schemeEnd = raw.indexOf("://");
+  const afterScheme = schemeEnd >= 0 ? raw.slice(schemeEnd + 3) : "";
+  const pathStart = afterScheme.search(/[/?#]/);
+  return pathStart >= 0 && afterScheme[pathStart] === "/";
 }
 
 export function redactUrl(raw: string, redact: Redactor): string {
@@ -166,15 +175,109 @@ export function redactUrl(raw: string, redact: Redactor): string {
     const masked = redact.text(raw);
     return masked === raw ? raw : masked;
   }
-  const schemeEnd = raw.indexOf("://");
-  const afterScheme = schemeEnd >= 0 ? raw.slice(schemeEnd + 3) : "";
-  const pathStart = afterScheme.search(/[/?#]/);
-  const hadExplicitSlash = pathStart >= 0 && afterScheme[pathStart] === "/";
-  const pathPart = url.pathname === "/" && !hadExplicitSlash ? "" : redact.text(url.pathname);
+  const pathPart = url.pathname === "/" && !hasExplicitRootSlash(raw) ? "" : redact.text(url.pathname);
   const queryPart = hasQuery ? `?${redactQueryPairs(url.search.slice(1), redact)}` : "";
   const hashPart = redactFragment(url.hash, redact);
   const userinfoPart = hasUserinfo ? `${REDACTED}@` : "";
   return `${url.protocol}//${userinfoPart}${redact.text(url.host)}${pathPart}${queryPart}${hashPart}`;
+}
+
+function hasRedactedMarker(value: string): boolean {
+  return value.includes(REDACTED) || /(?:\[|%5b)redacted(?:\]|%5d)/i.test(value);
+}
+
+function mergeMaskedPairs(submittedRaw: string, savedRaw: string, redact: Redactor): string | null {
+  const savedEntries = savedRaw
+    ? savedRaw.split("&").map((rawPair) => ({ rawPair, maskedPair: redactSinglePair(rawPair, redact), used: false }))
+    : [];
+  const merged: string[] = [];
+  for (const pair of submittedRaw.split("&")) {
+    if (!hasRedactedMarker(pair)) {
+      merged.push(pair);
+      continue;
+    }
+    const match = savedEntries.find((entry) => !entry.used && entry.maskedPair === pair);
+    if (!match) return null;
+    match.used = true;
+    merged.push(match.rawPair);
+  }
+  return merged.join("&");
+}
+
+export type ResolvedUrl = { ok: true; url: string } | { ok: false; error: string };
+
+export function resolveMaskedUrl(options: {
+  submitted: string | undefined;
+  saved: string;
+  redact: Redactor;
+  normalize: (value: string) => string;
+  fieldLabel: string;
+  displaySaved?: string;
+}): ResolvedUrl {
+  const { submitted, saved, redact, normalize, fieldLabel, displaySaved = saved } = options;
+  if (submitted === undefined) return { ok: true, url: saved };
+  const normalized = normalize(submitted);
+  if (normalized === "") return { ok: true, url: "" };
+  if (saved && normalized === normalize(redactUrl(displaySaved, redact))) return { ok: true, url: saved };
+  if (!hasRedactedMarker(normalized)) return { ok: true, url: normalized };
+
+  const fail = (): ResolvedUrl => ({ ok: false, error: `${fieldLabel} contains ${REDACTED}. Enter the full URL.` });
+  if (!saved) return fail();
+
+  let submittedUrl: URL;
+  let savedUrl: URL;
+  try {
+    submittedUrl = new URL(normalized);
+    savedUrl = new URL(saved);
+  } catch {
+    return fail();
+  }
+  if (submittedUrl.protocol !== savedUrl.protocol || submittedUrl.host !== savedUrl.host) return fail();
+  if (hasRedactedMarker(submittedUrl.host)) return fail();
+
+  let userinfoPart = "";
+  if (submittedUrl.username !== "" || submittedUrl.password !== "") {
+    if (safeDecodeComponent(submittedUrl.username) === REDACTED && submittedUrl.password === "") {
+      if (savedUrl.username === "" && savedUrl.password === "") return fail();
+      userinfoPart = savedUrl.password !== "" ? `${savedUrl.username}:${savedUrl.password}@` : `${savedUrl.username}@`;
+    } else if (hasRedactedMarker(submittedUrl.username) || hasRedactedMarker(submittedUrl.password)) {
+      return fail();
+    } else {
+      userinfoPart = submittedUrl.password !== "" ? `${submittedUrl.username}:${submittedUrl.password}@` : `${submittedUrl.username}@`;
+    }
+  }
+
+  const explicitSlash = hasExplicitRootSlash(normalized);
+  let pathPart = submittedUrl.pathname === "/" && !explicitSlash ? "" : submittedUrl.pathname;
+  if (hasRedactedMarker(pathPart)) {
+    if (submittedUrl.pathname !== redact.text(savedUrl.pathname)) return fail();
+    pathPart = savedUrl.pathname === "/" && !explicitSlash ? "" : savedUrl.pathname;
+  }
+
+  let queryPart = submittedUrl.search;
+  if (queryPart && hasRedactedMarker(queryPart)) {
+    if (!savedUrl.search) return fail();
+    const mergedQuery = mergeMaskedPairs(queryPart.slice(1), savedUrl.search.slice(1), redact);
+    if (mergedQuery === null) return fail();
+    queryPart = `?${mergedQuery}`;
+  }
+
+  let hashPart = submittedUrl.hash;
+  if (hashPart && hasRedactedMarker(hashPart)) {
+    if (hashPart === redactFragment(savedUrl.hash, redact)) {
+      hashPart = savedUrl.hash;
+    } else if (hashPart.includes("=") && savedUrl.hash.includes("=")) {
+      const mergedHash = mergeMaskedPairs(hashPart.slice(1), savedUrl.hash.slice(1), redact);
+      if (mergedHash === null) return fail();
+      hashPart = `#${mergedHash}`;
+    } else {
+      return fail();
+    }
+  }
+
+  const merged = normalize(`${submittedUrl.protocol}//${userinfoPart}${submittedUrl.host}${pathPart}${queryPart}${hashPart}`);
+  if (hasRedactedMarker(merged)) return fail();
+  return { ok: true, url: merged };
 }
 
 type IndexedView = {

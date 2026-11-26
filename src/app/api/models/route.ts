@@ -1,4 +1,5 @@
-import { Redactor } from "@/lib/chat-errors";
+import { normalizeBaseUrl } from "@/lib/base-url";
+import { Redactor, resolveMaskedUrl } from "@/lib/chat-errors";
 import { credentialsForModelList, listModels } from "@/lib/provider";
 import { getSettings, toPublicSettings } from "@/lib/settings";
 import { MODELS_NOT_CONFIGURED } from "@/lib/settings-form";
@@ -32,8 +33,22 @@ export async function POST(request: Request) {
   const parsed = postSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return Response.json({ error: "Invalid model request" }, { status: 400 });
   const settings = getSettings();
+  let requestedBaseUrl = parsed.data.baseUrl;
+  if (requestedBaseUrl !== undefined) {
+    const resolvedBase = resolveMaskedUrl({
+      submitted: requestedBaseUrl,
+      saved: settings?.baseUrl ?? "",
+      redact: new Redactor(settings),
+      normalize: normalizeBaseUrl,
+      fieldLabel: "Base URL",
+    });
+    if (!resolvedBase.ok) {
+      return Response.json({ error: resolvedBase.error, models: [] }, { status: 400 });
+    }
+    requestedBaseUrl = resolvedBase.url;
+  }
   const credentials = credentialsForModelList({
-    requestedBaseUrl: parsed.data.baseUrl,
+    requestedBaseUrl,
     requestedApiKey: parsed.data.apiKey,
     savedBaseUrl: settings?.baseUrl,
     savedPublicBaseUrl: settings ? toPublicSettings(settings).baseUrl : undefined,
@@ -46,7 +61,7 @@ export async function POST(request: Request) {
     apiKey: parsed.data.apiKey?.trim() ?? "",
     tavilyApiKey: "",
     githubToken: "",
-    baseUrl: parsed.data.baseUrl ?? "",
+    baseUrl: credentials.baseUrl,
   });
   const models = await listModels(credentials.baseUrl, credentials.apiKey, redact);
   if (!models) return Response.json({ error: "Could not reach the provider.", models: [] }, { status: 502 });

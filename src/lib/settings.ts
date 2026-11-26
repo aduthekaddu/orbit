@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { normalizeBaseUrl } from "./base-url";
-import { Redactor, redactUrl } from "./chat-errors";
+import { Redactor, redactUrl, resolveMaskedUrl } from "./chat-errors";
 import { db } from "./db";
 import { sandboxEnabled } from "./sandbox/enabled";
 import { settings } from "./db/schema";
@@ -75,17 +75,43 @@ export function matchesSavedBaseUrl(submitted: string, current: SettingsRecord):
   return normalized === normalizeBaseUrl(masked);
 }
 
-function resolveUpdatedUrl(
-  submitted: string | undefined,
-  saved: string,
-  redact: Redactor,
-  normalize: (value: string) => string,
-  displaySaved = saved,
-): string {
-  if (submitted === undefined) return saved;
-  const normalized = normalize(submitted);
-  if (saved && normalized === normalize(redactUrl(displaySaved, redact))) return saved;
-  return normalized;
+const trimSearx = (value: string) => value.trim().replace(/\/+$/, "");
+
+export type ResolvedSettingsUrls =
+  | { ok: true; baseUrl: string; searxngUrl: string; githubMcpUrl: string }
+  | { ok: false; error: string };
+
+export function resolveSettingsUrls(
+  input: { baseUrl: string; searxngUrl?: string; githubMcpUrl?: string },
+  current: SettingsRecord | null,
+): ResolvedSettingsUrls {
+  const currentRedact = new Redactor(current);
+  const base = resolveMaskedUrl({
+    submitted: input.baseUrl,
+    saved: current?.baseUrl ?? "",
+    redact: currentRedact,
+    normalize: normalizeBaseUrl,
+    fieldLabel: "Base URL",
+  });
+  if (!base.ok) return base;
+  const searx = resolveMaskedUrl({
+    submitted: input.searxngUrl,
+    saved: current?.searxngUrl ?? "",
+    redact: currentRedact,
+    normalize: trimSearx,
+    fieldLabel: "SearXNG URL",
+  });
+  if (!searx.ok) return searx;
+  const mcp = resolveMaskedUrl({
+    submitted: input.githubMcpUrl,
+    saved: current?.githubMcpUrl ?? "",
+    redact: currentRedact,
+    normalize: (value) => value.trim(),
+    fieldLabel: "GitHub MCP URL",
+    displaySaved: resolveGithubMcpUrl(current?.githubMcpUrl),
+  });
+  if (!mcp.ok) return mcp;
+  return { ok: true, baseUrl: base.url, searxngUrl: searx.url, githubMcpUrl: mcp.url };
 }
 
 export function saveSettings(input: {
@@ -99,34 +125,19 @@ export function saveSettings(input: {
   reasoningEffort: ReasoningEffort;
 }) {
   const current = getSettings();
-  const currentRedact = new Redactor(current);
-  const sameSavedBase = current !== null && matchesSavedBaseUrl(input.baseUrl, current);
-  const baseUrl = current
-    ? resolveUpdatedUrl(input.baseUrl, current.baseUrl, currentRedact, normalizeBaseUrl)
-    : normalizeBaseUrl(input.baseUrl);
+  const resolved = resolveSettingsUrls(input, current);
+  if (!resolved.ok) throw new Error(resolved.error);
+  const sameSavedBase = current !== null && normalizeBaseUrl(resolved.baseUrl) === normalizeBaseUrl(current.baseUrl);
   const requestedKey = input.apiKey?.trim() ?? "";
   const apiKey = requestedKey || (sameSavedBase ? current.apiKey : "");
-  const trimSearx = (value: string) => value.trim().replace(/\/+$/, "");
-  const searxngUrl = current
-    ? resolveUpdatedUrl(input.searxngUrl, current.searxngUrl, currentRedact, trimSearx)
-    : trimSearx(input.searxngUrl ?? "");
-  const githubMcpUrl = current
-    ? resolveUpdatedUrl(
-        input.githubMcpUrl,
-        current.githubMcpUrl,
-        currentRedact,
-        (value) => value.trim(),
-        resolveGithubMcpUrl(current.githubMcpUrl),
-      )
-    : (input.githubMcpUrl?.trim() ?? "");
   const values = {
     id: 1,
-    baseUrl,
+    baseUrl: resolved.baseUrl,
     apiKey,
-    searxngUrl,
+    searxngUrl: resolved.searxngUrl,
     tavilyApiKey: input.tavilyApiKey === null ? "" : input.tavilyApiKey?.trim() || current?.tavilyApiKey || "",
     githubToken: input.githubToken === null ? "" : input.githubToken?.trim() || current?.githubToken || "",
-    githubMcpUrl,
+    githubMcpUrl: resolved.githubMcpUrl,
     model: input.model.trim(),
     reasoningEffort: input.reasoningEffort,
     updatedAt: new Date(),
