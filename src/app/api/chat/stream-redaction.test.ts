@@ -599,3 +599,33 @@ test("misaligned Basic-auth base64 credentials are masked across text deltas, cr
   assert.equal(raw.includes(basic.slice(6)), false, `stream leaked Basic-auth suffix: ${raw}`);
   assert.equal(raw.includes(toolBasic.slice(3)), false, `tool-input-delta leaked Basic-auth suffix: ${raw}`);
 });
+
+test("start and message-metadata chunks do not overtake held text in the stream transform", async () => {
+  const { Redactor } = await import("@/lib/chat-errors");
+  const { redactUIMessageStream } = await import("@/lib/chat-stream-redactor");
+  const redactor = new Redactor({ apiKey: PROVIDER_KEY, tavilyApiKey: "", githubToken: "" });
+  const input = simulateReadableStream({
+    chunks: [
+      { type: "start" as const, messageId: "m1" },
+      { type: "text-start" as const, id: "t1" },
+      { type: "text-delta" as const, id: "t1", delta: "hello" },
+      { type: "text-end" as const, id: "t1" },
+      { type: "message-metadata" as const, messageMetadata: { note: `ref ${PROVIDER_KEY}` } },
+      { type: "text-start" as const, id: "t2" },
+      { type: "text-delta" as const, id: "t2", delta: "world" },
+      { type: "text-end" as const, id: "t2" },
+      { type: "start" as const, messageId: "m2" },
+      { type: "finish" as const, finishReason: "stop" as const },
+    ],
+  });
+  const out: Array<Record<string, unknown>> = [];
+  for await (const chunk of input.pipeThrough(redactUIMessageStream(redactor))) {
+    out.push(chunk as Record<string, unknown>);
+  }
+  assert.deepEqual(
+    out.map((c) => c.type),
+    ["start", "text-start", "text-delta", "text-end", "message-metadata", "text-start", "text-delta", "text-end", "start", "finish"],
+  );
+  const meta = out.find((c) => c.type === "message-metadata");
+  assert.deepEqual(meta?.messageMetadata, { note: "ref [redacted]" });
+});
