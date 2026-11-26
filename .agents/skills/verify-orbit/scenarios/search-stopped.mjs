@@ -29,12 +29,12 @@ export default async function searchStopped({ page, origin, mockUrl, step, shot 
   const card = page.locator('[data-tool-name="web_search"]');
   await card.waitFor();
   const status = await card.getByRole("status").innerText();
-  step("a completed stopped search shows Cancelled", status === "Cancelled", `received ${status}`);
+  step("a completed stopped search reads Search stopped", status === "Search stopped", `received ${status}`);
   await shot("stopped-output");
   await page.reload();
   await card.waitFor();
   const reloaded = await card.getByRole("status").innerText();
-  step("the stopped output remains Cancelled after reload", reloaded === "Cancelled", `received ${reloaded}`);
+  step("the stopped output still reads Search stopped after reload", reloaded === "Search stopped", `received ${reloaded}`);
   await shot("stopped-reloaded");
   const mock = await startMockSearxng();
   try {
@@ -64,7 +64,7 @@ export default async function searchStopped({ page, origin, mockUrl, step, shot 
     const heldCount = held.length;
     await Promise.all(held.splice(0).map((route) => route.continue().catch(() => {})));
     const statusAfterSend = await liveCard.getByRole("status").innerText();
-    step("a message sent right after Stop leaves the stopped search Cancelled, not Failed", statusAfterSend === "Cancelled", `header ${statusAfterSend}, held reads ${heldCount}`);
+    step("a message sent right after Stop leaves the line at Search stopped, not Search failed", statusAfterSend === "Search stopped", `line ${statusAfterSend}, held reads ${heldCount}`);
     await shot("send-after-stop");
   } finally {
     await mock.close();

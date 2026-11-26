@@ -1,6 +1,11 @@
 import { eventually } from "../../../../src/lib/eventually.mjs";
 import { startMockMcp } from "../../../../scripts/qa/mock-mcp.mjs";
 
+// A finished tool call is a closed <details> line, and its results show once the summary is clicked.
+async function openLine(line) {
+  if (await line.evaluate((root) => root.matches("details:not([open])"))) await line.locator(":scope > summary").click();
+}
+
 const ISSUE = "https://github.com/aduthekaddu/orbit/issues/7";
 export default async function github({ page, origin, mockUrl, step, shot }) {
   const mock = await startMockMcp();
@@ -52,6 +57,9 @@ export default async function github({ page, origin, mockUrl, step, shot }) {
       await shot("issues");
       return;
     }
+    const closed = await card.evaluate((root) => `${root.tagName.toLowerCase()}${root.open ? "[open]" : ""}`);
+    step("a finished GitHub line starts closed", closed === "details", `the line is ${closed}`);
+    await openLine(card);
     const cardLink = card.getByRole("link", { name: "Migration lock", exact: true });
     step(
       "the card links the issue",
@@ -67,6 +75,7 @@ export default async function github({ page, origin, mockUrl, step, shot }) {
     await shot("issues");
     await page.reload();
     await card.locator('[data-tool-status="succeeded"]').waitFor({ timeout: 15_000 });
+    await openLine(card);
     step("the issue link survives reload", (await card.getByRole("link", { name: "Migration lock", exact: true }).getAttribute("href")) === ISSUE);
     await page.setViewportSize({ width: 390, height: 844 });
     await card.scrollIntoViewIfNeeded();
