@@ -43,6 +43,14 @@ Known limits:
 - **Orbit does not check the Access JWT yet.** Access adds a signed `Cf-Access-Jwt-Assertion` header to each request. Orbit trusts that the tunnel is the only public path and does not verify that header. Anything that reaches port 3210 without the tunnel skips Access, such as another process or user on the same machine, or a misconfigured port mapping. This is a follow-up: verify the JWT against the team's public keys and the application's audience tag, and reject requests without it when `ORBIT_PUBLIC_URL` is set.
 - Anyone who can read `.env` can run the tunnel. Keep that file at mode `0600`.
 
+## Response headers
+
+`next.config.ts` sets a Content Security Policy for app pages and a separate policy for API responses. Both forbid other pages from framing the response. Both also send `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: same-origin`. Next.js omits `X-Powered-By`.
+
+The page policy allows the inline scripts Next.js emits and the inline scripts and esm.sh modules that artifact previews use. A preview inherits the page policy and adds its own. Inline scripts remain allowed on the page, so this policy cannot stop an injected inline script there.
+
+The planned `/s/` pages and their preview routes can set their own response headers. When adding a handler under `/api/` with its own CSP, exclude that path from the API rule. Next.js can replace a handler's header with one from a matching config rule.
+
 ## Artifact previews
 
 HTML, SVG, JSX and TSX code blocks run only in an iframe with `sandbox="allow-scripts"`. The frame has an opaque origin. It cannot read the parent page, cookies or local storage, and it has no permission to open popups, submit forms or navigate the app.
@@ -55,9 +63,7 @@ default-src 'none'; script-src 'unsafe-inline' https://esm.sh; style-src 'unsafe
 
 This policy blocks fetch requests, including requests to Orbit's API. It allows inline scripts and scripts from esm.sh. React previews load React 19.3.1 from esm.sh, so they need a network connection. HTML and SVG previews work offline. React source can import only the supported React modules.
 
-Orbit's pages also send `Content-Security-Policy: frame-src 'none'`. The browser checks this policy each time a frame on the page loads a URL, including a load the frame starts itself. When preview code sets `location.href`, follows a link or uses a meta refresh, the browser blocks the load before the request leaves, so the code cannot send data out in a URL. Chrome 155 and Firefox 157 block these loads. Safari is untested. The browser may show its own blocked page in the frame, and Reload brings the preview back. Orbit passes the preview document as `srcdoc`, not as a URL, so this policy does not block it.
-
-`next.config.ts` sets this header on the named app pages. Route handlers outside those paths can set their own CSP. A matching Next.js header rule can replace a handler's CSP, so keep the rule limited to pages. Client-side links keep the current document's CSP. Give new pages that link into chat the same policy or use a link that loads a new document, as the 404 page does.
+The app page policy includes `frame-src 'none'`. The browser checks it each time a frame on the page loads a URL, including a load the frame starts itself. When preview code sets `location.href`, follows a link or uses a meta refresh, the browser blocks the load before the request leaves, so the code cannot send data out in a URL. Chrome 155 and Firefox 157 block these loads. Safari is untested. The browser may show its own blocked page in the frame, and Reload brings the preview back. Orbit passes the preview document as `srcdoc`, which the policy allows.
 
 The app accepts an error report only from the preview frame's own window and shows the message as text. The frame does not limit CPU or memory use. Preview only code you are willing to run under these limits.
 
