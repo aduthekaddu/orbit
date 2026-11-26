@@ -90,8 +90,9 @@ export class Redactor {
   readonly #every: string[];
   readonly #long: string[];
 
-  constructor(...sources: [StoredCredentials, ...StoredCredentials[]]) {
-    const secrets = new Set(sources.flatMap((credentials) => CREDENTIAL_FIELDS.map((field) => credentials[field])));
+  constructor(...sources: [StoredCredentials | null, ...StoredCredentials[]]) {
+    const secrets = new Set(sources.flatMap((credentials) =>
+      credentials === null ? [] : CREDENTIAL_FIELDS.map((field) => credentials[field])));
     this.#every = [...secrets].filter((value) => value !== "");
     this.#long = this.#every.filter((value) => value.length >= MIN_CREDENTIAL_LENGTH);
   }
@@ -100,7 +101,7 @@ export class Redactor {
     return this.#every.some((secret) => text.includes(secret));
   }
 
-  // Saved replies and tool results: each long credential becomes the marker. A marker next to other
+  // Saved messages and tool results: each long credential becomes the marker. A marker next to other
   // text can spell a credential again; then the whole text is dropped.
   text(message: string) {
     const masked = maskRuns(message, this.#long);

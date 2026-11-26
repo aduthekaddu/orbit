@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test, { before } from "node:test";
 import { eq } from "drizzle-orm";
+import { Redactor } from "./chat-errors";
+
+const redact = new Redactor(null);
 
 type SearchModule = typeof import("./search");
 type MessageModule = typeof import("./messages");
@@ -35,9 +38,9 @@ function prompt(answerId: string) {
 // Saves an assistant reply after path, as POST /api/chat does for a request that ends in an unsaved
 // assistant message: the reply takes that message's id.
 function reply(chatId: string, path: { id: string; role: string; parts: unknown[] }[], answer: { id: string; parts: unknown[] }) {
-  const plan = messages.planChatWrite(chatId, [...path, { id: answer.id, role: "assistant", parts: [] }]);
+  const plan = messages.planChatWrite(chatId, [...path, { id: answer.id, role: "assistant", parts: [] }], redact);
   if ("error" in plan) assert.fail(`write refused: ${plan.error}`);
-  return messages.finishChatReply(plan, answer.parts);
+  return messages.finishChatReply(plan, answer.parts, redact);
 }
 
 test("toOrMatchQuery keeps only content words", () => {
@@ -130,7 +133,7 @@ test("a broken search index records a diagnostic without message or query text",
 test("deleting a chat drops its messages from search", () => {
   const now = new Date();
   db.insert(schema.chats).values({ id: "c-del", userId: "u1", title: "Gone", createdAt: now, updatedAt: now }).run();
-  assert.equal(messages.persistIncoming("c-del", [part("m-del", "user", "please deletemeplease now")]), "ok");
+  assert.equal(messages.persistIncoming("c-del", [part("m-del", "user", "please deletemeplease now")], redact), "ok");
   assert.ok(search.searchMessages("u1", "deletemeplease").some((hit) => hit.messageId === "m-del"));
   db.delete(schema.chats).where(eq(schema.chats.id, "c-del")).run();
   assert.equal(search.searchMessages("u1", "deletemeplease").length, 0);
@@ -138,7 +141,7 @@ test("deleting a chat drops its messages from search", () => {
 
 test("an edited message is found by its new text only", () => {
   assert.equal(reply("c1", [prompt("m-edit")], part("m-edit", "assistant", "oldlabeltoken stays")), true);
-  assert.equal(messages.updateMessageText("c1", "m-edit", "newlabeltoken stays"), true);
+  assert.equal(messages.updateMessageText("c1", "m-edit", "newlabeltoken stays", redact), true);
   assert.ok(search.searchMessages("u1", "newlabeltoken").some((hit) => hit.messageId === "m-edit"));
   assert.equal(search.searchMessages("u1", "oldlabeltoken").length, 0);
 });
@@ -148,7 +151,7 @@ test("another user's chat never matches", () => {
   const now = new Date();
   db.insert(schema.user).values({ id: "u2", name: "Two", email: "two@orbit.local" }).run();
   db.insert(schema.chats).values({ id: "c2", userId: "u2", title: "Secret", createdAt: now, updatedAt: now }).run();
-  assert.equal(messages.persistIncoming("c2", [part("m-secret", "user", "onlyotherperson word")]), "ok");
+  assert.equal(messages.persistIncoming("c2", [part("m-secret", "user", "onlyotherperson word")], redact), "ok");
   assert.equal(search.searchMessages("u1", "onlyotherperson").length, 0);
   assert.ok(search.searchMessages("u2", "onlyotherperson").some((hit) => hit.messageId === "m-secret"));
 });
@@ -277,8 +280,8 @@ test("colored output is found by its words and the snippet has no escape bytes",
 
 test("a reopened chat still finds output-only text after the message is saved again", () => {
   const again = toolMessage("m-out", { stdout: "rainbow-" + "gizmo7\n" });
-  const plan = messages.planChatWrite("c1", [prompt(again.id), again]);
+  const plan = messages.planChatWrite("c1", [prompt(again.id), again], redact);
   if ("error" in plan) assert.fail(`write refused: ${plan.error}`);
-  assert.equal(messages.finishChatReply(plan, again.parts), true);
+  assert.equal(messages.finishChatReply(plan, again.parts, redact), true);
   assert.deepEqual(search.searchMessages("u1", "rainbow-gizmo7").map((hit) => hit.messageId), ["m-out"]);
 });

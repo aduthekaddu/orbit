@@ -6,6 +6,9 @@ import test, { before, after } from "node:test";
 import Database from "better-sqlite3";
 import { dataDirectory } from "../paths";
 import { startMockOllama } from "./ollama-harness";
+import { Redactor } from "../chat-errors";
+
+const redact = new Redactor(null);
 
 const dataDir = dataDirectory();
 const requestLog = path.join(dataDir, "mock-requests.jsonl");
@@ -96,7 +99,7 @@ async function seedChat(text: string, createdAt: number) {
   const { createChat, persistIncoming } = await import("../messages");
   const chat = createChat("dream-user");
   const messageId = crypto.randomUUID();
-  assert.equal(persistIncoming(chat.id, [{ id: messageId, role: "user", parts: [{ type: "text", text }] }]), "ok");
+  assert.equal(persistIncoming(chat.id, [{ id: messageId, role: "user", parts: [{ type: "text", text }] }], redact), "ok");
   db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(createdAt, messageId);
   return { chatId: chat.id, messageId };
 }
@@ -108,9 +111,9 @@ async function seedReply(chatId: string, text: string, createdAt: number, messag
   const { finishChatReply, listMessages, planChatWrite } = await import("../messages");
   const prompt = listMessages(chatId).find((message) => message.role === "user");
   assert.ok(prompt, "chat has no prompt to reply to");
-  const plan = planChatWrite(chatId, [prompt, { id: messageId, role: "assistant", parts: [] }]);
+  const plan = planChatWrite(chatId, [prompt, { id: messageId, role: "assistant", parts: [] }], redact);
   if ("error" in plan) assert.fail(`write refused: ${plan.error}`);
-  assert.equal(finishChatReply(plan, [{ type: "text", text }]), true);
+  assert.equal(finishChatReply(plan, [{ type: "text", text }], redact), true);
   db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(createdAt, messageId);
   return messageId;
 }
@@ -336,7 +339,7 @@ test("an Ollama outage skips model calls and recovery reads the newest 100 messa
     const { db } = await import("../db");
     const { persistIncoming } = await import("../messages");
     const newestId = crypto.randomUUID();
-    assert.equal(persistIncoming(chatId, [{ id: newestId, role: "user", parts: [{ type: "text", text: "I live in Porto" }] }]), "ok");
+    assert.equal(persistIncoming(chatId, [{ id: newestId, role: "user", parts: [{ type: "text", text: "I live in Porto" }] }], redact), "ok");
     db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(start + 100, newestId);
 
     for (const night of [date, "2099-07-03"]) {

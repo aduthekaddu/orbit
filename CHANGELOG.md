@@ -4,6 +4,7 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- New prompts and manual reply edits mask stored credentials in chat history and message search. (#202)
 - Orbit pages now refuse to be framed by other pages. Every response outside `/s/` sends `nosniff` and a same-origin referrer rule, and none names Next.js in `X-Powered-By`. (#133)
 - Stopping a chat turn or hitting the setup deadline during the GitHub MCP handshake now closes the session on the GitHub MCP server instead of leaving it open. (#93)
 - A chat page keeps one layout from its first paint. An empty chat opens with its centered composer and starters, a chat with messages shows a placeholder in their shape until they load, and no Scroll to bottom button shows over an empty thread. (#246)
