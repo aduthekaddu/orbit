@@ -161,7 +161,7 @@ function insertMessage(
     role: message.role, content: body.content, parts: body.parts,
     position: parent ? parent.position + 1 : 0,
     createdAt: new Date(),
-    ...replyColumns(reply),
+    ...replyColumns(reply, redact),
   }).run();
   db.update(chats).set({ headId: message.id }).where(eq(chats.id, chatId)).run();
   return true;
@@ -286,9 +286,10 @@ function unchanged(row: SavedText | undefined, copy: SavedText) {
   return row !== undefined && row.content === copy.content && row.parts === copy.parts;
 }
 
-function replyColumns(reply: ReplyRecord | undefined) {
+// The model id comes from the provider's response, which can repeat a credential.
+function replyColumns(reply: ReplyRecord | undefined, redact: Redactor) {
   if (!reply) return {};
-  return { connectionId: reply.connectionId, model: reply.model, reasoningEffort: reply.effort, effortOutcome: reply.effortOutcome };
+  return { connectionId: reply.connectionId, model: redact.text(reply.model), reasoningEffort: reply.effort, effortOutcome: reply.effortOutcome };
 }
 
 /** Saves a reply with a visible part, unless a row its plan copied has changed. Returns whether it saved. */
@@ -299,7 +300,7 @@ export function finishChatReply(plan: ReplyPlan, parts: unknown, redact: Redacto
     if (!unchanged(savedText(plan.chatId, plan.prompt.id), plan.prompt.saved)) return false;
     if (!plan.continues) return insertMessage(plan.chatId, { id: plan.id, role: "assistant", parts }, plan.prompt.id, redact, reply);
     if (!unchanged(savedText(plan.chatId, plan.id), plan.continues)) return false;
-    db.update(messages).set({ ...messageBody(parts, redact), ...replyColumns(reply) })
+    db.update(messages).set({ ...messageBody(parts, redact), ...replyColumns(reply, redact) })
       .where(eq(messages.id, plan.id)).run();
     return true;
   });

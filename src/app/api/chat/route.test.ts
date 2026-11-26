@@ -58,10 +58,10 @@ const originalEnv = Object.fromEntries(
   ["ORBIT_DATA_DIR", "ORBIT_OLLAMA_URL", "ORBIT_GITHUB_MCP_FIXTURE", ...SEEDED_ENV].map((name) => [name, process.env[name]]),
 );
 
-function sse(res: http.ServerResponse, deltas: unknown[], finish: string) {
+function sse(res: http.ServerResponse, deltas: unknown[], finish: string, model: string) {
   res.writeHead(200, { "content-type": "text/event-stream" });
   const chunk = (delta: unknown, reason: string | null) =>
-    `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 0, model: "mock", choices: [{ index: 0, delta, finish_reason: reason }] })}\n\n`;
+    `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 0, model, choices: [{ index: 0, delta, finish_reason: reason }] })}\n\n`;
   for (const delta of deltas) res.write(chunk(delta, null));
   res.write(chunk({}, finish));
   res.end("data: [DONE]\n\n");
@@ -86,14 +86,15 @@ function answer(res: http.ServerResponse, body: { stream?: boolean; messages?: A
     res.end(JSON.stringify({ id: "t", object: "chat.completion", created: 0, model: "mock", choices: [{ index: 0, message: { role: "assistant", content: "Route test" }, finish_reason: "stop" }] }));
     return;
   }
+  const model = prompt.includes("[model-echoes-key]") ? `proxy-${PROVIDER_KEY}` : "mock";
   if (body.messages?.at(-1)?.role === "tool") {
-    sse(res, [{ role: "assistant", content: "Done." }], "stop");
+    sse(res, [{ role: "assistant", content: "Done." }], "stop", model);
     return;
   }
   const call = prompt.includes("[github-call]")
     ? { name: "github_list_issues", arguments: JSON.stringify({ owner: "aduthekaddu", repo: "orbit" }) }
     : { name: "render_ui", arguments: JSON.stringify({ root: "r", elements: { [TAVILY_KEY]: { type: "NotAComponent", props: {}, children: [] } } }) };
-  sse(res, [{ role: "assistant", content: "", tool_calls: [{ index: 0, id: "call-1", type: "function", function: call }] }], "tool_calls");
+  sse(res, [{ role: "assistant", content: "", tool_calls: [{ index: 0, id: "call-1", type: "function", function: call }] }], "tool_calls", model);
 }
 
 before(async () => {
@@ -255,6 +256,15 @@ test("a submitted prompt masks a stored credential in the saved message and sear
   await response.text();
   assert.equal(response.status, 200, "the tab can send a follow-up before it reloads the saved prompt");
   assertSavedText(`${chatId}-u2`, "A follow-up.");
+});
+
+test("a response model id that echoes the provider key is masked in the saved reply record", async () => {
+  const chatId = "c-model-echo";
+  const { streamed, saved } = await send(chatId, "[model-echoes-key] hello");
+  assert.ok(streamed.some((chunk) => chunk.type === "message-metadata"), "the stream sent the reply record");
+  const reply = messages.listMessages(chatId).find(({ role }) => role === "assistant");
+  assert.deepEqual((reply?.metadata as { reply?: { model?: string } } | undefined)?.reply?.model, "proxy-[redacted]");
+  assertNoCredential("the saved history", saved);
 });
 
 test("manual reply edits mask a stored credential in the saved message and search text", async (t) => {
