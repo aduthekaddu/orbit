@@ -10,8 +10,7 @@ import { readEnv } from "./env";
 import { listModels } from "./model-list";
 import { decryptSecret, encryptSecret, SecretUnreadable } from "./secrets";
 
-export const CONNECTION_KINDS = ["openai-compatible", "anthropic"] as const;
-export type ConnectionKind = (typeof CONNECTION_KINDS)[number];
+export type ConnectionKind = "openai-compatible" | "anthropic";
 
 export type ProviderConnection =
   | { id: string; userId: string; kind: "openai-compatible"; label: string; baseUrl: string; createdAt: Date }

@@ -14,8 +14,8 @@ export type ModelCaps = {
 };
 export type ListedModel = { id: string; label: string; caps: ModelCaps };
 
-export const ANTHROPIC_VERSION = "2023-06-01";
-export const MODEL_CAPS_TTL_MS = 5 * 60 * 1000;
+const ANTHROPIC_VERSION = "2023-06-01";
+const MODEL_CAPS_TTL_MS = 5 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 20_000;
 const MAX_ANTHROPIC_PAGES = 20;
 
