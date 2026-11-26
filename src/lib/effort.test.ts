@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { EFFORT_LABELS, EFFORTS, effortCallOptions, effortLevels, effortOutcome, type Effort } from "./effort";
+import { EFFORT_LABELS, EFFORTS, effortCallOptions, effortLevels, effortOutcome, titleCallOptions, type Effort } from "./effort";
 import type { ModelCaps } from "./model-list";
 
 const ALL: Effort[] = ["none", "low", "medium", "high", "xhigh", "max"];
@@ -101,6 +101,23 @@ test("an Anthropic call at None turns thinking off and still caches the prompt",
 
 test("an Anthropic call that sends no effort still caches the prompt", () => {
   assert.deepEqual(anthropicOptions(effortCallOptions("anthropic", "high", [])).cacheControl, { type: "ephemeral" });
+});
+
+// A turn a safety classifier declines is retried on Anthropic's recommended fallback model in the same call.
+test("every Anthropic chat and title call asks for the default fallbacks, and an OpenAI-compatible call does not", () => {
+  const calls = [
+    ...ALL.map((requested) => effortCallOptions("anthropic", requested, OPUS_LEVELS).options),
+    effortCallOptions("anthropic", "high", null).options,
+    effortCallOptions("anthropic", "high", []).options,
+    effortCallOptions("anthropic", "none", ALL).options,
+    titleCallOptions("anthropic", OPUS_LEVELS).options,
+    titleCallOptions("anthropic", null).options,
+    titleCallOptions("anthropic", []).options,
+  ];
+  for (const options of calls) assert.equal(options.providerOptions?.anthropic.fallbacks, "default", JSON.stringify(options));
+  for (const options of [effortCallOptions("openai-compatible", "high", ALL).options, titleCallOptions("openai-compatible", ALL).options]) {
+    assert.equal(JSON.stringify(options).includes("fallbacks"), false, JSON.stringify(options));
+  }
 });
 
 test("no effort sent gives no outcome", () => {
