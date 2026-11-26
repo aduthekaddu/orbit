@@ -49,7 +49,8 @@ function nearest(requested: Effort, levels: readonly Effort[]): Effort {
   return best;
 }
 
-function sentEffort(requested: Effort, levels: readonly Effort[] | null): Effort | null {
+/** The level a request sends: the chosen one, its nearest enabled level, or null when the model takes none. The picker moves to it too. */
+export function sentEffort(requested: Effort, levels: readonly Effort[] | null): Effort | null {
   if (levels === null) return requested;
   if (levels.length === 0) return null;
   return levels.includes(requested) ? requested : nearest(requested, levels);
