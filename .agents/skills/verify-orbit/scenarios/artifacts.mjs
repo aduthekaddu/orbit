@@ -115,9 +115,14 @@ export default async function artifacts({ page, origin, step, shot }) {
   await panel.getByRole("button", { name: "Download", exact: true }).click();
   const download = await downloadEvent;
   step("Download returns an HTML file", download.suggestedFilename().endsWith(".html"));
+  // A headless context holds clipboard-write at "prompt" and denies the write, so grant it first,
+  // as sandbox-copy.mjs does, and verify what actually landed on the clipboard.
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin });
   await panel.getByRole("button", { name: "Copy", exact: true }).click();
   await panel.getByRole("button", { name: "Copied", exact: true }).waitFor();
-  step("Copy reports the copied source", true);
+  const copiedSource = await eventually(() => page.evaluate(() => navigator.clipboard.readText()), (text) => text !== "", { timeoutMs: 3_000, what: "Copy to write the artifact source" });
+  const shownSource = await panel.getByRole("tabpanel").locator("code").textContent();
+  step("Copy reports the copied source", copiedSource === shownSource, `clipboard ${JSON.stringify(copiedSource)}`);
   await panel.getByRole("tab", { name: "Preview", exact: true }).click();
   step("switching tabs keeps the running artifact", !reopened.isDetached() && await reopenedButton.evaluate(node => node.style.backgroundColor === "green"));
   await panel.getByRole("button", { name: "Reload", exact: true }).click();

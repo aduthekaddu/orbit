@@ -5,6 +5,7 @@ import { ThreadPrimitive, useAui, useAuiEvent, useAuiState } from "@assistant-ui
 import { ArrowDownIcon } from "@phosphor-icons/react";
 import { Figure } from "@/components/figure";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Composer } from "./composer";
 import { messageByRole } from "./messages";
@@ -17,14 +18,18 @@ const STARTERS = [
   { label: "Brainstorm", prompt: "Give me ten ideas for " },
 ];
 
-export function Thread({ ready, model, focusMessageId }: { ready: boolean; model: string; focusMessageId?: string | null }) {
-  const empty = useAuiState((state) => state.thread.isEmpty);
+// The runtime loads saved messages in an effect after hydration, and its isLoading turns false once before that load
+// starts, so until the first message arrives the layout follows what the server saw: saved messages or none.
+type ThreadView = "empty" | "loading" | "messages";
+
+export function Thread({ ready, model, focusMessageId, hasHistory }: { ready: boolean; model: string; focusMessageId?: string | null; hasHistory: boolean }) {
+  const view = useAuiState((state): ThreadView => (state.thread.messages.length > 0 ? "messages" : hasHistory ? "loading" : "empty"));
   const [autoScroll, setAutoScroll] = useState(!focusMessageId);
   useAuiEvent("thread.runStart", () => setAutoScroll(true));
   const viewport = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const root = viewport.current;
-    if (!focusMessageId || empty || !root) return;
+    if (!focusMessageId || view !== "messages" || !root) return;
     let ring: number | undefined;
     const focus = () => {
       const el = root.querySelector(`[data-message-id="${CSS.escape(focusMessageId)}"]`);
@@ -43,7 +48,7 @@ export function Thread({ ready, model, focusMessageId }: { ready: boolean; model
       observer.disconnect();
       window.clearTimeout(ring);
     };
-  }, [empty, focusMessageId]);
+  }, [view, focusMessageId]);
   return (
     <TooltipProvider>
       <ThreadPrimitive.Root className="@container/thread relative flex h-full min-h-0 flex-col">
@@ -53,35 +58,56 @@ export function Thread({ ready, model, focusMessageId }: { ready: boolean; model
           autoScroll={autoScroll}
           className="@container flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-8 scrollbar-thin"
         >
-          {empty ? (
+          {view === "empty" ? (
             <EmptyState model={model} />
           ) : (
             <>
               <div className="flex flex-col gap-6">
-                <ThreadPrimitive.Messages>
-                  {({ message }) => {
-                    const Message = messageByRole[message.role];
-                    return <Message />;
-                  }}
-                </ThreadPrimitive.Messages>
+                {view === "loading" ? (
+                  <MessagesSkeleton />
+                ) : (
+                  <ThreadPrimitive.Messages>
+                    {({ message }) => {
+                      const Message = messageByRole[message.role];
+                      return <Message />;
+                    }}
+                  </ThreadPrimitive.Messages>
+                )}
               </div>
               <ThreadPrimitive.ViewportFooter className="pointer-events-none sticky bottom-0 mt-auto bg-gradient-to-t from-background from-60% pt-8 pb-4">
                 <div className="pointer-events-auto relative mx-auto w-full max-w-widget">
-                  <ThreadPrimitive.ScrollToBottom
-                    aria-label="Scroll to bottom"
-                    className="absolute -top-12 left-1/2 flex size-8 -translate-x-1/2 items-center justify-center rounded-full border bg-popover text-muted-foreground shadow-float transition-opacity duration-200 ease-orbit hover:text-foreground disabled:pointer-events-none disabled:opacity-0"
-                  >
-                    <ArrowDownIcon weight="regular" className="size-4" />
-                  </ThreadPrimitive.ScrollToBottom>
+                  {view === "messages" && (
+                    <ThreadPrimitive.ScrollToBottom
+                      aria-label="Scroll to bottom"
+                      className="absolute -top-12 left-1/2 flex size-8 -translate-x-1/2 items-center justify-center rounded-full border bg-popover text-muted-foreground shadow-float transition-opacity duration-200 ease-orbit hover:text-foreground disabled:pointer-events-none disabled:opacity-0"
+                    >
+                      <ArrowDownIcon weight="regular" className="size-4" />
+                    </ThreadPrimitive.ScrollToBottom>
+                  )}
                   <Composer ready={ready} model={model} />
                 </div>
               </ThreadPrimitive.ViewportFooter>
             </>
           )}
         </ThreadPrimitive.Viewport>
-        {empty ? null : <ThreadMap viewport={viewport} />}
+        {view === "messages" ? <ThreadMap viewport={viewport} /> : null}
       </ThreadPrimitive.Root>
     </TooltipProvider>
+  );
+}
+
+function MessagesSkeleton() {
+  return (
+    <>
+      <div className="mx-auto flex w-full max-w-widget justify-end">
+        <Skeleton className="h-10 w-2/5 rounded-2xl" />
+      </div>
+      <div className="mx-auto flex w-full max-w-widget flex-col gap-2.5">
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-11/12" />
+        <Skeleton className="h-4 w-3/5" />
+      </div>
+    </>
   );
 }
 
