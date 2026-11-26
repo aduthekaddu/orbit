@@ -11,7 +11,7 @@ node .agents/skills/verify-orbit/verify.mjs browse reply-actions
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
-The scenario drops the connection to Orbit while Chrome stays online. It checks that Chrome shows **Reconnecting**, renders all 50 words, and has one copy of the reply after a reload. The scenario repeats this check at 390 by 844 pixels.
+The scenario first drops the initial reply before the app receives the response headers, then checks that the open tab fetches the same reply and shows all 50 words. It also drops the connection after text reaches Chrome while the browser stays online. It checks that Chrome shows **Reconnecting**, renders all 50 words, and has one copy of the reply after a reload. The scenario repeats this check at 390 by 844 pixels.
 
 It also drops the connection during thinking, then checks that the timer survives reload. It presses **Stop** during a second reply and checks that the reasoning, duration, and **Stopped** label survive. Switching chats must leave the reply running. A second tab can watch that reply but gets HTTP 409 if it sends another prompt. A tab focused on an older branch stays on that branch.
 

@@ -21,6 +21,7 @@ type ReplyLinkState = ActiveReply | { kind: "attached"; replyId: null }
 
 type Snapshot = { state: ReplyLinkState; stopError: string };
 type ResumeAttempt = { signal: AbortSignal; controller: AbortController; target: Reconnecting; status?: number };
+type ReplyDiscovery = { kind: "initial" | "idle" } | { kind: "awaiting-reply"; promptId: string };
 
 function activeReply(state: ReplyLinkState): ActiveReply | null {
   if (state.kind === "stopping") return state.reply;
@@ -29,7 +30,7 @@ function activeReply(state: ReplyLinkState): ActiveReply | null {
 }
 
 type Chat = Pick<UseChatHelpers<UIMessage>, "resumeStream" | "clearError" | "setMessages" | "stop">;
-type Finish = Pick<Parameters<ChatOnFinishCallback<UIMessage>>[0], "isDisconnect" | "isAbort">;
+type Finish = Pick<Parameters<ChatOnFinishCallback<UIMessage>>[0], "isDisconnect" | "isAbort" | "messages">;
 
 const stoppedReply = z.object({ ok: z.literal(true), stopped: z.boolean() });
 const savedMessage = z.looseObject({
@@ -70,7 +71,7 @@ export function createReplyLink(chatId: string, refresh: () => void) {
   const listeners = new Set<() => void>();
   let connection: { chat: Chat; controller: AbortController } | null = null;
   let attempt: ResumeAttempt | null = null;
-  let mounted = false;
+  let discovery: ReplyDiscovery = { kind: "initial" };
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let stopTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -154,15 +155,21 @@ export function createReplyLink(chatId: string, refresh: () => void) {
   }
 
   function wake() {
+    if (discovery.kind === "awaiting-reply" && connection &&
+        navigator.onLine && document.visibilityState === "visible") {
+      refresh();
+      return;
+    }
     void resume();
   }
 
   function accept(replyId: string) {
+    discovery = { kind: "idle" };
     writeCheckpoint(key, replyId);
     update({ kind: "attached", replyId }, "");
   }
 
-  function finish({ isDisconnect, isAbort }: Finish) {
+  function finish({ isDisconnect, isAbort, messages }: Finish) {
     if (!connection || isAbort) return;
     clearTimeout(stopTimer);
     const reply = activeReply(snapshot.state);
@@ -171,6 +178,8 @@ export function createReplyLink(chatId: string, refresh: () => void) {
       scheduleRetry();
       return;
     }
+    const prompt = isDisconnect ? messages.findLast((message) => message.role === "user") : undefined;
+    discovery = prompt ? { kind: "awaiting-reply", promptId: prompt.id } : { kind: "idle" };
     settle({ kind: "attached", replyId: null });
     refresh();
   }
@@ -263,14 +272,16 @@ export function createReplyLink(chatId: string, refresh: () => void) {
         }
       };
     },
-    mount(liveReplyId: string | null, savedIds: ReadonlySet<string>, restorePending: boolean) {
-      if (mounted) return;
-      mounted = true;
+    mount(liveReplyId: string | null, savedIds: ReadonlySet<string>, restorePending: boolean, headId: string | null) {
+      const initial = discovery.kind === "initial";
+      if (!initial && (discovery.kind !== "awaiting-reply" || !liveReplyId || discovery.promptId !== headId)) return;
+      if (initial) discovery = { kind: "idle" };
       if (snapshot.state.kind !== "attached" || snapshot.state.replyId) return;
-      const stored = readCheckpoint(key);
+      const stored = initial ? readCheckpoint(key) : null;
       if (stored && savedIds.has(stored)) writeCheckpoint(key, null);
       const replyId = liveReplyId ?? (restorePending ? stored : null);
       if (!replyId || savedIds.has(replyId)) return;
+      discovery = { kind: "idle" };
       writeCheckpoint(key, replyId);
       update({ kind: "reconnecting", replyId, attempt: 0 });
       wake();
@@ -308,7 +319,7 @@ export function ReplyLink({
   const chat = useAISDKChat();
   const { resumeStream, clearError, setMessages, stop } = chat ?? {};
   const headLoaded = useAuiState((state) =>
-    !state.thread.isLoading && (headId === null || state.thread.messages.some((message) => message.id === headId)),
+    !state.thread.isLoading && !state.thread.isRunning && (headId === null || state.thread.messages.some((message) => message.id === headId)),
   );
 
   useEffect(() => {
@@ -317,8 +328,8 @@ export function ReplyLink({
   }, [link, resumeStream, clearError, setMessages, stop]);
 
   useEffect(() => {
-    if (historyLoaded && headLoaded && resumeStream) link.mount(liveReplyId, savedIds, restorePending);
-  }, [link, historyLoaded, headLoaded, resumeStream, liveReplyId, savedIds, restorePending]);
+    if (historyLoaded && headLoaded && resumeStream) link.mount(liveReplyId, savedIds, restorePending, headId);
+  }, [link, historyLoaded, headLoaded, resumeStream, liveReplyId, savedIds, restorePending, headId]);
 
   return <ReplyLinkContext.Provider value={link}>{children}</ReplyLinkContext.Provider>;
 }

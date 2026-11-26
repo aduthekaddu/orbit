@@ -62,7 +62,7 @@ test("a dropped stream retries while the tab stays online and visible", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const { link, resumeStream, stored } = fixture(t);
   link.accept("a1");
-  link.finish({ isDisconnect: true, isAbort: false });
+  link.finish({ isDisconnect: true, isAbort: false, messages: [] });
   assert.equal(stored.get(key), "a1");
   assert.equal(link.getSnapshot().state.kind, "reconnecting");
   t.mock.timers.tick(249);
@@ -77,7 +77,7 @@ test("going online or returning to the tab retries immediately", (t) => {
   document.visibilityState = "hidden";
   navigator.onLine = false;
   link.accept("a1");
-  link.finish({ isDisconnect: true, isAbort: false });
+  link.finish({ isDisconnect: true, isAbort: false, messages: [] });
   window.dispatchEvent(new Event("online"));
   assert.equal(resumeStream.mock.callCount(), 0);
   document.visibilityState = "visible";
@@ -91,19 +91,19 @@ test("going online or returning to the tab retries immediately", (t) => {
 test("mount clears a saved checkpoint and skips a stored reply on a different branch", async (t) => {
   await t.test("clears a reply already in history", (t) => {
     const { link, stored, resumeStream } = fixture(t, { storedReply: "a1" });
-    link.mount(null, new Set(["a1"]), true);
+    link.mount(null, new Set(["a1"]), true, "u1");
     assert.equal(stored.get(key), undefined);
     assert.equal(resumeStream.mock.callCount(), 0);
   });
   await t.test("skips a stored reply when focused on a different branch", (t) => {
     const { link, stored, resumeStream } = fixture(t, { storedReply: "a1" });
-    link.mount(null, noSaved, false);
+    link.mount(null, noSaved, false, "u1");
     assert.equal(stored.get(key), "a1");
     assert.equal(resumeStream.mock.callCount(), 0);
   });
   await t.test("attaches a reply reported by the server", (t) => {
     const { link, stored, resumeStream } = fixture(t);
-    link.mount("a1", noSaved, true);
+    link.mount("a1", noSaved, true, "u1");
     assert.equal(stored.get(key), "a1");
     assert.equal(resumeStream.mock.callCount(), 1);
   });
@@ -118,7 +118,7 @@ test("a missing stream restores a saved reply from the chat path", async (t) => 
       messages: [{ message: prompt, parentId: null }, { message: reply, parentId: "u1" }],
     }),
   });
-  link.mount(null, noSaved, true);
+  link.mount(null, noSaved, true, "u1");
   await eventually(() => link.getSnapshot().state.kind, (kind) => kind === "attached", {
     timeoutMs: 1_000,
     what: "saved reply to replace the stream",
@@ -134,7 +134,7 @@ test("a missing stream with no saved reply leaves the partial reply available", 
     storedReply: "a1",
     respond: () => Response.json({ headId: "u1", messages: [{ message: prompt, parentId: null }] }),
   });
-  link.mount(null, noSaved, true);
+  link.mount(null, noSaved, true, "u1");
   await eventually(() => link.getSnapshot().state.kind, (kind) => kind === "lost", {
     timeoutMs: 1_000,
     what: "interrupted reply to be shown",
@@ -154,7 +154,7 @@ test("a failed history fetch keeps the checkpoint for another attempt", async (t
       return Response.json({ headId: "u1", messages: [{ message: prompt, parentId: null }] });
     },
   });
-  link.mount(null, noSaved, true);
+  link.mount(null, noSaved, true, "u1");
   await eventually(() => link.getSnapshot().state, (state) => state.kind === "reconnecting" && state.attempt === 1, {
     timeoutMs: 1_000,
     what: "failed history request to schedule a retry",
@@ -172,13 +172,13 @@ test("a protocol failure clears the checkpoint and a local unmount abort preserv
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const { link, stored, resumeStream, refresh, disconnect } = fixture(t);
   link.accept("a1");
-  link.finish({ isAbort: false, isDisconnect: false });
+  link.finish({ isAbort: false, isDisconnect: false, messages: [] });
   t.mock.timers.tick(5_000);
   assert.equal(stored.get(key), undefined);
   assert.equal(refresh.mock.callCount(), 1);
   assert.equal(resumeStream.mock.callCount(), 0);
   link.accept("a1");
-  link.finish({ isAbort: true, isDisconnect: false });
+  link.finish({ isAbort: true, isDisconnect: false, messages: [] });
   disconnect();
   assert.equal(stored.get(key), "a1");
 });
@@ -204,12 +204,12 @@ test("Stop stays pending while recovering a dropped stream", async (t) => {
   await link.stop();
   assert.equal(stop.mock.callCount(), 0);
   assert.equal(link.getSnapshot().state.kind, "stopping");
-  link.finish({ isAbort: false, isDisconnect: true });
+  link.finish({ isAbort: false, isDisconnect: true, messages: [] });
   assert.equal(link.getSnapshot().state.kind, "stopping");
   t.mock.timers.tick(250);
   assert.equal(resumeStream.mock.callCount(), 1);
   assert.equal(link.getSnapshot().state.kind, "stopping");
-  link.finish({ isAbort: false, isDisconnect: false });
+  link.finish({ isAbort: false, isDisconnect: false, messages: [] });
   assert.equal(stored.get(key), undefined);
   assert.equal(link.getSnapshot().state.kind, "attached");
 });
@@ -220,7 +220,7 @@ test("mount cleanup cancels its local request and keeps the checkpoint for the n
   const stop = t.mock.fn(async () => first.resolve());
   const callbacks = { setMessages() {}, clearError() {}, stop };
   const cleanup = link.connect({ ...callbacks, resumeStream: () => first.promise });
-  link.mount("a1", noSaved, true);
+  link.mount("a1", noSaved, true, "u1");
   cleanup();
   assert.equal(stop.mock.callCount(), 1);
   assert.equal(stored.get(key), "a1");
@@ -266,7 +266,7 @@ const partial: UIMessageChunk[] = [
 function sdkFixture(t: TestContext, reconnect: (signal?: AbortSignal | null) => Response | Promise<Response>, send = () => streamResponse(partial, {
   "x-resumable-stream-id": "a1",
 })) {
-  const { stored } = browser(t);
+  const browserState = browser(t);
   const refresh = t.mock.fn();
   const link = createReplyLink("chat", refresh);
   const request = t.mock.fn(reconnect);
@@ -288,7 +288,7 @@ function sdkFixture(t: TestContext, reconnect: (signal?: AbortSignal | null) => 
     disconnect();
     await chat.stop();
   });
-  return { chat, link, stored, request, resumeStream, finish, refresh };
+  return { ...browserState, chat, link, request, resumeStream, finish, refresh };
 }
 
 test("replayed prefixes that disconnect keep increasing the reconnect delay", async (t) => {
@@ -334,16 +334,40 @@ test("the mounted chat resumes a reply discovered after its POST loses headers",
     { type: "text-end", id: "text" },
     { type: "finish", finishReason: "stop" },
   ]), () => { throw new TypeError("Network failed before response headers"); });
-  link.mount(null, noSaved, true);
-  await chat.sendMessage({ text: "question" });
+  link.mount(null, noSaved, true, "u1");
+  await chat.sendMessage({ ...prompt, parts: [...prompt.parts] });
   assert.equal(finish.mock.calls[0]?.arguments[0].isDisconnect, true);
   assert.equal(refresh.mock.callCount(), 1);
 
-  link.mount("a1", noSaved, true);
+  link.mount("a1", noSaved, true, "u1");
   assert.equal(resumeStream.mock.callCount(), 1, "the refreshed reply id reaches the SDK reconnect");
   await resumeStream.mock.calls[0]?.result;
   assert.equal(chat.messages.at(-1)?.id, "a1");
   assert.equal(chat.messages.at(-1)?.parts.find((part) => part.type === "text")?.text, "partial then finished");
+});
+
+test("a pre-header disconnect keeps Retry until the same prompt has a live reply", async (t) => {
+  const { chat, link, window, document, navigator, refresh, resumeStream } = sdkFixture(
+    t, () => new Response(null, { status: 204 }),
+    () => { throw new TypeError("Network failed before response headers"); },
+  );
+  link.mount(null, noSaved, true, null);
+  navigator.onLine = false;
+  await chat.sendMessage({ ...prompt, parts: [...prompt.parts] });
+  assert.equal(refresh.mock.callCount(), 1);
+
+  link.mount(null, noSaved, true, "u1");
+  link.mount("another-reply", noSaved, true, "another-prompt");
+  assert.equal(resumeStream.mock.callCount(), 0);
+  assert.equal(chat.status, "error");
+
+  document.visibilityState = "hidden";
+  navigator.onLine = true;
+  window.dispatchEvent(new Event("online"));
+  assert.equal(refresh.mock.callCount(), 1);
+  document.visibilityState = "visible";
+  document.dispatchEvent(new Event("visibilitychange"));
+  assert.equal(refresh.mock.callCount(), 2);
 });
 
 test("a 204 reconnect reaches history without calling the SDK finish callback", async (t) => {
@@ -352,7 +376,7 @@ test("a 204 reconnect reaches history without calling the SDK finish callback", 
     headId: "a1",
     messages: [{ message: prompt, parentId: null }, { message: reply, parentId: "u1" }],
   }));
-  link.mount("a1", noSaved, true);
+  link.mount("a1", noSaved, true, "u1");
   await eventually(() => chat.messages, (messages) => messages.at(-1)?.id === "a1", {
     timeoutMs: 1_000,
     what: "the saved reply after a 204 reconnect",
@@ -367,7 +391,7 @@ test("a failed Stop error clears when the reply finishes", async (t) => {
   link.accept("a1");
   await link.stop();
   assert.equal(link.getSnapshot().stopError, "Could not stop");
-  link.finish({ isAbort: false, isDisconnect: false });
+  link.finish({ isAbort: false, isDisconnect: false, messages: [] });
   assert.equal(link.getSnapshot().state.kind, "attached");
   assert.equal(link.getSnapshot().stopError, "");
 });
@@ -389,7 +413,7 @@ for (const saved of [true, false]) {
     link.accept("a1");
     await link.stop();
     assert.equal(link.getSnapshot().stopError, "Could not stop");
-    link.finish({ isAbort: false, isDisconnect: true });
+    link.finish({ isAbort: false, isDisconnect: true, messages: [] });
     assert.equal(link.getSnapshot().stopError, "Could not stop");
     window.dispatchEvent(new Event("online"));
     await eventually(() => link.getSnapshot().state.kind, (kind) => kind === (saved ? "attached" : "lost"), {
@@ -414,7 +438,7 @@ test("Stop replaces a reconnect stalled before headers", async (t) => {
   });
   t.after(() => first.resolve(new Response(null, { status: 204 })));
   t.mock.method(globalThis, "fetch", async () => Response.json({ ok: true, stopped: true }));
-  link.mount("a1", noSaved, true);
+  link.mount("a1", noSaved, true, "u1");
   await headersRequested.promise;
   try {
     await link.stop();
@@ -507,7 +531,7 @@ test("headers arriving before Stop is confirmed let the same replay finish", asy
     return response.promise;
   });
   t.mock.method(globalThis, "fetch", () => stopResponse.promise);
-  link.mount("a1", noSaved, true);
+  link.mount("a1", noSaved, true, "u1");
   await headersRequested.promise;
   const stopping = link.stop();
   const stream = new ReadableStream<UIMessageChunk>({

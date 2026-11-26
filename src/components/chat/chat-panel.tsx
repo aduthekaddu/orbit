@@ -73,8 +73,8 @@ export function ChatPanel({
     adapters: { history },
     transport,
     isSendDisabled: state.kind === "reconnecting" || state.kind === "stopping",
-    onFinish: ({ message, isAbort, isDisconnect }) => {
-      link.finish({ isAbort, isDisconnect });
+    onFinish: ({ message, messages, isAbort, isDisconnect }) => {
+      link.finish({ isAbort, isDisconnect, messages });
       if (!isDisconnect && hasOpenCodeRun(message)) {
         setStopped((ids) => ids.includes(message.id) ? ids : [...ids, message.id]);
       }
