@@ -25,12 +25,12 @@ The scenario owns its mock search server and closes it even if a check fails. It
 Require each printed check to pass.
 
 - The settings form saves a SearXNG URL and reports only whether the Tavily key is set.
-- `[qa:search] orbit` starts one search card, changes it from Running to Succeeded, and shows three result links.
+- `[qa:search] orbit` starts one search line that reads "Searching the web", then "Searched the web, 3 sources". The finished line is closed. Opening it shows three result links.
 - The next model request receives the search output and answers with a link to its first result.
 - The result links use `target="_blank"` and `rel="noopener noreferrer nofollow"`.
-- The saved card and its three links survive reload.
-- The card fits at 390 by 844 without page overflow.
-- Stop changes an unfinished card to Cancelled. Reload preserves Cancelled.
+- The saved line and its three links survive reload. The line is closed again after reload.
+- The line fits at 390 by 844 without page overflow.
+- Stop changes an unfinished line to "Search stopped". Reload preserves it.
 - A completed stopped-search result shows Cancelled and keeps that status after reload.
 - A search stopped and then followed by a new message before the saved result arrives stays Cancelled, not Failed.
 - A search failure shows Failed, and the model still answers.
