@@ -29,17 +29,17 @@ function firstPaint(messages: StoredMessage[], liveReplyId?: string, choice: Mod
   );
 }
 
-test("an empty chat paints the starters and no Scroll to bottom button before hydration", () => {
+test("an empty chat paints the starters and no Jump to latest button before hydration", () => {
   const html = firstPaint([]);
   assert.match(html, />Make a table</);
-  assert.doesNotMatch(html, /Scroll to bottom/);
+  assert.doesNotMatch(html, /data-scroll-to-bottom|Jump to latest/);
 });
 
-test("a chat with saved messages paints neither the starters nor a Scroll to bottom button before hydration", () => {
+test("a chat with saved messages paints neither the starters nor a Jump to latest button before hydration", () => {
   const html = firstPaint(saved);
   assert.match(html, /placeholder="Ask anything"/);
   assert.doesNotMatch(html, />Make a table</);
-  assert.doesNotMatch(html, /Scroll to bottom/);
+  assert.doesNotMatch(html, /data-scroll-to-bottom|Jump to latest/);
 });
 
 test("a chat with a live reply renders on the server without reading browser storage", () => {
