@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ThreadPrimitive, useAui, useAuiEvent, useAuiState } from "@assistant-ui/react";
+import { useEffect, useRef } from "react";
+import { ThreadPrimitive, useAui, useAuiState } from "@assistant-ui/react";
 import { ArrowDownIcon } from "@phosphor-icons/react";
 import { Figure } from "@/components/figure";
 import { Button } from "@/components/ui/button";
@@ -24,8 +24,6 @@ type ThreadView = "empty" | "loading" | "messages";
 
 export function Thread({ ready, focusMessageId, hasHistory }: { ready: boolean; focusMessageId?: string | null; hasHistory: boolean }) {
   const view = useAuiState((state): ThreadView => (state.thread.messages.length > 0 ? "messages" : hasHistory ? "loading" : "empty"));
-  const [autoScroll, setAutoScroll] = useState(!focusMessageId);
-  useAuiEvent("thread.runStart", () => setAutoScroll(true));
   const viewport = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const root = viewport.current;
@@ -52,10 +50,12 @@ export function Thread({ ready, focusMessageId, hasHistory }: { ready: boolean; 
   return (
     <TooltipProvider>
       <ThreadPrimitive.Root className="@container/thread relative flex h-full min-h-0 flex-col">
+        {/* turnAnchor="top" scrolls each new prompt to the top once and never follows the reply down, so the reader
+            starts at the beginning of the answer. ?m= search hits skip the first scroll to the bottom so they can center. */}
         <ThreadPrimitive.Viewport
           ref={viewport}
+          turnAnchor="top"
           scrollToBottomOnInitialize={!focusMessageId}
-          autoScroll={autoScroll}
           className="@container flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-8 scrollbar-thin"
         >
           {view === "empty" ? (
@@ -74,17 +74,25 @@ export function Thread({ ready, focusMessageId, hasHistory }: { ready: boolean; 
                   </ThreadPrimitive.Messages>
                 )}
               </div>
-              <ThreadPrimitive.ViewportFooter className="pointer-events-none sticky bottom-0 mt-auto bg-gradient-to-t from-background from-60% pt-8 pb-4">
-                <div className="pointer-events-auto relative mx-auto w-full max-w-chat">
-                  {view === "messages" && (
-                    <ThreadPrimitive.ScrollToBottom
-                      aria-label="Scroll to bottom"
-                      className="absolute -top-12 left-1/2 flex size-8 -translate-x-1/2 items-center justify-center rounded-full border bg-popover text-muted-foreground shadow-float transition-opacity duration-200 ease-orbit hover:text-foreground disabled:pointer-events-none disabled:opacity-0"
-                    >
-                      <ArrowDownIcon weight="regular" className="size-4" />
-                    </ThreadPrimitive.ScrollToBottom>
-                  )}
-                  <Composer ready={ready} />
+              {/* Below the fade everything is opaque, and the strip holds its height while messages load and while the
+                  button is hidden, so text never shows behind the button and the composer never moves. */}
+              <ThreadPrimitive.ViewportFooter className="pointer-events-none sticky bottom-0 mt-auto">
+                <div aria-hidden className="h-4 bg-gradient-to-t from-background to-transparent" />
+                <div className="pointer-events-auto bg-background pb-[max(1rem,env(safe-area-inset-bottom))]">
+                  <div data-jump-strip className="flex h-11 items-center justify-center bg-background">
+                    {view === "messages" && (
+                      <ThreadPrimitive.ScrollToBottom
+                        data-scroll-to-bottom
+                        className="flex items-center gap-1.5 rounded-full border bg-popover px-3 py-1.5 text-meta text-muted-foreground shadow-card transition-opacity duration-200 ease-orbit outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-0"
+                      >
+                        <ArrowDownIcon weight="regular" className="size-3.5" />
+                        Jump to latest
+                      </ThreadPrimitive.ScrollToBottom>
+                    )}
+                  </div>
+                  <div className="mx-auto w-full max-w-chat">
+                    <Composer ready={ready} />
+                  </div>
                 </div>
               </ThreadPrimitive.ViewportFooter>
             </>
