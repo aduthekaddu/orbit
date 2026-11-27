@@ -70,8 +70,8 @@ export function ChatPanel({
       router.refresh();
     }, { once: true, signal: waiting.signal });
   }), [chatId, router]);
-  // A reply ID proves POST /api/chat committed the chat and its prompt, so a reload must open the saved chat.
-  const committedDraft = useRef(false);
+  // A draft that sent its first message may have a saved chat row before any answer arrives.
+  const sentDraft = useRef(false);
   const draft = useRef(isDraft);
   useEffect(() => {
     draft.current = isDraft;
@@ -79,8 +79,9 @@ export function ChatPanel({
     if (!isDraft) dropNewParam(chatId);
   }, [chatId, isDraft]);
   useEffect(() => () => {
-    // Leaving mid-stream skips the refresh at the reply's end, and the sidebar would miss the new chat.
-    if (draft.current && committedDraft.current) router.refresh();
+    // Leaving before the reply ends skips its refresh, and the sidebar would miss the new chat. The server can save
+    // the chat seconds before the headers arrive, so any send counts. A refresh after a failed send changes nothing.
+    if (draft.current && sentDraft.current) router.refresh();
   }, [router]);
   const { state } = useSyncExternalStore(link.subscribe, link.getSnapshot, link.getServerSnapshot);
   const rows = useMemo(() => initialHistory.messages.map(({ parentId, message }) => ({ id: message.id, parentId })), [initialHistory]);
@@ -93,11 +94,12 @@ export function ChatPanel({
       return id;
     },
     modelChoice: () => sendChoice.current,
+    onSend: () => {
+      if (draft.current) sentDraft.current = true;
+    },
+    // A reply ID proves POST /api/chat committed the chat and its prompt, so a reload must open the saved chat.
     onReplyId: (replyId) => {
-      if (draft.current) {
-        committedDraft.current = true;
-        dropNewParam(chatId);
-      }
+      if (draft.current) dropNewParam(chatId);
       link.accept(replyId);
     },
     onReconnectResponse: link.reconnectResponse,
