@@ -30,11 +30,14 @@ function focusedOpacity(page) {
   });
 }
 
-// Tabs from the top of the page to the composer and records each stop inside a message.
+// Tabs from the top of the page to the composer and records each stop inside a message. The sidebar lists every
+// chat earlier scenarios made, two stops each (the link and its Actions button), so the walk is capped by the
+// page's own count of focusable elements, not a fixed number of presses.
 async function tabStops(page, onStop = async () => {}) {
   await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+  const limit = await page.evaluate(() => document.querySelectorAll("a[href], button, input, select, textarea, [tabindex]").length + 10);
   const stops = [];
-  for (let n = 0; n < 80; n += 1) {
+  for (let n = 0; n < limit; n += 1) {
     await page.keyboard.press("Tab");
     const stop = await page.evaluate(() => {
       const element = document.activeElement;
