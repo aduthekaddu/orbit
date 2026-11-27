@@ -32,6 +32,7 @@ const caps: z.ZodType<ModelCaps> = z.object({
   reasoning: z.boolean().nullable(),
   contextTokens: z.number().nullable(),
   efforts: z.array(z.enum(EFFORTS)).nullable(),
+  anthropic: z.object({ adaptiveThinking: z.boolean().nullable(), canDisableThinking: z.boolean().nullable() }).optional(),
 });
 
 export const modelListBody: z.ZodType<ModelList> = z.object({

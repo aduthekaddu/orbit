@@ -6,10 +6,12 @@ import test, { before, after } from "node:test";
 import Database from "better-sqlite3";
 import { Redactor } from "../chat-errors";
 import { seedTestConnection } from "../connection-fixture";
+import { saveModelDefaults } from "../connections";
 import { getDb } from "../db";
 import * as schema from "../db/schema";
 import { createChat, finishChatReply, listMessages, persistIncoming, planChatWrite } from "../messages";
 import { dataDirectory } from "../paths";
+import { encryptSecret } from "../secrets";
 import * as dream from "./dream";
 import * as embed from "./embed";
 import { startMockOllama } from "./ollama-harness";
@@ -146,6 +148,52 @@ test("a run adds facts the user stated", async () => {
   assert.equal(row.error, null);
   assert.equal(api.formatDreamStatus(row).includes("I live in Lisbon"), false);
   assert.match(api.formatDreamStatus(row), /3 chats, 3 added, 0 merged/);
+});
+
+test("a manual dream sends the Anthropic fallback option and beta header", async (t) => {
+  assert.ok(provider);
+  resetChats();
+  const date = "2099-05-02";
+  const { messageId } = seedChat("My cat is named Dot", at(date, 12));
+  const db = getDb();
+  const model = "claude-opus-5-5";
+  const fetch = globalThis.fetch;
+  const requests: { body: { fallbacks?: string }; beta: string | null }[] = [];
+  t.mock.method(globalThis, "fetch", (input: URL | RequestInfo, init?: RequestInit) => {
+    if (String(input) !== `${provider!.url}/messages`) return fetch(input, init);
+    const body = JSON.parse(String(init?.body));
+    requests.push({ body, beta: new Headers(init?.headers).get("anthropic-beta") });
+    return Promise.resolve(Response.json({
+      id: "msg-dream",
+      type: "message",
+      role: "assistant",
+      model,
+      content: [{ type: "text", text: JSON.stringify({ candidates: [{ kind: "fact", text: "My cat is named Dot", sourceMessageId: messageId }] }) }],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 4, output_tokens: 4 },
+    }));
+  });
+
+  const defaultId = db.select({ id: schema.providerConnections.id }).from(schema.providerConnections).get()!.id;
+  const id = "dream-anthropic";
+  const base = process.env.ORBIT_ANTHROPIC_BASE_URL;
+  try {
+    process.env.ORBIT_ANTHROPIC_BASE_URL = provider.url;
+    db.insert(schema.providerConnections).values({
+      id, userId: "dream-user", kind: "anthropic", label: "Claude", apiKeyCiphertext: encryptSecret("test-dream-key"), createdAt: new Date(),
+    }).run();
+    saveModelDefaults("dream-user", { connectionId: id, model, effort: "medium" });
+    const row = await dream.runDream({ manual: true, date, now: new Date(at(date, 16)) });
+    assert.equal(row?.added, 1);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].body.fallbacks, "default");
+    assert.match(requests[0].beta ?? "", /server-side-fallback-2026-07-01/);
+  } finally {
+    saveModelDefaults("dream-user", { connectionId: defaultId, model: "mock-genui", effort: "medium" });
+    db.$client.prepare("DELETE FROM provider_connections WHERE id = ?").run(id);
+    if (base === undefined) delete process.env.ORBIT_ANTHROPIC_BASE_URL;
+    else process.env.ORBIT_ANTHROPIC_BASE_URL = base;
+  }
 });
 
 test("a run embeds each candidate with the document label", async () => {

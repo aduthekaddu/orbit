@@ -16,7 +16,7 @@ import { EFFORTS, effortCallOptions, effortLevels, effortOutcome, titleCallOptio
 import { ensureChat, finishChatReply, getChatForUser, planChatWrite, redactChatTitle, storedAssistantParts, storedMessageCount, storedMessageIds, textFromParts, touchChat } from "@/lib/messages";
 import { chatChoice, resolveChoice, sameChoice, setChatChoice, type ReplyRecord } from "@/lib/model-choice";
 import { cachedCaps } from "@/lib/model-list";
-import { languageModelFor } from "@/lib/provider";
+import { knownAdaptiveThinking, languageModelFor } from "@/lib/provider";
 import { settleReasoningTimes, stampReasoningTimes, stripOrbitTiming } from "@/lib/reasoning-time";
 import { bindReplyPlan, releaseReplyRun, replyResponse, reserveReplyRun, startReplyRun, type ReplyEndPart, type ReplyEndReason } from "@/lib/reply-runs";
 import { startChatTitle } from "@/lib/titles";
@@ -169,7 +169,11 @@ export async function POST(request: Request) {
     bindReplyPlan(run, write.id, write.prompt.id);
     // A chat pins its model on its first send, so a later change of the defaults does not move it.
     if (!sameChoice(chatChoice(chat), choice)) setChatChoice(chat.id, choice);
-    const levels = effortLevels(connection.kind, cachedCaps(connection.id, choice.model));
+    const caps = cachedCaps(connection.id, choice.model);
+    const levels = connection.kind === "anthropic" ? (caps?.efforts ?? null) : effortLevels(connection.kind, caps);
+    const adaptiveThinking = connection.kind === "anthropic"
+      ? (caps?.anthropic?.adaptiveThinking ?? knownAdaptiveThinking(choice.model))
+      : null;
     const firstUser = incoming.find((message) => message.role === "user");
     const lastUser = incoming.findLast((message) => message.role === "user");
     const title = textFromParts(firstUser?.parts).trim();
@@ -182,7 +186,7 @@ export async function POST(request: Request) {
         firstMessage: redact.text(title),
         fallbackTitle: redactChatTitle(title, redact),
         model: languageModelFor({ connection, apiKey, model: choice.model, chatId: chat.id }),
-        call: titleCallOptions(connection.kind, levels),
+        call: titleCallOptions(connection.kind, levels, adaptiveThinking),
         redact,
         onError: (message) => redact.logError("chat title", message),
       });
@@ -195,7 +199,7 @@ export async function POST(request: Request) {
       parts: (message.role === "assistant" ? stored.get(message.id) ?? message.parts ?? [] : message.parts ?? []) as UIMessage["parts"],
     })) as UIMessage[];
 
-    const effort = effortCallOptions(connection.kind, choice.effort, levels);
+    const effort = effortCallOptions(connection.kind, choice.effort, levels, adaptiveThinking);
     let dropped = false;
     const warnings: { type: string; feature?: string }[] = [];
     let reply: ReplyRecord = { connectionId: connection.id, model: choice.model, effort: effort.sent === null ? null : choice.effort, effortOutcome: null };
@@ -205,6 +209,11 @@ export async function POST(request: Request) {
     const recordReply = (modelId?: string) => {
       reply = { ...reply, model: fellBackTo ?? (modelId || reply.model), effortOutcome: effortOutcome({ sent: effort.sent, requested: choice.effort, dropped, warnings }) };
       return reply;
+    };
+    const updateReply = () => {
+      const previous = reply;
+      const next = recordReply();
+      if (previous.model !== next.model || previous.effortOutcome !== next.effortOutcome) return { reply: next };
     };
     const stopped = createStoppedRuns();
     const loaded = await toolsForTurn(settings, stopped, { chatId: chat.id, messageId: lastUser?.id ?? null }, signal, redact);
@@ -254,14 +263,21 @@ export async function POST(request: Request) {
       originalMessages: uiMessages,
       generateMessageId: () => write.id,
       onError: (error) => streamErrorMessage(error, redact),
-      // Before redaction and the replay buffer, so a tab that reconnects mid-reply gets the record too. A stopped or
-      // failed reply ends without finish, so each finished step sends the record so far.
+      // Publish changes before redaction and the replay buffer. A stopped reply or failed step can end without finish.
       messageMetadata: ({ part }) => {
         if (part.type === "start") return { reply };
-        if (part.type === "start-step") warnings.push(...part.warnings);
-        if (part.type === "custom") fellBackTo = fallbackModel(part) ?? fellBackTo;
+        if (part.type === "start-step") {
+          warnings.push(...part.warnings);
+          return updateReply();
+        }
+        if (part.type === "custom") {
+          const model = fallbackModel(part);
+          if (model === null) return undefined;
+          fellBackTo = model;
+          return updateReply();
+        }
         if (part.type === "finish-step") return { reply: recordReply(part.response.modelId) };
-        if (part.type === "finish") return { reply: recordReply() };
+        if (part.type === "finish" || part.type === "abort" || part.type === "error") return { reply: recordReply() };
         return undefined;
       },
       onEnd: async ({ responseMessage, isAborted, outcome, finishReason }) => {

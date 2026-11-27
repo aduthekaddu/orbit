@@ -11,6 +11,7 @@ export type ModelCaps = {
   reasoning: boolean | null;
   contextTokens: number | null;
   efforts: Effort[] | null; // the levels the model takes, or null when unknown
+  anthropic?: { adaptiveThinking: boolean | null; canDisableThinking: boolean | null };
 };
 export type ListedModel = { id: string; label: string; caps: ModelCaps };
 
@@ -34,7 +35,7 @@ const anthropicPage = z.object({
         .object({
           image_input: supported,
           thinking: z
-            .object({ supported: z.boolean().optional(), types: z.object({ disabled: supported }).partial().optional() })
+            .object({ supported: z.boolean().optional(), types: z.object({ disabled: supported, adaptive: supported }).optional() })
             .partial()
             .optional()
             .catch(undefined),
@@ -52,12 +53,11 @@ const anthropicPage = z.object({
 type AnthropicEntry = z.infer<typeof anthropicPage>["data"][number];
 
 // The Models API names each effort level, and whether thinking can be turned off, which is the None level. None is
-// offered only when the entry says so. Without effort capabilities the other levels are unknown, so the route sends the
-// chosen effort and reports what the provider did with it, unless the entry rules out None.
+// offered only when the entry says so. Without effort capabilities, the SDK translates the requested level.
 function anthropicEfforts(capabilities: AnthropicEntry["capabilities"]): Effort[] | null {
   const effort = capabilities?.effort;
   const canTurnOffThinking = capabilities?.thinking?.types?.disabled?.supported;
-  if (!effort) return canTurnOffThinking === false ? EFFORTS.filter((level) => level !== "none") : null;
+  if (!effort) return null;
   const levels = EFFORTS.filter((level) => level !== "none" && supported.parse(effort[level])?.supported === true);
   return canTurnOffThinking === true ? ["none", ...levels] : levels;
 }
@@ -74,6 +74,10 @@ function anthropicModel(entry: AnthropicEntry): ListedModel {
       reasoning: capabilities?.thinking?.supported ?? null,
       contextTokens: entry.max_input_tokens ?? null,
       efforts: anthropicEfforts(capabilities),
+      anthropic: {
+        adaptiveThinking: capabilities?.thinking?.types?.adaptive?.supported ?? null,
+        canDisableThinking: capabilities?.thinking?.types?.disabled?.supported ?? null,
+      },
     },
   };
 }

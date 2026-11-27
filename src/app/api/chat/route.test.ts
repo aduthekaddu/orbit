@@ -8,13 +8,16 @@ import { format } from "node:util";
 import { pathToFileURL } from "node:url";
 import test, { after, before } from "node:test";
 import { startMockMcp, type MockMcp } from "../../../../scripts/qa/mock-mcp.mjs";
+import { Redactor } from "@/lib/chat-errors";
 import { getDb } from "@/lib/db";
 import * as schema from "@/lib/db/schema";
+import type { Effort } from "@/lib/effort";
 import * as messages from "@/lib/messages";
 import { seedTestConnection } from "@/lib/connection-fixture";
-import { deleteConnection } from "@/lib/connections";
+import { deleteConnection, getConnection } from "@/lib/connections";
 import { eventually } from "@/lib/eventually.mjs";
-import { releaseReplyRun, reserveReplyRun, stopReplyRun } from "@/lib/reply-runs";
+import { cachedCaps, listModels } from "@/lib/model-list";
+import { findReplyRun, releaseReplyRun, replyResponse, reserveReplyRun, stopReplyRun } from "@/lib/reply-runs";
 import { encryptSecret } from "@/lib/secrets";
 import { saveSettings } from "@/lib/settings";
 
@@ -44,6 +47,7 @@ const ANTHROPIC_ID = "conn-route-anthropic";
 const anthropicBodies: AnthropicBody[] = [];
 const providerKeys: string[] = [];
 let providerBase = "";
+let failedAnthropicStream: http.ServerResponse | undefined;
 (globalThis as { __orbitAfter?: Promise<unknown>[] }).__orbitAfter = afterTasks;
 
 const hooks = registerHooks({
@@ -106,7 +110,14 @@ function answer(res: http.ServerResponse, body: { stream?: boolean; messages?: A
 }
 
 type AnthropicBlock = { type: string; text?: string };
-type AnthropicBody = { model?: string; stream?: boolean; messages?: Array<{ role: string; content: string | AnthropicBlock[] }> };
+type AnthropicBody = {
+  model?: string;
+  stream?: boolean;
+  thinking?: { type: string };
+  output_config?: { effort?: string };
+  fallbacks?: string;
+  messages?: Array<{ role: string; content: string | AnthropicBlock[] }>;
+};
 
 const omittedBeforeFallback = new Set(["thinking", "redacted_thinking", "tool_use"]);
 
@@ -115,6 +126,7 @@ function echoesRefusedTurn(body: AnthropicBody) {
   return (body.messages ?? []).some(({ role, content }) => {
     if (role !== "assistant" || !Array.isArray(content)) return false;
     const boundary = content.findLastIndex((block) => block.type === "fallback");
+    if (boundary < 0) return false;
     return content.slice(0, boundary).some((block) => omittedBeforeFallback.has(block.type));
   });
 }
@@ -139,6 +151,7 @@ function anthropicEvents(res: http.ServerResponse, model: string, blocks: Array<
     }
     event({ type: "content_block_stop", index });
   });
+  if (stopReason === "interrupted") return;
   event({ type: "message_delta", delta: { stop_reason: stopReason, stop_sequence: null }, usage: { output_tokens: 9 } });
   event({ type: "message_stop" });
   res.end();
@@ -147,9 +160,11 @@ function anthropicEvents(res: http.ServerResponse, model: string, blocks: Array<
 function answerAnthropic(res: http.ServerResponse, body: AnthropicBody) {
   anthropicBodies.push(body);
   const model = body.model ?? "claude-opus-5-5";
-  if (echoesRefusedTurn(body)) {
+  const unsupported = (model === "claude-haiku-4-5" && body.output_config?.effort !== undefined) ||
+    (["claude-haiku-4-5", "claude-opus-4-5"].includes(model) && body.thinking?.type === "adaptive");
+  if (echoesRefusedTurn(body) || unsupported) {
     res.writeHead(400, { "content-type": "application/json" });
-    res.end(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "thinking before a fallback block must be omitted" } }));
+    res.end(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: unsupported ? "Unsupported effort or thinking" : "Thinking before a fallback block must be omitted" } }));
     return;
   }
   if (body.stream !== true) {
@@ -159,6 +174,23 @@ function answerAnthropic(res: http.ServerResponse, body: AnthropicBody) {
   }
   const last = body.messages?.at(-1)?.content;
   const prompt = typeof last === "string" ? last : (last ?? []).map((block) => block.text ?? "").join("");
+  if (prompt.includes("[thinking]")) {
+    anthropicEvents(res, model, [{ type: "thinking", thinking: "Weighing the request." }, { type: "text", text: "Thoughtful reply." }]);
+    return;
+  }
+  for (const [tag, target, stopReason] of [
+    ["[invalid-fallback]", "", "end_turn"],
+    ["[stopped-fallback]", "claude-opus-5", "interrupted"],
+    ["[failed-fallback]", "claude-opus-5", "interrupted"],
+  ]) {
+    if (!prompt.includes(tag)) continue;
+    if (tag === "[failed-fallback]") failedAnthropicStream = res;
+    anthropicEvents(res, model, [
+      { type: "fallback", from: { model }, to: { model: target } },
+      { type: "text", text: stopReason === "interrupted" ? "Partial answer. ".repeat(32) : "Partial answer." },
+    ], stopReason);
+    return;
+  }
   if (prompt.includes("[fallback-tool]")) {
     anthropicEvents(res, model, [
       { type: "thinking", thinking: "Weighing the request." },
@@ -191,6 +223,16 @@ before(async () => {
 
   provider = http.createServer((req, res) => {
     providerKeys.push(req.headers.authorization ?? "");
+    if (req.url?.startsWith("/v1/models")) {
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({
+        data: [
+          { id: "claude-haiku-4-5", capabilities: { effort: { supported: false }, thinking: { types: { adaptive: { supported: false }, disabled: { supported: true } } } } },
+          { id: "claude-opus-4-5", capabilities: { effort: { high: { supported: true } }, thinking: { types: { adaptive: { supported: false }, disabled: { supported: true } } } } },
+          { id: "claude-opus-5-5-stale-caps", capabilities: { effort: { low: { supported: true } }, thinking: { types: { adaptive: { supported: true }, disabled: { supported: true } } } } },
+        ],
+      }));
+      return;
+    }
     let raw = "";
     req.on("data", (part) => (raw += part));
     req.on("end", () => (req.url?.endsWith("/messages") ? answerAnthropic : answer)(res, JSON.parse(raw || "{}")));
@@ -408,28 +450,36 @@ test("a send that waits for a stopping reply does not call a connection deleted 
   assert.equal(response.status, 404);
 });
 
-type StreamChunk = { type: string; kind?: string; messageMetadata?: { reply?: { model?: string } } };
+type StreamChunk = { type: string; kind?: string; delta?: string; messageMetadata?: { reply?: { model?: string; effortOutcome?: string } } };
 
-async function postAnthropic(chatId: string, history: unknown[], text: string) {
-  const response = await route.POST(new Request("http://127.0.0.1/api/chat", {
+function openAnthropic(chatId: string, history: unknown[], text: string, model = "claude-opus-5-5", effort: Effort = "high") {
+  return route.POST(new Request("http://127.0.0.1/api/chat", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       id: chatId,
       trigger: "submit-message",
-      modelChoice: { connectionId: ANTHROPIC_ID, model: "claude-opus-5-5", effort: "high" },
+      modelChoice: { connectionId: ANTHROPIC_ID, model, effort },
       messages: [...history, { id: `${chatId}-u${history.length + 1}`, role: "user", parts: [{ type: "text", text }] }],
     }),
   }));
-  const streamed = (await response.text())
-    .split("\n")
+}
+
+function streamChunks(body: string): StreamChunk[] {
+  return body.split("\n")
     .filter((line) => line.startsWith("data: {"))
     .map((line) => JSON.parse(line.slice(6)) as StreamChunk);
+}
+
+async function postAnthropic(chatId: string, history: unknown[], text: string, model?: string) {
+  const response = await openAnthropic(chatId, history, text, model);
+  const streamed = streamChunks(await response.text());
   await Promise.allSettled(afterTasks);
   return { status: response.status, streamed };
 }
 
 const savedReply = (chatId: string) => messages.listMessages(chatId).findLast(({ role }) => role === "assistant");
+const savedReplyRecord = (chatId: string) => (savedReply(chatId)?.metadata as StreamChunk["messageMetadata"])?.reply;
 
 test("a reply that falls back mid-stream names the model that answered, live and saved", async () => {
   const chatId = "c-fallback-label";
@@ -471,4 +521,117 @@ test("a tool step after a fallback continues the same reply without the thinking
   assert.equal(echoesRefusedTurn(steps[1]), false, JSON.stringify(steps[1].messages));
   assert.equal(streamed.some((chunk) => chunk.type === "error"), false, JSON.stringify(streamed.filter((chunk) => chunk.type === "error")));
   assert.equal((savedReply(chatId)?.metadata as { reply?: { model?: string } } | undefined)?.reply?.model, "claude-opus-5");
+});
+
+test("Haiku accepts both chat and title requests with a cold capability cache", async () => {
+  const model = "claude-haiku-4-5";
+  assert.equal(cachedCaps(ANTHROPIC_ID, model), null);
+  const since = anthropicBodies.length;
+  const { streamed } = await postAnthropic("c-cold-haiku", [], "Cold cache", model);
+  assert.equal(streamed.some(({ type }) => type === "error"), false);
+  assert.equal(savedReply("c-cold-haiku")?.parts.some((part) => part.type === "text" && part.text === "Next."), true);
+  assert.equal(messages.getChatForUser("c-cold-haiku", USER_ID)?.title, "Route test");
+  assert.deepEqual(anthropicBodies.slice(since).map(({ fallbacks }) => fallbacks), ["default", "default"]);
+});
+
+test("a cached legacy Claude can use listed effort without unsupported adaptive thinking", async () => {
+  const connection = getConnection(USER_ID, ANTHROPIC_ID);
+  assert.ok(connection);
+  await listModels(connection, PROVIDER_KEY, new Redactor(null));
+  const model = "claude-opus-4-5";
+  assert.ok(cachedCaps(ANTHROPIC_ID, model));
+  const since = anthropicBodies.length;
+  const { streamed } = await postAnthropic("c-legacy-effort", [], "Listed effort", model);
+  assert.equal(streamed.some(({ type }) => type === "error"), false);
+  assert.equal(anthropicBodies.slice(since).find((body) => body.stream)?.output_config?.effort, "high");
+});
+
+test("an expired capability entry still permits chat and title generation", async () => {
+  const model = "claude-haiku-4-5";
+  assert.ok(cachedCaps(ANTHROPIC_ID, model));
+  assert.equal(cachedCaps(ANTHROPIC_ID, model, Date.now() + 5 * 60_000), null);
+  const { streamed } = await postAnthropic("c-expired-haiku", [], "Expired cache", model);
+  assert.equal(streamed.some(({ type }) => type === "error"), false);
+  assert.equal(messages.getChatForUser("c-expired-haiku", USER_ID)?.title, "Route test");
+});
+
+test("the next Anthropic turn accepts ordinary thinking history with no fallback", async () => {
+  const chatId = "c-thinking-next";
+  await postAnthropic(chatId, [], "[thinking] hello");
+  const history = messages.listMessages(chatId);
+  const { streamed } = await postAnthropic(chatId, history, "and then?");
+  assert.equal(streamed.some(({ type }) => type === "error"), false);
+  assert.ok(streamed.some(({ delta }) => delta === "Next."));
+});
+
+test("malformed fallback metadata leaves the reply stream and saved text intact", async () => {
+  const chatId = "c-invalid-fallback";
+  const { streamed } = await postAnthropic(chatId, [], "[invalid-fallback] hello");
+  assert.equal(streamed.at(-1)?.type, "finish");
+  assert.ok(streamed.some(({ delta }) => delta === "Partial answer."));
+  assert.equal(savedReplyRecord(chatId)?.model, "claude-opus-5-5");
+  const since = anthropicBodies.length;
+  const next = await postAnthropic(chatId, messages.listMessages(chatId), "What else?");
+  assert.ok(next.streamed.some(({ delta }) => delta === "Next."));
+  const history = anthropicBodies.slice(since).find(({ stream }) => stream)?.messages ?? [];
+  assert.ok(history.some(({ role }) => role === "assistant"));
+  assert.equal(history.some(({ content }) => Array.isArray(content) && content.some((block) => block.type === "fallback")), false);
+});
+
+async function interruptAnthropic(chatId: string, response: Response, interrupt: () => void, signal: AbortSignal) {
+  const run = findReplyRun(chatId, USER_ID);
+  assert.ok(run);
+  signal.addEventListener("abort", () => stopReplyRun(chatId, USER_ID), { once: true });
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let body = "";
+  let interrupted = false;
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      body += decoder.decode(next.value, { stream: true });
+      if (interrupted || !body.includes("Partial answer.")) continue;
+      interrupted = true;
+      interrupt();
+    }
+    body += decoder.decode();
+  } finally {
+    await reader.cancel();
+    reader.releaseLock();
+  }
+  assert.ok(interrupted, "the upstream was interrupted after visible text");
+  const replay = await replyResponse(run.run, run.replyId).text();
+  return [streamChunks(body), streamChunks(replay)];
+}
+
+const lastReplyRecord = (chunks: StreamChunk[]) => chunks.findLast(({ messageMetadata }) => messageMetadata?.reply)?.messageMetadata?.reply;
+
+for (const [kind, terminal] of [["stopped", "abort"], ["failed", "error"]]) {
+  test(`a ${kind} reply updates the fallback model in live metadata, replay, and SQLite`, { timeout: 10_000 }, async (t) => {
+    const chatId = `c-${kind}-fallback`;
+    const response = await openAnthropic(chatId, [], `[${kind}-fallback] hello`);
+    const interrupt = kind === "stopped" ? () => stopReplyRun(chatId, USER_ID) : () => failedAnthropicStream?.destroy();
+    for (const chunks of await interruptAnthropic(chatId, response, interrupt, t.signal)) {
+      assert.equal(chunks.at(-1)?.type, terminal);
+      assert.equal(lastReplyRecord(chunks)?.model, "claude-opus-5");
+    }
+    assert.equal(savedReplyRecord(chatId)?.model, "claude-opus-5");
+  });
+}
+
+test("an SDK warning marks effort adjusted before a stopped step can finish", { timeout: 10_000 }, async (t) => {
+  const connection = getConnection(USER_ID, ANTHROPIC_ID);
+  assert.ok(connection);
+  await listModels(connection, PROVIDER_KEY, new Redactor(null));
+  const chatId = "c-adjusted-warning";
+  const model = "claude-opus-5-5-stale-caps";
+  const response = await openAnthropic(chatId, [], "[stopped-fallback] hello", model, "none");
+  for (const chunks of await interruptAnthropic(chatId, response, () => stopReplyRun(chatId, USER_ID), t.signal)) {
+    assert.equal(chunks.at(-1)?.type, "abort");
+    const fallback = chunks.findIndex(({ type }) => type === "custom");
+    assert.ok(fallback >= 0);
+    assert.equal(lastReplyRecord(chunks.slice(0, fallback))?.effortOutcome, "adjusted");
+  }
+  assert.equal(savedReplyRecord(chatId)?.effortOutcome, "adjusted");
 });

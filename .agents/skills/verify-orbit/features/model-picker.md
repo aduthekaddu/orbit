@@ -25,6 +25,8 @@ The scenario adds an Anthropic connection in **Settings** and hides `claude-haik
 
 Screenshots in `.verify/evidence/model-picker/`: `popover.png`, `sheet-390.png`, `sheet-360.png`, `label.png`, `ignored.png`, `settings-models.png`, `settings-desktop.png`, `settings-390.png`, `chat-390.png`, `key-unreadable.png`.
 
+Run `node .agents/skills/verify-orbit/verify.mjs browse provider-review` with the same mock launch to check that an ordinary Claude thinking turn accepts a follow-up. The scenario also clicks **Stop** after an Anthropic fallback on desktop and after an OpenAI-compatible effort rejection at 390px. It compares each reply label while streaming, after Stop, and after reload, and saves the stopped replies in `.verify/evidence/provider-review/`.
+
 ## Real Anthropic run
 
 Precondition: a plain `launch` (not `--mock`, so Anthropic calls reach `https://api.anthropic.com/v1`) and `ORBIT_ANTHROPIC_API_KEY` in the environment of the `browse` command. The scenario reads the key only from the environment and never prints it.

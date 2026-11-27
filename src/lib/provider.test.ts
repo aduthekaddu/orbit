@@ -46,19 +46,22 @@ test("the reasoning effort reaches the provider", async () => {
   await generateText({ model, prompt: "ping", maxRetries: 0, ...effort("low") });
   assert.equal(bodies.length, 1);
   assert.equal(bodies[0].reasoning_effort, "low");
+  assert.equal(bodies[0].fallbacks, undefined);
 });
 
-test("a provider that rejects reasoning_effort gets the request again without it, and the drop is reported", async () => {
-  const { model, bodies, drops } = recordingModel("https://no-reasoning.example/v1", (attempt) =>
-    attempt === 1 ? json({ error: { message: "reasoning_effort is not supported" } }, 400) : chatReply(),
-  );
-  const result = await generateText({ model, prompt: "ping", maxRetries: 0, ...effort("high") });
-  assert.equal(result.text, "ok");
-  assert.equal(bodies.length, 2);
-  assert.equal(bodies[0].reasoning_effort, "high");
-  assert.equal("reasoning_effort" in bodies[1], false);
-  assert.deepEqual(drops, [2], "the drop is reported once, after the retry succeeded");
-});
+for (const status of [400, 422]) {
+  test(`HTTP ${status} rejecting reasoning_effort triggers one retry without it`, async () => {
+    const { model, bodies, drops } = recordingModel("https://no-reasoning.example/v1", (attempt) =>
+      attempt === 1 ? json({ error: { message: "reasoning_effort is not supported" } }, status) : chatReply(),
+    );
+    const result = await generateText({ model, prompt: "ping", maxRetries: 0, ...effort("high") });
+    assert.equal(result.text, "ok");
+    assert.equal(bodies.length, 2);
+    assert.equal(bodies[0].reasoning_effort, "high");
+    assert.equal("reasoning_effort" in bodies[1], false);
+    assert.deepEqual(drops, [2], "the drop is reported once, after the retry succeeded");
+  });
+}
 
 test("a retry without reasoning_effort that fails reports no drop, so the SDK's later retry with the effort reads as applied", async () => {
   const { model, bodies, drops } = recordingModel("https://flaky-reasoning.example/v1", (attempt) => {
@@ -80,6 +83,26 @@ test("an error unrelated to reasoning is not sent again", async () => {
   assert.equal(bodies.length, 1);
   assert.deepEqual(drops, []);
 });
+
+test("reasoning words in the prompt do not cause a fallback retry", async () => {
+  const { model, bodies, drops } = recordingModel("https://no-reasoning.example/v1", (attempt) =>
+    attempt === 1 ? json({ error: { message: "bad reasoning prompt" } }, 400) : chatReply(),
+  );
+  await assert.rejects(generateText({ model, prompt: "Explain reasoning_effort", maxRetries: 0 }));
+  assert.equal(bodies.length, 1);
+  assert.deepEqual(drops, []);
+});
+
+for (const status of [429, 503]) {
+  test(`HTTP ${status} preserves the requested effort for the SDK retry`, async () => {
+    const { model, bodies, drops } = recordingModel("https://busy.example/v1", (attempt) =>
+      attempt === 1 ? json({ error: { message: "reasoning backend overloaded" } }, status) : chatReply(),
+    );
+    await assert.rejects(generateText({ model, prompt: "ping", maxRetries: 0, ...effort("high") }));
+    assert.deepEqual(bodies.map((body) => body.reasoning_effort), ["high"]);
+    assert.deepEqual(drops, []);
+  });
+}
 
 test("an Anthropic connection sends effort, summarized adaptive thinking that drops a mismatched block, and prompt caching", async () => {
   const original = process.env.ORBIT_ANTHROPIC_BASE_URL;
@@ -105,7 +128,7 @@ test("an Anthropic connection sends effort, summarized adaptive thinking that dr
         });
       },
     });
-    const result = await generateText({ model, prompt: "ping", maxRetries: 0, ...effortCallOptions("anthropic", "high", ["low", "medium", "high"]).options });
+    const result = await generateText({ model, prompt: "ping", maxRetries: 0, ...effortCallOptions("anthropic", "high", ["low", "medium", "high"], true).options });
     assert.equal(result.text, "ok");
     assert.equal(seen.length, 1);
     const [request] = seen;
@@ -113,6 +136,8 @@ test("an Anthropic connection sends effort, summarized adaptive thinking that dr
     assert.equal(request.headers.get("x-api-key"), "made-up-anthropic-key-0001");
     assert.equal(request.headers.get("authorization"), null);
     assert.match(request.headers.get("anthropic-beta") ?? "", /thinking-binding-controls-2026-08-01/);
+    assert.match(request.headers.get("anthropic-beta") ?? "", /server-side-fallback-2026-07-01/);
+    assert.equal(request.body.fallbacks, "default");
     assert.deepEqual(request.body.output_config, { effort: "high" });
     assert.deepEqual(request.body.thinking, { type: "adaptive", display: "summarized", block_binding: { prefix_mismatch_behavior: "drop_block" } });
     assert.deepEqual(request.body.cache_control, { type: "ephemeral" });

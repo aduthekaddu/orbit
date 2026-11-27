@@ -145,11 +145,13 @@ test("an Anthropic model list parses into context, images, and effort levels, fo
     reasoning: true,
     contextTokens: 1_000_000,
     efforts: ["low", "medium", "high", "xhigh", "max"],
+    anthropic: { adaptiveThinking: true, canDisableThinking: false },
   });
   assert.deepEqual(inEffortOrder(byId(models, "claude-opus-5").caps.efforts), ["none", "low", "medium", "high", "xhigh", "max"]);
   const haiku = byId(models, "claude-haiku-4-5");
   assert.equal(haiku.caps.contextTokens, 200_000);
   assert.deepEqual(haiku.caps.efforts, ["none"], "Haiku 4.5 takes no effort level and can turn thinking off");
+  assert.deepEqual(haiku.caps.anthropic, { adaptiveThinking: false, canDisableThinking: true });
 
   const requests = seen.slice(from);
   assert.deepEqual(requests.map((request) => request.path), ["/v1/models", "/v1/models"]);
