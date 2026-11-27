@@ -368,7 +368,7 @@ test("hosting routes enforce connection ownership and signup across modes", asyn
   const turn = (connectionId: string) => ({
     route: "chat", method: "POST", input: { ...chatBody(chatId), modelChoice: { connectionId, model: memberModel, effort: "medium" } },
   });
-  const unauthorizedAdmin = [
+  const unauthorizedAdmin: Omit<Spec, "status">[] = [
     { route: "chats/[id]", method: "GET", params: { id: chatId } },
     { route: "chats/[id]", method: "PATCH", params: { id: chatId }, input: { title: "No access" } },
     { route: "chats/[id]", method: "DELETE", params: { id: chatId } },

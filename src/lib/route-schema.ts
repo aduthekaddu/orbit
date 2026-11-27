@@ -26,6 +26,7 @@ export const r = {
 
 export const LIMITS = {
   id: 100,
+  inviteToken: 128,
   url: 2048,
   secret: 4096,
   modelName: 200,

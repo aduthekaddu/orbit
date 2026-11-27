@@ -141,6 +141,13 @@
       "when": 1795796574107,
       "tag": "0019_accounts_vectors",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1795810215997,
+      "tag": "0020_accounts_modes",
+      "breakpoints": true
     }
   ]
 }
