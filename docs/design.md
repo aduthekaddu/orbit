@@ -96,6 +96,8 @@ Appearance (`src/components/settings/appearance-settings.tsx`) is the first card
 
 Each sidebar row has an actions button, `Actions for <title>`. With a mouse it shows on hover, on focus, and on the active row, and opens a dropdown (`src/components/ui/dropdown-menu.tsx`). On touch it always shows at 44px and opens a `Sheet` titled with the chat's name. Both menus hold **Rename** and **Delete**, with Delete in `text-destructive`. A menu closed without a choice gives focus back to its button.
 
+The first Tab stop on every app page is a skip link, hidden until it has focus, because each sidebar chat adds two Tab stops. On a chat it reads **Skip to chat** and moves focus to the composer. Elsewhere it reads **Skip to content** and moves focus to the page's `<main>`.
+
 **Rename** turns the row into a `text-field` input that holds the title, selected, up to 120 characters. Enter or leaving the field saves. Escape cancels, and in the phone drawer it does not close the drawer. Blank or unchanged text sends nothing. The new title shows at once in the sidebar, the header, and the palette. If the save fails, the title goes back to the last saved one and "Could not rename" shows.
 
 **Delete** hides the chat at once and shows one toast, "Chat deleted" with **Undo**, at the top center: under the header on phones, and inside the drawer while it is open. The delete is sent after five seconds, or at once when the page is hidden or closed. Hover or focus on the toast pauses the count. Deleting the open chat opens a new draft, and **Undo** goes back to the chat while a draft is still open. A failed delete puts the row back and shows "Could not delete" for five seconds. After deleting a chat that is not open, focus moves to the next row.

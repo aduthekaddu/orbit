@@ -339,6 +339,14 @@ export function AppShell({
     else window.setTimeout(() => focusChatRow(pending.chat.id), 0);
   }
 
+  // Every sidebar chat has two Tab stops, so the first one on the page skips past them to the composer or the page.
+  function skipToContent(event: React.MouseEvent<HTMLAnchorElement>) {
+    event.preventDefault();
+    const content = document.getElementById("content");
+    const composer = content?.querySelector<HTMLTextAreaElement>("textarea:not([disabled])");
+    (composer ?? content)?.focus();
+  }
+
   const current = visibleChats.find((chat) => pathname === `/c/${chat.id}`);
   const title = pathname === "/settings" ? "Settings" : pathname === "/memory" ? "Memory" : current && chatLabel(current.title);
 
@@ -373,6 +381,13 @@ export function AppShell({
   return (
     <HeaderSlotContext.Provider value={headerSlot}>
       <div className="flex h-dvh overflow-hidden bg-background">
+        <a
+          href="#content"
+          onClick={skipToContent}
+          className="sr-only focus:not-sr-only focus:fixed focus:left-[max(0.5rem,env(safe-area-inset-left))] focus:top-[max(0.5rem,env(safe-area-inset-top))] focus:z-[70] focus:rounded-lg focus:border focus:bg-popover focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:shadow-float focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          {pathname.startsWith("/c/") ? "Skip to chat" : "Skip to content"}
+        </a>
         <aside
           inert={sidebar.collapsed}
           className={cn(
@@ -433,7 +448,9 @@ export function AppShell({
               </TooltipContent>
             </Tooltip>
           </header>
-          {children}
+          <main id="content" tabIndex={-1} className="flex min-h-0 flex-1 flex-col outline-none">
+            {children}
+          </main>
         </div>
 
         <CommandPalette
