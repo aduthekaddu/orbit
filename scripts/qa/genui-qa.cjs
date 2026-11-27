@@ -13,6 +13,7 @@ const REAL_MODEL = process.env.ORBIT_REAL_MODEL ?? "deepseek-v4.1-flash";
 const COMPOSER = 'textarea[placeholder="Ask anything"]';
 const ASSISTANT = '[data-message-role="assistant"]';
 const FALLBACK = "[data-genui-fallback]";
+const ERROR_LINE = "Could not show this view";
 
 fs.mkdirSync(OUT, { recursive: true });
 
@@ -104,6 +105,11 @@ async function waitIdle(page, timeout = 120_000) {
 async function waitForText(page, pattern, timeout = 60_000) {
   await page.getByText(pattern).first().waitFor({ timeout });
   await waitIdle(page);
+}
+
+// A widget error is one line over a closed Details disclosure, so open it before reading the error text.
+async function openDetails(page) {
+  for (const summary of await page.locator(`details${FALLBACK}:not([open]) > summary`).all()) await summary.click();
 }
 
 async function viewportMetrics(page) {
@@ -235,8 +241,9 @@ async function main() {
         if (!afterClick.includes("Saved from the generated button.")) {
           finding("high", "button", "all: the note did not appear after a click", ".verify/evidence/genui-qa/genui-all-desktop.png");
         }
-        if (afterClick.split("Saved from the generated button.").length < 3) {
-          finding("medium", "button", "all: the callout watching /note did not pick up the button note", ".verify/evidence/genui-qa/genui-all-desktop.png");
+        const noteShown = afterClick.split("Saved from the generated button.").length - 1;
+        if (noteShown !== 1) {
+          finding("medium", "button", `all: the note shows ${noteShown} times, expected once, in the callout that watches /note`, ".verify/evidence/genui-qa/genui-all-desktop.png");
         }
 
         await button.focus();
@@ -282,12 +289,25 @@ async function main() {
   await runScenario(page, "huge", "[qa:huge] Render the huge table.", "Huge table", {
     timeout: 120_000,
     check: async (target) => {
-      const rows = await target.locator("table tbody tr").count();
-      if (rows !== 220) finding("high", "huge", `huge: rendered ${rows} rows instead of 220`, ".verify/evidence/genui-qa/genui-huge-desktop.png");
-      const box = await target.locator("div.overflow-x-auto").first().evaluate((node) => ({
-        scrollWidth: node.scrollWidth,
-        clientWidth: node.clientWidth,
-      }));
+      const bodyRows = target.locator("table tbody tr");
+      const rows = await bodyRows.count();
+      if (rows !== 12) finding("high", "huge", `huge: rendered ${rows} rows instead of the 12-row cap`, ".verify/evidence/genui-qa/genui-huge-desktop.png");
+      const showAll = target.getByRole("button", { name: "Show all 220 rows", exact: true });
+      if (await showAll.count()) {
+        await showAll.click();
+        await bodyRows.nth(219).waitFor({ timeout: 5_000 }).catch(() => {});
+        const all = await bodyRows.count();
+        if (all !== 220) finding("high", "huge", `huge: Show all 220 rows rendered ${all} rows`, ".verify/evidence/genui-qa/genui-huge-desktop.png");
+        await target.getByRole("button", { name: "Show fewer", exact: true }).click();
+        await bodyRows.nth(12).waitFor({ state: "detached", timeout: 5_000 }).catch(() => {});
+      } else {
+        finding("high", "huge", "huge: no Show all 220 rows button under the capped table", ".verify/evidence/genui-qa/genui-huge-desktop.png");
+      }
+      const box = await target.locator("table").first().evaluate((table) => {
+        let node = table.parentElement;
+        while (node && !/auto|scroll/.test(getComputedStyle(node).overflowX)) node = node.parentElement;
+        return { scrollWidth: node?.scrollWidth ?? 0, clientWidth: node?.clientWidth ?? 0 };
+      });
       if (box.scrollWidth <= box.clientWidth) {
         finding("low", "huge", "huge: the table did not need its own horizontal scroll at 1440px", ".verify/evidence/genui-qa/genui-huge-desktop.png");
       }
@@ -302,8 +322,9 @@ async function main() {
     },
   });
 
-  await runScenario(page, "invalid", "[qa:invalid] Render invalid props.", "elements.card.props.title", {
+  await runScenario(page, "invalid", "[qa:invalid] Render invalid props.", ERROR_LINE, {
     check: async (target) => {
+      await openDetails(target);
       const text = await assistantText(target);
       if (!text.includes("elements.card.props.title")) {
         finding("high", "fallback", "invalid: the fallback did not name the bad prop", ".verify/evidence/genui-qa/genui-invalid-desktop.png");
@@ -320,8 +341,9 @@ async function main() {
     }
   }
 
-  await runScenario(page, "missing", "[qa:missing] Render missing props.", "elements.metric.props.value", {
+  await runScenario(page, "missing", "[qa:missing] Render missing props.", ERROR_LINE, {
     check: async (target) => {
+      await openDetails(target);
       const text = await assistantText(target);
       if (!text.includes("elements.callout.props.tone")) {
         finding("high", "fallback", "missing: the fallback did not name the missing callout tone", ".verify/evidence/genui-qa/genui-missing-desktop.png");
@@ -333,6 +355,7 @@ async function main() {
 
   await runScenario(page, "unknown", "[qa:unknown] Render an unknown component.", null, {
     check: async (target) => {
+      await openDetails(target);
       const text = await assistantText(target);
       if (!text.includes("Chart")) {
         finding("low", "fallback", "unknown: the fallback raw payload did not show the unknown type", ".verify/evidence/genui-qa/genui-unknown-desktop.png");
@@ -354,8 +377,9 @@ async function main() {
     }
   }
 
-  await runScenario(page, "dangling", "[qa:dangling] Render a dangling child.", "ghost", {
+  await runScenario(page, "dangling", "[qa:dangling] Render a dangling child.", ERROR_LINE, {
     check: async (target) => {
+      await openDetails(target);
       const text = await assistantText(target);
       if (!text.includes("ghost")) {
         finding("high", "fallback", "dangling: the fallback did not name the missing child", ".verify/evidence/genui-qa/genui-dangling-desktop.png");

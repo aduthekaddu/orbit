@@ -127,6 +127,60 @@ function hugeTableSpec() {
   };
 }
 
+// Every Metric change format and tone, every Callout tone, and numbers that must and must not get a comma.
+function tonesSpec() {
+  return {
+    root: "card",
+    elements: {
+      card: {
+        type: "Card",
+        props: { title: "Team health", description: "Platform team, week 47." },
+        children: ["users", "deploys", "cost", "info", "warning", "success", "kv"],
+      },
+      users: {
+        type: "Metric",
+        props: { label: "Weekly active users", value: 18400, change: 12, changeFormat: "percent" },
+        children: [],
+      },
+      deploys: {
+        type: "Metric",
+        props: { label: "Deploys per day", value: 6.5, change: -3.5, changeFormat: "number" },
+        children: [],
+      },
+      cost: {
+        type: "Metric",
+        props: { label: "Cost per seat", value: "$38", change: -8, changeFormat: "percent", changeTone: "positive", hint: "Lower is better" },
+        children: [],
+      },
+      info: {
+        type: "Callout",
+        props: { tone: "info", title: "Survey closes Friday", text: "Eleven of fourteen engineers have answered so far." },
+        children: [],
+      },
+      warning: {
+        type: "Callout",
+        props: { tone: "warning", title: "On-call is thin", text: "Two people cover every night shift until December 8." },
+        children: [],
+      },
+      success: {
+        type: "Callout",
+        props: { tone: "success", title: "Migration finished", text: "All services now read from the new database." },
+        children: [],
+      },
+      kv: {
+        type: "KeyValue",
+        props: {
+          items: [
+            { label: "Budget", value: 42000 },
+            { label: "Year", value: 2026 },
+          ],
+        },
+        children: [],
+      },
+    },
+  };
+}
+
 function longTextSpec() {
   const longWord = "supercalifragilisticexpialidocious".repeat(80);
   const paragraph = Array.from(
@@ -224,6 +278,8 @@ function specFor(scenario) {
       return allSpec();
     case "huge":
       return hugeTableSpec();
+    case "tones":
+      return tonesSpec();
     case "long":
       return longTextSpec();
     case "invalid":

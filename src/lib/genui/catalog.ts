@@ -3,7 +3,7 @@ import { schema } from "@json-render/react/schema";
 import { z } from "zod";
 
 const text = () => z.string();
-const shown = () => z.union([z.string(), z.number()]).transform((value) => String(value));
+const shown = () => z.union([z.string(), z.number()]);
 
 export const RENDER_UI_TOOL = "render_ui";
 
@@ -22,8 +22,11 @@ export const catalog = defineCatalog(schema, {
         label: text(),
         value: shown(),
         hint: text().nullable().optional(),
+        change: z.number().nullable().optional(),
+        changeFormat: z.enum(["percent", "number"]).nullable().optional(),
+        changeTone: z.enum(["positive", "negative", "neutral"]).nullable().optional(),
       }),
-      description: "One labeled number or short value. A numeric value is stored as text.",
+      description: "One labeled number or short value. change is how much it moved, in changeFormat units (default number). changeTone defaults to positive for a rise and negative for a drop.",
     },
     KeyValue: {
       props: z.object({
@@ -125,7 +128,8 @@ export const RENDER_UI_SYSTEM = [
   "Use only Card, Metric, KeyValue, Table, List, Text, Callout, and Button.",
   "Text holds plain text or code. format is plain or code.",
   "Button action is the string note, and note is the text the click stores.",
-  "Metric, list, table, and key-value values may be strings or numbers.",
+  "Metric, list, table, and key-value values may be strings or numbers. Pass numbers as numbers, not text, so they are formatted.",
+  "Give Metric a change number when the value moved, and set changeTone when a drop is good.",
   "Pass null for an optional string you are not using.",
   `Component props. ${componentPropDocs()}`,
 ].join(" ");
