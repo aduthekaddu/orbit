@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type ComponentType } from "react";
+import { useId, useLayoutEffect, useRef, useState, type ComponentType } from "react";
+import { flushSync } from "react-dom";
 import {
   ActionBarPrimitive,
   ComposerPrimitive,
@@ -127,7 +128,7 @@ function AssistantMessage() {
         </>
       )}
       {!editing && (
-        <div className={cn("mt-1 -ml-1.5 flex h-7 items-center", failed && "mt-2 ml-0")}>
+        <div className={cn("mt-1 -ml-1.5 flex min-h-7 items-center pointer-coarse:min-h-11", failed && "mt-2 ml-0")}>
           {busy ? null : (
             <ActionBarPrimitive.Root hideWhenRunning className={cn("flex gap-0.5", !last && !failed && hoverActionsClass)}>
               {text && <CopyAction />}
@@ -167,10 +168,14 @@ function UserMessage() {
   const reconnecting = last && reply.kind === "reconnecting";
   const lost = last && !running && reply.kind === "lost";
   if (editing) return <UserEditComposer busy={busy} />;
+  // One wrapping row, so placement is CSS only and nothing shifts after hydration. With a mouse the actions sit beside
+  // the bubble, which leaves them 4rem so it never wraps under them, and the branch picker wraps below. On touch the
+  // bubble takes the first line, and the branch picker and the 44px actions share the line under it, so the actions
+  // take no width from the text.
   return (
     <MessagePrimitive.Root data-turn-id={id} data-message-id={id} tabIndex={-1} className="group/message mx-auto flex w-full scroll-mt-6 outline-none max-w-chat animate-rise flex-col items-end gap-1.5">
-      <div className="flex w-full items-end justify-end gap-1.5">
-        <ActionBarPrimitive.Root className={cn("flex", hoverActionsClass)}>
+      <div className="flex w-full flex-wrap items-end justify-end gap-1.5">
+        <ActionBarPrimitive.Root className={cn("flex pointer-coarse:order-last", hoverActionsClass)}>
           <CopyAction />
           <IconAction label="Edit">
             <ActionBarPrimitive.Edit disabled={busy} className={iconActionClass}>
@@ -178,11 +183,15 @@ function UserMessage() {
             </ActionBarPrimitive.Edit>
           </IconAction>
         </ActionBarPrimitive.Root>
-        <div className="max-w-[85%] rounded-2xl border bg-surface-raised px-3.5 py-2 text-prose break-words whitespace-pre-wrap">
-          <MessagePrimitive.Parts components={userParts} />
+        <div className="flex min-w-0 max-w-[min(85%,calc(100%-4rem))] justify-end pointer-coarse:max-w-none pointer-coarse:basis-full">
+          <div className="min-w-0 rounded-2xl border bg-surface-raised px-3.5 py-2 text-prose break-words whitespace-pre-wrap pointer-coarse:max-w-[85%]">
+            <UserText key={id} />
+          </div>
+        </div>
+        <div className="flex basis-full justify-end empty:hidden pointer-coarse:basis-auto">
+          <BranchPicker />
         </div>
       </div>
-      <BranchPicker />
       {(reconnecting || lost) && <ReplyStatus kind={reconnecting ? "reconnecting" : "lost"} />}
       {lost && (
         <Button variant="outline" size="xs" onClick={() => void chat?.regenerate({ messageId: id })}>
@@ -191,6 +200,72 @@ function UserMessage() {
         </Button>
       )}
     </MessagePrimitive.Root>
+  );
+}
+
+export type Fold = "fits" | "folded" | "expanded";
+
+/** A user message taller than this many lines folds to 12 lines (`max-h-[12lh]`) with Show more. */
+export const FOLD_AFTER_LINES = 14;
+
+/** The fold after measuring the text: taller than 14 lines (a pixel of rounding allowed) folds, and while it stays tall the reader's choice holds. */
+export function measuredFold(fold: Fold, scrollHeight: number, lineHeight: number): Fold {
+  const tall = Number.isFinite(lineHeight) && lineHeight > 0 && scrollHeight > lineHeight * FOLD_AFTER_LINES + 1;
+  if (!tall) return "fits";
+  return fold === "fits" ? "folded" : fold;
+}
+
+/** Show more and Show less. A message that fits has no toggle. */
+export function toggledFold(fold: Fold): Fold {
+  if (fold === "folded") return "expanded";
+  if (fold === "expanded") return "folded";
+  return fold;
+}
+
+// Copy and Edit read the message from the runtime, so they get every line while the text is folded.
+function UserText() {
+  const text = useRef<HTMLDivElement>(null);
+  const toggle = useRef<HTMLButtonElement>(null);
+  const textId = useId();
+  const [fold, setFold] = useState<Fold>("fits");
+  // A layout effect, so a long message paints folded the first time. The observer measures again when the width or
+  // the text size changes; scrollHeight counts the hidden lines while folded.
+  useLayoutEffect(() => {
+    const element = text.current;
+    if (!element) return;
+    const measure = () => setFold((current) => measuredFold(current, element.scrollHeight, parseFloat(getComputedStyle(element).lineHeight)));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const folded = fold === "folded";
+  return (
+    <>
+      <div className="relative">
+        <div ref={text} id={textId} data-folded={folded ? "true" : undefined} className={cn(folded && "max-h-[12lh] overflow-hidden")}>
+          <MessagePrimitive.Parts components={userParts} />
+        </div>
+        {folded && <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-[1lh] bg-gradient-to-t from-surface-raised" />}
+      </div>
+      {fold !== "fits" && (
+        <button
+          ref={toggle}
+          type="button"
+          aria-expanded={fold === "expanded"}
+          aria-controls={textId}
+          onClick={() => {
+            if (folded) return setFold(toggledFold(fold));
+            // Folding a long message moves its end up; keep the toggle in view so the reader stays at this message.
+            flushSync(() => setFold(toggledFold(fold)));
+            toggle.current?.scrollIntoView({ block: "nearest" });
+          }}
+          className="mt-1 rounded-sm text-meta font-medium text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          {folded ? "Show more" : "Show less"}
+        </button>
+      )}
+    </>
   );
 }
 
