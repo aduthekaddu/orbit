@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test, { after, before } from "node:test";
 import Database from "better-sqlite3";
@@ -10,7 +11,7 @@ import { registerMigrationFunctions } from "./index";
 
 const TAG = "0017_drop_empty_chats";
 const repo = process.cwd();
-const work = fs.mkdtempSync(path.join(process.env.ORBIT_DATA_DIR ?? "", "drop-empty-chats-"));
+const work = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-drop-empty-chats-"));
 let db: Database.Database;
 let migrationSql: string;
 

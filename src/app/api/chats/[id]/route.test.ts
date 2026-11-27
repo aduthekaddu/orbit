@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { registerHooks } from "node:module";
+import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test, { after, before } from "node:test";
@@ -20,7 +21,7 @@ const STORED_KEY = "made-up-tavily-key-0042";
 
 // The route reads the session from request headers, which need a Next.js request scope. This stub
 // returns whichever user a test signs in as, or no session.
-const stubDir = fs.mkdtempSync(path.join(process.env.ORBIT_DATA_DIR ?? "", "stubs-"));
+const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-chats-route-"));
 const sessionStub = path.join(stubDir, "session.cjs");
 fs.writeFileSync(sessionStub, `exports.getSession = async () => (globalThis.__orbitSignedIn ? { user: { id: globalThis.__orbitSignedIn } } : null);
 exports.unauthorized = () => Response.json({ error: "Unauthorized" }, { status: 401 });`);
@@ -47,6 +48,7 @@ before(async () => {
 after(() => {
   hooks.deregister();
   getDb().$client.close();
+  fs.rmSync(stubDir, { recursive: true, force: true });
 });
 
 function signIn(userId: string | null) {
