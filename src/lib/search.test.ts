@@ -297,17 +297,17 @@ test("a reopened chat still finds output-only text after the message is saved ag
 
 test("a snippet drops markdown markers, also where a heading follows the leading ellipsis", () => {
   const filler = "one two three four five six seven eight nine ten eleven twelve thirteen fourteen";
-  const text = `${filler}\n\n## Kettlewing notes\n- **bold** item with \`code\` and a [link](https://example.com/kettlewing)`;
+  const text = `${filler}\n\n## Kettlewing notes\n- **bold** \`code\``;
   assert.equal(reply("c1", [prompt("m-md")], part("m-md", "assistant", text)), true);
   const [hit] = search.searchMessages("u1", "kettlewing");
   assert.equal(hit?.messageId, "m-md");
   assert.deepEqual(matched(hit?.snippet), ["Kettlewing"]);
   assert.match(joined(hit?.snippet), /^…/);
   assert.doesNotMatch(joined(hit?.snippet), /#|\*|`|\]\(|[\uE000\uE001]/);
-  assert.match(joined(hit?.snippet), /Kettlewing notes bold item with code and a link$/);
+  assert.match(joined(hit?.snippet), / Kettlewing notes bold code$/);
 
   // FTS5 starts a snippet at a token, so this is the shape plainText sees when a cut lands on a marker.
-  assert.deepEqual(search.snippetParts("…## \uE000Deploy\uE001 steps\n- **run** it"), [
+  assert.deepEqual(search.snippetParts("…## \uE000Deploy\uE001 steps\n- **run** [it](https://example.com/\uE000deploy\uE001)"), [
     { text: "…", match: false },
     { text: "Deploy", match: true },
     { text: " steps run it", match: false },

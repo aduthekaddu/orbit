@@ -1,14 +1,17 @@
 import Database from "better-sqlite3";
 import { focusedHead } from "./chat-tree";
 import { getDb } from "./db";
-import { getChatForUser, messageRepository } from "./messages";
+import { getChatForUser, messageRepository, plainText } from "./messages";
+
+/** A run of snippet text, flagged when it is a word the search matched. */
+export type SnippetPart = { text: string; match: boolean };
 
 export type SearchHit = {
   chatId: string;
   chatTitle: string;
   messageId: string;
   role: "user" | "assistant";
-  snippet: string;
+  snippet: SnippetPart[];
 };
 
 type SearchRow = {
@@ -18,6 +21,39 @@ type SearchRow = {
   role: string;
   snippet: string;
 };
+
+// FTS5 wraps each match in these private-use characters. Markdown cleanup leaves them alone, and the scan below drops them.
+const MATCH_START = "\uE000";
+const MATCH_END = "\uE001";
+const ELLIPSIS = "…";
+
+/**
+ * Plain text parts from an FTS5 snippet with match markers. A leading ellipsis is set aside so a heading or list
+ * marker right after it is still dropped. Literal brackets in the message stay plain text.
+ */
+export function snippetParts(snippet: string): SnippetPart[] {
+  const cut = snippet.startsWith(ELLIPSIS);
+  const text = (cut ? ELLIPSIS : "") + plainText(cut ? snippet.slice(ELLIPSIS.length) : snippet);
+  const parts: SnippetPart[] = [];
+  let match = false;
+  let start = 0;
+  const push = (end: number) => {
+    if (end <= start) return;
+    const piece = text.slice(start, end);
+    const last = parts.at(-1);
+    if (last?.match === match) last.text += piece;
+    else parts.push({ text: piece, match });
+  };
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index];
+    if (char !== MATCH_START && char !== MATCH_END) continue;
+    push(index);
+    start = index + 1;
+    match = char === MATCH_START;
+  }
+  push(text.length);
+  return parts;
+}
 
 function quotedToken(token: string): string {
   return `"${token.replaceAll('"', '""')}"`;
@@ -68,7 +104,7 @@ export function searchMessages(userId: string, q: string): SearchHit[] {
                 chats.title AS chatTitle,
                 messages.id AS messageId,
                 messages.role AS role,
-                snippet(messages_fts, 0, '[', ']', '…', 12) AS snippet
+                snippet(messages_fts, 0, char(57344), char(57345), '…', 12) AS snippet
          FROM messages_fts
          JOIN messages ON messages.rowid = messages_fts.rowid
          JOIN chats ON chats.id = messages.chat_id
@@ -80,7 +116,7 @@ export function searchMessages(userId: string, q: string): SearchHit[] {
       )
       .all(match, userId) as SearchRow[];
     return rows.flatMap((row) =>
-      row.role === "user" || row.role === "assistant" ? [{ ...row, role: row.role }] : [],
+      row.role === "user" || row.role === "assistant" ? [{ ...row, role: row.role, snippet: snippetParts(row.snippet) }] : [],
     );
   } catch (error) {
     console.error("[search] query failed", {
