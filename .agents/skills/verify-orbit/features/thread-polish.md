@@ -24,16 +24,16 @@ At each width:
 
 - **New chat** three times goes to `/c/<id>?new` each time. `GET /api/chats` and the sidebar gain no rows, and the header title is empty.
 - On a draft, picking `mock-reasoner` at Medium and sending `[qa:plain] hello` creates one row pinned to that choice, shows it in the sidebar, and drops `?new`.
-- A reload during a draft's first `[qa:slow]` reply lands on `/c/<id>` and reattaches until `word50`.
-- An offline first send keeps `?new`, creates no row, keeps the picked model, and reloads as a draft, not a 404.
+- A reload during a draft's first `[qa:slow]` reply lands on `/c/<id>` and reattaches until `word50`. The reply text, without its model label, holds `word1` to `word50` once each, in order.
+- An offline first send keeps `?new`, creates no row, and reloads as a draft, not a 404. The page does not load again, and the picked model holds through the refresh that follows when the connection returns.
 - **Rename** from `Actions for <title>` fills the `Chat title` box, saves with Enter, answers `PATCH` 200 `{ id, title }`, and keeps the title, the sort order, and `updated_at` after reload. Escape and blank input send no request. A `PATCH` 500 rolls back and shows `Could not rename`.
-- **Delete** on the open chat opens a draft, hides the chat in the sidebar and palette, and shows `Chat deleted` with **Undo**. Undo reopens the chat and sends no `DELETE`.
+- **Delete** on the open chat opens a draft, hides the chat in the sidebar and palette, and shows `Chat deleted` with **Undo**. Undo reopens the chat, puts it back in the palette, and sends no `DELETE`. The palette check matches the chat's id, so a rerun on the same sandbox, which holds chats with the same titles, still holds.
 - **Delete** on an inactive chat shows the toast inside the drawer on a phone, and Undo restores the row.
 - **Delete** during `[qa:slow]`, then Undo, reattaches and all 50 words finish.
 - **Delete** during `[qa:slow]` with no Undo sends one `DELETE` after 5 seconds. Then `GET /api/chats/<id>` and `/stream` answer 404, the palette finds no hit for the prompt's word, and `messages_fts` passes `integrity-check`.
-- **Delete** followed by a reload commits through `pagehide` before the 5 seconds end.
+- **Delete** followed by a reload commits through `pagehide` before the 5 seconds end, and the reloaded sidebar drops the row.
 - A `DELETE` 500 restores the row and shows `Could not delete`. A double click on **Delete** sends one request. `DELETE` on a missing id answers 404.
-- The footer shows **Memory** and **Settings** links and the email as plain text. **Sign out** opens `Sign out?`, and **Cancel** keeps the session. At 360 the scenario confirms, lands on `/login`, and `GET /api/chats` answers 401, so it runs last.
+- The footer shows **Memory** and **Settings** links and the email as plain text. **Sign out** opens `Sign out?`, and **Cancel** keeps the session. Cancel returns focus to Sign out without opening its tooltip, so on a phone one Escape closes the drawer. At 360 the scenario confirms, lands on `/login`, and `GET /api/chats` answers 401, so it runs last.
 
 Screenshots: `menu-desktop.png`, `menu-sheet-390.png`, `rename.png`, `undo-toast-360.png`, `signout-confirm.png`, `drawer-360.png`.
 

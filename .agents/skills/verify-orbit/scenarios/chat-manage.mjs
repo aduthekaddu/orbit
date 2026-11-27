@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { eventually } from "../../../../src/lib/eventually.mjs";
+import { replyText } from "../../../../scripts/qa/reply-text.mjs";
 
 // Slice 16 chat management: draft chats that get a row only with their first message, rename and delete from the
 // row menu with a five-second undo, the delete commit on expiry and on pagehide, failed requests, and the sidebar
@@ -49,7 +50,10 @@ function ftsIntact() {
 }
 
 const chatRow = (id) => readDb((db) => db.prepare("SELECT title, updated_at AS updatedAt, model, reasoning_effort AS effort FROM chats WHERE id = ?").get(id) ?? null);
-const wordsIntact = (text) => WORDS.every((word, index) => text.indexOf(`${word} `) !== -1 && (index === 0 || text.indexOf(`${word} `) > text.indexOf(`${WORDS[index - 1]} `)));
+const replyWords = (text) => text.match(/\bword\d+\b/g) ?? [];
+const wordCount = (text) => replyWords(text).length;
+// All 50 words once each, in order: a replay that repeats or drops part of the reply fails.
+const wordsIntact = (text) => JSON.stringify(replyWords(text)) === JSON.stringify(WORDS);
 
 function draftId(url) {
   const parsed = new URL(url);
@@ -68,9 +72,12 @@ function viewportRun(context, { label, touch, page }) {
   const api = {
     chats: async () => (await (await page.request.get(`${origin}/api/chats`)).json()).chats,
     status: async (urlPath) => (await page.request.get(`${origin}${urlPath}`)).status(),
+    // A rename the page did not make reaches the sidebar only with the next server render, so this reloads.
     name: async (id, title) => {
       const answer = await page.request.patch(`${origin}/api/chats/${id}`, { data: { title } });
       if (answer.status() !== 200) throw new Error(`PATCH /api/chats/${id} answered ${answer.status()}`);
+      await page.reload();
+      await composer.waitFor({ timeout: 15_000 });
     },
   };
 
@@ -179,8 +186,9 @@ function viewportRun(context, { label, touch, page }) {
     await page.reload();
     const landed = page.url();
     await replyDone("word50", 30_000).catch(() => {});
-    const text = await lastReply().innerText().catch(() => "");
-    step(`${label}: reloading mid-stream lands on /c/<id> and reattaches to the reply`, chatId(landed) === id && !new URL(landed).searchParams.has("new") && wordsIntact(`${text} `), `url ${landed}, reply ${JSON.stringify(text.slice(-60))}`);
+    // The reply's own text, without the model label that follows word50.
+    const text = await replyText(lastReply()).catch(() => "");
+    step(`${label}: reloading mid-stream lands on /c/<id> and reattaches to the reply`, chatId(landed) === id && !new URL(landed).searchParams.has("new") && wordsIntact(text), `url ${landed}, ${wordCount(text)} words, reply ${JSON.stringify(text.slice(0, 30))}…${JSON.stringify(text.slice(-30))}`);
     return id;
   }
 
@@ -188,13 +196,28 @@ function viewportRun(context, { label, touch, page }) {
     const id = await newDraft();
     await pickReasoner();
     const failed = page.waitForEvent("requestfailed", { predicate: (request) => new URL(request.url()).pathname === "/api/chat", timeout: 10_000 }).then(() => true, () => false);
+    // A full page load in this window, such as the browser's offline page, would drop the picked model. A load
+    // clears the marker. A same-document URL change does not.
+    const loads = [];
+    const onLoad = () => loads.push(page.url());
+    await page.evaluate(() => {
+      window.orbitOfflineDraft = true;
+    });
+    // Once online, the page refreshes to learn whether the send reached the server. The model must survive that too.
+    const refreshed = () => page.waitForResponse((response) => response.request().headers().rsc === "1" && !response.request().headers()["next-router-prefetch"] && new URL(response.url()).pathname === `/c/${id}`, { timeout: 10_000 }).then(() => true, () => false);
+    let refresh = null;
+    page.on("load", onLoad);
     await page.context().setOffline(true);
     try {
       await send("[qa:plain] hello");
       await failed;
     } finally {
+      refresh = refreshed();
       await page.context().setOffline(false);
     }
+    const refreshLanded = await refresh;
+    page.off("load", onLoad);
+    const samePage = await page.evaluate(() => window.orbitOfflineDraft === true);
     const kept = page.url();
     const chip = (await page.locator("[data-model-chip]").first().innerText()).toLowerCase();
     const listed = (await api.chats()).some((chat) => chat.id === id);
@@ -203,8 +226,8 @@ function viewportRun(context, { label, touch, page }) {
     const notFound = await page.getByText("This page could not be found").count();
     step(
       `${label}: an offline first send keeps ?new, creates no row, keeps the model, and reloads as a draft`,
-      draftId(kept) === id && !listed && chip.includes("reasoner") && chatRow(id) === null && draft && notFound === 0 && draftId(page.url()) === id,
-      `url ${kept}, listed ${listed}, chip ${JSON.stringify(chip)}, after reload ${page.url()} 404 ${notFound}`,
+      draftId(kept) === id && refreshLanded && samePage && !listed && chip.includes("reasoner") && chatRow(id) === null && draft && notFound === 0 && draftId(page.url()) === id,
+      `url ${kept}, refresh after online ${refreshLanded}, same page ${samePage}, loads ${JSON.stringify(loads)}, listed ${listed}, chip ${JSON.stringify(chip)}, after reload ${page.url()} 404 ${notFound}`,
     );
   }
 
@@ -281,11 +304,12 @@ function viewportRun(context, { label, touch, page }) {
     return newTitle;
   }
 
-  async function paletteHas(text) {
+  // By id: a rerun on the same sandbox leaves older chats with the same titles.
+  async function paletteHas(id) {
     await page.keyboard.press("Control+K");
     const dialog = page.getByRole("dialog", { name: "Command palette" });
     await dialog.waitFor({ timeout: 5_000 });
-    const count = await dialog.locator("[cmdk-item]", { hasText: text }).count();
+    const count = await dialog.locator(`[cmdk-item][data-value="${id}"]`).count();
     await page.keyboard.press("Escape");
     await dialog.waitFor({ state: "hidden", timeout: 5_000 });
     return count > 0;
@@ -300,15 +324,16 @@ function viewportRun(context, { label, touch, page }) {
     if (label === "360") await shot("undo-toast-360");
     const gone = !(await rowLink(await list(), id).isVisible());
     await closeList();
-    const inPalette = await paletteHas(title);
+    const inPalette = await paletteHas(id);
     await (await need(toast().getByRole("button", { name: "Undo" }), "Undo button in the Chat deleted toast", 3_000)).click();
     const back = await eventually(() => page.url(), (url) => chatId(url) === id, { timeoutMs: 5_000, what: "the chat to reopen" }).catch(() => page.url());
     const restored = await visible(rowLink(await list(), id), 5_000);
     await closeList();
+    const backInPalette = await paletteHas(id);
     step(
       `${label}: deleting the open chat hides it, opens a draft, and Undo restores it`,
-      draftId(draftUrl) !== null && shownToast && gone && !inPalette && chatId(back) === id && restored && (await api.status(`/api/chats/${id}`)) === 200,
-      `draft ${draftUrl}, toast ${shownToast}, hidden ${gone}, in palette ${inPalette}, back ${back}, restored ${restored}`,
+      draftId(draftUrl) !== null && shownToast && gone && !inPalette && chatId(back) === id && restored && backInPalette && (await api.status(`/api/chats/${id}`)) === 200,
+      `draft ${draftUrl}, toast ${shownToast}, hidden ${gone}, in palette ${inPalette}, back ${back}, restored ${restored}, back in palette ${backInPalette}`,
     );
     deletes.stop();
     step(`${label}: Undo sends no DELETE`, deletes.seen.length === 0, `${deletes.seen.length} DELETE requests`);
@@ -337,8 +362,8 @@ function viewportRun(context, { label, touch, page }) {
     await toast().getByRole("button", { name: "Undo" }).click({ timeout: 3_000 });
     await eventually(() => page.url(), (url) => chatId(url) === id, { timeoutMs: 5_000, what: "the chat to reopen" });
     await replyDone("word50", 30_000).catch(() => {});
-    const text = await lastReply().innerText().catch(() => "");
-    step(`${label}: Undo during [qa:slow] reattaches and all 50 words finish`, wordsIntact(`${text} `), `reply ${JSON.stringify(text.slice(-80))}`);
+    const text = await replyText(lastReply()).catch(() => "");
+    step(`${label}: Undo during [qa:slow] reattaches and all 50 words finish`, wordsIntact(text), `${wordCount(text)} words, reply ${JSON.stringify(text.slice(0, 30))}…${JSON.stringify(text.slice(-30))}`);
   }
 
   async function deleteStreamingAndExpire(id, title) {
@@ -376,7 +401,9 @@ function viewportRun(context, { label, touch, page }) {
     await page.reload();
     const status = await eventually(() => api.status(`/api/chats/${id}`), (value) => value === 404, { timeoutMs: UNDO_MS, what: "the pagehide delete to land" }).catch(() => null);
     const elapsed = Date.now() - clicked;
-    const listed = await rowLink(await list(), id).count();
+    // The reload can render its sidebar before the DELETE lands, so the row may show until the page has loaded.
+    const container = await list();
+    const listed = await eventually(() => rowLink(container, id).count(), (count) => count === 0, { timeoutMs: 5_000, what: "the deleted row to leave the reloaded sidebar" }).catch(() => rowLink(container, id).count());
     await closeList();
     step(`${label}: reloading right after Delete commits it through pagehide`, status === 404 && elapsed < UNDO_MS && listed === 0, `status ${status} after ${elapsed}ms, rows ${listed}`);
   }
