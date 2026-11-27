@@ -10,11 +10,13 @@ import { saveModelDefaults } from "../connections";
 import { getDb } from "../db";
 import * as schema from "../db/schema";
 import { createChat, finishChatReply, listMessages, persistIncoming, planChatWrite } from "../messages";
+import { resolveChoice } from "../model-choice";
 import { dataDirectory } from "../paths";
 import { encryptSecret } from "../secrets";
 import * as dream from "./dream";
 import * as embed from "./embed";
 import { startMockOllama } from "./ollama-harness";
+import type { MemoryRun } from "./run-state";
 import * as store from "./store";
 
 const redact = new Redactor(null);
@@ -146,8 +148,7 @@ test("a run adds facts the user stated", async () => {
   for (const memory of store.listMemories()) assert.partialDeepStrictEqual(memory, { source: "dream" });
   assert.equal(row.chatIds.includes(first.chatId) && row.chatIds.includes(second.chatId) && row.chatIds.includes(third.chatId), true);
   assert.equal(row.error, null);
-  assert.equal(api.formatDreamStatus(row).includes("I live in Lisbon"), false);
-  assert.match(api.formatDreamStatus(row), /3 chats, 3 added, 0 merged/);
+  assert.deepEqual(api.dreamStatus(row, api.lastDoneRun(), true), { state: "done", finishedAt: row.finishedAt?.toISOString(), chats: 3, added: 3, merged: 0 });
 });
 
 test("a manual dream sends the Anthropic fallback option and beta header", async (t) => {
@@ -595,4 +596,93 @@ test("dream masks stored credentials before embedding and saving memories", asyn
   assert.equal(received.some((entry) => entry.includes(secret)), false, `Ollama received unmasked key: ${JSON.stringify(received)}`);
   assert.equal(db.$client.prepare("SELECT count(*) AS n FROM memories_vec").get() !== undefined, true);
   assert.equal(store.listMemories()[0]?.embedded, true);
+});
+
+// Deletes a chat the way DELETE /api/chats/[id] does, without going through that code.
+function dropChat(chatId: string) {
+  getDb().$client.prepare("DELETE FROM messages WHERE chat_id = ?").run(chatId);
+  getDb().$client.prepare("DELETE FROM chats WHERE id = ?").run(chatId);
+}
+
+function dreamRequests() {
+  return fs.readFileSync(requestLog, "utf8").split("\n").filter((line) => line.includes('"scenario":"dream"'));
+}
+
+test("dreamStatus reports each night's state with ISO times and hides a stale no-provider failure", () => {
+  const api = requireDream();
+  const progress = { date: "2099-11-14", startedAt: new Date("2099-11-14T03:00:00Z"), chatIds: ["a", "b", "c"], doneChatIds: ["a", "b", "c"], retryChatIds: [], added: 3, merged: 1 };
+  const finishedAt = new Date("2099-11-14T03:04:00Z");
+  const done: MemoryRun = { ...progress, state: "done", owner: null, leaseUntil: null, finishedAt, error: null };
+  const running: MemoryRun = { ...progress, date: "2099-11-15", state: "running", owner: "w", leaseUntil: new Date("2099-11-15T03:02:00Z"), finishedAt: null, error: null };
+  const failed = (error: string): MemoryRun => ({ ...progress, date: "2099-11-15", state: "failed", owner: null, leaseUntil: null, finishedAt: new Date("2099-11-15T03:01:00Z"), error });
+  const doneStatus = { state: "done", finishedAt: "2099-11-14T03:04:00.000Z", chats: 3, added: 3, merged: 1 };
+
+  assert.deepEqual(api.dreamStatus(null, null, true), { state: "never" });
+  assert.deepEqual(api.dreamStatus(done, done, false), doneStatus);
+  assert.deepEqual(api.dreamStatus(running, done, true), { state: "running", startedAt: "2099-11-14T03:00:00.000Z" });
+  assert.deepEqual(api.dreamStatus(failed("No provider is saved"), done, false), { state: "failed", finishedAt: "2099-11-15T03:01:00.000Z", error: "No provider is saved" });
+  assert.deepEqual(api.dreamStatus(failed("No provider is saved"), done, true), doneStatus);
+  assert.deepEqual(api.dreamStatus(failed("No provider is saved"), null, true), { state: "never" });
+  assert.deepEqual(api.dreamStatus(failed("Ollama returned HTTP 503"), done, true), { state: "failed", finishedAt: "2099-11-15T03:01:00.000Z", error: "Ollama returned HTTP 503" });
+});
+
+test("after a no-provider night, the status shows the last done night once a provider is ready", async () => {
+  const api = requireDream();
+  resetChats();
+  const db = getDb();
+  seedChat("I sail on weekends", at("2099-11-01", 12));
+  const first = await api.runDream({ manual: true, date: "2099-11-01", now: new Date(at("2099-11-01", 16)) });
+  assert.equal(first?.state, "done");
+  db.$client.prepare("UPDATE user_preferences SET default_model = NULL WHERE user_id = 'dream-user'").run();
+  try {
+    const second = await api.runDream({ manual: true, date: "2099-11-02", now: new Date(at("2099-11-02", 16)) });
+    assert.equal(second?.error, "No provider is saved");
+    assert.equal(api.lastDoneRun()?.date, "2099-11-01");
+    assert.equal(api.dreamStatus(api.latestRun(), api.lastDoneRun(), false).state, "failed");
+  } finally {
+    db.$client.prepare("UPDATE user_preferences SET default_model = 'mock-genui' WHERE user_id = 'dream-user'").run();
+  }
+  const ready = resolveChoice("dream-user", { connectionId: null, model: null, reasoningEffort: null }).ok;
+  assert.equal(ready, true);
+  assert.deepEqual(api.dreamStatus(api.latestRun(), api.lastDoneRun(), ready), {
+    state: "done", finishedAt: first?.finishedAt?.toISOString(), chats: 1, added: 1, merged: 0,
+  });
+});
+
+test("a chat deleted before the dream reaches it is marked done without the provider, the model or Ollama", async (t) => {
+  const api = requireDream();
+  resetChats();
+  fs.writeFileSync(requestLog, "");
+  const date = "2099-12-01";
+  const gone = seedChat("I collect stamps", at(date, 12));
+  assert.equal(api.tryClaim({ date, owner: "worker-a", now: new Date(at(date, 16)), chatIds: [gone.chatId] }), true);
+  dropChat(gone.chatId);
+  const calls = t.mock.method(globalThis, "fetch", () => Promise.reject(new Error("no request expected")));
+  const db = getDb();
+  db.$client.prepare("UPDATE user_preferences SET default_model = NULL WHERE user_id = 'dream-user'").run();
+  try {
+    assert.equal(await api.dreamChat(gone.chatId, { date, owner: "worker-a" }), "done");
+  } finally {
+    db.$client.prepare("UPDATE user_preferences SET default_model = 'mock-genui' WHERE user_id = 'dream-user'").run();
+  }
+  assert.equal(calls.mock.callCount(), 0);
+  assert.deepEqual(dreamRequests(), []);
+  assert.partialDeepStrictEqual(api.getRun(date), { doneChatIds: [gone.chatId], retryChatIds: [], added: 0, merged: 0 });
+  assert.deepEqual(memoryTexts(), []);
+});
+
+test("a chat deleted while the dream model reads it adds no memory", async (t) => {
+  const api = requireDream();
+  resetChats();
+  const date = "2099-12-02";
+  const chat = seedChat("I collect stamps", at(date, 12));
+  assert.equal(api.tryClaim({ date, owner: "worker-a", now: new Date(at(date, 16)), chatIds: [chat.chatId] }), true);
+  const live = globalThis.fetch;
+  t.mock.method(globalThis, "fetch", (input: URL | RequestInfo, init?: RequestInit) => {
+    if (String(input).startsWith(provider!.url)) dropChat(chat.chatId);
+    return live(input, init);
+  });
+  assert.equal(await api.dreamChat(chat.chatId, { date, owner: "worker-a" }), "done");
+  assert.deepEqual(memoryTexts(), []);
+  assert.partialDeepStrictEqual(api.getRun(date), { doneChatIds: [chat.chatId], added: 0 });
 });

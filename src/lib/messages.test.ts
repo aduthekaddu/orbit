@@ -7,13 +7,21 @@ import { Redactor } from "./chat-errors";
 import { getDb, type OrbitDb } from "./db";
 import * as schema from "./db/schema";
 import {
+  beginTurn,
+  chatExists,
+  chatTitle,
+  deleteChat,
   finishChatReply,
   listMessages,
   persistIncoming,
   planChatWrite,
+  plainText,
+  renameChat,
   storedAssistantParts,
   updateMessageText,
 } from "./messages";
+import { saveMemory } from "./memory/store";
+import { searchMessages } from "./search";
 
 const redact = new Redactor(null);
 
@@ -244,4 +252,158 @@ test("storedAssistantParts returns the stored parts for incoming assistant ids i
   assert.deepEqual(mods.storedAssistantParts("c2", ["ap-a", "missing"]), expected);
   assert.deepEqual(mods.storedAssistantParts("c1", ["ap-a"]), new Map());
   assert.deepEqual(mods.storedAssistantParts("c2", []), new Map());
+});
+
+const OTHER = "u-other";
+let otherUserReady = false;
+
+// A second account, as slice 18 allows. The single-user trigger refuses it, so tests drop the trigger first.
+function otherUser() {
+  if (otherUserReady) return OTHER;
+  mods.db.$client.exec("DROP TRIGGER IF EXISTS user_single_row");
+  mods.db.insert(mods.schema.user).values({ id: OTHER, name: "Other", email: "other@orbit.local" }).run();
+  otherUserReady = true;
+  return OTHER;
+}
+
+function chatRow(id: string) {
+  return mods.db.$client.prepare("select id, user_id, title, updated_at from chats where id = ?").get(id) as
+    | { id: string; user_id: string; title: string; updated_at: number }
+    | undefined;
+}
+
+function messageCount(chatId: string) {
+  return (mods.db.$client.prepare("select count(*) as n from messages where chat_id = ?").get(chatId) as { n: number }).n;
+}
+
+function insertChat(id: string, userId: string, title = "New chat", updatedAt = new Date(1_000)) {
+  mods.db.insert(mods.schema.chats).values({ id, userId, title, createdAt: updatedAt, updatedAt }).run();
+}
+
+function ftsIntact() {
+  mods.db.$client.prepare("insert into messages_fts(messages_fts) values('integrity-check')").run();
+  return true;
+}
+
+test("plainText drops markdown markers and keeps every word", () => {
+  const markdown = [
+    "# Deploy notes",
+    "",
+    "- **Fly.io** runs `fly deploy` from the _main_ branch",
+    "> see the [guide](https://example.com/guide) and ![logo](logo.png)",
+    "1. first step",
+    "```sh",
+    "fly deploy --remote-only",
+    "```",
+    "~~old~~ words that keep going well past the eighty characters a sidebar title would keep",
+  ].join("\n");
+  assert.equal(
+    plainText(markdown),
+    "Deploy notes Fly.io runs fly deploy from the main branch see the guide and logo first step fly deploy --remote-only old words that keep going well past the eighty characters a sidebar title would keep",
+  );
+  assert.equal(chatTitle(markdown).endsWith("…"), true, "a title is still cut to one line");
+});
+
+test("plainText and chatTitle finish quickly on 50,000 repeats of one character", () => {
+  for (const unit of ["a", "[", "(", "#", "*", "_", "`", "1", "!", "[x](", "\n"]) {
+    const text = unit.repeat(Math.ceil(50_000 / unit.length));
+    const started = performance.now();
+    plainText(text);
+    chatTitle(text);
+    const elapsed = performance.now() - started;
+    assert.ok(elapsed < 500, `${JSON.stringify(unit)} took ${elapsed.toFixed(0)} ms`);
+  }
+});
+
+test("chatExists sees a chat of any owner and no missing one", () => {
+  insertChat("exists-other", otherUser());
+  assert.equal(chatExists("exists-other"), true);
+  assert.equal(chatExists("c1"), true);
+  assert.equal(chatExists("never-made"), false);
+});
+
+test("renameChat trims and masks the title, keeps updated_at, and ignores another user's chat", () => {
+  const key = "made-up-provider-key";
+  const masking = new Redactor({ apiKey: key, tavilyApiKey: "", githubToken: "" });
+  insertChat("rename-me", "u1", "Old title", new Date(5_000));
+  assert.deepEqual(renameChat("rename-me", "u1", "  Trip plans  ", masking), { id: "rename-me", title: "Trip plans" });
+  assert.deepEqual(chatRow("rename-me"), { id: "rename-me", user_id: "u1", title: "Trip plans", updated_at: 5_000 });
+  assert.deepEqual(renameChat("rename-me", "u1", `key ${key}`, masking), { id: "rename-me", title: "key [redacted]" });
+  assert.equal(chatRow("rename-me")?.title, "key [redacted]");
+  assert.deepEqual(renameChat("rename-me", "u1", "New chat", masking), { id: "rename-me", title: "New chat" });
+
+  insertChat("rename-other", otherUser(), "Theirs");
+  assert.equal(renameChat("rename-other", "u1", "Mine now", masking), null);
+  assert.equal(chatRow("rename-other")?.title, "Theirs");
+  assert.equal(renameChat("rename-missing", "u1", "Anything", masking), null);
+  assert.equal(chatRow("rename-missing"), undefined);
+});
+
+test("deleteChat removes the chat and its messages, keeps the search index whole, and keeps linked memories without a source", () => {
+  insertChat("delete-me", "u1", "Gone soon");
+  reply("delete-me", [message("dm-u1", "user", "the plumquartz plan")], message("dm-a1", "assistant", "plumquartz answer"));
+  const linked = saveMemory({ text: "The plan is plumquartz", kind: "fact", source: "dream", sourceChatId: "delete-me", sourceMessageId: "dm-u1" });
+  assert.equal(searchMessages("u1", "plumquartz").length, 2);
+
+  insertChat("delete-other", otherUser(), "Theirs");
+  reply("delete-other", [message("do-u1", "user", "their plumquartz")], message("do-a1", "assistant", "their answer"));
+  assert.equal(deleteChat("delete-other", "u1"), false);
+  assert.equal(chatRow("delete-other")?.title, "Theirs");
+  assert.equal(messageCount("delete-other"), 2);
+
+  assert.equal(deleteChat("delete-me", "u1"), true);
+  assert.equal(chatRow("delete-me"), undefined);
+  assert.equal(messageCount("delete-me"), 0);
+  assert.equal(ftsIntact(), true);
+  assert.deepEqual(searchMessages("u1", "plumquartz"), []);
+  const memory = mods.db.$client.prepare("select text, source_chat_id, source_message_id from memories where id = ?").get(linked.id);
+  assert.deepEqual(memory, { text: "The plan is plumquartz", source_chat_id: null, source_message_id: null });
+  assert.equal(deleteChat("delete-me", "u1"), false);
+});
+
+test("beginTurn creates a missing chat together with its first prompt", () => {
+  const turn = beginTurn("first-turn", "u1", [message("ft-u1", "user", "hello there")], redact, "submit-message");
+  if (!turn.ok) assert.fail(`turn refused: ${turn.error}`);
+  assert.equal(turn.messagesBeforeTurn, 0);
+  assert.equal(turn.chat.id, "first-turn");
+  assert.equal(turn.chat.userId, "u1");
+  assert.equal(turn.chat.title, "New chat");
+  assert.equal(turn.chat.headId, "ft-u1");
+  assert.equal(turn.write.prompt.id, "ft-u1");
+  assert.deepEqual(listMessages("first-turn").map(({ id }) => id), ["ft-u1"]);
+
+  assert.equal(finishChatReply(turn.write, message("ft-a1", "assistant", "hi").parts, redact), true);
+  const next = beginTurn("first-turn", "u1", [...listMessages("first-turn"), message("ft-u2", "user", "again")], redact, "submit-message");
+  if (!next.ok) assert.fail(`turn refused: ${next.error}`);
+  assert.equal(next.messagesBeforeTurn, 2);
+  assert.equal(next.chat.headId, "ft-u2");
+});
+
+test("a refused first turn leaves no chat row behind", () => {
+  reply("c2", [message("cross-u1", "user", "stored elsewhere")], message("cross-a1", "assistant", "here"));
+  const refused = [
+    ["stale", [message("st-a1", "assistant", "an answer nobody saved"), message("st-u1", "user", "and then?")], "submit-message", undefined],
+    ["invalid-edit", [message("ie-u1", "user", "edited")], "submit-message", "ie-missing"],
+    ["cross-chat", [message("cross-u1", "user", "stored elsewhere")], "submit-message", undefined],
+    ["no-prompt", [message("np-a1", "assistant", "only an answer")], "submit-message", undefined],
+    ["not-found", [message("rg-u1", "user", "retry me")], "regenerate-message", undefined],
+  ] as const;
+  for (const [error, incoming, trigger, editMessageId] of refused) {
+    const chatId = `refused-${error}`;
+    assert.deepEqual(beginTurn(chatId, "u1", [...incoming], redact, trigger, editMessageId), { ok: false, error }, error);
+    assert.equal(chatExists(chatId), false, `${error} left a chat row`);
+    assert.equal(messageCount(chatId), 0, `${error} left a message row`);
+  }
+});
+
+test("beginTurn answers not-found for another user's chat and writes nothing to it", () => {
+  insertChat("turn-other", otherUser(), "Theirs", new Date(7_000));
+  reply("turn-other", [message("to-u1", "user", "their question")], message("to-a1", "assistant", "their answer"));
+  const before = listMessages("turn-other");
+  assert.deepEqual(
+    beginTurn("turn-other", "u1", [...before, message("to-u2", "user", "my question")], redact, "submit-message"),
+    { ok: false, error: "not-found" },
+  );
+  assert.deepEqual(listMessages("turn-other"), before);
+  assert.equal(chatRow("turn-other")?.user_id, OTHER);
 });

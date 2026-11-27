@@ -67,7 +67,8 @@ test("the migration removes terminal escape sequences from saved output", () => 
   assert.equal(content("old-color"), "colorlegacy done\n\nwarnlegacy\n");
   assert.deepEqual(search.searchMessages("u1", "colorlegacy").map((hit) => hit.messageId), ["old-color"]);
   assert.deepEqual(search.searchMessages("u1", "warnlegacy").map((hit) => hit.messageId), ["old-color"]);
-  assert.doesNotMatch(search.searchMessages("u1", "colorlegacy")[0]?.snippet ?? "", /\u001b|\[31m/);
+  const snippet = search.searchMessages("u1", "colorlegacy")[0]?.snippet ?? [];
+  assert.doesNotMatch(snippet.map((part) => part.text).join(""), /\u001b|\[31m/);
 });
 
 test("the migration keeps the output of several runs in the order of the chat", () => {

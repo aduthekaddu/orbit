@@ -18,7 +18,7 @@ import { deleteConnection, getConnection, getModelDefaults } from "@/lib/connect
 import { eventually } from "@/lib/eventually.mjs";
 import { chatChoice, setChatChoice, type ModelChoice } from "@/lib/model-choice";
 import { cachedCaps, listModels } from "@/lib/model-list";
-import { findReplyRun, releaseReplyRun, replyResponse, reserveReplyRun, stopReplyRun } from "@/lib/reply-runs";
+import { discardReplyRun, findReplyRun, releaseReplyRun, replyResponse, reserveReplyRun, stopReplyRun } from "@/lib/reply-runs";
 import { encryptSecret } from "@/lib/secrets";
 import { getSettings, saveSettings } from "@/lib/settings";
 
@@ -729,4 +729,61 @@ test("an SDK warning marks effort adjusted before a stopped step can finish", { 
     assert.equal(lastReplyRecord(chunks.slice(0, fallback))?.effortOutcome, "adjusted");
   }
   assert.equal(savedReplyRecord(chatId)?.effortOutcome, "adjusted");
+});
+
+function post(body: Record<string, unknown>) {
+  return route.POST(new Request("http://127.0.0.1/api/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  }));
+}
+
+const userMessage = (id: string, text = "hello") => ({ id, role: "user", parts: [{ type: "text", text }] });
+const assistantMessage = (id: string, text: string) => ({ id, role: "assistant", parts: [{ type: "text", text }] });
+
+test("a first send that the route refuses leaves no chat row", async () => {
+  const cases: Array<[string, Record<string, unknown>, number]> = [
+    ["stale", { trigger: "submit-message", messages: [assistantMessage("rf-a1", "an answer nobody saved"), userMessage("rf-u1")] }, 409],
+    ["no-prompt", { trigger: "submit-message", messages: [assistantMessage("rf-a2", "only an answer")] }, 400],
+    ["regenerate", { trigger: "regenerate-message", messages: [userMessage("rf-u3")] }, 404],
+    ["bad-edit", { trigger: "submit-message", editMessageId: "rf-missing", messages: [userMessage("rf-u4")] }, 400],
+    ["unknown-connection", { messages: [userMessage("rf-u5")], modelChoice: { connectionId: "conn-missing", model: "mock", effort: "low" } }, 404],
+    ["too-long", { messages: [userMessage("rf-u6", "a".repeat(50_001))] }, 413],
+  ];
+  for (const [name, body, status] of cases) {
+    const chatId = `c-refused-${name}`;
+    const response = await post({ id: chatId, ...body });
+    await response.text();
+    assert.equal(response.status, status, name);
+    assert.equal(messages.getChatForUser(chatId, USER_ID), null, `${name} left a chat row`);
+  }
+});
+
+test("a reply discarded mid-stream saves nothing and keeps the prompt", { timeout: 10_000 }, async (t) => {
+  const chatId = "c-discarded";
+  const response = await openAnthropic(chatId, [], "[stopped-fallback] hello");
+  let discarded: Promise<void> | undefined;
+  const [live] = await interruptAnthropic(chatId, response, () => {
+    discarded = discardReplyRun(chatId);
+  }, t.signal);
+  await discarded;
+  await Promise.allSettled(afterTasks);
+  assert.equal(live.at(-1)?.type, "abort");
+  assert.equal(savedReply(chatId), undefined, "the discarded reply was saved");
+  assert.deepEqual(messages.listMessages(chatId).map(({ role }) => role), ["user"]);
+});
+
+test("a send to another user's chat answers 404 and writes nothing", async () => {
+  const db = getDb();
+  const other = "u-route-other";
+  db.$client.exec("DROP TRIGGER IF EXISTS user_single_row");
+  db.insert(schema.user).values({ id: other, name: "Other", email: "other@orbit.local", emailVerified: false, createdAt: new Date(), updatedAt: new Date() }).run();
+  db.insert(schema.chats).values({ id: "c-theirs", userId: other, title: "Theirs", createdAt: new Date(3_000), updatedAt: new Date(3_000) }).run();
+  const response = await post({ id: "c-theirs", trigger: "submit-message", messages: [userMessage("theirs-u1")] });
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "Not found" });
+  assert.deepEqual(messages.listMessages("c-theirs"), []);
+  assert.equal(findReplyRun("c-theirs", other), null);
+  assert.deepEqual(db.$client.prepare("select user_id as userId, title, updated_at as updatedAt from chats where id = 'c-theirs'").get(), { userId: other, title: "Theirs", updatedAt: 3_000 });
 });
