@@ -39,17 +39,31 @@ const workers = values.workers !== undefined
   : parseWorkers(process.env.ORBIT_TEST_WORKERS, "ORBIT_TEST_WORKERS");
 const effectiveWorkers = workers ?? Math.max(availableParallelism() - 1, 1);
 
-const globs = ["src/**/*.test.ts", "src/**/*.test.tsx"];
 const seed = process.env.ORBIT_TEST_SEED ?? (values.shuffle ? String(randomInt(2 ** 32)) : undefined);
-let files;
+if (seed !== undefined && !/^\d{1,10}$/.test(seed)) throw new Error("ORBIT_TEST_SEED must be a decimal number");
+const found = ["src/**/*.test.ts", "src/**/*.test.tsx"].flatMap((pattern) => globSync(pattern)).sort();
+if (found.length === 0) throw new Error("No Orbit test files were found");
+
+// node:test starts files in array order, so the listed slow files start first and the rest
+// follow, sorted or shuffled by the seed. The list's own comment says how to refresh it.
+const slowList = "scripts/slow-test-files.txt";
+const slowFiles = readFileSync(slowList, "utf8")
+  .split("\n")
+  .map((line) => line.trim())
+  .filter((line) => line !== "" && !line.startsWith("#"));
+slowFiles.forEach((file, index) => {
+  if (!found.includes(file)) throw new Error(`${slowList} lists ${file}, which is not a test file. Fix or remove that line.`);
+  if (slowFiles.indexOf(file) !== index) throw new Error(`${slowList} lists ${file} twice`);
+});
+let rest = found.filter((file) => !slowFiles.includes(file));
 if (seed !== undefined) {
-  if (!/^\d{1,10}$/.test(seed)) throw new Error("ORBIT_TEST_SEED must be a decimal number");
-  files = globs
-    .flatMap((pattern) => globSync(pattern))
+  rest = rest
     .map((file) => ({ file, rank: createHash("sha256").update(seed).update("\0").update(file).digest("hex") }))
     .sort((a, b) => a.rank.localeCompare(b.rank))
     .map(({ file }) => file);
-  if (files.length === 0) throw new Error("No Orbit test files were found");
+}
+const files = [...slowFiles, ...rest];
+if (seed !== undefined) {
   const fileLabel = files.length === 1 ? "file" : "files";
   const workerLabel = effectiveWorkers === 1 ? "worker" : "workers";
   console.error(`Orbit test order seed: ${seed} (${files.length} ${fileLabel}, ${effectiveWorkers} ${workerLabel})`);
@@ -150,7 +164,7 @@ for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
 }
 
 const tests = run({
-  ...(files ? { files } : { globPatterns: globs }),
+  files,
   execArgv: ["--import", "tsx", "--import", fileURLToPath(new URL("./test-data-dir.mjs", import.meta.url))],
   isolation: "process",
   concurrency: workers ?? true,

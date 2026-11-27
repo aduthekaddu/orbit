@@ -1,0 +1,20 @@
+# Test files that npm test starts first, in this order, before every other test file.
+# CI stops the unit suite at 120 seconds, and a long file that starts late can run past
+# that, so the longest files start first and the short ones fill in behind them (#274).
+# The other files follow in sorted order, or shuffled by --shuffle or ORBIT_TEST_SEED.
+#
+# To refresh, time each test file alone where Docker and Ollama run, as they do in
+# scripts/ci/test-with-ollama.sh:
+#   node --import tsx --import ./scripts/test-data-dir.mjs --test <file>
+# List every file that takes more than about 5 seconds, longest first. A path that is not
+# a test file, or a path listed twice, stops npm test.
+src/lib/sandbox/run.test.ts
+src/lib/qa-harness.test.ts
+src/lib/chat-stream-redactor.test.ts
+src/app/api/route-body-limits.test.ts
+src/lib/test-runner.test.ts
+src/lib/db/lazy-open.test.ts
+src/lib/migrate-provider.test.ts
+src/lib/tools/search.test.ts
+src/lib/memory/embed.test.ts
+src/lib/secrets.test.ts
