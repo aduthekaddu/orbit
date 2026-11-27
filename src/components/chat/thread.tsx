@@ -18,6 +18,18 @@ const STARTERS = [
   { label: "Brainstorm", prompt: "Give me ten ideas for " },
 ];
 
+// turnAnchor="top" scrolls a prompt taller than `tallerThan` so only its last `visibleHeight` stays in view, and it
+// measures the whole user message. On touch that holds the 44px Copy and Edit row and its 6px gap under the bubble,
+// about 3.125em, so the touch clamp adds that to both defaults (10em and 6em): the same prompts clamp as with a mouse,
+// and the same part of the bubble stays in view instead of one cut line above the actions.
+const TOUCH_ANCHOR_CLAMP = { tallerThan: "13.125em", visibleHeight: "9.125em" };
+
+// assistant-ui reads the clamp once, when the viewport mounts. It writes no markup, so reading the pointer in a state
+// initializer keeps the server render and hydration the same.
+function anchorClamp() {
+  return typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches ? TOUCH_ANCHOR_CLAMP : undefined;
+}
+
 // The runtime loads saved messages in an effect after hydration, and its isLoading turns false once before that load
 // starts, so until the first message arrives the layout follows what the server saw: saved messages or none.
 type ThreadView = "empty" | "loading" | "messages";
@@ -30,6 +42,7 @@ export function Thread({ ready, focusMessageId, hasHistory }: { ready: boolean; 
   // refreshes the page, and assistant-ui would run the first-load scroll then. ChatPanel remounts per chat and ?m=.
   const [scrollToBottomOnLoad] = useState(hasHistory && !focusMessageId);
   const viewport = useRef<HTMLDivElement>(null);
+  const [clamp] = useState(anchorClamp);
   // The thread map puts its Prompts button here when the rail does not fit and the header is hidden.
   const [promptsSlot, setPromptsSlot] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -62,6 +75,7 @@ export function Thread({ ready, focusMessageId, hasHistory }: { ready: boolean; 
         <ThreadPrimitive.Viewport
           ref={viewport}
           turnAnchor="top"
+          topAnchorMessageClamp={clamp}
           scrollToBottomOnInitialize={scrollToBottomOnLoad}
           className="@container flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-8 scrollbar-thin"
         >
