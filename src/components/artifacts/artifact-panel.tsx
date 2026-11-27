@@ -14,6 +14,7 @@ import { useCopy } from "@/components/chat/use-copy";
 import { cn } from "@/lib/utils";
 import { ArtifactFrame } from "./artifact-frame";
 import { useArtifact } from "./use-artifact";
+import { useArtifactTheme } from "./use-artifact-theme";
 
 const WIDE_SCREEN = "(min-width: 1024px)";
 function subscribeWidth(callback: () => void) {
@@ -112,6 +113,8 @@ export function ArtifactPanel({ artifact, onClose, onFix }: { artifact: Artifact
   const { copied, failed, copy } = useCopy();
   const onError = useCallback((message: string) => setError(message), []);
   const title = useMemo(() => artifactTitle(artifact), [artifact]);
+  // A theme change rebuilds the document, which reloads the preview.
+  const theme = useArtifactTheme();
 
   useEffect(() => {
     let active = true;
@@ -123,7 +126,7 @@ export function ArtifactPanel({ artifact, onClose, onFix }: { artifact: Artifact
           code = transform(code, { transforms: ["jsx", "typescript"], jsxRuntime: "automatic", production: true }).code;
         }
         const { artifactDocument } = await import("@/lib/artifacts/document");
-        const document = artifactDocument(artifact.kind, code);
+        const document = artifactDocument(artifact.kind, code, theme);
         if (active) setPreview({ status: "ready", document });
       } catch (cause) {
         if (active) setPreview({ status: "error", message: cause instanceof Error ? cause.message : String(cause) });
@@ -131,7 +134,7 @@ export function ArtifactPanel({ artifact, onClose, onFix }: { artifact: Artifact
     }
     void prepare();
     return () => { active = false; };
-  }, [artifact]);
+  }, [artifact, theme]);
 
   const message = preview.status === "error" ? preview.message : error;
 
