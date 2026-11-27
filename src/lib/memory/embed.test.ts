@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import test, { after, before } from "node:test";
 import { getDb } from "../db";
+import { user } from "../db/schema";
+import { parseViewer } from "../policy";
 import * as embed from "./embed";
 import { startMockOllama } from "./ollama-harness";
 import * as store from "./store";
@@ -10,7 +12,10 @@ delete process.env.ORBIT_OLLAMA_URL;
 
 let mock: { url: string; stop: () => Promise<void> } | undefined;
 
+const viewer = parseViewer({ id: "memory-admin", role: "admin" });
+
 before(async () => {
+  getDb().insert(user).values({ ...viewer, name: "Memory admin", email: "memory-admin@orbit.test" }).run();
   mock = await startMockOllama();
 });
 
@@ -76,7 +81,7 @@ test("embed gives up after 5 seconds when Ollama accepts and never answers", asy
 
 test("a hung Ollama does not stall a second status check", async () => {
   const { embed, store } = modules();
-  const saved = store.saveMemory({ text: "Hangsearch token stays searchable", kind: "fact", source: "tool" });
+  const saved = store.saveMemory(viewer.id, { text: "Hangsearch token stays searchable", kind: "fact", source: "tool" });
   const server = http.createServer(() => {});
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
   const address = server.address();
@@ -84,17 +89,17 @@ test("a hung Ollama does not stall a second status check", async () => {
   process.env.ORBIT_OLLAMA_URL = `http://127.0.0.1:${port}`;
   const started = Date.now();
   try {
-    const [first, second] = await Promise.all([embed.memoryEmbeddings(), embed.memoryEmbeddings()]);
+    const [first, second] = await Promise.all([embed.memoryEmbeddings(viewer.id), embed.memoryEmbeddings(viewer.id)]);
     const elapsed = Date.now() - started;
     assert.equal(first.ok, false);
     assert.equal(second.ok, false);
     assert.ok(elapsed < 2_000, `elapsed ${elapsed}`);
     const again = Date.now();
-    const third = await embed.memoryEmbeddings();
+    const third = await embed.memoryEmbeddings(viewer.id);
     assert.equal(third.ok, false);
     assert.ok(Date.now() - again < 200, `cached ${Date.now() - again}`);
-    assert.equal(store.listMemories("Hangsearch").some((memory) => memory.id === saved.id), true);
-    assert.equal(store.getMemory(saved.id)?.embedded, false);
+    assert.equal(store.listMemories(viewer.id, "Hangsearch").some((memory) => memory.id === saved.id), true);
+    assert.equal(store.getMemory(viewer.id, saved.id)?.embedded, false);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -103,16 +108,16 @@ test("a hung Ollama does not stall a second status check", async () => {
 test("embedPending fills vectors after Ollama comes back", async () => {
   const { embed, store, mock } = modules();
   process.env.ORBIT_OLLAMA_URL = "http://127.0.0.1:9";
-  const saved = store.saveMemory({ text: "Pending embedtoken until Ollama returns", kind: "fact", source: "tool" });
-  assert.equal(store.getMemory(saved.id)?.embedded, false);
-  const failed = await embed.embedPending();
+  const saved = store.saveMemory(viewer.id, { text: "Pending embedtoken until Ollama returns", kind: "fact", source: "tool" });
+  assert.equal(store.getMemory(viewer.id, saved.id)?.embedded, false);
+  const failed = await embed.embedPending(viewer.id);
   assert.equal(failed.ok, false);
-  assert.equal(store.getMemory(saved.id)?.embedded, false);
+  assert.equal(store.getMemory(viewer.id, saved.id)?.embedded, false);
   process.env.ORBIT_OLLAMA_URL = mock.url;
-  const filled = await embed.embedPending();
+  const filled = await embed.embedPending(viewer.id);
   assert.equal(filled.ok, true);
   if (filled.ok) assert.ok(filled.embedded >= 1);
-  assert.equal(store.getMemory(saved.id)?.embedded, true);
+  assert.equal(store.getMemory(viewer.id, saved.id)?.embedded, true);
 });
 
 test("questions reach Ollama as search_query and saved memories as search_document", async () => {
@@ -120,12 +125,28 @@ test("questions reach Ollama as search_query and saved memories as search_docume
   process.env.ORBIT_OLLAMA_URL = mock.url;
   const question = "Prefixcheck where do these notes live?";
   const memoryText = "Prefixcheck notes live in a shoebox";
-  store.saveMemory({ text: memoryText, kind: "fact", source: "tool" });
+  store.saveMemory(viewer.id, { text: memoryText, kind: "fact", source: "tool" });
   assert.equal((await embed.embedQuery(question)).ok, true);
-  assert.equal((await embed.embedPending()).ok, true);
+  assert.equal((await embed.embedPending(viewer.id)).ok, true);
   const received = (await (await fetch(`${mock.url}/qa/received`)).json()) as string[];
   assert.ok(received.includes(`search_query: ${question}`), "the question goes out as search_query");
   assert.ok(received.includes(`search_document: ${memoryText}`), "the saved memory goes out as search_document");
   assert.equal(received.includes(question), false);
   assert.equal(received.includes(memoryText), false);
+});
+
+test("embedding pending memories sends only that account's unembedded text", async () => {
+  const { mock } = modules();
+  process.env.ORBIT_OLLAMA_URL = mock.url;
+  const member = parseViewer({ id: "memory-member", role: "member" });
+  getDb().insert(user).values({ ...member, name: "Memory member", email: "memory-member@orbit.test" }).run();
+  const a = store.saveMemory(viewer.id, { text: "Admin embedding canary", kind: "fact", source: "tool" });
+  const b = store.saveMemory(member.id, { text: "Member embedding canary", kind: "fact", source: "tool" });
+
+  assert.deepEqual(await embed.embedPending(member.id), { ok: true, embedded: 1 });
+  assert.equal(store.getMemory(viewer.id, a.id)?.embedded, false);
+  assert.equal(store.getMemory(member.id, b.id)?.embedded, true);
+  const received: string[] = await (await fetch(`${mock.url}/qa/received`)).json();
+  assert.ok(received.includes(`search_document: ${b.text}`));
+  assert.ok(!received.includes(`search_document: ${a.text}`));
 });

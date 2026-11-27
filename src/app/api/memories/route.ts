@@ -1,5 +1,5 @@
 import { listMemories, memoryJson } from "@/lib/memory/store";
-import { getSession, unauthorized } from "@/lib/session";
+import { sessionFrom, unauthorized } from "@/lib/session";
 import { LIMITS, r } from "@/lib/route-schema";
 
 export const runtime = "nodejs";
@@ -10,11 +10,11 @@ const querySchema = r.object({
 });
 
 export async function GET(request: Request) {
-  const session = await getSession();
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const parsed = querySchema.safeParse({
     q: new URL(request.url).searchParams.get("q") ?? "",
   });
   if (!parsed.success) return Response.json({ error: "Invalid search" }, { status: 400 });
-  return Response.json({ memories: listMemories(parsed.data.q).map(memoryJson) });
+  return Response.json({ memories: listMemories(session.user.id, parsed.data.q).map(memoryJson) });
 }

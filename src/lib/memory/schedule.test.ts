@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { getDb } from "../db";
+import { user, userPreferences } from "../db/schema";
+import { parseViewer } from "../policy";
 import * as schedule from "./schedule";
 
 delete process.env.ORBIT_OLLAMA_URL;
@@ -126,23 +128,39 @@ test("local midnight stays on that calendar date when the clocks change", () => 
   }
 });
 
-test("maybeDream reads tonight's row", () => {
-  const { maybeDream, localStamp } = requireSchedule();
+test("only accounts with memory on and an available lease are due at the saved hour", () => {
+  const { dueDreamViewers, localStamp, memoryEnabledViewers } = requireSchedule();
+  const db = getDb();
+  const admin = parseViewer({ id: "dream-admin", role: "admin" });
+  const member = parseViewer({ id: "dream-member", role: "member" });
+  db.insert(user).values([
+    { ...admin, name: "Admin", email: "dream-admin@orbit.test" },
+    { ...member, name: "Member", email: "dream-member@orbit.test" },
+  ]).run();
+  db.insert(userPreferences).values({ userId: member.id, memory: "off", updatedAt: new Date() }).run();
+  db.$client.prepare("UPDATE instance_settings SET dream_hour = 5 WHERE id = 1").run();
+
   const now = new Date();
-  now.setHours(3, 5, 0, 0);
-  const early = new Date();
-  early.setHours(1, 5, 0, 0);
-  assert.equal(maybeDream(early), false);
-  assert.equal(maybeDream(now), true);
-  const date = localStamp(now, Intl.DateTimeFormat().resolvedOptions().timeZone).date;
-  getDb().$client
+  now.setHours(5, 5, 0, 0);
+  const early = new Date(now);
+  early.setHours(4);
+  assert.deepEqual(memoryEnabledViewers(), [admin]);
+  assert.deepEqual(dueDreamViewers(early), []);
+  assert.deepEqual(dueDreamViewers(now), [admin]);
+
+  const { date } = localStamp(now, Intl.DateTimeFormat().resolvedOptions().timeZone);
+  db.$client
     .prepare(
       `INSERT INTO memory_runs (
-         date, state, started_at, finished_at, owner, lease_until, chat_ids, done_chat_ids, retry_chat_ids, added, merged, error
-       ) VALUES (?, 'done', ?, ?, 'worker-a', ?, '[]', '[]', '[]', 0, 0, NULL)`,
+         user_id, date, state, started_at, owner, lease_until, chat_ids, done_chat_ids, retry_chat_ids, added, merged
+       ) VALUES (?, ?, 'running', ?, 'worker-a', ?, '[]', '[]', '[]', 0, 0)`,
     )
-    .run(date, now.getTime() - 1_000, now.getTime(), now.getTime());
-  assert.equal(maybeDream(now), false);
+    .run(admin.id, date, now.getTime() - 1_000, now.getTime() + 1_000);
+  assert.deepEqual(dueDreamViewers(now), []);
+  assert.deepEqual(dueDreamViewers(new Date(now.getTime() + 2_000)), [admin]);
+
+  db.update(userPreferences).set({ memory: "on" }).run();
+  assert.deepEqual(dueDreamViewers(now), [member]);
 });
 
 test("the scheduler stays off during a build", () => {

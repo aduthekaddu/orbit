@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
+import type { UserId } from "../policy";
 import type { Redactor } from "../chat-errors";
 import { cleanMemoryText, deleteMemory, MemoryRejected, saveMemory, type MemoryKind } from "../memory/store";
 
@@ -12,6 +13,7 @@ function isForeignKey(error: unknown): boolean {
 }
 
 export function rememberFact(
+  userId: UserId,
   source: MemorySource,
   input: { text: string; kind: MemoryKind },
   redact?: Redactor,
@@ -36,7 +38,7 @@ export function rememberFact(
     if (seen.has(key)) continue;
     seen.add(key);
     try {
-      const memory = saveMemory({
+      const memory = saveMemory(userId, {
         text,
         kind: input.kind,
         source: "tool",
@@ -52,29 +54,29 @@ export function rememberFact(
   return { error: "Could not save memory" };
 }
 
-export function createRememberTool(source: MemorySource = { chatId: null, messageId: null }, redact?: Redactor) {
+export function createRememberTool(userId: UserId, source: MemorySource = { chatId: null, messageId: null }, redact?: Redactor) {
   return tool({
     description: "Save a lasting fact or preference the user stated, or something the user asked you to remember.",
     inputSchema: z.object({
       text: z.string().trim().min(1).max(500),
       kind: kindSchema.default("fact"),
     }),
-    execute: ({ text, kind }) => rememberFact(source, { text, kind }, redact),
+    execute: ({ text, kind }) => rememberFact(userId, source, { text, kind }, redact),
   });
 }
 
-export function forgetMemory(id: string): { id: string } | { error: string } {
+export function forgetMemory(userId: UserId, id: string): { id: string } | { error: string } {
   const trimmed = id.trim();
   if (!trimmed) return { error: "Memory id is required" };
-  return deleteMemory(trimmed) ? { id: trimmed } : { error: "No memory with that id" };
+  return deleteMemory(userId, trimmed) ? { id: trimmed } : { error: "No memory with that id" };
 }
 
 export const forgetIdSchema = z.object({ id: z.string().trim().min(1).max(100) });
 
-export function createForgetTool() {
+export function createForgetTool(userId: UserId) {
   return tool({
     description: "Delete one saved memory. The id has to be one the user gave you. Do not invent an id.",
     inputSchema: forgetIdSchema,
-    execute: ({ id }) => forgetMemory(id),
+    execute: ({ id }) => forgetMemory(userId, id),
   });
 }

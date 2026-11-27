@@ -1,3 +1,4 @@
+import { parseViewer } from "../policy";
 import assert from "node:assert/strict";
 import http from "node:http";
 import test, { type TestContext } from "node:test";
@@ -226,7 +227,11 @@ test("web_search masks stored credentials in titles, URLs, snippets, and queries
   });
   const settings = { searxngUrl: local.url, tavilyApiKey: tavilyKey, githubToken, githubMcpUrl: "" };
   const { Redactor } = await import("../chat-errors");
-  const tools = toolsFor(settings, undefined, undefined, new Redactor(settings, { apiKey: providerKey, baseUrl: "http://127.0.0.1:9/v1" }));
+  const viewer = parseViewer({ id: "search-admin", role: "admin" });
+  const tools = toolsFor({
+    instance: { ...settings, sandbox: "on" },
+    user: { id: viewer.id, memory: true, github: settings },
+  }, undefined, undefined, new Redactor(settings, { apiKey: providerKey, baseUrl: "http://127.0.0.1:9/v1" }));
   const execute = tools.web_search?.execute;
   assert.ok(execute);
   const output = (await execute({ query: `lookup ${providerKey}` }, { toolCallId: "s1", messages: [], context: {} })) as {

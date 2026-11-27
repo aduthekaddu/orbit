@@ -1,4 +1,5 @@
 import type { ModelMessage } from "ai";
+import type { UserId } from "../policy";
 import { embedQuery } from "./embed";
 import { getMemory, markUsed, memoryCount, textMatchIds, vectorMatchIds, type Memory } from "./store";
 
@@ -65,21 +66,21 @@ export function fuseRanks(textIds: readonly string[], vectorIds: readonly string
     .map(({ id, score, via }) => ({ id, score, via }));
 }
 
-export async function recall(query: string, k: number): Promise<Recall[]> {
+export async function recall(userId: UserId, query: string, k: number): Promise<Recall[]> {
   const trimmed = query.trim();
-  if (!trimmed || k < 1 || memoryCount() === 0) return [];
-  const textIds = textMatchIds(trimmed, TEXT_LIMIT);
+  if (!trimmed || k < 1 || memoryCount(userId) === 0) return [];
+  const textIds = textMatchIds(userId, trimmed, TEXT_LIMIT);
   let vectorIds: string[] = [];
   const embedded = await embedQuery(trimmed);
-  if (embedded.ok && embedded.vectors[0]) vectorIds = vectorMatchIds(embedded.vectors[0], VECTOR_LIMIT);
+  if (embedded.ok && embedded.vectors[0]) vectorIds = vectorMatchIds(userId, embedded.vectors[0], VECTOR_LIMIT);
   const fused = fuseRanks(textIds, vectorIds, k);
   const usedAt = new Date();
   const hits: Recall[] = [];
   for (const row of fused) {
-    const memory = getMemory(row.id);
+    const memory = getMemory(userId, row.id);
     if (!memory) continue;
     hits.push({ memory, score: row.score, via: row.via });
   }
-  markUsed(hits.map((hit) => hit.memory.id), usedAt);
+  markUsed(userId, hits.map((hit) => hit.memory.id), usedAt);
   return hits.map((hit) => ({ ...hit, memory: { ...hit.memory, lastUsedAt: usedAt } }));
 }

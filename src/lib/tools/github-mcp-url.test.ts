@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
+import { parseViewer } from "../policy";
 import { checkGithub, githubMcpTarget } from "./github";
 
+const viewer = parseViewer({ id: "github-admin", role: "admin" });
 const production: NodeJS.ProcessEnv = { NODE_ENV: "test" };
 const fixture: NodeJS.ProcessEnv = { NODE_ENV: "test", ORBIT_GITHUB_MCP_FIXTURE: "1" };
 
@@ -37,7 +39,7 @@ test("an arbitrary MCP URL does not receive the GitHub token", { timeout: 20_000
   if (!address || typeof address === "string") throw new Error("The fixture server did not bind a port");
   const token = "secret-token-value";
   try {
-    const result = await checkGithub({ apiKey: "", tavilyApiKey: "", githubToken: token, githubMcpUrl: `http://127.0.0.1:${address.port}/mcp` });
+    const result = await checkGithub(viewer.id, { githubToken: token, githubTokenReadable: true, githubMcpUrl: `http://127.0.0.1:${address.port}/mcp` });
     assert.equal(hits.length, 0);
     assert.deepEqual(result, { ok: false, error: "GitHub MCP URL is not allowed." });
     assert.equal(JSON.stringify(result).includes(token), false);

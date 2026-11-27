@@ -95,7 +95,7 @@ export function MemoryList({
   dreamStatus,
 }: {
   initial: MemoryItem[];
-  embeddings: { ok: true } | { ok: false; error: string };
+  embeddings: { ok: true } | { ok: false; error: string } | null;
   dreamStatus: DreamStatus;
 }) {
   const router = useRouter();
@@ -196,7 +196,9 @@ export function MemoryList({
           {inBrowser ? dreamLine(dreamStatus) : "\u00a0"}
         </p>
       )}
-      <p className={embeddings.ok ? "mb-4 text-sm text-positive" : "mb-4 text-sm text-destructive"}>{embeddings.ok ? "Embeddings on" : embeddings.error}</p>
+      {embeddings && (
+        <p className={embeddings.ok ? "mb-4 text-sm text-positive" : "mb-4 text-sm text-destructive"}>{embeddings.ok ? "Embeddings on" : embeddings.error}</p>
+      )}
       <Input
         aria-label="Search"
         placeholder="Search"

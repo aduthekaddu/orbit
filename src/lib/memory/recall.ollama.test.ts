@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test, { after, before, type TestContext } from "node:test";
 import { getDb } from "../db";
+import { user } from "../db/schema";
+import { parseViewer } from "../policy";
 import * as embed from "./embed";
 import { FLY_PAIR, MAIN, type LabeledSet } from "./ollama-pairs";
 import * as store from "./store";
@@ -8,16 +10,19 @@ import * as store from "./store";
 let unavailable = "";
 const memoryIds = new Map<string, string>();
 
+const viewer = parseViewer({ id: "memory-admin", role: "admin" });
+
 before(async () => {
   const probe = await embed.embed(["orbit"], "query");
   if (!probe.ok) {
     unavailable = `real Ollama with ${embed.EMBED_MODEL} is not available: ${probe.error}`;
     return;
   }
+  getDb().insert(user).values({ ...viewer, name: "Memory admin", email: "memory-admin@orbit.test" }).run();
   for (const topic of MAIN.topics) {
-    for (const text of topic.memories) memoryIds.set(text, store.saveMemory({ text, kind: "fact", source: "tool" }).id);
+    for (const text of topic.memories) memoryIds.set(text, store.saveMemory(viewer.id, { text, kind: "fact", source: "tool" }).id);
   }
-  const filled = await embed.embedPending();
+  const filled = await embed.embedPending(viewer.id);
   assert.equal(filled.ok, true, filled.ok ? undefined : `every labeled memory must embed: ${filled.error}`);
 });
 
@@ -33,7 +38,7 @@ async function nearIds(question: string): Promise<string[]> {
   const embedded = await embed.embedQuery(question, RECALL_EMBED_TIMEOUT_MS);
   assert.equal(embedded.ok, true, embedded.ok ? undefined : `embed "${question}": ${embedded.error}`);
   if (!embedded.ok || !embedded.vectors[0]) return [];
-  return store.vectorMatchIds(embedded.vectors[0], 50);
+  return store.vectorMatchIds(viewer.id, embedded.vectors[0], 50);
 }
 
 function idsOf(texts: string[]): string[] {

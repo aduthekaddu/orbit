@@ -1,13 +1,13 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { Redactor } from "../chat-errors";
+import type { Redactor } from "../chat-errors";
 import { connectionApiKey } from "../connections";
 import { getDb } from "../db";
-import { user } from "../db/schema";
-import { chatExists } from "../messages";
-import { resolveChoice } from "../model-choice";
+import { getChatForUser } from "../messages";
+import { NOTHING_PINNED, resolveChoice } from "../model-choice";
+import type { UserId, Viewer } from "../policy";
 import { languageModelFor } from "../provider";
-import { requestRedactor } from "../settings";
+import { requestRedactor } from "../request-redactor";
 import { embed, embedPending } from "./embed";
 import { parseRun, storedRow, transition, unfinishedChatIds, type MemoryRun, type RunEvent } from "./run-state";
 import { localMidnight, localStamp, systemTimeZone } from "./schedule";
@@ -35,48 +35,48 @@ const RUN_COLUMNS = `date, state, started_at AS startedAt, finished_at AS finish
 
 const WRITE_RUN = `
 INSERT INTO memory_runs (
-  date, state, started_at, finished_at, owner, lease_until,
+  user_id, date, state, started_at, finished_at, owner, lease_until,
   chat_ids, done_chat_ids, retry_chat_ids, added, merged, error
 ) VALUES (
-  @date, @state, @startedAt, @finishedAt, @owner, @leaseUntil,
+  @userId, @date, @state, @startedAt, @finishedAt, @owner, @leaseUntil,
   @chatIds, @doneChatIds, @retryChatIds, @added, @merged, @error
 )
-ON CONFLICT(date) DO UPDATE SET
+ON CONFLICT(user_id, date) DO UPDATE SET
   state = excluded.state, started_at = excluded.started_at, finished_at = excluded.finished_at,
   owner = excluded.owner, lease_until = excluded.lease_until, chat_ids = excluded.chat_ids,
   done_chat_ids = excluded.done_chat_ids, retry_chat_ids = excluded.retry_chat_ids,
   added = excluded.added, merged = excluded.merged, error = excluded.error
 `;
 
-function readRun(date: string): MemoryRun | null {
-  const row = getDb().$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE date = ?`).get(date);
+function readRun(userId: UserId, date: string): MemoryRun | null {
+  const row = getDb().$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE user_id = ? AND date = ?`).get(userId, date);
   return row ? parseRun(row) : null;
 }
 
 // The only writer of memory_runs. The immediate transaction takes the write lock before the read,
 // so two processes cannot both apply an event to the same row.
-function advance(date: string, event: RunEvent): MemoryRun | null {
+function advance(userId: UserId, date: string, event: RunEvent): MemoryRun | null {
   const client = getDb().$client;
   return client
     .transaction(() => {
-      const next = transition(readRun(date), event);
-      if (next) client.prepare(WRITE_RUN).run(storedRow(next));
+      const next = transition(readRun(userId, date), event);
+      if (next) client.prepare(WRITE_RUN).run({ userId, ...storedRow(next) });
       return next;
     })
     .immediate();
 }
 
-export function getRun(date: string): MemoryRun | null {
-  return readRun(date);
+export function getRun(userId: UserId, date: string): MemoryRun | null {
+  return readRun(userId, date);
 }
 
-export function latestRun(): MemoryRun | null {
-  const row = getDb().$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs ORDER BY date DESC LIMIT 1`).get();
+export function latestRun(userId: UserId): MemoryRun | null {
+  const row = getDb().$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE user_id = ? ORDER BY date DESC LIMIT 1`).get(userId);
   return row ? parseRun(row) : null;
 }
 
-export function lastDoneRun(): MemoryRun | null {
-  const row = getDb().$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE state = 'done' ORDER BY date DESC LIMIT 1`).get();
+export function lastDoneRun(userId: UserId): MemoryRun | null {
+  const row = getDb().$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE user_id = ? AND state = 'done' ORDER BY date DESC LIMIT 1`).get(userId);
   return row ? parseRun(row) : null;
 }
 
@@ -105,24 +105,24 @@ export function dreamStatus(latest: MemoryRun | null, lastDone: MemoryRun | null
   return { state: "failed", finishedAt: latest.finishedAt.toISOString(), error: latest.error };
 }
 
-export function tryClaim(input: { date: string; owner: string; now: Date; chatIds: string[] }): boolean {
-  return advance(input.date, { type: "claim", date: input.date, owner: input.owner, at: input.now, chatIds: input.chatIds }) !== null;
+export function tryClaim(userId: UserId, input: { date: string; owner: string; now: Date; chatIds: string[] }): boolean {
+  return advance(userId, input.date, { type: "claim", date: input.date, owner: input.owner, at: input.now, chatIds: input.chatIds }) !== null;
 }
 
-function previousRun(date: string): MemoryRun | null {
-  const row = getDb().$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE date < ? ORDER BY date DESC LIMIT 1`).get(date);
+function previousRun(userId: UserId, date: string): MemoryRun | null {
+  const row = getDb().$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE user_id = ? AND date < ? ORDER BY date DESC LIMIT 1`).get(userId, date);
   return row ? parseRun(row) : null;
 }
 
-function latestDone(date: string): MemoryRun | null {
+function latestDone(userId: UserId, date: string): MemoryRun | null {
   const row = getDb().$client
-    .prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE date < ? AND state = 'done' ORDER BY date DESC LIMIT 1`)
-    .get(date);
+    .prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE user_id = ? AND date < ? AND state = 'done' ORDER BY date DESC LIMIT 1`)
+    .get(userId, date);
   return row ? parseRun(row) : null;
 }
 
-function windowStart(date: string): number {
-  const done = latestDone(date);
+function windowStart(userId: UserId, date: string): number {
+  const done = latestDone(userId, date);
   if (done) return done.startedAt.getTime();
   return localMidnight(date, systemTimeZone());
 }
@@ -130,25 +130,29 @@ function windowStart(date: string): number {
 // Where a retried chat's unread rows begin: the window start of the night it first failed. Every
 // run since that night holds the chat in retryChatIds and reached done, so the oldest such row
 // carries the start, which the retried night's own window start no longer reaches back to.
-function retryWindowStart(date: string, chatId: string): number | null {
+function retryWindowStart(userId: UserId, date: string, chatId: string): number | null {
   let first: MemoryRun | null = null;
-  for (let run = previousRun(date); run?.retryChatIds.includes(chatId); run = previousRun(run.date)) {
+  for (let run = previousRun(userId, date); run?.retryChatIds.includes(chatId); run = previousRun(userId, run.date)) {
     first = run;
   }
-  return first ? windowStart(first.date) : null;
+  return first ? windowStart(userId, first.date) : null;
 }
 
-function changedChatIds(date: string, end: number): string[] {
-  const start = windowStart(date);
+function changedChatIds(userId: UserId, date: string, end: number): string[] {
+  const start = windowStart(userId, date);
   const rows = getDb().$client
-    .prepare("SELECT DISTINCT chat_id AS id FROM messages WHERE created_at > ? AND created_at <= ?")
-    .all(start, end) as { id: string }[];
-  const retry = previousRun(date)?.retryChatIds.filter(chatExists) ?? [];
+    .prepare(
+      `SELECT DISTINCT messages.chat_id AS id
+       FROM messages JOIN chats ON chats.id = messages.chat_id AND chats.user_id = ?
+       WHERE messages.created_at > ? AND messages.created_at <= ?`,
+    )
+    .all(userId, start, end) as { id: string }[];
+  const retry = previousRun(userId, date)?.retryChatIds.filter((chatId) => getChatForUser(chatId, userId) !== null) ?? [];
   return [...new Set([...rows.map((row) => row.id), ...retry])].sort();
 }
 
-function renew(date: string, owner: string): boolean {
-  return advance(date, { type: "renew", owner, at: new Date() }) !== null;
+function renew(userId: UserId, date: string, owner: string): boolean {
+  return advance(userId, date, { type: "renew", owner, at: new Date() }) !== null;
 }
 
 function safeError(error: unknown): string {
@@ -156,8 +160,8 @@ function safeError(error: unknown): string {
   return "Dream failed";
 }
 
-function failOwned(date: string, owner: string, message: string) {
-  advance(date, { type: "fail", owner, at: new Date(), error: message });
+function failOwned(userId: UserId, date: string, owner: string, message: string) {
+  advance(userId, date, { type: "fail", owner, at: new Date(), error: message });
 }
 
 type ChatMessage = { id: string; role: string; parts: string; createdAt: number };
@@ -167,18 +171,20 @@ const PAGE = 100;
 // The window in full, oldest first. Pages on (createdAt, id), because a cursor on createdAt alone
 // skips rows that share the last row's timestamp. A null id keeps the first page inside the
 // window's exclusive start.
-function loadWindow(chatId: string, start: number, end: number): ChatMessage[] {
+function loadWindow(userId: UserId, chatId: string, start: number, end: number): ChatMessage[] {
   const page = getDb().$client.prepare(
-    `SELECT id, role, parts, created_at AS createdAt FROM messages
-     WHERE chat_id = ? AND created_at > ? AND created_at <= ? AND role IN ('user', 'assistant')
-       AND (created_at > ? OR (created_at = ? AND id > ?))
-     ORDER BY created_at, id LIMIT ?`,
+    `SELECT messages.id, messages.role, messages.parts, messages.created_at AS createdAt
+     FROM messages JOIN chats ON chats.id = messages.chat_id AND chats.user_id = ?
+     WHERE messages.chat_id = ? AND messages.created_at > ? AND messages.created_at <= ?
+       AND messages.role IN ('user', 'assistant')
+       AND (messages.created_at > ? OR (messages.created_at = ? AND messages.id > ?))
+     ORDER BY messages.created_at, messages.id LIMIT ?`,
   );
   const all: ChatMessage[] = [];
   let cursorAt = start;
   let cursorId: string | null = null;
   for (;;) {
-    const rows = page.all(chatId, start, end, cursorAt, cursorAt, cursorId, PAGE) as ChatMessage[];
+    const rows = page.all(userId, chatId, start, end, cursorAt, cursorAt, cursorId, PAGE) as ChatMessage[];
     all.push(...rows);
     if (rows.length < PAGE) return all;
     const last = rows[rows.length - 1];
@@ -213,41 +219,46 @@ function promptFor(messages: ChatMessage[]): string {
   return `${tag}Extract lasting facts and preferences the user stated. Ignore questions, tasks, and guesses. Return json {"candidates":[{"kind":"fact","text":"...","sourceMessageId":"the message id"}]}. kind is fact or preference. At most 10 items.\n${lines.join("\n")}`;
 }
 
-function nearest(vector: number[]): { id: string; similarity: number } | null {
+function nearest(userId: UserId, vector: number[]): { id: string; similarity: number } | null {
   const blob = Buffer.from(new Float32Array(vector).buffer);
   const row = getDb().$client
     .prepare(
       `SELECT memories.id AS id, vec_distance_cosine(memories_vec.embedding, ?) AS distance
        FROM memories_vec
        JOIN memories ON memories.rowid = memories_vec.rowid
+       WHERE memories.user_id = ?
        ORDER BY distance
        LIMIT 1`,
     )
-    .get(blob) as { id: string; distance: number } | undefined;
+    .get(blob, userId) as { id: string; distance: number } | undefined;
   if (!row || !Number.isFinite(row.distance)) return null;
   return { id: row.id, similarity: 1 - row.distance };
 }
 
-function rememberVector(id: string, text: string, vector: number[]) {
-  const located = getDb().$client.prepare("SELECT rowid AS rowid FROM memories WHERE id = ?").get(id) as { rowid: number } | undefined;
+function rememberVector(userId: UserId, id: string, text: string, vector: number[]) {
+  const located = getDb().$client.prepare("SELECT rowid AS rowid FROM memories WHERE user_id = ? AND id = ?").get(userId, id) as { rowid: number } | undefined;
   if (!located) return;
   writeVectors([{ rowid: located.rowid, text, vector }]);
 }
 
 type Prepared = Candidate & { vector: number[]; createdAt: number };
 
-function sourceChat(messageId: string): string | null {
-  const row = getDb().$client.prepare("SELECT chat_id AS chatId FROM messages WHERE id = ?").get(messageId) as { chatId: string } | undefined;
+function sourceChat(userId: UserId, messageId: string): string | null {
+  const row = getDb().$client.prepare(
+    `SELECT messages.chat_id AS chatId
+     FROM messages JOIN chats ON chats.id = messages.chat_id AND chats.user_id = ?
+     WHERE messages.id = ?`,
+  ).get(userId, messageId) as { chatId: string } | undefined;
   return row?.chatId ?? null;
 }
 
-function applyCandidatesWithSource(chatId: string, prepared: Prepared[]): { added: number; merged: number } {
+function applyCandidatesWithSource(userId: UserId, chatId: string, prepared: Prepared[]): { added: number; merged: number } {
   let added = 0;
   let merged = 0;
   const client = getDb().$client;
   for (const candidate of prepared) {
     // The chat or the message was deleted while the model read it, so the fact has no chat to come from.
-    if (sourceChat(candidate.sourceMessageId) !== chatId) continue;
+    if (sourceChat(userId, candidate.sourceMessageId) !== chatId) continue;
     let text: string;
     try {
       text = cleanMemoryText(candidate.text);
@@ -255,33 +266,34 @@ function applyCandidatesWithSource(chatId: string, prepared: Prepared[]): { adde
       if (error instanceof MemoryRejected) continue;
       throw error;
     }
-    const hit = nearest(candidate.vector);
+    const hit = nearest(userId, candidate.vector);
     if (hit && hit.similarity >= MERGE_SIMILARITY) {
-      const memory = getMemory(hit.id);
+      const memory = getMemory(userId, hit.id);
       merged += 1;
       if (memory && candidate.createdAt > memory.createdAt.getTime() && text.length > memory.text.length) {
         try {
-          const updated = updateMemory(memory.id, { text, kind: candidate.kind, source: "dream" });
-          if (updated) rememberVector(updated.id, updated.text, candidate.vector);
+          const updated = updateMemory(userId, memory.id, { text, kind: candidate.kind, source: "dream" });
+          if (updated) rememberVector(userId, updated.id, updated.text, candidate.vector);
         } catch (error) {
           if (!(error instanceof MemoryRejected)) throw error;
         }
       }
       continue;
     }
-    const prior = client.prepare("SELECT id FROM memories WHERE text_norm = ?").get(text.toLowerCase()) as { id: string } | undefined;
-    const saved = saveMemory({ text, kind: candidate.kind, source: "dream", sourceChatId: chatId, sourceMessageId: candidate.sourceMessageId });
+    const prior = client.prepare("SELECT id FROM memories WHERE user_id = ? AND text_norm = ?").get(userId, text.toLowerCase()) as { id: string } | undefined;
+    const saved = saveMemory(userId, { text, kind: candidate.kind, source: "dream", sourceChatId: chatId, sourceMessageId: candidate.sourceMessageId });
     if (prior) {
       merged += 1;
       continue;
     }
     added += 1;
-    rememberVector(saved.id, saved.text, candidate.vector);
+    rememberVector(userId, saved.id, saved.text, candidate.vector);
   }
   return { added, merged };
 }
 
 function finishChat(
+  userId: UserId,
   date: string,
   owner: string,
   chatId: string,
@@ -290,46 +302,38 @@ function finishChat(
 ): "done" | "retry" | "lost" {
   return getDb().$client
     .transaction((): "done" | "retry" | "lost" => {
-      if (!renew(date, owner)) return "lost";
+      if (!renew(userId, date, owner)) return "lost";
       const counts = outcome === "done" ? apply() : { added: 0, merged: 0 };
-      if (!advance(date, { type: "chat", owner, chatId, outcome, ...counts })) return "lost";
-      console.log(JSON.stringify({ dream: date, chatId, outcome, ...counts }));
+      if (!advance(userId, date, { type: "chat", owner, chatId, outcome, ...counts })) return "lost";
       return outcome;
     })
     .immediate();
 }
 
-// Dreaming runs on the first account's defaults until slice 18 adds accounts.
-function dreamAccount() {
-  const first = getDb().select({ id: user.id }).from(user).orderBy(user.createdAt).limit(1).get();
-  if (!first) return null;
-  const resolved = resolveChoice(first.id, { connectionId: null, model: null, reasoningEffort: null });
-  return resolved.ok ? { userId: first.id, ...resolved } : null;
-}
-
-export async function dreamChat(chatId: string, input: { date: string; owner: string }): Promise<"done" | "retry" | "lost"> {
-  const run = readRun(input.date);
+export async function dreamChat(viewer: Viewer, chatId: string, input: { date: string; owner: string }): Promise<"done" | "retry" | "lost"> {
+  const userId = viewer.id;
+  const run = readRun(userId, input.date);
   if (!run || run.owner !== input.owner) return "lost";
   if (run.doneChatIds.includes(chatId)) return "done";
   if (run.retryChatIds.includes(chatId)) return "retry";
-  if (!renew(input.date, input.owner)) return "lost";
+  if (!renew(userId, input.date, input.owner)) return "lost";
   // A chat deleted since the night began has nothing left to read.
-  if (!chatExists(chatId)) return finishChat(input.date, input.owner, chatId, "done", () => ({ added: 0, merged: 0 }));
-  const start = retryWindowStart(input.date, chatId) ?? windowStart(input.date);
-  const messages = loadWindow(chatId, start, run.startedAt.getTime());
+  if (!getChatForUser(chatId, userId)) return finishChat(userId, input.date, input.owner, chatId, "done", () => ({ added: 0, merged: 0 }));
+  const start = retryWindowStart(userId, input.date, chatId) ?? windowStart(userId, input.date);
+  const messages = loadWindow(userId, chatId, start, run.startedAt.getTime());
   const known = new Set(messages.filter((message) => message.role === "user").map((message) => message.id));
   const createdAt = new Map(messages.map((message) => [message.id, message.createdAt]));
   let candidates: Candidate[] = [];
   let redact: Redactor;
   try {
-    const account = dreamAccount();
-    if (!account) throw new Error(NO_PROVIDER);
-    redact = requestRedactor(account.userId);
-    const apiKey = connectionApiKey(account.userId, account.connection.id);
+    const resolved = resolveChoice(viewer, NOTHING_PINNED);
+    if (!resolved.ok) throw new Error(NO_PROVIDER);
+    redact = requestRedactor(viewer);
+    const apiKey = connectionApiKey(userId, resolved.connection.id);
     for (let offset = 0; offset < messages.length; offset += PAGE) {
-      if (!renew(input.date, input.owner)) return "lost";
+      if (!renew(userId, input.date, input.owner)) return "lost";
       const generated = await generateObject({
-        model: languageModelFor({ connection: account.connection, apiKey, model: account.choice.model, chatId }),
+        model: languageModelFor({ connection: resolved.connection, apiKey, model: resolved.choice.model, chatId }),
         schema: candidateList,
         prompt: promptFor(messages.slice(offset, offset + PAGE)),
         maxRetries: 0,
@@ -339,7 +343,7 @@ export async function dreamChat(chatId: string, input: { date: string; owner: st
     }
   } catch (error) {
     if (error instanceof Error && error.message === NO_PROVIDER) throw error;
-    return finishChat(input.date, input.owner, chatId, "retry", () => ({ added: 0, merged: 0 }));
+    return finishChat(userId, input.date, input.owner, chatId, "retry", () => ({ added: 0, merged: 0 }));
   }
   // Mask before embedding so credentials never reach Ollama and the stored text matches the embedded text.
   const accepted = candidates
@@ -353,59 +357,60 @@ export async function dreamChat(chatId: string, input: { date: string; owner: st
         throw error;
       }
     });
+  if (!renew(userId, input.date, input.owner)) return "lost";
   const embedded = await embed(accepted.map((candidate) => candidate.text), "document");
-  if (!embedded.ok) return finishChat(input.date, input.owner, chatId, "retry", () => ({ added: 0, merged: 0 }));
+  if (!embedded.ok) return finishChat(userId, input.date, input.owner, chatId, "retry", () => ({ added: 0, merged: 0 }));
   const prepared: Prepared[] = accepted.flatMap((candidate, index) => {
     const vector = embedded.vectors[index];
     const at = createdAt.get(candidate.sourceMessageId);
     if (!vector || at == null) return [];
     return [{ ...candidate, vector, createdAt: at }];
   });
-  return finishChat(input.date, input.owner, chatId, "done", () => applyCandidatesWithSource(chatId, prepared));
+  return finishChat(userId, input.date, input.owner, chatId, "done", () => applyCandidatesWithSource(userId, chatId, prepared));
 }
 
-export async function runDream(input: { now?: Date; date?: string; manual?: boolean } = {}): Promise<MemoryRun | null> {
+export async function runDream(input: { viewer: Viewer; now?: Date; date?: string; manual?: boolean }): Promise<MemoryRun | null> {
+  const { viewer } = input;
+  const userId = viewer.id;
   const now = input.now ?? new Date();
   const date = input.date ?? localStamp(now, systemTimeZone()).date;
   const owner = crypto.randomUUID();
-  if (input.manual) advance(date, { type: "reopen", owner, at: now });
-  const existing = readRun(date);
+  if (input.manual) advance(userId, date, { type: "reopen", owner, at: now });
+  const existing = readRun(userId, date);
   let owned = existing?.state === "running" && existing.owner === owner;
   if (!owned) {
-    const chatIds = existing?.state === "running" ? existing.chatIds : changedChatIds(date, now.getTime());
-    owned = tryClaim({ date, owner, now, chatIds });
+    const chatIds = existing?.state === "running" ? existing.chatIds : changedChatIds(userId, date, now.getTime());
+    owned = tryClaim(userId, { date, owner, now, chatIds });
   }
-  if (!owned) return readRun(date);
+  if (!owned) return readRun(userId, date);
   try {
-    if (!dreamAccount()) {
-      failOwned(date, owner, NO_PROVIDER);
-      return readRun(date);
+    if (!resolveChoice(viewer, NOTHING_PINNED).ok) {
+      failOwned(userId, date, owner, NO_PROVIDER);
+      return readRun(userId, date);
     }
-    const claimed = readRun(date);
+    const claimed = readRun(userId, date);
     if (!claimed) return null;
     const pending = unfinishedChatIds(claimed);
     if (pending.length > 0) {
       const status = await embed(["orbit"], "query");
       if (!status.ok) {
-        failOwned(date, owner, status.error);
-        return readRun(date);
+        failOwned(userId, date, owner, status.error);
+        return readRun(userId, date);
       }
     }
     for (const chatId of pending) {
-      const outcome = await dreamChat(chatId, { date, owner });
-      if (outcome === "lost") return readRun(date);
+      const outcome = await dreamChat(viewer, chatId, { date, owner });
+      if (outcome === "lost") return readRun(userId, date);
     }
-    const embedded = await embedPending();
+    if (!renew(userId, date, owner)) return readRun(userId, date);
+    const embedded = await embedPending(userId);
     if (!embedded.ok) {
-      failOwned(date, owner, embedded.error);
-      return readRun(date);
+      failOwned(userId, date, owner, embedded.error);
+      return readRun(userId, date);
     }
-    const final = advance(date, { type: "done", owner, at: new Date(), embedded });
-    if (!final) return readRun(date);
-    console.log(JSON.stringify({ dream: final.date, state: final.state, chats: final.chatIds.length, added: final.added, merged: final.merged }));
-    return final;
+    return advance(userId, date, { type: "done", owner, at: new Date(), embedded }) ?? readRun(userId, date);
   } catch (error) {
-    failOwned(date, owner, safeError(error));
-    return readRun(date);
+    failOwned(userId, date, owner, safeError(error));
+    return readRun(userId, date);
   }
 }
