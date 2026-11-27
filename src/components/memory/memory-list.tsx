@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { memoryWriteError } from "./save-error";
 import { isMemorySearchPending, visibleMemories } from "./visible-memories";
+import type { DreamStatus } from "@/lib/memory/dream";
 import { requestJson, useLoaded } from "@/lib/request-json";
 
 type MemoryKind = "fact" | "preference" | "summary";
@@ -54,6 +55,22 @@ function formatWhen(value: string) {
   return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(value));
 }
 
+function formatDayTime(value: string) {
+  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(value));
+}
+
+function formatTime(value: string) {
+  return new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(value));
+}
+
+// Call only in the browser, so the times are in the reader's time zone.
+function dreamLine(status: Exclude<DreamStatus, { state: "never" }>) {
+  if (status.state === "running") return `Dreaming since ${formatTime(status.startedAt)}`;
+  if (status.state === "failed") return `Dream failed ${formatDayTime(status.finishedAt)}. ${status.error}`;
+  const chats = `${status.chats} ${status.chats === 1 ? "chat" : "chats"}`;
+  return `Last dream ${formatDayTime(status.finishedAt)}. ${chats}, ${status.added} added, ${status.merged} merged`;
+}
+
 function subscribeNothing() {
   return () => {};
 }
@@ -72,11 +89,11 @@ function sourceHref(memory: MemoryItem) {
 export function MemoryList({
   initial,
   embeddings,
-  dreamStatus = null,
+  dreamStatus,
 }: {
   initial: MemoryItem[];
   embeddings: { ok: true } | { ok: false; error: string };
-  dreamStatus?: string | null;
+  dreamStatus: DreamStatus;
 }) {
   const router = useRouter();
   const inBrowser = useInBrowser();
@@ -170,7 +187,12 @@ export function MemoryList({
   return (
     <div className="mx-auto w-full max-w-page px-6 py-10">
       <h1 className="mb-6 text-xl font-semibold tracking-tight">Memory</h1>
-      {dreamStatus ? <p className="mb-4 text-sm text-muted-foreground num">{dreamStatus}</p> : null}
+      {dreamStatus.state === "never" ? null : (
+        // Before hydration a no-break space holds the line, so the page does not move when the time appears.
+        <p className={dreamStatus.state === "failed" ? "mb-4 text-sm text-destructive num" : "mb-4 text-sm text-muted-foreground num"}>
+          {inBrowser ? dreamLine(dreamStatus) : "\u00a0"}
+        </p>
+      )}
       <p className={embeddings.ok ? "mb-4 text-sm text-positive" : "mb-4 text-sm text-destructive"}>{embeddings.ok ? "Embeddings on" : embeddings.error}</p>
       <Input
         aria-label="Search"
