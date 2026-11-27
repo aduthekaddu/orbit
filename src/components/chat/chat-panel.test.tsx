@@ -22,7 +22,7 @@ function firstPaint(messages: StoredMessage[], liveReplyId?: string, choice: Mod
     <AppRouterContext.Provider value={router}>
       <PathnameContext.Provider value="/c/c1">
         <SearchParamsContext.Provider value={new URLSearchParams()}>
-          <ChatPanel chatId="c1" initialHistory={toRepository(messages, messages.at(-1)?.id ?? null)} focusMessageId={null} choice={choice} connections={connections} liveReplyId={liveReplyId} />
+          <ChatPanel chatId="c1" initialHistory={toRepository(messages, messages.at(-1)?.id ?? null)} focusMessageId={null} choice={choice} connections={connections} canManageConnections liveReplyId={liveReplyId} />
         </SearchParamsContext.Provider>
       </PathnameContext.Provider>
     </AppRouterContext.Provider>,

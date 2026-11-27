@@ -7,7 +7,7 @@ import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
 import { focusedHead, type toRepository } from "@/lib/chat-tree";
 import { hasOpenCodeRun } from "@/lib/chat-stopped-runs";
 import { orbitChatTransport } from "@/lib/chat-transport";
-import type { PublicConnection } from "@/lib/connections";
+import type { PickableConnection } from "@/lib/connections";
 import type { Effort } from "@/lib/effort";
 import type { ModelChoice } from "@/lib/model-choice";
 import { ArtifactProvider } from "@/components/artifacts/use-artifact";
@@ -27,6 +27,7 @@ export function ChatPanel({
   choice: resolvedChoice,
   choiceLevels = null,
   connections,
+  canManageConnections,
   liveReplyId = null,
   restorePending = true,
 }: {
@@ -37,7 +38,8 @@ export function ChatPanel({
   focusMessageId: string | null;
   choice: ModelChoice | null;
   choiceLevels?: Effort[] | null;
-  connections: PublicConnection[];
+  connections: PickableConnection[];
+  canManageConnections: boolean;
   liveReplyId?: string | null;
   restorePending?: boolean;
 }) {
@@ -151,6 +153,7 @@ export function ChatPanel({
                 <ModelChoiceProvider
                   choice={choice}
                   connections={connections}
+                  canManageConnections={canManageConnections}
                   known={resolvedChoice && { connectionId: resolvedChoice.connectionId, model: resolvedChoice.model, levels: choiceLevels }}
                   onChoose={setPicked}
                 >

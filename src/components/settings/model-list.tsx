@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { listOf, loadedList, type ModelLists } from "@/components/use-model-lists";
-import type { PublicConnection } from "@/lib/connections";
+import type { PickableConnection } from "@/lib/connections";
 import type { ListedModel } from "@/lib/model-list";
 import { SEARCH_AFTER_ROWS, searchModels, type ModelList } from "@/lib/model-picker";
 import { requestJson, type Loaded } from "@/lib/request-json";
@@ -22,7 +22,7 @@ export function ModelListSettings({
   onRetry,
   onHidden,
 }: {
-  connections: PublicConnection[];
+  connections: PickableConnection[];
   lists: ModelLists;
   onRetry: (connectionId: string) => void;
   onHidden: (connectionId: string, hidden: string[]) => void;
@@ -74,7 +74,7 @@ function ConnectionModels({
   onRetry,
   onHidden,
 }: {
-  connection: PublicConnection;
+  connection: PickableConnection;
   list: Loaded<ModelList>;
   query: string;
   onRetry: () => void;

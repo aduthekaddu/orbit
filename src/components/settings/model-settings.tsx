@@ -3,15 +3,20 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useModelLists } from "@/components/use-model-lists";
-import type { ModelDefaults, PublicConnection } from "@/lib/connections";
+import type { ModelDefaults, PickableConnection } from "@/lib/connections";
 import { ConnectionSettings } from "./connections";
 import { DefaultModelSettings } from "./default-model";
 import { ModelListSettings } from "./model-list";
 
 /** Connections, the default model, and each connection's models share one list of connections and their model lists. */
-export function ModelSettings({ initialConnections, initialDefaults }: { initialConnections: PublicConnection[]; initialDefaults: ModelDefaults }) {
+export function ModelSettings({ initialConnections, initialDefaults, canManageConnections }: {
+  initialConnections: PickableConnection[];
+  initialDefaults: ModelDefaults;
+  canManageConnections: boolean;
+}) {
   const router = useRouter();
-  const [connections, setConnections] = useState(initialConnections);
+  const [owned, setConnections] = useState(() => initialConnections.filter((connection) => "keyReadable" in connection));
+  const connections = canManageConnections ? owned : initialConnections;
   const [defaults, setDefaults] = useState(initialDefaults);
   const { lists, load, setHidden } = useModelLists();
   const [firstIds] = useState(() => initialConnections.map((connection) => connection.id));
@@ -23,8 +28,8 @@ export function ModelSettings({ initialConnections, initialDefaults }: { initial
   // Pages that read connections on the server stay in the router cache, so Back would show them stale.
   return (
     <>
-      <ConnectionSettings
-        connections={connections}
+      {canManageConnections ? <ConnectionSettings
+        connections={owned}
         onAdded={(connection) => {
           setConnections((current) => [...current, connection]);
           load(connection.id);
@@ -39,7 +44,7 @@ export function ModelSettings({ initialConnections, initialDefaults }: { initial
           setConnections((current) => current.filter((item) => item.id !== id));
           router.refresh();
         }}
-      />
+      /> : null}
       <DefaultModelSettings
         connections={connections}
         defaults={defaults}

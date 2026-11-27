@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { listOf, loadedList, type ModelLists } from "@/components/use-model-lists";
-import type { ModelDefaults, PublicConnection } from "@/lib/connections";
+import type { ModelDefaults, PickableConnection } from "@/lib/connections";
 import { DEFAULT_EFFORT, sentEffort, type Effort } from "@/lib/effort";
 import { CUSTOM_OPTION, NO_OPTION, modelDefaultsBody, modelLevels, selectedOptionIndex, showsModelInput, switchModel } from "@/lib/model-picker";
 import { requestJson, useLatestRequest } from "@/lib/request-json";
@@ -25,7 +25,7 @@ export function DefaultModelSettings({
   onRetry,
   onSaved,
 }: {
-  connections: PublicConnection[];
+  connections: PickableConnection[];
   defaults: ModelDefaults;
   lists: ModelLists;
   onRetry: (connectionId: string) => void;

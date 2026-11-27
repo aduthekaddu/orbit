@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { WarningCircleIcon } from "@phosphor-icons/react";
@@ -15,16 +15,29 @@ import { Label } from "@/components/ui/label";
 function useAuthSubmit(fallbackError: string) {
   const router = useRouter();
   const [submit, dispatch] = useReducer(authSubmitTransition, idleSubmit);
+  const submitting = useRef(false);
 
   useEffect(() => {
     if (submit.status !== "succeeded") return;
-    const timer = setTimeout(() => dispatch({ type: "timeout" }), AUTH_REDIRECT_RESET_MS);
+    const timer = setTimeout(() => {
+      submitting.current = false;
+      dispatch({ type: "timeout" });
+    }, AUTH_REDIRECT_RESET_MS);
     return () => clearTimeout(timer);
   }, [submit.status]);
 
   async function run(request: () => Promise<AuthResult>) {
-    if (submit.status === "pending" || submit.status === "succeeded") return;
-    await runAuthSubmit({ request, router, dispatch, fallbackError });
+    if (submitting.current) return;
+    submitting.current = true;
+    await runAuthSubmit({
+      request,
+      router,
+      dispatch: (event) => {
+        if (event.type === "fail") submitting.current = false;
+        dispatch(event);
+      },
+      fallbackError,
+    });
   }
 
   function onFieldChange() {
@@ -78,7 +91,7 @@ export function LoginForm({ signupOpen }: { signupOpen: boolean }) {
   );
 }
 
-export function SignupForm() {
+export function SignupForm({ inviteToken }: { inviteToken?: string }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -86,7 +99,12 @@ export function SignupForm() {
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    await run(() => authClient.signUp.email({ name, email, password }));
+    await run(() => authClient.signUp.email({
+      name,
+      email,
+      password,
+      fetchOptions: inviteToken ? { headers: { "x-orbit-invite": inviteToken } } : undefined,
+    }));
   }
 
   return (
