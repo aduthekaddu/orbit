@@ -262,6 +262,8 @@ before(async () => {
 after(async () => {
   await Promise.allSettled(afterTasks);
   closeDb?.();
+  // A keep-alive socket left by the last streamed reply would hold close() open until it times out.
+  provider?.closeAllConnections();
   await new Promise<void>((resolve) => (provider ? provider.close(() => resolve()) : resolve()));
   await github?.close();
   process.chdir(originalCwd);
