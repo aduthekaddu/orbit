@@ -19,7 +19,7 @@ The scenario owns its mock MCP server and closes it even if a check fails. It sa
 
 Require each printed check to pass.
 
-- Settings save reports `githubTokenSet` and the MCP URL, and the response has no token.
+- Settings save reports `githubTokenSet`, `githubTokenReadable`, and the MCP URL for the signed-in account. The token stays on the server.
 - A wrong token shows `GitHub rejected the token.`
 - Check with the stored token shows Connected and the login `octocat`, then closes the MCP client.
 - `[qa:github]` starts one `github_list_issues` line that ends as "List issues on GitHub, 1 result", closed. The scenario opens it before it reads the link.

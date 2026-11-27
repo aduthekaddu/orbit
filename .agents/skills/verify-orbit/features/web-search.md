@@ -18,13 +18,13 @@ node .agents/skills/verify-orbit/verify.mjs cleanup
 
 The scenario owns its mock search server and closes it even if a check fails. It saves a fake Tavily key to check that the API never returns it and that a blank field keeps it. The scenario then clicks Remove and Save to clear the fake key before sending search requests.
 
-`browse settings-search-route` sends requests directly to the settings route. It checks URL normalization, blank and omitted key preservation, redaction, rejected inputs, and repeatable removal.
+`browse settings-search-route` sends requests directly to `/api/admin/settings`. It checks URL normalization, blank and omitted key preservation, redaction, rejected inputs, and repeatable removal.
 
 ## Proof
 
 Require each printed check to pass.
 
-- The settings form saves a SearXNG URL and reports only whether the Tavily key is set.
+- The Search form on Admin saves a SearXNG URL and reports only whether the Tavily key is set.
 - `[qa:search] orbit` starts one search line that reads "Searching the web", then "Searched the web, 3 sources". The finished line is closed. Opening it shows three result links.
 - The next model request receives the search output and answers with a link to its first result.
 - The result links use `target="_blank"` and `rel="noopener noreferrer nofollow"`.
@@ -39,4 +39,4 @@ Require each printed check to pass.
 
 Each scenario keeps its output in `.verify/evidence/<scenario>/` after cleanup. The `search-tool` screenshots include `running.png`, `done.png`, `reloaded.png`, `mobile.png`, `cancelled.png`, `cancelled-reloaded.png`, `failed.png`, `settings.png`, and `final-answer.png`. A run against the earlier app captures `before.png` and fails at the missing SearXNG field.
 
-Real provider proof also needs the Compose SearXNG service. Configure its URL in Settings, ask a current-news question, and save the card and cited answer. Stop only the service this run started and repeat the question to check failure. Record the time to the final answer for five real questions separately from this fixed-response recipe.
+Real provider proof also needs the Compose SearXNG service. Configure its URL on Admin, ask a current-news question, and save the card and cited answer. Stop only the service this run started and repeat the question to check failure. Record the time to the final answer for five real questions separately from this fixed-response recipe.

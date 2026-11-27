@@ -202,7 +202,7 @@ node .agents/skills/verify-orbit/verify.mjs browse settings-sandbox
 node .agents/skills/verify-orbit/verify.mjs cleanup
 ```
 
-The scenario reads the mode the server was launched with. Require `GET /api/settings` and the Settings page to agree with it, a read-only status under a Code sandbox heading, no key or Docker detail in the response, and no way to change the setting from the browser. It also checks the page at 390 pixels.
+The scenario reads the server's sandbox setting. With `ORBIT_SANDBOX=on`, the Code sandbox switch on Admin saves both On and Off. With the server gate off, Admin displays read-only Off and a write request cannot activate the sandbox. A member receives 403 from both methods on `/api/admin/settings`. The scenario also checks the page at 390 pixels.
 
 ## Real provider
 

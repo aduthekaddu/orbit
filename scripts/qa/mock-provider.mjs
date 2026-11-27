@@ -1015,6 +1015,21 @@ const server = http.createServer((req, res) => {
       toolResponse(res, scenario, { text, kind: "fact" }, "remember");
       return;
     }
+    if (scenario === "forget") {
+      const messages = body.messages ?? [];
+      const latestUser = messages.findLastIndex((message) => message.role === "user");
+      const reply = messages.slice(latestUser + 1).findLast((message) => message.role === "tool");
+      if (reply) {
+        const output = JSON.parse(reply.content);
+        textResponse(res, typeof output.error === "string" ? output.error : "Forgot.");
+      } else if (body.tools?.some((entry) => entry.function?.name === "forget")) {
+        const id = prompt.slice(prompt.lastIndexOf("[qa:forget]") + "[qa:forget]".length).trim();
+        toolResponse(res, scenario, { id }, "forget");
+      } else {
+        textResponse(res, "Memory is off.");
+      }
+      return;
+    }
     if (raw.includes("Write a title of at most six words.") && body.stream !== true) {
       jsonTitle(res);
       return;

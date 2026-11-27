@@ -86,7 +86,7 @@ export default async function toolCards({ page, origin, mockUrl, step, shot }) {
   const before = new Set((await listMemories()).map((memory) => memory.id));
 
   try {
-    const saved = await page.request.put(`${origin}/api/settings`, { data: {
+    const saved = await page.request.put(`${origin}/api/admin/settings`, { data: {
       baseUrl: mockUrl, model: "mock-genui", reasoningEffort: "low", searxngUrl: searxng.url, tavilyApiKey: null,
     } });
     step("search settings point at the SearXNG fixture", saved.status() === 200, `status ${saved.status()}`);
@@ -209,7 +209,7 @@ export default async function toolCards({ page, origin, mockUrl, step, shot }) {
   } finally {
     for (const context of contexts) await context.close().catch(() => {});
     if (searxng) await searxng.close();
-    await page.request.put(`${origin}/api/settings`, { data: {
+    await page.request.put(`${origin}/api/admin/settings`, { data: {
       baseUrl: mockUrl, model: "mock-genui", reasoningEffort: "low", searxngUrl: "", tavilyApiKey: null,
     } });
     // Delete only the memory this run saved, so later scenarios on this server never recall it.

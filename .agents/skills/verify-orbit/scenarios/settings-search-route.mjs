@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 export default async function settingsSearchRoute({ page, origin, step }) {
   const save = async (input) => {
-    const response = await page.request.put(`${origin}/api/settings`, { data: input });
+    const response = await page.request.put(`${origin}/api/admin/settings`, { data: input });
     assert.equal(response.status(), 200);
     return response.json();
   };
@@ -13,13 +13,13 @@ export default async function settingsSearchRoute({ page, origin, step }) {
   step("PUT settings keeps the saved Tavily key on blank input", blank.tavilyKeySet && redacted(blank));
   const omitted = await save({});
   step("PUT settings keeps the Tavily key and the search URL on omitted input", omitted.tavilyKeySet && omitted.searxngUrl === initial.searxngUrl && redacted(omitted));
-  const invalid = await page.request.put(`${origin}/api/settings`, { data: { tavilyApiKey: 42 } });
+  const invalid = await page.request.put(`${origin}/api/admin/settings`, { data: { tavilyApiKey: 42 } });
   step("PUT settings rejects an invalid removal value", invalid.status() === 400);
-  const unchanged = await (await page.request.get(`${origin}/api/settings`)).json();
+  const unchanged = await (await page.request.get(`${origin}/api/admin/settings`)).json();
   step("a rejected settings write leaves the Tavily key set and redacted", unchanged.tavilyKeySet && redacted(unchanged));
   const removed = await save({ tavilyApiKey: null, searxngUrl: "" });
   const repeated = await save({ tavilyApiKey: null });
   step("explicit removal clears the Tavily key and is repeatable", !removed.tavilyKeySet && !repeated.tavilyKeySet && redacted(removed) && redacted(repeated));
-  const persisted = await (await page.request.get(`${origin}/api/settings`)).json();
+  const persisted = await (await page.request.get(`${origin}/api/admin/settings`)).json();
   step("GET settings reads the cleared search configuration without keys", !persisted.tavilyKeySet && persisted.searxngUrl === "" && redacted(persisted));
 }

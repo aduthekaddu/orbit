@@ -56,6 +56,10 @@ Feature recipes live in `features/`. Read `features/README.md` first. Drive one 
 
 `drive chat` runs `scripts/smoke.ts` with cwd `.verify/sandbox` and `ORBIT_QA_ORIGIN` set to the sandbox origin. Run on its own, smoke calls `http://127.0.0.1:3210`. It needs `ORBIT_BASE_URL` and `ORBIT_API_KEY` in the environment, and reads `ORBIT_MODEL` when set (default `deepseek-v4.1-flash`). Smoke adds a connection from them, or reuses one with that base URL, and makes that model the default. The helper redacts those values in its output. If they are missing, the command fails before any provider call.
 
+## Seed a member for the accounts scenario
+
+Run `node .agents/skills/verify-orbit/verify.mjs seed-member` after `launch --mock`. The command verifies the sandbox server and admin before it inserts the synthetic member into the sandbox database. It is safe to run twice. See [Account isolation](features/accounts.md).
+
 ## Evidence
 
 Each drive writes `.verify/evidence/<feature>/summary.txt`. Each browse run writes `.verify/evidence/<scenario>/summary.txt` with its `PASS` and `FAIL` lines, plus one PNG per screenshot. Signup records the statuses, the redirect, the chat list count, and the `user` and `chats` row counts. Signin records the statuses and the redirect location. Settings records each connection request's status and the key-leak checks. Chat records the smoke exit code and the redacted log. No file records cookies or key values.
@@ -74,6 +78,6 @@ Run cleanup after a failed drive too, so the port is free. Then confirm the evid
 
 ## Helpers
 
-`node .agents/skills/verify-orbit/verify.mjs` with one of `launch [--mock]`, `doctor`, `cleanup`, `drive` plus `signup`, `signin`, `settings`, `chat`, `dream`, or `public`, or `browse` plus a scenario name.
+`node .agents/skills/verify-orbit/verify.mjs` with one of `launch [--mock]`, `doctor`, `seed-member`, `cleanup`, `drive` plus `signup`, `signin`, `settings`, `chat`, `dream`, or `public`, or `browse` plus a scenario name.
 
 The script is the only helper. Browse scenarios live in `scenarios/`. Feature files name these commands and the visible result.
