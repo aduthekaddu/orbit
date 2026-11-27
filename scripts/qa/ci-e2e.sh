@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs one verify-orbit suite the way CI does.
 #
-#   scripts/qa/ci-e2e.sh core     sign up, sign in, and save settings over HTTP
+#   scripts/qa/ci-e2e.sh core     sign up, sign in, and add a provider connection over HTTP
 #   scripts/qa/ci-e2e.sh browse   every mock-provider browser scenario, sandbox off
 #   scripts/qa/ci-e2e.sh sandbox  every sandbox scenario, sandbox on, with real Docker
 #

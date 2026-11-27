@@ -34,6 +34,8 @@ const DB_REACHING_MODULES = [
   "./src/lib/settings.ts",
   "./src/lib/preferences.ts",
   "./src/lib/messages.ts",
+  "./src/lib/secrets.ts",
+  "./src/lib/connections.ts",
   "./src/lib/auth.ts",
   "./src/app/api/auth/[...all]/route.ts",
   "./src/proxy.ts",
@@ -81,10 +83,10 @@ test("importing a db-reaching module without ORBIT_DATA_DIR in a test process ne
   const result = importInChild(settingsUrl, {
     cwd,
     env,
-    script: `const mod = await import(process.argv[1]); console.log(JSON.stringify(mod.toPublicSettings(null).keySet));`,
+    script: `const mod = await import(process.argv[1]); console.log(typeof mod.toPublicSettings);`,
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.equal(result.stdout.trim(), "false");
+  assert.equal(result.stdout.trim(), "function");
   assert.equal(fs.existsSync(path.join(cwd, "data")), false);
 });

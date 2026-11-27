@@ -1,9 +1,12 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { Redactor } from "../chat-errors";
+import { connectionApiKey } from "../connections";
 import { getDb } from "../db";
-import { orbitModel } from "../provider";
-import { getSettings } from "../settings";
+import { user } from "../db/schema";
+import { resolveChoice } from "../model-choice";
+import { languageModelFor } from "../provider";
+import { requestRedactor } from "../settings";
 import { embed, embedPending } from "./embed";
 import { parseRun, storedRow, transition, unfinishedChatIds, type MemoryRun, type RunEvent } from "./run-state";
 import { localMidnight, localStamp, systemTimeZone } from "./schedule";
@@ -277,6 +280,14 @@ function finishChat(
     .immediate();
 }
 
+// Dreaming runs on the first account's defaults until slice 18 adds accounts.
+function dreamAccount() {
+  const first = getDb().select({ id: user.id }).from(user).orderBy(user.createdAt).limit(1).get();
+  if (!first) return null;
+  const resolved = resolveChoice(first.id, { connectionId: null, model: null, reasoningEffort: null });
+  return resolved.ok ? { userId: first.id, ...resolved } : null;
+}
+
 export async function dreamChat(chatId: string, input: { date: string; owner: string }): Promise<"done" | "retry" | "lost"> {
   const run = readRun(input.date);
   if (!run || run.owner !== input.owner) return "lost";
@@ -290,18 +301,14 @@ export async function dreamChat(chatId: string, input: { date: string; owner: st
   let candidates: Candidate[] = [];
   let redact: Redactor;
   try {
-    const settings = getSettings();
-    if (!settings?.baseUrl || !settings.apiKey || !settings.model) throw new Error("No provider is saved");
-    redact = new Redactor(settings);
+    const account = dreamAccount();
+    if (!account) throw new Error("No provider is saved");
+    redact = requestRedactor(account.userId);
+    const apiKey = connectionApiKey(account.userId, account.connection.id);
     for (let offset = 0; offset < messages.length; offset += PAGE) {
       if (!renew(input.date, input.owner)) return "lost";
       const generated = await generateObject({
-        model: orbitModel({
-          baseUrl: settings.baseUrl,
-          apiKey: settings.apiKey,
-          model: settings.model,
-          chatId,
-        }),
+        model: languageModelFor({ connection: account.connection, apiKey, model: account.choice.model, chatId }),
         schema: candidateList,
         prompt: promptFor(messages.slice(offset, offset + PAGE)),
         maxRetries: 0,
@@ -349,8 +356,7 @@ export async function runDream(input: { now?: Date; date?: string; manual?: bool
   }
   if (!owned) return readRun(date);
   try {
-    const settings = getSettings();
-    if (!settings?.baseUrl || !settings.apiKey || !settings.model) {
+    if (!dreamAccount()) {
       failOwned(date, owner, "No provider is saved");
       return readRun(date);
     }

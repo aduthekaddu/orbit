@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { startDropFront } from "../../../../scripts/qa/drop-front.mjs";
 import { eventually } from "../../../../src/lib/eventually.mjs";
+import { replyText } from "../../../../scripts/qa/reply-text.mjs";
 
 const word = (page, number) => page.getByText(new RegExp(`\\bword${number}\\b`));
 const replies = (page) => page.locator('[data-message-role="assistant"]');
@@ -109,13 +110,13 @@ async function dropDuringText({ page, origin, front, step, shot, phone = false }
   }
 
   await word(page, 50).waitFor({ timeout: 15_000 });
-  assert.deepEqual(textWords(await replies(page).last().textContent()), allWords);
+  assert.deepEqual(textWords(await replyText(replies(page).last())), allWords);
   await waitForSavedWords(page, origin, id);
   if (!phone) await shot("finished");
   await page.reload();
   await word(page, 50).waitFor({ timeout: 15_000 });
   step(`${phone ? "phone" : "desktop"} renders all 50 words before reload and one complete reply after reload`,
-    await replies(page).count() === 1 && JSON.stringify(textWords(await replies(page).last().textContent())) === JSON.stringify(allWords),
+    await replies(page).count() === 1 && JSON.stringify(textWords(await replyText(replies(page).last()))) === JSON.stringify(allWords),
     "the saved reply is duplicated or incomplete");
 }
 
@@ -252,13 +253,13 @@ export default async function durableReply({ page, origin, mockUrl, step, shot }
       await word(second, 50).waitFor({ timeout: 15_000 });
       const final = await readChat(second, origin, branched);
       step("the second tab renders all 50 words and the refused prompt stays out of the chat",
-        JSON.stringify(textWords(await replies(second).last().textContent())) === JSON.stringify(allWords) &&
+        JSON.stringify(textWords(await replyText(replies(second).last()))) === JSON.stringify(allWords) &&
           !final.messages.some(({ message }) => message.id === refusedId),
         "the reply is incomplete or the refused prompt was saved");
       step("focusing the earlier branch keeps only that branch visible",
         await page.getByText("pong", { exact: true }).isVisible() &&
           await page.getByText("[qa:slow] Active branch", { exact: true }).count() === 0 &&
-          textWords(await replies(page).last().textContent()).length === 0,
+          textWords(await replyText(replies(page).last())).length === 0,
         "the active branch reached the focused page");
     } finally {
       await second.close();

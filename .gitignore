@@ -7,6 +7,7 @@ dist
 data/*.db
 data/*.db-*
 data/auth-secret
+data/secret-key
 .env
 .env.local
 .env.*.local

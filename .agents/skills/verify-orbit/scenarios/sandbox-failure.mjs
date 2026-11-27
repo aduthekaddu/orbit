@@ -1,5 +1,5 @@
-export default async function sandboxFailure({ page, origin, mockUrl, step, shot }) {
-  await page.request.put(`${origin}/api/settings`, { data: { baseUrl: mockUrl, apiKey: "test-key-not-real", model: "mock-genui", reasoningEffort: "low" } });
+export default async function sandboxFailure({ page, origin, useProvider, step, shot }) {
+  await useProvider();
   const { id } = await (await page.request.post(`${origin}/api/chats`)).json();
   await page.goto(`${origin}/c/${id}`);
   const composer = page.getByPlaceholder("Ask anything");

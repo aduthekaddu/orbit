@@ -621,10 +621,6 @@ test("check reports the GitHub login and a rejected token", { timeout: 20_000 },
 test("a turn merges GitHub tools when a token is set and closes the client", { timeout: 20_000 }, async () => {
   await withMock(async (mock) => {
     const opened = await toolsForTurn({
-      baseUrl: "https://provider.invalid/v1",
-      apiKey: "test-key-not-real",
-      model: "mock-genui",
-      reasoningEffort: "low",
       searxngUrl: "",
       tavilyApiKey: "",
       githubToken: mock.token,
@@ -645,10 +641,6 @@ test("a turn merges GitHub tools when a token is set and closes the client", { t
 
 test("a turn without a GitHub token does not open GitHub", async () => {
   const opened = await toolsForTurn({
-    baseUrl: "https://provider.invalid/v1",
-    apiKey: "test-key-not-real",
-    model: "mock-genui",
-    reasoningEffort: "low",
     searxngUrl: "",
     tavilyApiKey: "",
     githubToken: "",

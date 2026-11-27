@@ -498,8 +498,12 @@ function chunk(choices, extra = {}) {
   };
 }
 
+// A real provider names the model that answered in each chunk, and Orbit labels the reply with it.
+const answeringModel = new WeakMap();
+
 function send(res, payload) {
-  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  const named = payload.object === "chat.completion.chunk" ? { ...payload, model: answeringModel.get(res) ?? MODEL } : payload;
+  res.write(`data: ${JSON.stringify(named)}\n\n`);
 }
 
 function start(res) {
@@ -665,6 +669,229 @@ function malformedResponse(res) {
   res.end();
 }
 
+// OpenRouter-style capability fields, so a model list can show badges and enable effort levels.
+const OPENAI_MODELS = [
+  { id: MODEL, object: "model", capabilities: { reasoning: false } },
+  {
+    id: "mock-reasoner",
+    object: "model",
+    name: "Mock Reasoner",
+    context_length: 131072,
+    architecture: { input_modalities: ["text", "image"], output_modalities: ["text"] },
+    supported_parameters: ["max_tokens", "reasoning", "include_reasoning", "tools", "tool_choice"],
+  },
+];
+
+const CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
+
+function claudeModel({ id, name, createdAt, context, efforts, thinking }) {
+  return {
+    type: "model",
+    id,
+    display_name: name,
+    created_at: createdAt,
+    max_input_tokens: context,
+    max_tokens: 64000,
+    capabilities: {
+      image_input: { supported: true },
+      thinking: {
+        supported: true,
+        types: {
+          adaptive: { supported: thinking !== "budget" },
+          enabled: { supported: thinking === "budget" },
+          disabled: { supported: thinking !== "always" },
+        },
+      },
+      effort: {
+        supported: efforts.length > 0,
+        ...Object.fromEntries(CLAUDE_EFFORTS.map((level) => [level, { supported: efforts.includes(level) }])),
+      },
+    },
+  };
+}
+
+// Newest first, as the Models API lists them. Three models on pages of two make Orbit follow after_id once.
+const CLAUDE_MODELS = [
+  claudeModel({ id: "claude-opus-5-5", name: "Claude Opus 5.5", createdAt: "2026-10-01T00:00:00Z", context: 1_000_000, efforts: CLAUDE_EFFORTS, thinking: "always" }),
+  claudeModel({ id: "claude-opus-5", name: "Claude Opus 5", createdAt: "2026-06-01T00:00:00Z", context: 1_000_000, efforts: CLAUDE_EFFORTS, thinking: "adaptive" }),
+  claudeModel({ id: "claude-haiku-4-5", name: "Claude Haiku 4.5", createdAt: "2025-10-01T00:00:00Z", context: 200_000, efforts: [], thinking: "budget" }),
+];
+const CLAUDE_PAGE_SIZE = 2;
+
+// Only these request headers reach the request log, so a key header never can.
+const LOGGED_HEADERS = ["anthropic-beta"];
+
+function json(res, status, payload) {
+  res.writeHead(status, { "content-type": "application/json" });
+  res.end(JSON.stringify(payload));
+}
+
+function anthropicError(res, status, type, message) {
+  json(res, status, { type: "error", error: { type, message } });
+}
+
+function claudeModelsPage(res, params) {
+  const afterId = params.get("after_id");
+  const from = afterId ? CLAUDE_MODELS.findIndex((model) => model.id === afterId) + 1 : 0;
+  if (afterId && from === 0) {
+    anthropicError(res, 400, "invalid_request_error", `after_id: unknown model ${afterId}`);
+    return;
+  }
+  const limit = Number(params.get("limit") ?? 20);
+  const data = CLAUDE_MODELS.slice(from, from + Math.min(limit, CLAUDE_PAGE_SIZE));
+  json(res, 200, {
+    data,
+    has_more: from + data.length < CLAUDE_MODELS.length,
+    first_id: data[0]?.id ?? null,
+    last_id: data.at(-1)?.id ?? null,
+  });
+}
+
+// Rejects what the Messages API rejects for the model's capabilities, so a wrong effort or thinking setting shows up.
+function claudeRequestError(body) {
+  const model = CLAUDE_MODELS.find((entry) => entry.id === body.model);
+  if (!model) return [404, "not_found_error", `model: ${body.model}`];
+  const effort = body.output_config?.effort;
+  if (effort !== undefined && model.capabilities.effort[effort]?.supported !== true) {
+    return [400, "invalid_request_error", `output_config.effort: ${effort} is not supported by ${model.id}`];
+  }
+  const thinking = body.thinking?.type;
+  if (thinking !== undefined && model.capabilities.thinking.types[thinking]?.supported !== true) {
+    return [400, "invalid_request_error", `thinking.type: ${thinking} is not supported by ${model.id}`];
+  }
+  return null;
+}
+
+function sendEvent(res, payload) {
+  res.write(`event: ${payload.type}\ndata: ${JSON.stringify(payload)}\n\n`);
+}
+
+function claudeStream(res, model, { thinking = null, text }) {
+  res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache" });
+  sendEvent(res, {
+    type: "message_start",
+    message: {
+      id: `msg_mock_${Date.now()}`,
+      type: "message",
+      role: "assistant",
+      model,
+      content: [],
+      stop_reason: null,
+      stop_sequence: null,
+      usage: { input_tokens: 12, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+    },
+  });
+  let index = 0;
+  if (thinking !== null) {
+    sendEvent(res, { type: "content_block_start", index, content_block: { type: "thinking", thinking: "", signature: "" } });
+    for (const part of thinking.match(/.{1,24}/gs) ?? []) {
+      sendEvent(res, { type: "content_block_delta", index, delta: { type: "thinking_delta", thinking: part } });
+    }
+    sendEvent(res, { type: "content_block_delta", index, delta: { type: "signature_delta", signature: "bW9jay1zaWduYXR1cmU" } });
+    sendEvent(res, { type: "content_block_stop", index });
+    index += 1;
+  }
+  sendEvent(res, { type: "content_block_start", index, content_block: { type: "text", text: "" } });
+  for (const part of text.match(/.{1,24}/gs) ?? []) {
+    sendEvent(res, { type: "content_block_delta", index, delta: { type: "text_delta", text: part } });
+  }
+  sendEvent(res, { type: "content_block_stop", index });
+  sendEvent(res, { type: "message_delta", delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 24 } });
+  sendEvent(res, { type: "message_stop" });
+  res.end();
+}
+
+// A mid-stream fallback, as the Messages API sends it when a safety classifier declines the turn partway through:
+// message_start names the requested model, and a fallback block hands the rest of the reply to claude-opus-5.
+function claudeFallbackStream(res, model, { hold = false } = {}) {
+  const to = "claude-opus-5";
+  res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache" });
+  sendEvent(res, {
+    type: "message_start",
+    message: { id: `msg_mock_${Date.now()}`, type: "message", role: "assistant", model, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 12, output_tokens: 1 } },
+  });
+  sendEvent(res, { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "", signature: "" } });
+  sendEvent(res, { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "Starting on the request." } });
+  sendEvent(res, { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "bW9jay1zaWduYXR1cmU" } });
+  sendEvent(res, { type: "content_block_stop", index: 0 });
+  sendEvent(res, { type: "content_block_start", index: 1, content_block: { type: "text", text: "" } });
+  sendEvent(res, { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: "Before the switch. " } });
+  sendEvent(res, { type: "content_block_stop", index: 1 });
+  sendEvent(res, { type: "content_block_start", index: 2, content_block: { type: "fallback", from: { model }, to: { model: to } } });
+  sendEvent(res, { type: "content_block_stop", index: 2 });
+  sendEvent(res, { type: "content_block_start", index: 3, content_block: { type: "text", text: "" } });
+  const text = hold
+    ? "The fallback model started its answer. " + "This reply is waiting for Stop. ".repeat(10)
+    : "Answered by the fallback model.";
+  sendEvent(res, { type: "content_block_delta", index: 3, delta: { type: "text_delta", text } });
+  sendEvent(res, { type: "content_block_stop", index: 3 });
+  if (hold) return;
+  sendEvent(res, {
+    type: "message_delta",
+    delta: { stop_reason: "end_turn", stop_sequence: null },
+    usage: {
+      output_tokens: 30,
+      iterations: [
+        { type: "message", model, input_tokens: 12, output_tokens: 10 },
+        { type: "fallback_message", model: to, input_tokens: 12, output_tokens: 20 },
+      ],
+    },
+  });
+  sendEvent(res, { type: "message_stop" });
+  res.end();
+}
+
+// Like the Messages API: a turn that fell back is sent back without the thinking or tool use from before its last
+// fallback block.
+function echoesRefusedTurn(body) {
+  return (body.messages ?? []).some(({ role, content }) => {
+    if (role !== "assistant" || !Array.isArray(content)) return false;
+    const boundary = content.findLastIndex((block) => block?.type === "fallback");
+    if (boundary < 0) return false;
+    return content.slice(0, boundary).some((block) => ["thinking", "redacted_thinking", "tool_use"].includes(block?.type));
+  });
+}
+
+function claudeReply(res, body, raw, scenario) {
+  if (echoesRefusedTurn(body)) {
+    anthropicError(res, 400, "invalid_request_error", "messages: thinking, redacted_thinking and tool_use blocks before the last fallback block must be omitted");
+    return;
+  }
+  const refused = claudeRequestError(body);
+  if (refused) {
+    anthropicError(res, ...refused);
+    return;
+  }
+  if (body.stream !== true) {
+    const text = raw.includes("Write a title of at most six words.") ? "Mock title" : "pong";
+    json(res, 200, {
+      type: "message",
+      id: `msg_mock_${Date.now()}`,
+      role: "assistant",
+      model: body.model,
+      content: [{ type: "text", text }],
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage: { input_tokens: 12, output_tokens: 3 },
+    });
+    return;
+  }
+  if (scenario === "claude-think") {
+    // Claude omits thinking text unless the request asks for a summary.
+    const summarized = body.thinking?.display === "summarized";
+    claudeStream(res, body.model, {
+      thinking: summarized ? "The user said hello, so a short greeting back fits." : "",
+      text: "Hello from the mock Claude.",
+    });
+    return;
+  }
+  if (scenario === "claude-fallback" || scenario === "claude-fallback-stop") {
+    claudeFallbackStream(res, body.model, { hold: scenario === "claude-fallback-stop" });
+    return;
+  }
+  claudeStream(res, body.model, { text: "pong" });
+}
+
 // The AI SDK retries a 500 twice, so three failures make the first send fail in the browser.
 const failuresByPrompt = new Map();
 
@@ -673,14 +900,26 @@ const server = http.createServer((req, res) => {
     res.writeHead(404).end();
     return;
   }
-  if (req.method === "GET" && req.url.endsWith("/models")) {
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ object: "list", data: [{ id: MODEL, object: "model", capabilities: { reasoning: false } }] }));
+  const { pathname, searchParams } = new URL(req.url, "http://mock.invalid");
+  const anthropic = typeof req.headers["anthropic-version"] === "string";
+  if (anthropic && !req.headers["x-api-key"]) {
+    anthropicError(res, 401, "authentication_error", "x-api-key header is required");
     return;
   }
-  if (req.method !== "POST" || !req.url.endsWith("/chat/completions")) {
-    res.writeHead(404, { "content-type": "application/json" });
-    res.end(JSON.stringify({ error: "not found" }));
+  if (req.method === "GET" && pathname.endsWith("/models")) {
+    if (anthropic) claudeModelsPage(res, searchParams);
+    else json(res, 200, { object: "list", data: OPENAI_MODELS });
+    return;
+  }
+  const route = req.method !== "POST"
+    ? null
+    : pathname.endsWith("/chat/completions")
+      ? "openai"
+      : anthropic && pathname.endsWith("/messages")
+        ? "anthropic"
+        : null;
+  if (!route) {
+    json(res, 404, { error: "not found" });
     return;
   }
   let raw = "";
@@ -700,7 +939,13 @@ const server = http.createServer((req, res) => {
     console.error(`mock request scenario=${scenario.replace(/\n|\r/g, "")}`);
     const requestLog = process.env.MOCK_REQUEST_LOG ?? path.join(process.cwd(), ".verify", "mock-requests.jsonl");
     fs.mkdirSync(path.dirname(requestLog), { recursive: true });
-    fs.appendFileSync(requestLog, `${JSON.stringify({ at: new Date().toISOString(), scenario, body })}\n`);
+    const headers = Object.fromEntries(LOGGED_HEADERS.map((name) => [name, req.headers[name] ?? null]));
+    fs.appendFileSync(requestLog, `${JSON.stringify({ at: new Date().toISOString(), scenario, headers, body })}\n`);
+    if (typeof body.model === "string") answeringModel.set(res, body.model);
+    if (route === "anthropic") {
+      claudeReply(res, body, raw, scenario);
+      return;
+    }
     if (scenario === "remember") {
       if (body.messages?.at(-1)?.role === "tool") {
         textResponse(res, "Saved.");
@@ -713,6 +958,19 @@ const server = http.createServer((req, res) => {
     }
     if (raw.includes("Write a title of at most six words.") && body.stream !== true) {
       jsonTitle(res);
+      return;
+    }
+    if (scenario === "effort-reject" || scenario === "slow-effort-reject") {
+      // Like a provider that does not take the parameter: each request that carries it gets one 400.
+      if (Object.hasOwn(body, "reasoning_effort")) {
+        json(res, 400, {
+          error: { message: "Unsupported parameter: reasoning_effort is not supported with this model.", type: "invalid_request_error", param: "reasoning_effort", code: "unsupported_parameter" },
+        });
+      } else if (scenario === "slow-effort-reject") {
+        slowResponse(res);
+      } else {
+        textResponse(res, "pong");
+      }
       return;
     }
     if (scenario === "remember-loop") {

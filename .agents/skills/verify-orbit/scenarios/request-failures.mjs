@@ -1,4 +1,5 @@
 import { eventually } from "../../../../src/lib/eventually.mjs";
+import { settingsForm, settingsSave } from "../../../../scripts/qa/settings-save.mjs";
 
 // Fails each browser request with page.route and checks what the screen shows.
 
@@ -83,19 +84,20 @@ export default async function requestFailures({ page, origin, step, shot }) {
   const sawPending = await disabled(newChat);
   // A full page.goto would destroy the app's JS context and the pending answer with it, so the step must navigate in-app.
   await page.getByRole("link", { name: "Settings" }).click();
-  await page.getByRole("button", { name: "Save", exact: true }).waitFor({ timeout: 10_000 });
+  const saveButton = settingsSave(page);
+  await saveButton.waitFor({ timeout: 10_000 });
   await Promise.all(heldCreates.splice(0).map((route) => route.continue().catch(() => {})));
   await page.unrouteAll({ behavior: "ignoreErrors" });
   const leftSettings = await page.waitForURL((url) => !url.pathname.startsWith("/settings"), { timeout: 2_000 }).then(() => true, () => false);
   step("a New chat answer that arrives after opening Settings leaves Settings open", sawPending && !leftSettings, `pending ${sawPending}, left ${leftSettings}, url ${page.url()}`);
   await shot("new-chat-after-leave");
 
-  const status = page.locator("form").first();
-  const failedLabel = status.getByText("Failed", { exact: true });
-  const zeroModels = status.getByText(/^\s*0\s+models?\s*$/);
-  const someModels = status.getByText(/^\s*\d+\s+models?\s*$/);
+  const failedLabel = page.getByText("Failed", { exact: true }).first();
+  const zeroModels = page.getByText(/^\s*0\s+models?\s*$/).first();
+  const someModels = page.getByText(/^\s*\d+\s+models?\s*$/).first();
+  const modelList = "**/api/connections/*/models";
 
-  await page.route("**/api/models", (route) => route.fulfill({ status: 200, contentType: "text/html", body: "<html>gateway</html>" }));
+  await page.route(modelList, (route) => route.fulfill({ status: 200, contentType: "text/html", body: "<html>gateway</html>" }));
   await page.goto(`${origin}/settings`);
   const unreadable = await shows(failedLabel, 10_000);
   await shot("models-unreadable");
@@ -106,13 +108,13 @@ export default async function requestFailures({ page, origin, step, shot }) {
     ["a proxy", "<html>400 Bad Request</html>", "text/html"],
   ]) {
     await page.unrouteAll({ behavior: "ignoreErrors" });
-    await page.route("**/api/models", (route) => route.fulfill({ status: 400, contentType, body }));
+    await page.route(modelList, (route) => route.fulfill({ status: 400, contentType, body }));
     await page.reload();
-    step(`a model list 400 from ${label} shows Failed, not Not checked`, await shows(failedLabel, 10_000), `status ${await status.locator("[aria-live]").first().textContent()}`);
+    step(`a model list 400 from ${label} shows Failed, not Not checked`, await shows(failedLabel, 10_000), "no Failed label");
   }
 
   await page.unrouteAll({ behavior: "ignoreErrors" });
-  await page.route("**/api/models", (route) => route.abort());
+  await page.route(modelList, (route) => route.abort());
   await page.reload();
   step("a model list that fails on the network shows Failed", await shows(failedLabel, 10_000), "no Failed label");
 
@@ -126,10 +128,9 @@ export default async function requestFailures({ page, origin, step, shot }) {
     if (route.request().method() !== "PUT") return route.continue();
     heldSaves.push(route);
   });
-  const saveButton = page.getByRole("button", { name: "Save", exact: true });
   await saveButton.click();
   const savePending = await disabled(saveButton);
-  await page.locator("form").first().evaluate((form) => form.requestSubmit());
+  await settingsForm(page).evaluate((form) => form.requestSubmit());
   const saveRequests = heldSaves.length;
   await Promise.all(heldSaves.splice(0).map((route) => route.continue().catch(() => {})));
   await page.unrouteAll({ behavior: "ignoreErrors" });
@@ -137,7 +138,7 @@ export default async function requestFailures({ page, origin, step, shot }) {
   await shot("settings-save-held");
 
   await page.route("**/api/settings", (route) => (route.request().method() === "PUT" ? route.abort() : route.continue()));
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await saveButton.click();
   const saveFailed = await shows(page.getByRole("alert").filter({ hasText: "Could not save" }));
   await shot("settings-save-offline");
   step("a settings save that fails on the network shows Could not save", saveFailed, "no Could not save");

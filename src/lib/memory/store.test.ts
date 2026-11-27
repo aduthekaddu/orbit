@@ -4,7 +4,7 @@ import path from "node:path";
 import test, { before, after } from "node:test";
 import { createRequire } from "node:module";
 import Database from "better-sqlite3";
-import { getDb } from "../db";
+import { getDb, registerMigrationFunctions } from "../db";
 import * as schema from "../db/schema";
 import { dataDirectory } from "../paths";
 import { rememberFact } from "../tools/memory";
@@ -141,7 +141,7 @@ test("upgrading an existing database keeps the memory and gives it an unknown so
   const migrations = fs.readdirSync(folder).filter((name) => name.endsWith(".sql")).sort();
   const db = new Database(":memory:");
   try {
-    db.function("orbit_clean_output", (text: unknown) => (typeof text === "string" ? text : null));
+    registerMigrationFunctions(db);
     const sqliteVec = require("sqlite-vec") as { load: (database: Database.Database) => void };
     sqliteVec.load(db);
     const apply = (names: string[]) => {

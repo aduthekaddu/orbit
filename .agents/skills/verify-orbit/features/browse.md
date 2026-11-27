@@ -10,11 +10,11 @@ Browse drives Chrome through Playwright. Use it to prove a click, a layout, or a
 - **Output.** Each check prints `PASS <name>` or `FAIL <name>: <detail>`. Screenshots go to `.verify/evidence/<scenario>/<name>.png`, and the step lines go to `summary.txt` in the same folder. Each run deletes that scenario's old evidence first.
 - **Exit code.** 1 when any step fails or the scenario throws. A throw prints `FAIL scenario finished` and saves `error.png`.
 
-A scenario exports one default function that receives `{ page, origin, mockUrl, step, shot }`. `mockUrl` is the base URL of the mock provider that `launch --mock` started. Reading it with no mock running fails the scenario with the command to run. `step(name, ok, detail)` records a check. `shot(name, target)` saves a screenshot of `target`, which is `page` by default. Find elements by the label a user sees, such as `Ask anything`, `Retry`, or `Save`, not by CSS classes.
+A scenario exports one default function that receives `{ page, origin, mockUrl, useProvider, step, shot }`. `mockUrl` is the base URL of the mock provider that `launch --mock` started. Reading it with no mock running fails the scenario with the command to run. `useProvider()` connects the mock and makes `mock-genui` at `low` the default model, reusing the connection `launch --mock` added. Pass `{ model, effort }` to change the default, or `{ baseUrl, apiKey, model }` to connect a real provider. It throws when a request fails or a response holds the key. `step(name, ok, detail)` records a check. `shot(name, target)` saves a screenshot of `target`, which is `page` by default. Find elements by the label a user sees, such as `Ask anything`, `Retry`, or `Save`, not by CSS classes.
 
 ## Preconditions
 
-- Run `node .agents/skills/verify-orbit/verify.mjs launch --mock`. It starts the sandbox server, starts `scripts/qa/mock-provider.mjs` on a free port that the OS picks (saved in `.verify/mock.json`), and saves the settings for it: base URL `http://127.0.0.1:<mock port>/v1`, key `test-key-not-real`, and model `mock-genui`.
+- Run `node .agents/skills/verify-orbit/verify.mjs launch --mock`. It starts the sandbox server, starts `scripts/qa/mock-provider.mjs` on a free port that the OS picks (saved in `.verify/mock.json`), and adds a connection to it: base URL `http://127.0.0.1:<mock port>/v1`, key `test-key-not-real`, and default model `mock-genui` at `low`.
 - `doctor` prints `doctor ok`. `browse` runs the same check first and stops if it fails.
 - `launch --mock` creates `verify@orbit.local`, so `drive signup` and `drive chat` cannot run on that sandbox. Use a fresh launch for them.
 - `cleanup` stops the mock provider and the server.
@@ -82,7 +82,7 @@ Screenshot: `save-visible.png`.
 
 ### request-failures
 
-Fails each browser request with `page.route`: New chat (HTTP 500, network, a body with no id, an HTTP 500 from the open drawer at 390 pixels, a held answer with a double click and the shortcut, then a held answer after opening Settings), the settings model list (not JSON, a JSON 400, an HTML 400, network, then real), a second Settings Save while one is held, settings Save and the GitHub check on the network, a GitHub check 400, and a reply edit on the network.
+Fails each browser request with `page.route`: New chat (HTTP 500, network, a body with no id, an HTTP 500 from the open drawer at 390 pixels, a held answer with a double click and the shortcut, then a held answer after opening Settings), a connection's model list in Settings, `GET /api/connections/<id>/models` (not JSON, a JSON 400, an HTML 400, network, then real), a second Settings Save while one is held, settings Save and the GitHub check on the network, a GitHub check 400, and a reply edit on the network.
 
 Pass lines:
 

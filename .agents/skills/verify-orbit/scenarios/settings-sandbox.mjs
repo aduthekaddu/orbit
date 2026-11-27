@@ -1,25 +1,22 @@
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const publicFields = ["baseUrl", "githubMcpUrl", "githubTokenSet", "keySet", "model", "reasoningEffort", "sandbox", "searxngUrl", "tavilyKeySet"];
-export default async function settingsSandbox({ page, origin, mockUrl, step, shot }) {
-  const provider = { baseUrl: mockUrl, model: "mock-genui", reasoningEffort: "low" };
+const publicFields = ["githubMcpUrl", "githubTokenSet", "sandbox", "searxngUrl", "tavilyKeySet"];
+export default async function settingsSandbox({ page, origin, step, shot }) {
   const state = JSON.parse(fs.readFileSync(fileURLToPath(new URL("../../../../.verify/server.json", import.meta.url)), "utf8"));
   const expected = state.sandboxEnabled === true;
   const label = expected ? "On" : "Off";
 
-  const seeded = await page.request.put(`${origin}/api/settings`, { data: { ...provider, apiKey: "test-key-not-real" } });
-  step("valid provider settings are saved before the checks", seeded.ok(), `PUT ${seeded.status()}`);
   const body = await (await page.request.get(`${origin}/api/settings`)).json();
   step(`GET /api/settings reports the sandbox ${label}`, body.sandbox === expected, `sandbox ${JSON.stringify(body.sandbox)}`);
   const fields = Object.keys(body).sort();
   step("settings expose only the known fields and no Docker connection detail", JSON.stringify(fields) === JSON.stringify(publicFields) && !/docker|socket|proxy/i.test(JSON.stringify(body)), fields.join(","));
-  const put = await page.request.put(`${origin}/api/settings`, { data: { ...provider, sandbox: !expected } });
+  const put = await page.request.put(`${origin}/api/settings`, { data: { sandbox: !expected } });
   const after = await (await page.request.get(`${origin}/api/settings`)).json();
   step("the browser cannot change the sandbox setting", put.ok() && after.sandbox === expected, `PUT ${put.status()}, sandbox ${JSON.stringify(after.sandbox)}`);
 
   await page.goto(`${origin}/settings`);
-  await page.getByRole("heading", { name: "Provider" }).waitFor({ timeout: 15_000 });
+  await page.getByRole("heading", { name: "Code sandbox" }).waitFor({ timeout: 15_000 });
   const status = page.locator("[data-sandbox-status]");
   const shown = (await status.count()) === 1;
   const text = shown ? (await status.innerText()).trim() : "";

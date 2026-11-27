@@ -1,3 +1,4 @@
+import type { ConnectionSecrets } from "./connections";
 import type { settings } from "./db/schema";
 import { stripTerminalControlsWithMap } from "./sandbox/terminal";
 import type { SettingsRecord } from "./settings";
@@ -16,8 +17,8 @@ export type SettingsLabels<Field extends string> = {
   [Name in Field]: Lowercase<Name> extends CredentialName ? "credential" : "credential" | "setting";
 };
 
-// Every stored setting and every settings column must be listed here, so a new
-// credential cannot be added without the Redactor covering it.
+// Every stored setting, every settings column, and every decrypted provider connection field must be listed here, so
+// a new credential cannot be added without the Redactor covering it.
 const SETTINGS_FIELDS = {
   baseUrl: "setting",
   apiKey: "credential",
@@ -25,13 +26,11 @@ const SETTINGS_FIELDS = {
   tavilyApiKey: "credential",
   githubToken: "credential",
   githubMcpUrl: "setting",
-  model: "setting",
-  reasoningEffort: "setting",
-} as const satisfies SettingsLabels<keyof SettingsRecord | StoredColumn>;
+} as const satisfies SettingsLabels<keyof SettingsRecord | StoredColumn | keyof ConnectionSecrets>;
 
 type SettingsField = keyof typeof SETTINGS_FIELDS;
 type CredentialField = { [Field in SettingsField]: (typeof SETTINGS_FIELDS)[Field] extends "credential" ? Field : never }[SettingsField];
-export type StoredCredentials = Readonly<Record<CredentialField, string>>;
+export type StoredCredentials = Readonly<Partial<Record<CredentialField, string>>>;
 export type CredentialSource = StoredCredentials & {
   readonly baseUrl?: string;
   readonly searxngUrl?: string;
@@ -798,7 +797,7 @@ export class Redactor {
         credentials === null
           ? []
           : [
-              ...CREDENTIAL_FIELDS.map((field) => credentials[field]),
+              ...CREDENTIAL_FIELDS.map((field) => credentials[field] ?? ""),
               ...URL_FIELDS.flatMap((field) => urlSecrets(credentials[field])),
             ],
       ),
@@ -838,6 +837,11 @@ export class Redactor {
 
   get hasLongSecrets(): boolean {
     return this.#longSet.strings.length > 0;
+  }
+
+  withCredentials(...sources: CredentialSource[]): Redactor {
+    const saved = Array.from(this.#everyLookup, (apiKey) => ({ apiKey }));
+    return new Redactor(null, ...saved, ...sources);
   }
 
   get streamHoldback(): number {

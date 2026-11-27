@@ -156,17 +156,13 @@ async function main() {
     const { createChat, persistIncoming } = await import("../../src/lib/messages.ts");
     const { runDream } = await import("../../src/lib/memory/dream.ts");
 
+    const { addConnection, saveModelDefaults } = await import("../../src/lib/connections.ts");
+
     db.insert(schema.user).values({ id: "qa-user", name: "QA", email: "qa@orbit.local", emailVerified: true }).run();
-    db.insert(schema.settings)
-      .values({
-        id: 1,
-        baseUrl: provider.url,
-        apiKey: "mock-key-not-real",
-        model: "mock-genui",
-        reasoningEffort: "medium",
-        updatedAt: new Date(),
-      })
-      .run();
+    const redact = new Redactor(null);
+    const added = await addConnection("qa-user", { kind: "openai-compatible", label: "Mock", baseUrl: provider.url, apiKey: "mock-key-not-real" }, redact);
+    if (!added.ok) throw new Error(`adding the mock connection failed: ${added.reason}`);
+    saveModelDefaults("qa-user", { connectionId: added.connection.id, model: "mock-genui", effort: "medium" });
 
     const date = "2099-08-08";
     const base = Date.parse(`${date}T12:00:00Z`);
@@ -175,7 +171,6 @@ async function main() {
       { chat: "B", text: best.right },
       { chat: "C", text: unrelated.right },
     ];
-    const redact = new Redactor(null);
     seeds.forEach((seed, index) => {
       const chat = createChat("qa-user");
       const id = crypto.randomUUID();

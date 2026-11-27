@@ -25,7 +25,6 @@ async function checkHashScenario(program: Program, result: { exitCode?: number; 
   let digest = "";
   const page = {
     request: {
-      put: async () => ({ ok: () => true }),
       post: async () => ({ json: async () => ({ id: "hash-check" }) }),
       get: async () => ({ json: async () => ({ messages: [{ message: { role: "assistant", parts: [
         { type: "tool-run_code", state: "output-available", input: program(input, digest), output: { exitCode: result.exitCode ?? 0, stdout: result.stdout ?? `${digest}\n` } },
@@ -46,7 +45,7 @@ async function checkHashScenario(program: Program, result: { exitCode?: number; 
     waitForFunction: async () => {},
   };
   const { default: sandboxReal } = await import(scenarioUrl);
-  await sandboxReal({ page, origin: "http://orbit.invalid", step: (name: string, ok: boolean) => checks.set(name, ok), shot: async () => {} });
+  await sandboxReal({ page, origin: "http://orbit.invalid", useProvider: async () => ({}), step: (name: string, ok: boolean) => checks.set(name, ok), shot: async () => {} });
   return { prompt, checks };
 }
 

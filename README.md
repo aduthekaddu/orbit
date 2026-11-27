@@ -40,7 +40,7 @@ Planned features are listed in the [roadmap](docs/roadmap.md).
 
 | Requirement | Version | Needed for |
 | --- | --- | --- |
-| An OpenAI-compatible endpoint and API key | Any | Chat |
+| An API key for an OpenAI-compatible endpoint or for Anthropic | Any | Chat |
 | Docker with the Compose plugin | Compose v2 (`docker compose`) | Running with Docker |
 | Node.js | 22 or later | Running from source |
 | npm | 10 or later | Running from source |
@@ -55,7 +55,7 @@ Planned features are listed in the [roadmap](docs/roadmap.md).
 	cd orbit
 	```
 
-2. Optional: copy `.env.example` to `.env` and fill in `ORBIT_BASE_URL`, `ORBIT_API_KEY`, and `ORBIT_MODEL`. Orbit uses them to fill the settings the first time it starts. You can also enter them later on the **Settings** page.
+2. Optional: copy `.env.example` to `.env` and fill in `ORBIT_BASE_URL`, `ORBIT_API_KEY`, and `ORBIT_MODEL`. When you create your account, Orbit saves them as your first provider connection and default model. You can also add connections later on the **Settings** page.
 
 3. Build and start the container.
 
@@ -93,7 +93,7 @@ The entrypoint gives `/app/data`, or the directory in `ORBIT_DATA_DIR` when you 
 	npm start -- -p 3210 -H 127.0.0.1
 	```
 
-3. Open <http://127.0.0.1:3210> and create your account. Then open **Settings** and enter your base URL, API key, and model.
+3. Open <http://127.0.0.1:3210> and create your account. The first chat asks for a provider connection: an OpenAI-compatible base URL and API key, or an Anthropic API key. Then pick the default model.
 
 For development with hot reload, run `npm run dev` instead of steps 2 and 3.
 
@@ -103,7 +103,9 @@ Every variable is optional.
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `ORBIT_BASE_URL`, `ORBIT_API_KEY`, `ORBIT_MODEL` | Empty | Fill the provider settings when the database has none yet. |
+| `ORBIT_BASE_URL`, `ORBIT_API_KEY`, `ORBIT_MODEL` | Empty | When the first account is created, save an OpenAI-compatible connection from the base URL and key, with `ORBIT_MODEL` as the default model. After that, connections live in the database and these variables are not read again. |
+| `ORBIT_SECRET_KEY` | Generated into `data/secret-key` | 64 hex characters. The key that encrypts saved provider API keys. See [Back up your data](#back-up-your-data). |
+| `ORBIT_ANTHROPIC_BASE_URL` | `https://api.anthropic.com/v1` | Where Anthropic connections send messages and list models. |
 | `ORBIT_SEARXNG_URL` | Empty, or `http://searxng:8080` in Compose | Seed the search backend URL on a new database. For a local Next.js server, use `http://127.0.0.1:8888`. |
 | `ORBIT_TAVILY_API_KEY` | Empty | Seed the server-side Tavily key on a new database. Tavily runs when SearXNG fails or returns no results. |
 | `ORBIT_GITHUB_TOKEN` | Empty | Seed the server-side GitHub token on a new database. Tools stay read-only and cover repositories, issues, and pull requests. The token is sent only to `api.githubcopilot.com`, `github.com`, and `api.github.com` over HTTPS. |
@@ -111,12 +113,16 @@ Every variable is optional.
 | `ORBIT_DREAM_HOUR` | `3` | Local hour when the nightly memory pass starts. The Docker image runs UTC unless `TZ` is set, so 3 means 03:00 UTC there. |
 | `ORBIT_SANDBOX` | Off | Source builds use `on` to enable `run_code`. Compose requires the [sandbox override](#enable-the-code-sandbox). Settings shows whether it is on. |
 | `DOCKER_HOST` | Local Docker socket for source builds | Configure the local connection for source builds. Default Compose omits it. The sandbox override sets a private proxy. Remote Docker hosts are unsupported. |
-| `ORBIT_DATA_DIR` | `./data` | Where Orbit keeps `orbit.db` and `auth-secret`. |
+| `ORBIT_DATA_DIR` | `./data` | Where Orbit keeps `orbit.db`, `secret-key`, and `auth-secret`. |
 | `BETTER_AUTH_SECRET` | Generated into `data/auth-secret` | The key that signs session cookies. |
 | `BETTER_AUTH_URL` | `http://127.0.0.1:3210` | The URL you open Orbit at. |
 | `ORBIT_TRUSTED_ORIGINS` | Empty | Extra origins, separated by commas, that may sign in and send API writes. Needed when you serve Orbit on another port or host. Sign-in accepts wildcard patterns. An API write the browser marks `same-origin` passes; every other write matches each origin exactly, not as a wildcard. |
 | `ORBIT_PUBLIC_URL` | Empty | The public address behind a Cloudflare tunnel, such as `https://orbit.example.com`. It becomes the auth URL and a trusted origin. `127.0.0.1:3210` still signs in. See [Deploy behind Cloudflare](#deploy-behind-cloudflare). |
 | `CLOUDFLARE_TUNNEL_TOKEN` | Empty | The tunnel token. Only the `cloudflared` container reads it, as a file secret. |
+
+### Back up your data
+
+Orbit keeps everything in its data directory, `./data` unless `ORBIT_DATA_DIR` says otherwise. Stop Orbit, then copy the whole directory. Keep `secret-key` with `orbit.db`. Provider API keys in `orbit.db` are encrypted with it, so a database restored without it cannot use them, and each connection needs its API key entered again. If you set `ORBIT_SECRET_KEY`, keep that value instead. `auth-secret` signs sessions. Without it, you sign in again.
 
 ### Memory embeddings
 

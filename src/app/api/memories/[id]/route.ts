@@ -1,6 +1,5 @@
-import { Redactor } from "@/lib/chat-errors";
 import { cleanMemoryText, deleteMemory, memoryJson, MemoryRejected, updateMemory } from "@/lib/memory/store";
-import { getSettings } from "@/lib/settings";
+import { requestRedactor } from "@/lib/settings";
 import { getSession, unauthorized } from "@/lib/session";
 import { LIMITS, r } from "@/lib/route-schema";
 
@@ -25,7 +24,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) return Response.json({ error: "Invalid memory" }, { status: 400 });
   try {
-    const redact = new Redactor(getSettings());
+    const redact = requestRedactor(session.user.id);
     const text = redact.text(cleanMemoryText(redact.text(parsed.data.text)));
     const memory = updateMemory(params.data.id, { ...parsed.data, text, source: "user" });
     if (!memory) return Response.json({ error: "Not found" }, { status: 404 });

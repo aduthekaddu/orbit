@@ -2,10 +2,9 @@ import assert from "node:assert/strict";
 
 const answer = "Answered after four notes.";
 
-export default async function noSearchFinalAnswer({ page, origin, mockUrl, step, shot }) {
-  const saved = await page.request.put(`${origin}/api/settings`, { data: {
-    baseUrl: mockUrl, model: "mock-genui", reasoningEffort: "low", searxngUrl: "", tavilyApiKey: null,
-  } });
+export default async function noSearchFinalAnswer({ page, origin, useProvider, step, shot }) {
+  await useProvider();
+  const saved = await page.request.put(`${origin}/api/settings`, { data: { searxngUrl: "", tavilyApiKey: null } });
   assert.equal(saved.status(), 200);
   const settings = await (await page.request.get(`${origin}/api/settings`)).json();
   step("search is off", settings.searxngUrl === "" && settings.tavilyKeySet === false);

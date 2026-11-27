@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
+import { Redactor } from "../chat-errors";
 import { getDb } from "../db";
 import * as store from "../memory/store";
 import { toolsFor } from "./index";
@@ -30,16 +31,8 @@ test("remember returns the saved text", () => {
 test("remember masks stored credentials before saving to SQLite and returning tool output", async () => {
   const providerKey = "made-up-provider-key-0001";
   const tavilyKey = "made-up-tavily-key-0002";
-  const tool = toolsFor({
-    baseUrl: "http://127.0.0.1:9/v1",
-    apiKey: providerKey,
-    model: "mock",
-    reasoningEffort: "low",
-    searxngUrl: "",
-    tavilyApiKey: tavilyKey,
-    githubToken: "",
-    githubMcpUrl: "",
-  }).remember;
+  const settings = { searxngUrl: "", tavilyApiKey: tavilyKey, githubToken: "", githubMcpUrl: "" };
+  const tool = toolsFor(settings, undefined, undefined, new Redactor(settings, { apiKey: providerKey, baseUrl: "http://127.0.0.1:9/v1" })).remember;
   assert.ok(tool?.execute);
   const result = (await tool.execute(
     { text: `Use ${providerKey} and made%2Dup-tavily-key-0002`, kind: "fact" },

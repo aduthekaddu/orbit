@@ -14,6 +14,7 @@ export const r = {
   union: z.union,
   discriminatedUnion: z.discriminatedUnion,
   number: z.number,
+  boolean: z.boolean,
   // For content a chat already stores. The whole request is capped at LIMITS.requestBytes before
   // it is parsed, and no string or list inside it can be longer than that.
   history: {
@@ -28,6 +29,7 @@ export const LIMITS = {
   url: 2048,
   secret: 4096,
   modelName: 200,
+  label: 100,
   memoryText: 2000,
   query: 500,
   userMessageText: 50_000,

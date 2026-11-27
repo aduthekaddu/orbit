@@ -1,10 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 
-export default async function sandboxReal({ page, origin, step, shot }) {
+export default async function sandboxReal({ page, origin, useProvider, step, shot }) {
   const { ORBIT_API_KEY, ORBIT_BASE_URL, ORBIT_MODEL } = process.env;
   if (!ORBIT_API_KEY || !ORBIT_BASE_URL || !ORBIT_MODEL) throw new Error("ORBIT_API_KEY, ORBIT_BASE_URL, and ORBIT_MODEL are required");
-  const settings = await page.request.put(`${origin}/api/settings`, { data: { baseUrl: ORBIT_BASE_URL, apiKey: ORBIT_API_KEY, model: ORBIT_MODEL, reasoningEffort: "low" } });
-  if (!settings.ok()) throw new Error(`provider settings returned ${settings.status()}`);
+  await useProvider({ baseUrl: ORBIT_BASE_URL, apiKey: ORBIT_API_KEY, model: ORBIT_MODEL });
   const { id } = await (await page.request.post(`${origin}/api/chats`)).json();
   await page.goto(`${origin}/c/${id}`);
   const composer = page.getByPlaceholder("Ask anything");

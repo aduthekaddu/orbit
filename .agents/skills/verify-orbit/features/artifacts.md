@@ -21,7 +21,7 @@ The layout checks use 1440 by 900 and 390 by 844 viewports. The phone preview mu
 
 Proof goes in `.verify/evidence/artifacts/summary.txt` and the screenshots `html.png`, `svg.png`, `react-clicked.png`, `error.png`, `reloaded.png`, `mobile.png` and `reasoning-open.png`. Before implementation, the missing Preview action produces `before.png` and a failed step. Copy that evidence elsewhere under `.verify/` before a later run, since browse replaces the scenario's evidence folder.
 
-Run the real-provider check with `ORBIT_BASE_URL`, `ORBIT_API_KEY` and `ORBIT_MODEL` in the environment:
+Run the real-provider check with `ORBIT_BASE_URL`, `ORBIT_API_KEY` and `ORBIT_MODEL` in the environment. The scenario connects that provider and makes `ORBIT_MODEL` the default:
 
 ```sh
 node .agents/skills/verify-orbit/verify.mjs launch

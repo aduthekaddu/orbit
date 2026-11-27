@@ -1,5 +1,6 @@
 import { eventually } from "../../../../src/lib/eventually.mjs";
 import { startMockMcp } from "../../../../scripts/qa/mock-mcp.mjs";
+import { settingsSave } from "../../../../scripts/qa/settings-save.mjs";
 
 // A finished tool call is a closed <details> line, and its results show once the summary is clicked.
 async function openLine(line) {
@@ -7,15 +8,12 @@ async function openLine(line) {
 }
 
 const ISSUE = "https://github.com/aduthekaddu/orbit/issues/7";
-export default async function github({ page, origin, mockUrl, step, shot }) {
+export default async function github({ page, origin, useProvider, step, shot }) {
   const mock = await startMockMcp();
   try {
+    await useProvider();
     const saved = await page.request.put(`${origin}/api/settings`, {
       data: {
-        baseUrl: mockUrl,
-        apiKey: "test-key-not-real",
-        model: "mock-genui",
-        reasoningEffort: "low",
         githubToken: mock.token,
         githubMcpUrl: mock.url,
       },
@@ -88,7 +86,7 @@ export default async function github({ page, origin, mockUrl, step, shot }) {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto(`${origin}/settings`);
     await page.getByRole("button", { name: "Remove GitHub token", exact: true }).click();
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await settingsSave(page).click();
     const savedLabel = await page.getByText("Saved", { exact: true }).waitFor({ timeout: 10_000 }).then(() => true, () => false);
     const removedText = await (await page.request.get(`${origin}/api/settings`)).text();
     const removed = JSON.parse(removedText);

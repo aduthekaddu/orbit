@@ -1,17 +1,16 @@
 import { eventually } from "../../../../src/lib/eventually.mjs";
 import { startMockSearxng, searchFixtures } from "../../../../scripts/qa/mock-searxng.mjs";
+import { settingsSave } from "../../../../scripts/qa/settings-save.mjs";
 
 // A finished tool call is a closed <details> line, and its results show once the summary is clicked.
 async function openLine(line) {
   if (await line.evaluate((root) => root.matches("details:not([open])"))) await line.locator(":scope > summary").click();
 }
 
-export default async function searchTool({ page, origin, mockUrl, step, shot }) {
+export default async function searchTool({ page, origin, useProvider, step, shot }) {
   const mock = await startMockSearxng();
   try {
-    await page.request.put(`${origin}/api/settings`, {
-      data: { baseUrl: mockUrl, apiKey: "test-key-not-real", model: "mock-genui", reasoningEffort: "low" },
-    });
+    await useProvider();
     await page.goto(`${origin}/settings`);
     const field = page.getByLabel("SearXNG URL", { exact: true });
     const present = await field.isVisible();
@@ -22,7 +21,7 @@ export default async function searchTool({ page, origin, mockUrl, step, shot }) 
     }
     await field.fill(mock.url);
     await page.getByLabel("Tavily key", { exact: true }).fill("test-tavily-key-not-real");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await settingsSave(page).click();
     await page.getByText("Saved", { exact: true }).waitFor();
     await shot("settings");
     const settings = await page.request.get(`${origin}/api/settings`);
@@ -30,7 +29,7 @@ export default async function searchTool({ page, origin, mockUrl, step, shot }) 
     const publicSettings = JSON.parse(publicText);
     step("Search settings save without exposing either key", publicSettings.searxngUrl === mock.url && publicSettings.tavilyKeySet === true && !("tavilyApiKey" in publicSettings) && !("apiKey" in publicSettings) && !publicText.includes("test-tavily-key-not-real") && !publicText.includes("test-key-not-real"));
     await page.getByLabel("Tavily key", { exact: true }).fill("");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await settingsSave(page).click();
     await page.getByText("Saved", { exact: true }).waitFor();
     const kept = await (await page.request.get(`${origin}/api/settings`)).json();
     step("a blank Tavily key keeps the stored key", kept.tavilyKeySet === true);
@@ -41,10 +40,10 @@ export default async function searchTool({ page, origin, mockUrl, step, shot }) 
       return;
     }
     await remove.click();
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await settingsSave(page).click();
     await page.getByText("Saved", { exact: true }).waitFor();
     const removed = await (await page.request.get(`${origin}/api/settings`)).json();
-    step("Remove and Save clear the stored Tavily key", removed.tavilyKeySet === false && removed.keySet === true);
+    step("Remove and Save clear the stored Tavily key", removed.tavilyKeySet === false);
     await page.reload();
     step("the removed Tavily key stays absent after reload", await page.getByLabel("Tavily key", { exact: true }).getAttribute("placeholder") === "" && await remove.count() === 0);
     await shot("key-removed");

@@ -1,5 +1,6 @@
 import { AssistantChatTransport } from "@assistant-ui/react-ai-sdk";
 import type { UIMessage, UIMessageChunk } from "ai";
+import type { ModelChoice } from "./model-choice";
 import { SERVER_TIME_HEADER } from "./thought-time";
 
 class OrbitChatTransport extends AssistantChatTransport<UIMessage> {
@@ -34,6 +35,7 @@ export function orbitChatTransport(
   chatId: string,
   options?: {
     editMessageId?: () => string | null;
+    modelChoice?: () => ModelChoice | null;
     api?: string;
     headers?: Record<string, string>;
     fetch?: typeof fetch;
@@ -67,7 +69,15 @@ export function orbitChatTransport(
     },
     // assistant-ui replaces the request id with its local thread id. The open chat id has to win.
     prepareSendMessagesRequest: ({ body, messages, trigger, messageId }) => ({
-      body: { ...body, id: chatId, messages, trigger, messageId, editMessageId: trigger === "submit-message" ? options?.editMessageId?.() ?? undefined : undefined },
+      body: {
+        ...body,
+        id: chatId,
+        messages,
+        trigger,
+        messageId,
+        editMessageId: trigger === "submit-message" ? options?.editMessageId?.() ?? undefined : undefined,
+        modelChoice: options?.modelChoice?.() ?? undefined,
+      },
     }),
   });
 }

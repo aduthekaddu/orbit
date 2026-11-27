@@ -1,4 +1,5 @@
 import { eventually } from "../../../../src/lib/eventually.mjs";
+import { settingsSave } from "../../../../scripts/qa/settings-save.mjs";
 
 // The Appearance section in /settings (slice 14, turn 3): rows, touch targets, each choice applied at once and
 // saved, first paint from the server with and without JavaScript, system theme, a rapid-change race, a failed
@@ -135,7 +136,7 @@ export default async function appearance({ page, origin, step, shot }) {
     // 1. Rows at 1440 and 390 with touch.
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(settingsUrl);
-    await page.getByRole("button", { name: "Save" }).waitFor({ timeout: 15_000 });
+    await settingsSave(page).waitFor({ timeout: 15_000 });
     const darkPaint = await paint();
     const hasSection = await section(page).waitFor({ timeout: 10_000 }).then(() => true, () => false);
     step("1440: /settings has an Appearance section", hasSection, "no region named Appearance");
@@ -161,7 +162,7 @@ export default async function appearance({ page, origin, step, shot }) {
     await phone.addCookies(await page.context().cookies());
     const mobile = await phone.newPage();
     await mobile.goto(settingsUrl);
-    await mobile.getByRole("button", { name: "Save" }).waitFor({ timeout: 15_000 });
+    await settingsSave(mobile).waitFor({ timeout: 15_000 });
     const phoneSection = await section(mobile).waitFor({ timeout: 10_000 }).then(() => true, () => false);
     const narrowRows = await rowsAt(mobile);
     step("390: four rows show and Chat width is hidden", phoneSection && narrowRows.length === 4 && !narrowRows.includes("Chat width"), `shown: ${narrowRows.join(", ") || "none"}`);

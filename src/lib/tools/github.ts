@@ -1,6 +1,7 @@
 import { createMCPClient, type MCPClient } from "@ai-sdk/mcp";
 import type { Tool } from "ai";
 import { REDACTED, Redactor, resolveMaskedUrl, type StoredCredentials } from "../chat-errors";
+import type { ConnectionSecrets } from "../connections";
 import { githubLogin } from "./github-links";
 
 export const DEFAULT_GITHUB_MCP_URL = "https://api.githubcopilot.com/mcp/";
@@ -21,7 +22,7 @@ const GITHUB_CLOSE_MS = 5_000;
 const MCP_LEGACY_PROTOCOL_VERSION = "2025-11-25";
 const PREFIX = "github_";
 
-export type GithubSettings = StoredCredentials & { githubMcpUrl: string };
+export type GithubSettings = StoredCredentials & { githubToken: string; githubMcpUrl: string };
 
 export type McpToolSet = {
   tools: Record<string, Tool>;
@@ -524,13 +525,15 @@ export async function openGithubTurn(
   }
 }
 
-// A token submitted with the check replaces the stored one for this request, and the redactor covers both.
+// A token submitted with the check replaces the stored one for this request, and the redactor covers both. Settings
+// masks the saved URL with `connectionSecrets` too, so the URL it shows matches here.
 export async function checkGithub(
   stored: GithubSettings,
   submitted: { token?: string; mcpUrl?: string } = {},
   signal?: AbortSignal,
+  connectionSecrets: readonly ConnectionSecrets[] = [],
 ): Promise<{ ok: true; login: string } | { ok: false; error: string }> {
-  const storedRedact = new Redactor(stored);
+  const storedRedact = new Redactor(stored, ...connectionSecrets);
   const resolvedMcp = resolveMaskedUrl({
     submitted: submitted.mcpUrl,
     saved: stored.githubMcpUrl,
@@ -545,7 +548,7 @@ export async function checkGithub(
     githubToken: submitted.token?.trim() || stored.githubToken,
     githubMcpUrl: resolvedMcp.url,
   };
-  const redact = new Redactor(stored, settings);
+  const redact = new Redactor(stored, settings, ...connectionSecrets);
   if (!settings.githubToken.trim()) return { ok: false, error: "Add a GitHub token." };
   try {
     const opened = await githubTools(settings, { signal, tools: GITHUB_CHECK_TOOLS, redact });

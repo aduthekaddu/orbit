@@ -15,7 +15,7 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 
 - Start from the baseline unless the feature names a different precondition.
 - `<port>` in a recipe is the port in `ORBIT_VERIFY_PORT`, default `3210`. The sandbox origin is `http://127.0.0.1:<port>`. Where the deployment owns `3210`, `http://127.0.0.1:3210` opens the deployment, not the sandbox.
-- Page checks use the visible strings `Create account`, `Sign in`, `Ask anything`, and the settings labels `Base URL` and `API key`.
+- Page checks use the visible strings `Create account`, `Sign in`, `Ask anything`, and the settings headings `Connections` and `Default model`.
 - Run every command through `node .agents/skills/verify-orbit/verify.mjs`.
 - Keep `.verify/evidence/` after cleanup.
 
@@ -35,6 +35,7 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 - [Sign in](./signin.md) returns that account to a chat.
 - [Settings](./settings.md) stores a provider without returning the key.
 - [Chat](./chat.md) streams one turn and reads it back from SQLite.
+- [Model picker](./model-picker.md) picks a model and effort per chat, labels each reply, and covers hidden models, deleted connections, and unreadable keys.
 - [Durable replies](./durable-replies.md) reconnects a dropped stream and checks that Stop saves the thinking duration.
 - [Reading and appearance](./appearance.md) measures reply type, line length, input sizes, and contrast in every theme, and checks that saved appearance paints from the server.
 - [Widgets and tool lines](./widgets.md) checks that `render_ui` draws one surface with formatted numbers, colored callouts, and a capped table, and that finished tool calls shrink to one line.

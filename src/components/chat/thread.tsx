@@ -22,7 +22,7 @@ const STARTERS = [
 // starts, so until the first message arrives the layout follows what the server saw: saved messages or none.
 type ThreadView = "empty" | "loading" | "messages";
 
-export function Thread({ ready, model, focusMessageId, hasHistory }: { ready: boolean; model: string; focusMessageId?: string | null; hasHistory: boolean }) {
+export function Thread({ ready, focusMessageId, hasHistory }: { ready: boolean; focusMessageId?: string | null; hasHistory: boolean }) {
   const view = useAuiState((state): ThreadView => (state.thread.messages.length > 0 ? "messages" : hasHistory ? "loading" : "empty"));
   const [autoScroll, setAutoScroll] = useState(!focusMessageId);
   useAuiEvent("thread.runStart", () => setAutoScroll(true));
@@ -59,7 +59,7 @@ export function Thread({ ready, model, focusMessageId, hasHistory }: { ready: bo
           className="@container flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-8 scrollbar-thin"
         >
           {view === "empty" ? (
-            <EmptyState model={model} />
+            <EmptyState />
           ) : (
             <>
               <div className="flex flex-col gap-6">
@@ -84,7 +84,7 @@ export function Thread({ ready, model, focusMessageId, hasHistory }: { ready: bo
                       <ArrowDownIcon weight="regular" className="size-4" />
                     </ThreadPrimitive.ScrollToBottom>
                   )}
-                  <Composer ready={ready} model={model} />
+                  <Composer ready={ready} />
                 </div>
               </ThreadPrimitive.ViewportFooter>
             </>
@@ -112,7 +112,7 @@ function MessagesSkeleton() {
 }
 
 // An empty chat centers the figure and the composer as one group; the composer drops to the bottom on the first send.
-function EmptyState({ model }: { model: string }) {
+function EmptyState() {
   const aui = useAui();
   const input = useRef<HTMLTextAreaElement>(null);
 
@@ -128,7 +128,7 @@ function EmptyState({ model }: { model: string }) {
         <Figure name="dish" />
       </div>
       <div className="mt-8 w-full max-w-chat animate-rise">
-        <Composer ready model={model} inputRef={input} />
+        <Composer ready inputRef={input} />
         <div className="mt-3 flex flex-wrap justify-center gap-2">
           {STARTERS.map((starter) => (
             <Button

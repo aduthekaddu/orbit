@@ -1,4 +1,4 @@
-export default async function branches({ page, origin, step, shot }) {
+export default async function branches({ page, origin, useProvider, step, shot }) {
   const requests = [];
   page.on("request", (request) => {
     if (request.method() !== "POST" || !request.url().endsWith("/api/chat")) return;
@@ -7,13 +7,8 @@ export default async function branches({ page, origin, step, shot }) {
     requests.push(body);
     console.log(JSON.stringify({ trigger: body.trigger, messageId: body.messageId, editMessageId: body.editMessageId, messages: ids }));
   });
-  if (process.env.ORBIT_BASE_URL && process.env.ORBIT_API_KEY && process.env.ORBIT_MODEL) {
-    const settings = await page.request.put(`${origin}/api/settings`, { data: {
-      baseUrl: process.env.ORBIT_BASE_URL, apiKey: process.env.ORBIT_API_KEY,
-      model: process.env.ORBIT_MODEL, reasoningEffort: "low",
-    } });
-    if (!settings.ok()) throw new Error(`Provider settings status ${settings.status()}`);
-  }
+  const { ORBIT_BASE_URL, ORBIT_API_KEY, ORBIT_MODEL } = process.env;
+  await useProvider(ORBIT_BASE_URL && ORBIT_API_KEY && ORBIT_MODEL ? { baseUrl: ORBIT_BASE_URL, apiKey: ORBIT_API_KEY, model: ORBIT_MODEL } : {});
   const { id } = await (await page.request.post(`${origin}/api/chats`)).json();
   await page.goto(`${origin}/c/${id}`);
   await page.getByRole("textbox").fill(process.env.ORBIT_API_KEY ? "Reply with the single word first" : "[qa:text] first");

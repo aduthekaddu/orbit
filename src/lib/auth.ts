@@ -5,6 +5,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";
 import { LOCAL_AUTH_URL, resolveAuthBaseUrl, resolveTrustedOrigins } from "./auth-origins";
+import { trySeedConnection } from "./connections";
 import { getDb, signupOpen } from "./db";
 import { account, session, user, verification } from "./db/schema";
 import { readEnv } from "./env";
@@ -50,6 +51,11 @@ function createAuth() {
             if (!signupOpen()) {
               throw new APIError("FORBIDDEN", { message: "Signup is closed" });
             }
+          },
+          // The first account takes the provider the install was set up with. The account exists by now, so a failure
+          // must not fail the signup. Resolving a chat can retry setup.
+          after: async (created) => {
+            trySeedConnection(created.id);
           },
         },
       },

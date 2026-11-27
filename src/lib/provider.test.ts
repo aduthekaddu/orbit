@@ -1,21 +1,9 @@
 import assert from "node:assert/strict";
-import test, { type TestContext } from "node:test";
+import test from "node:test";
 import { generateText } from "ai";
-import {
-  credentialsForModelList,
-  listModels,
-  MODEL_META_TTL_MS,
-  modelAllowsReasoning,
-  OPENCODE_GO_BASE_URL,
-  OPENCODE_GO_MODELS_URL,
-  orbitModel,
-  outboundSessionHeader,
-  reasoningAllowed,
-  reasoningOptions,
-} from "./provider";
-
-const savedBaseUrl = "https://saved.example/v1";
-const savedApiKey = "saved-secret";
+import type { ProviderConnection } from "./connections";
+import { effortCallOptions } from "./effort";
+import { languageModelFor, OPENCODE_GO_BASE_URL, orbitModel, outboundSessionHeader } from "./provider";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -29,163 +17,6 @@ function chatReply() {
   });
 }
 
-// The model metadata cache is module state, so each test lists models for its own host.
-function mockFetch(t: TestContext, respond: (url: string, init?: RequestInit) => Response) {
-  return t.mock.method(globalThis, "fetch", async (input: string | URL | Request, init?: RequestInit) => respond(String(input), init));
-}
-
-test("the saved key is not reused for a different base URL", () => {
-  const credentials = credentialsForModelList({
-    requestedBaseUrl: "https://evil.example/v1",
-    requestedApiKey: "  ",
-    savedBaseUrl,
-    savedApiKey,
-  });
-  assert.equal(credentials, null);
-});
-
-test("the same base URL with a trailing slash reuses the saved key", () => {
-  const credentials = credentialsForModelList({ requestedBaseUrl: `${savedBaseUrl}/`, savedBaseUrl, savedApiKey });
-  assert.deepEqual(credentials, { baseUrl: `${savedBaseUrl}/`, apiKey: savedApiKey });
-});
-
-test("the typed key is kept for an edited base URL", () => {
-  const credentials = credentialsForModelList({
-    requestedBaseUrl: "https://evil.example/v1",
-    requestedApiKey: "typed-key",
-    savedBaseUrl,
-    savedApiKey,
-  });
-  assert.deepEqual(credentials, { baseUrl: "https://evil.example/v1", apiKey: "typed-key" });
-});
-
-test("an omitted base URL uses the saved provider", () => {
-  assert.deepEqual(credentialsForModelList({ savedBaseUrl, savedApiKey }), { baseUrl: savedBaseUrl, apiKey: savedApiKey });
-});
-
-async function listReasoningModels(t: TestContext, host: string) {
-  const base = `https://${host}/v1`;
-  const fetch = mockFetch(t, (url) =>
-    url === `${base}/models`
-      ? json([
-          { id: "plain", capabilities: { reasoning: false } },
-          { id: "thinker", capabilities: { reasoning: true } },
-        ])
-      : json({ error: "unexpected" }, 500),
-  );
-  const listed = await listModels(`${base}/`, savedApiKey);
-  return { base, fetch, listed };
-}
-
-test("a cold chat allows reasoning without discovering models", (t) => {
-  const fetch = mockFetch(t, () => json({ error: "unexpected" }, 500));
-  assert.equal(modelAllowsReasoning("https://cold.example/v1", "plain"), true);
-  assert.equal(fetch.mock.callCount(), 0);
-});
-
-test("the model list returns the provider models", async (t) => {
-  const { listed } = await listReasoningModels(t, "list.example");
-  assert.deepEqual(listed?.map((model) => model.id), ["plain", "thinker"]);
-});
-
-test("a listed model's reasoning flag is cached for chat", async (t) => {
-  const { base } = await listReasoningModels(t, "cached.example");
-  assert.equal(modelAllowsReasoning(base, "plain"), false);
-  assert.equal(modelAllowsReasoning(base, "thinker"), true);
-  assert.equal(modelAllowsReasoning(base, "missing"), true);
-});
-
-test("a warm chat does not discover models", async (t) => {
-  const { base, fetch } = await listReasoningModels(t, "warm.example");
-  const afterList = fetch.mock.callCount();
-  modelAllowsReasoning(base, "plain");
-  modelAllowsReasoning(base, "thinker");
-  modelAllowsReasoning(base, "missing");
-  assert.equal(fetch.mock.callCount(), afterList);
-});
-
-test("expired metadata allows reasoning and is not refreshed on the chat path", async (t) => {
-  const { base, fetch } = await listReasoningModels(t, "expired.example");
-  const afterList = fetch.mock.callCount();
-  assert.equal(modelAllowsReasoning(base, "plain", Date.now() + MODEL_META_TTL_MS + 1000), true);
-  assert.equal(fetch.mock.callCount(), afterList);
-});
-
-test("a throwing OpenCode primary falls back to the Go model list with the saved key", async (t) => {
-  const fetch = mockFetch(t, (url) => {
-    if (url === `${OPENCODE_GO_BASE_URL}/models`) throw new Error("primary down");
-    if (url === OPENCODE_GO_MODELS_URL) return json([{ id: "from-fallback", capabilities: { reasoning: false } }]);
-    return json({ error: "unexpected" }, 500);
-  });
-  const listed = await listModels(OPENCODE_GO_BASE_URL, savedApiKey);
-  assert.deepEqual(listed?.map((model) => model.id), ["from-fallback"]);
-  const requests = fetch.mock.calls.map((call) => ({
-    url: String(call.arguments[0]),
-    authorization: new Headers(call.arguments[1]?.headers).get("authorization"),
-  }));
-  assert.deepEqual(requests, [
-    { url: `${OPENCODE_GO_BASE_URL}/models`, authorization: `Bearer ${savedApiKey}` },
-    { url: OPENCODE_GO_MODELS_URL, authorization: `Bearer ${savedApiKey}` },
-  ]);
-  assert.equal(modelAllowsReasoning(OPENCODE_GO_BASE_URL, "from-fallback"), false);
-});
-
-test("a throwing model list for another provider returns null", async (t) => {
-  const base = "https://other.example/v1";
-  const fetch = mockFetch(t, () => {
-    throw new Error("down");
-  });
-  assert.equal(await listModels(base, savedApiKey), null);
-  assert.deepEqual(fetch.mock.calls.map((c) => String(c.arguments[0])), [`${base}/models`]);
-});
-
-test("a model list that answers with an error status returns null", async (t) => {
-  const base = "https://denied.example/v1";
-  const fetch = mockFetch(t, () => json({ error: "unauthorized" }, 401));
-  assert.equal(await listModels(base, savedApiKey), null);
-  assert.deepEqual(fetch.mock.calls.map((c) => String(c.arguments[0])), [`${base}/models`]);
-});
-
-const payloads = [
-  {
-    shape: "a { data } body",
-    body: { data: [{ id: "b" }, { id: "a", capabilities: { reasoning: false } }] },
-    models: [
-      { id: "a", reasoning: false },
-      { id: "b", reasoning: null },
-    ],
-  },
-  { shape: "a { models } body", body: { models: [{ id: "m", reasoning: true }] }, models: [{ id: "m", reasoning: true }] },
-  { shape: "plain string ids", body: ["plain-id"], models: [{ id: "plain-id", reasoning: null }] },
-  { shape: "a name in place of an id", body: [{ name: "named" }], models: [{ id: "named", reasoning: null }] },
-  { shape: "an empty { data } body", body: { data: [] }, models: [] },
-  { shape: "an empty top-level array", body: [], models: [] },
-  { shape: "JSON that is not a model list", body: { object: "error", message: "upstream changed" }, models: null },
-  { shape: "an object with no model array", body: { object: "list" }, models: null },
-];
-
-for (const [index, { shape, body, models }] of payloads.entries()) {
-  test(`the model list reads ${shape}`, async (t) => {
-    const base = `https://payload-${index}.example/v1`;
-    const fetch = mockFetch(t, (url) => (url === `${base}/models` ? json(body) : json({ error: "unexpected" }, 500)));
-    assert.deepEqual(await listModels(base, savedApiKey), models);
-    assert.deepEqual(fetch.mock.calls.map((c) => String(c.arguments[0])), [`${base}/models`]);
-  });
-}
-
-test("reasoning metadata that says no turns reasoning off", () => {
-  assert.equal(reasoningAllowed({ capabilities: { reasoning: false } }), false);
-  assert.equal(reasoningAllowed({ capabilities: { reasoning: { supported: false } } }), false);
-  assert.equal(reasoningAllowed({ reasoning: false }), false);
-});
-
-test("missing or positive reasoning metadata keeps reasoning on", () => {
-  assert.equal(reasoningAllowed({ id: "plain" }), true);
-  assert.equal(reasoningAllowed({ capabilities: { reasoning: { supported: true, effort: ["max"] } } }), true);
-  assert.equal(reasoningAllowed({ reasoning: true }), true);
-  assert.equal(reasoningAllowed(null), true);
-});
-
 test("the OpenCode session header goes only to OpenCode", async () => {
   assert.equal(await outboundSessionHeader(OPENCODE_GO_BASE_URL, "chat-1"), "chat-1");
   assert.equal(await outboundSessionHeader("https://example.com/v1", "chat-1"), null);
@@ -193,41 +24,125 @@ test("the OpenCode session header goes only to OpenCode", async () => {
 
 function recordingModel(baseUrl: string, respond: (attempt: number) => Response) {
   const bodies: Record<string, unknown>[] = [];
+  const drops: number[] = [];
   const model = orbitModel({
     baseUrl,
     apiKey: "test",
     model: "test-model",
     chatId: "chat-1",
+    onDropped: () => drops.push(bodies.length),
     fetch: async (_input, init) => {
       bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
       return respond(bodies.length);
     },
   });
-  return { model, bodies };
+  return { model, bodies, drops };
 }
+
+const effort = (level: "low" | "high") => effortCallOptions("openai-compatible", level, null).options;
 
 test("the reasoning effort reaches the provider", async () => {
   const { model, bodies } = recordingModel("https://effort.example/v1", () => chatReply());
-  await generateText({ model, prompt: "ping", maxRetries: 0, ...reasoningOptions("low") });
+  await generateText({ model, prompt: "ping", maxRetries: 0, ...effort("low") });
   assert.equal(bodies.length, 1);
   assert.equal(bodies[0].reasoning_effort, "low");
+  assert.equal(bodies[0].fallbacks, undefined);
 });
 
-test("a provider that rejects reasoning_effort gets the request again without it", async () => {
-  const { model, bodies } = recordingModel("https://no-reasoning.example/v1", (attempt) =>
-    attempt === 1 ? json({ error: { message: "reasoning_effort is not supported" } }, 400) : chatReply(),
-  );
-  const result = await generateText({ model, prompt: "ping", maxRetries: 0, ...reasoningOptions("high") });
+for (const status of [400, 422]) {
+  test(`HTTP ${status} rejecting reasoning_effort triggers one retry without it`, async () => {
+    const { model, bodies, drops } = recordingModel("https://no-reasoning.example/v1", (attempt) =>
+      attempt === 1 ? json({ error: { message: "reasoning_effort is not supported" } }, status) : chatReply(),
+    );
+    const result = await generateText({ model, prompt: "ping", maxRetries: 0, ...effort("high") });
+    assert.equal(result.text, "ok");
+    assert.equal(bodies.length, 2);
+    assert.equal(bodies[0].reasoning_effort, "high");
+    assert.equal("reasoning_effort" in bodies[1], false);
+    assert.deepEqual(drops, [2], "the drop is reported once, after the retry succeeded");
+  });
+}
+
+test("a retry without reasoning_effort that fails reports no drop, so the SDK's later retry with the effort reads as applied", async () => {
+  const { model, bodies, drops } = recordingModel("https://flaky-reasoning.example/v1", (attempt) => {
+    if (attempt === 1) return json({ error: { message: "reasoning_effort is not supported" } }, 400);
+    if (attempt === 2) return new Response(JSON.stringify({ error: { message: "upstream busy" } }), { status: 503, headers: { "content-type": "application/json", "retry-after-ms": "0" } });
+    return chatReply();
+  });
+  const result = await generateText({ model, prompt: "ping", maxRetries: 1, ...effort("high") });
   assert.equal(result.text, "ok");
-  assert.equal(bodies.length, 2);
-  assert.equal(bodies[0].reasoning_effort, "high");
-  assert.equal("reasoning_effort" in bodies[1], false);
+  assert.deepEqual(bodies.map((body) => body.reasoning_effort ?? null), ["high", null, "high"]);
+  assert.deepEqual(drops, []);
 });
 
 test("an error unrelated to reasoning is not sent again", async () => {
-  const { model, bodies } = recordingModel("https://too-long.example/v1", () =>
+  const { model, bodies, drops } = recordingModel("https://too-long.example/v1", () =>
     json({ error: { message: "context length exceeded" } }, 400),
   );
-  await assert.rejects(generateText({ model, prompt: "ping", maxRetries: 0, ...reasoningOptions("high") }));
+  await assert.rejects(generateText({ model, prompt: "ping", maxRetries: 0, ...effort("high") }));
   assert.equal(bodies.length, 1);
+  assert.deepEqual(drops, []);
+});
+
+test("reasoning words in the prompt do not cause a fallback retry", async () => {
+  const { model, bodies, drops } = recordingModel("https://no-reasoning.example/v1", (attempt) =>
+    attempt === 1 ? json({ error: { message: "bad reasoning prompt" } }, 400) : chatReply(),
+  );
+  await assert.rejects(generateText({ model, prompt: "Explain reasoning_effort", maxRetries: 0 }));
+  assert.equal(bodies.length, 1);
+  assert.deepEqual(drops, []);
+});
+
+for (const status of [429, 503]) {
+  test(`HTTP ${status} preserves the requested effort for the SDK retry`, async () => {
+    const { model, bodies, drops } = recordingModel("https://busy.example/v1", (attempt) =>
+      attempt === 1 ? json({ error: { message: "reasoning backend overloaded" } }, status) : chatReply(),
+    );
+    await assert.rejects(generateText({ model, prompt: "ping", maxRetries: 0, ...effort("high") }));
+    assert.deepEqual(bodies.map((body) => body.reasoning_effort), ["high"]);
+    assert.deepEqual(drops, []);
+  });
+}
+
+test("an Anthropic connection sends effort, summarized adaptive thinking that drops a mismatched block, and prompt caching", async () => {
+  const original = process.env.ORBIT_ANTHROPIC_BASE_URL;
+  process.env.ORBIT_ANTHROPIC_BASE_URL = "http://127.0.0.1:9/v1";
+  const seen: { url: string; headers: Headers; body: Record<string, unknown> }[] = [];
+  try {
+    const connection: ProviderConnection = { id: "conn-claude", userId: "u", kind: "anthropic", label: "Claude", createdAt: new Date() };
+    const model = languageModelFor({
+      connection,
+      apiKey: "made-up-anthropic-key-0001",
+      model: "claude-opus-5-5",
+      chatId: "chat-1",
+      fetch: async (input, init) => {
+        seen.push({ url: String(input), headers: new Headers(init?.headers), body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+        return json({
+          id: "msg_1",
+          type: "message",
+          role: "assistant",
+          model: "claude-opus-5-5",
+          content: [{ type: "text", text: "ok" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 1, output_tokens: 1 },
+        });
+      },
+    });
+    const result = await generateText({ model, prompt: "ping", maxRetries: 0, ...effortCallOptions("anthropic", "high", ["low", "medium", "high"], true).options });
+    assert.equal(result.text, "ok");
+    assert.equal(seen.length, 1);
+    const [request] = seen;
+    assert.equal(request.url, "http://127.0.0.1:9/v1/messages");
+    assert.equal(request.headers.get("x-api-key"), "made-up-anthropic-key-0001");
+    assert.equal(request.headers.get("authorization"), null);
+    assert.match(request.headers.get("anthropic-beta") ?? "", /thinking-binding-controls-2026-08-01/);
+    assert.match(request.headers.get("anthropic-beta") ?? "", /server-side-fallback-2026-07-01/);
+    assert.equal(request.body.fallbacks, "default");
+    assert.deepEqual(request.body.output_config, { effort: "high" });
+    assert.deepEqual(request.body.thinking, { type: "adaptive", display: "summarized", block_binding: { prefix_mismatch_behavior: "drop_block" } });
+    assert.deepEqual(request.body.cache_control, { type: "ephemeral" });
+  } finally {
+    if (original === undefined) delete process.env.ORBIT_ANTHROPIC_BASE_URL;
+    else process.env.ORBIT_ANTHROPIC_BASE_URL = original;
+  }
 });

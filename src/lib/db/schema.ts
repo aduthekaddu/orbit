@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const user = sqliteTable("user", {
   id: text("id").primaryKey(),
@@ -81,16 +81,62 @@ export const verification = sqliteTable(
 
 export const settings = sqliteTable("settings", {
   id: integer("id").primaryKey(),
-  baseUrl: text("base_url").notNull().default(""),
-  apiKey: text("api_key").notNull().default(""),
   searxngUrl: text("searxng_url").notNull().default(""),
   tavilyApiKey: text("tavily_api_key").notNull().default(""),
   githubToken: text("github_token").notNull().default(""),
   githubMcpUrl: text("github_mcp_url").notNull().default(""),
-  model: text("model").notNull().default(""),
-  reasoningEffort: text("reasoning_effort").notNull().default("medium"),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
+
+export const providerConnections = sqliteTable(
+  "provider_connections",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    label: text("label").notNull(),
+    baseUrl: text("base_url"),
+    apiKeyCiphertext: text("api_key_ciphertext").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    index("provider_connections_user_id_idx").on(table.userId),
+    check(
+      "provider_connections_base_url",
+      sql`(${table.kind} = 'openai-compatible' AND ${table.baseUrl} IS NOT NULL) OR (${table.kind} = 'anthropic' AND ${table.baseUrl} IS NULL)`,
+    ),
+  ],
+);
+
+export const hiddenModels = sqliteTable(
+  "hidden_models",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    connectionId: text("connection_id")
+      .notNull()
+      .references(() => providerConnections.id, { onDelete: "cascade" }),
+    modelId: text("model_id").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.connectionId, table.modelId] })],
+);
+
+// The provider of an install nobody has signed up to yet. The first account takes it.
+export const pendingConnection = sqliteTable(
+  "pending_connection",
+  {
+    id: integer("id").primaryKey(),
+    baseUrl: text("base_url").notNull(),
+    apiKeyCiphertext: text("api_key_ciphertext").notNull(),
+    model: text("model"),
+    effort: text("effort").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [check("pending_connection_single_row", sql`${table.id} = 1`)],
+);
 
 export const chats = sqliteTable(
   "chats",
@@ -103,6 +149,10 @@ export const chats = sqliteTable(
     title: text("title").notNull().default("New chat"),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+    // Set together or all null, only through setChatChoice. A foreign key would null one of the three.
+    connectionId: text("connection_id"),
+    model: text("model"),
+    reasoningEffort: text("reasoning_effort"),
   },
   (table) => [index("chats_user_id_idx").on(table.userId)],
 );
@@ -120,6 +170,10 @@ export const messages = sqliteTable(
     parts: text("parts").notNull(),
     position: integer("position").notNull(),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    connectionId: text("connection_id").references(() => providerConnections.id, { onDelete: "set null" }),
+    model: text("model"),
+    reasoningEffort: text("reasoning_effort"),
+    effortOutcome: text("effort_outcome"),
   },
   (table) => [index("messages_chat_position_idx").on(table.chatId, table.position), index("messages_chat_parent_idx").on(table.chatId, table.parentId)],
 );
@@ -165,5 +219,9 @@ export const userPreferences = sqliteTable("user_preferences", {
   replyFont: text("reply_font").notNull().default("sans"),
   chatWidth: text("chat_width").notNull().default("normal"),
   accent: text("accent").notNull().default("sun"),
+  defaultConnectionId: text("default_connection_id").references(() => providerConnections.id, { onDelete: "set null" }),
+  defaultModel: text("default_model"),
+  defaultEffort: text("default_effort"),
+  providerSetupComplete: integer("provider_setup_complete", { mode: "boolean" }).notNull().default(false),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });

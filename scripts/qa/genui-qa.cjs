@@ -68,15 +68,18 @@ async function mockBase() {
   return base;
 }
 
+async function useProvider(request, provider) {
+  const { connectProvider } = await import("./connect-provider.mjs");
+  const send = async (urlPath, { method = "GET", json } = {}) => {
+    const response = await request.fetch(`${ORIGIN}${urlPath}`, { method, data: json });
+    return { status: response.status(), text: await response.text() };
+  };
+  return connectProvider(send, provider);
+}
+
 async function useMockProvider(request) {
   const MOCK_BASE = await mockBase();
-  const response = await request.put(`${ORIGIN}/api/settings`, {
-    data: { baseUrl: MOCK_BASE, apiKey: "mock-key", model: "mock-genui", reasoningEffort: "low" },
-  });
-  const body = await response.json();
-  if (!response.ok() || body.keySet !== true || body.model !== "mock-genui") {
-    throw new Error(`mock provider setup failed status=${response.status()} body=${JSON.stringify(body)}`);
-  }
+  await useProvider(request, { label: "Mock", baseUrl: MOCK_BASE, apiKey: "mock-key", model: "mock-genui" });
   console.log(`mock provider ${MOCK_BASE} model=mock-genui`);
 }
 
@@ -463,14 +466,13 @@ async function main() {
     finding("low", "real", "real provider: skipped because ORBIT_REAL_API_KEY was not set", null);
   } else {
     console.log("real provider call");
-    const settings = await context.request.put(`${ORIGIN}/api/settings`, {
-      data: { baseUrl: REAL_BASE, apiKey: REAL_KEY, model: REAL_MODEL, reasoningEffort: "low" },
-    });
-    if (!settings.ok()) {
-      finding("high", "real", `real provider: settings save failed with ${settings.status()}`, null);
+    const connected = await useProvider(context.request, { label: "Real", baseUrl: REAL_BASE, apiKey: REAL_KEY, model: REAL_MODEL }).then(
+      () => null,
+      (error) => error.message,
+    );
+    if (connected) {
+      finding("high", "real", `real provider: connecting failed: ${connected}`, null);
     } else {
-      const body = await settings.json();
-      if (JSON.stringify(body).includes(REAL_KEY)) finding("high", "real", "real provider: settings response leaked the key", null);
       await newChat(page);
       await send(
         page,

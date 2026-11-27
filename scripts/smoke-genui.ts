@@ -3,11 +3,12 @@ import type { toRepository } from "../src/lib/chat-tree";
 import Database from "better-sqlite3";
 import { parseRenderSpec } from "../src/lib/genui/spec";
 import { dataDirectory } from "../src/lib/paths";
+import { connectProvider } from "./qa/connect-provider.mjs";
 
-const origin = "http://127.0.0.1:3211";
+const origin = new URL(process.env.ORBIT_QA_ORIGIN || "http://127.0.0.1:3211").origin;
 const email = "smoke@orbit.local";
 const password = "orbit-smoke-pass";
-const model = "deepseek-v4.1-flash";
+const model = process.env.ORBIT_MODEL?.trim() || "deepseek-v4.1-flash";
 
 function redact(value: string) {
   const secret = process.env.ORBIT_API_KEY;
@@ -91,21 +92,15 @@ async function main() {
 
   await auth();
 
-  const saved = await request("/api/settings", {
-    method: "PUT",
-    body: JSON.stringify({
-      baseUrl,
-      apiKey,
-      model,
-      reasoningEffort: "low",
-    }),
-  });
-  const savedBody = (await saved.json()) as { model?: string; keySet?: boolean; apiKey?: unknown; error?: string };
-  if (!saved.ok) fail(`settings save failed ${saved.status} ${savedBody.error ?? ""}`);
-  if ("apiKey" in savedBody) fail("settings leaked apiKey");
-  if (JSON.stringify(savedBody).includes(apiKey)) fail("settings response contained the key");
-  if (savedBody.model !== model || savedBody.keySet !== true) fail("settings did not store the model");
-  console.log(`settings saved model=${savedBody.model} keySet=yes`);
+  const { connection, defaults } = await connectProvider(
+    async (path, { method, json }) => {
+      const response = await request(path, { method, body: json === undefined ? undefined : JSON.stringify(json) });
+      return { status: response.status, text: await response.text() };
+    },
+    { label: "Smoke", baseUrl, apiKey, model },
+  );
+  if (defaults.connectionId !== connection.id || defaults.model !== model) fail("the default model was not saved");
+  console.log(`connection kind=${connection.kind} keySet=yes default model=${defaults.model}`);
 
   const created = await request("/api/chats", { method: "POST" });
   const createdBody = (await created.json()) as { id?: string };

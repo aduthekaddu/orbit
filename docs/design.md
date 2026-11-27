@@ -29,12 +29,12 @@ Each color that differs by theme is written once as `light-dark(<light>, <dark>)
 | `--accent` | `#ebeae4` | `#1e1f25` | `bg-accent` | Hover fill |
 | `--destructive` | `--negative` | `--negative` | `text-destructive` | Errors. One source for error red |
 | `--border`, `--input` | `--orbit-border` | `--orbit-border` | `border` (default color) | Hairline borders |
-| `--border-strong` | `#cdcac1` | `#33353d` | `border-border-strong` | Hover and selected borders |
+| `--border-strong` | `#cdcac1` | `#33353d` | `border-border-strong` | Hover and open borders |
 | `--ring` | `--orbit-sun` | `--orbit-sun` | `ring-ring` | Focus rings |
 | `--overlay` | `rgb(28 26 20 / 0.32)` | `rgb(0 0 0 / 0.75)` | `bg-overlay` | Behind dialogs |
 | `--canvas` | `#eeede7` | `#07080a` | `bg-canvas` | Darker than the page, for wells |
 | `--surface-sunken` | `#f1f0eb` | `#0e0f12` | `bg-surface-sunken` | Inputs, code blocks |
-| `--surface-raised` | `#ffffff` | `#1d1e24` | `bg-surface-raised` | Kbd, slider track, the selected toggle |
+| `--surface-raised` | `#ffffff` | `#1d1e24` | `bg-surface-raised` | Kbd, slider track, the selected pill toggle |
 | `--positive`, `--warning`, `--info`, `--negative` | `#18794a`, `#8a5c00`, `#0b6a9c`, `#c3322b` | `#4fd18b`, `#f2cf4a`, `#5ec8f2`, `#ff6259` | `text-positive` | Status only: success, warning, info, error. 4.5:1 on `--card` |
 | `--skeleton`, `--skeleton-highlight` | `#ebeae4`, `#f6f5f1` | `#1a1b20`, `#282a31` | `shimmer` | Loading placeholders |
 | `--chart-1` to `--chart-5` | orange, blue, green, ochre, pink | sun, sky, green, yellow, pink | `fill-chart-1` | Data series, in order. 3:1 on `--card`. An accent change never recolors them |
@@ -51,6 +51,11 @@ Static theme values in `@theme`:
 | --- | --- | --- |
 | `--container-chat` | `var(--chat-column)` | `max-w-chat` |
 | `--container-page` | `42.5rem` | `max-w-page` |
+| `--spacing-picker` | `24rem` | `w-picker`, the model picker popover |
+| `--spacing-picker-height` | `60vh` | `max-h-picker-height`, the popover and each model list in Settings |
+| `--spacing-sheet-height` | `80dvh` | `max-h-sheet-height`, the bottom sheet |
+| `--spacing-touch` | `max(2.75rem, 44px)` | `min-h-touch`, `h-touch`, rows and cells in the sheet, 44px at every text size |
+| `--ring-width-focus` | `3px` | `ring-focus`, the focus ring width |
 | `--text-prose` | `1rem`, line height `1.65` | `text-prose` |
 | `--text-field` | `max(1rem, 16px)`, line height `1.5rem` | `text-field` |
 | `--text-code` | `0.875rem`, line height `1.5rem` | `text-code` |
@@ -73,7 +78,7 @@ Utilities: `num` (Geist Mono, tabular figures), `shimmer`, `scrollbar-none`, `sc
 - **Text size.** `data-text-size` scales the root font size to 93.75%, 100%, 112.5%, or 125%. Percentages keep the browser's own font setting. Everything in rem scales with it, the chat column included, so a line holds the same number of characters at every size.
 - **Copy.** Short labels only. No taglines, helper text, or secondary labels. If a screen needs explaining, fix the layout.
 - **Lines, not shadows.** 1px `border`, `shadow-card` on raised surfaces, `shadow-float` only on things that float (menus, dialogs, tooltips).
-- **Accent.** Primary actions are ivory. Sun appears once or twice per screen: the mark, the active chat, the current prompt. Marks repeated down the thread use `tone="mono"` and turn sun only while busy. A selected toggle is a raised surface, not a tint.
+- **Accent.** Primary actions are ivory. Sun appears once or twice per screen: the mark, the active chat, the current prompt. Marks repeated down the thread use `tone="mono"` and turn sun only while busy. A selected pill toggle is a raised surface, not a tint. A selected outline toggle, such as an effort level, has a `--foreground` border.
 - **Depth.** In every theme, a card is lighter than the page and a well is darker. On dark and dim, depth comes from a lighter surface; on light, from a white card with a soft warm drop. The composer lifts to `bg-popover` on focus instead of drawing a ring.
 - **Touch.** On `pointer: coarse` every control has a 44px hit area. `globals.css` grows buttons and links with a pseudo-element. A control whose parent clips it grows its own box with `pointer-coarse:`.
 - **Icons.** `@phosphor-icons/react`, weight `light` by default, `regular` at 14px and below. Import the `*Icon` names (`XIcon`, not the deprecated `X`). In a server component import from `@phosphor-icons/react/ssr`.
@@ -83,7 +88,7 @@ Utilities: `num` (Geist Mono, tabular figures), `shimmer`, `scrollbar-none`, `sc
 
 ## Components
 
-`src/components/ui/` holds shadcn-style primitives on individual `@radix-ui/react-*` packages: `Button`, `Input`, `Label`, `Slider`, `Tooltip`, `ToggleGroup`, `Select`, `Dialog`, `Skeleton`, `Kbd`. Each sets `data-slot` for styling from a parent.
+`src/components/ui/` holds shadcn-style primitives on individual `@radix-ui/react-*` packages: `Button`, `Input`, `Label`, `Slider`, `Tooltip`, `ToggleGroup`, `Select`, `Dialog`, `Popover`, `Sheet`, `Switch`, `Skeleton`, `Kbd`. Each sets `data-slot` for styling from a parent. `Sheet` is a bottom sheet on the Dialog primitives, built like the chat drawer: full width, `bg-popover`, rounded top corners, at most `max-h-sheet-height`, sliding up from the bottom edge. It focuses itself on open instead of its first field, so a phone keyboard does not cover it. `Switch` is a `role="switch"` button. `DESKTOP_QUERY` and `useDesktop()` in `src/components/use-desktop.ts` are the one 48rem breakpoint test for script.
 
 `OrbitMark` (`src/components/orbit-mark.tsx`) is the app's only loading indicator. Pass `busy` while the assistant is thinking or streaming and the moon travels the ring, passing behind the planet on the far side. `tone` is `"accent"` (sun ring and moon) or `"mono"` (muted). It is `aria-hidden`, so pair it with a status label where the state matters to a screen reader.
 
@@ -91,7 +96,26 @@ Appearance (`src/components/settings/appearance-settings.tsx`) is the first card
 
 `ThreadMap` (`src/components/chat/thread-map.tsx`) is a rail of ticks on the thread's right edge, one per prompt, shown from three prompts when the thread is at least 52rem wide. Ticks for turns in view are brighter and the current turn is sun. Hovering or focusing the rail opens the prompt list. A row jumps to its prompt and moves focus there. `Alt+Up` and `Alt+Down` step between prompts when focus is outside a text field. The current-turn math lives in `src/lib/thread-map.ts`.
 
-A chat with no provider and no messages shows the provider form in place, so the first run never leaves the chat. Saving refreshes the route and the composer appears.
+A chat whose model choice does not resolve and that has no messages shows the first run in place, so it never leaves the chat. With no connection it shows the add connection form, kind first. Then it shows the default model card. Saving that refreshes the route and the composer appears. When the saved key cannot be read, it shows the connections card, so the key can be entered again.
+
+### Model picker
+
+The composer chip is a `button` (`data-model-chip`) in `font-mono text-meta`, reading `model · Effort`, such as `claude-opus-5-5 · High`, or the model alone when the model takes no effort. It truncates at the end and never pushes Send out of the row. It opens the picker: a `Popover` anchored above the chip on desktop (`w-picker`, at most `max-h-picker-height` or the room above the chip, `shadow-float`), and a `Sheet` under 48rem. Both hold the same panel:
+
+- Models grouped under each connection's label, hidden models left out. A search field shows when the lists hold more than 8 rows. Each row shows the model id, its badges, and a check on the current one. Rows are at least 44px tall in the sheet at every text size (`min-h-touch`).
+- A model list that is still loading shows skeleton rows. One that failed shows its error and **Retry** inside its group. A loaded list with nothing to show says `No models`. With no connection at all, the list holds one **Add connection** link to `/settings#connections`, so a chat with history reaches setup too.
+- Under the list, the effort grid: 3 by 2, `None` to `Max`. Levels the model does not take are disabled, and all six are when it takes none. Picking a model that does not take the current effort moves it to the nearest level it takes. The selected level has a `--foreground` border, which reads at 12:1 or more on the popover and the card in every theme, where a raised surface or `--border-strong` reads under 2:1.
+- **Manage** goes to `/settings#models`.
+
+The choice is the chat's own until the next send pins it. Picking a model keeps the picker open, so the effort can follow. A pick whose connection is deleted is dropped, and the chat falls back to its pinned choice or the defaults as the page last resolved them.
+
+**Badges.** Phosphor icons at 14px, `regular`, each with an `aria-label`: images, tools, reasoning. Then the context size in `num`, such as `200K` or `1M`. A capability the provider did not report gets no badge.
+
+**Reply label.** Each assistant reply with a record shows `model · Effort` at the right end of its action row, in `font-mono text-meta text-muted-foreground`. It sits outside the action bar, so it stays visible when older action bars hide on hover devices and while a reply stops or reconnects. An effort the provider changed reads `High (adjusted)` or `High (ignored)`. A reply with no effort shows the model alone. No tooltip.
+
+### Model settings
+
+After Appearance, Settings has three cards. **Connections** lists each connection's label with its kind and host under it, then `Key unreadable` in `text-destructive` when this server cannot open the saved key, and **Edit** and **Delete** on the row. **Add** opens a dialog that asks the kind first; an Anthropic connection has no base URL field. **Delete** asks once in a dialog. Errors show inside the dialog. **Default model** holds the connection select, the model select with a **Custom** option for typing an id (a text field alone when the list is empty or failed), the effort grid, and **Save**. The model belongs to the chosen connection, so switching the connection or deleting it clears the model. **Models** (`#models`) lists every model of each connection with its badges and a show or hide `Switch`. Each connection's heading shows its list status: `Checking`, `N models`, or `Failed`.
 
 `ScrollFade` (`src/components/ui/scroll-fade.tsx`) wraps anything that scrolls on one axis and fades the edge that has more content behind it. Pass `fade` as the color of the surface behind the content. Code blocks, markdown tables, and the command palette use it. A cut line or row without a fade reads as a layout bug.
 

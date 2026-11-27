@@ -1,12 +1,14 @@
 import Database from "better-sqlite3";
 import type { UIMessage, UIMessageChunk } from "ai";
 import { orbitChatTransport } from "../src/lib/chat-transport";
-import { OPENCODE_GO_BASE_URL, outboundSessionHeader, reasoningAllowed } from "../src/lib/provider";
+import { OPENCODE_GO_BASE_URL, outboundSessionHeader } from "../src/lib/provider";
+import type { ListedModel } from "../src/lib/model-list";
+import { connectProvider } from "./qa/connect-provider.mjs";
 
 const origin = new URL(process.env.ORBIT_QA_ORIGIN || "http://127.0.0.1:3210").origin;
 const email = "smoke@orbit.local";
 const password = "orbit-smoke-pass";
-const model = "deepseek-v4.1-flash";
+const model = process.env.ORBIT_MODEL?.trim() || "deepseek-v4.1-flash";
 
 function redact(value: string) {
   const secret = process.env.ORBIT_API_KEY;
@@ -22,15 +24,6 @@ function fail(message: string): never {
 const baseUrl = process.env.ORBIT_BASE_URL?.trim();
 const apiKey = process.env.ORBIT_API_KEY?.trim();
 if (!baseUrl || !apiKey) fail("ORBIT_BASE_URL and ORBIT_API_KEY are required");
-
-if (reasoningAllowed({ capabilities: { reasoning: { supported: false } } }) !== false) {
-  fail("reasoning gate allowed an unsupported model");
-}
-if (!reasoningAllowed({ id: "plain" })) fail("missing reasoning metadata should allow the slider");
-if (!reasoningAllowed({ capabilities: { reasoning: { supported: true, effort: ["max"] } } })) {
-  fail("reasoning gate blocked a model that supports reasoning");
-}
-console.log("reasoning gate: yes");
 
 const cookies = new Map<string, string>();
 
@@ -54,6 +47,11 @@ async function request(path: string, init: RequestInit = {}) {
   const response = await fetch(`${origin}${path}`, { ...init, headers, signal: AbortSignal.timeout(120_000) });
   storeCookies(response);
   return response;
+}
+
+async function send(path: string, { method, json }: { method?: string; json?: unknown } = {}) {
+  const response = await request(path, { method, body: json === undefined ? undefined : JSON.stringify(json) });
+  return { status: response.status, text: await response.text() };
 }
 
 async function auth() {
@@ -93,40 +91,20 @@ async function main() {
 
   await auth();
 
-  const before = await request("/api/settings");
-  const beforeBody = (await before.json()) as { keySet?: boolean; baseUrl?: string; apiKey?: unknown };
-  if (!before.ok) fail(`settings read failed ${before.status}`);
-  if ("apiKey" in beforeBody) fail("settings leaked apiKey before save");
-  console.log(`settings before save keySet=${beforeBody.keySet ? "yes" : "no"}`);
+  const { connection, defaults } = await connectProvider(send, { label: "Smoke", baseUrl: providerBase, apiKey: providerKey, model });
+  if (defaults.connectionId !== connection.id || defaults.model !== model) fail("the default model was not saved");
+  console.log(`connection kind=${connection.kind} keySet=yes default model=${defaults.model} effort=${defaults.effort}`);
 
-  const saved = await request("/api/settings", {
-    method: "PUT",
-    body: JSON.stringify({
-      baseUrl: providerBase,
-      apiKey: providerKey,
-      model,
-      reasoningEffort: "low",
-    }),
-  });
-  const savedBody = (await saved.json()) as { model?: string; keySet?: boolean; apiKey?: unknown; error?: string };
-  if (!saved.ok) fail(`settings save failed ${saved.status} ${savedBody.error ?? ""}`);
-  if ("apiKey" in savedBody) fail("settings leaked apiKey");
-  if (savedBody.model !== model || savedBody.keySet !== true) fail("settings did not store the model");
-  const serialized = JSON.stringify(savedBody);
-  if (serialized.includes(providerKey)) fail("settings response contained the key");
-  console.log(`settings saved model=${savedBody.model} keySet=yes`);
-
-  const listed = await request("/api/models", {
-    method: "POST",
-    body: JSON.stringify({ baseUrl: providerBase }),
-  });
-  const listedBody = (await listed.json()) as { models?: Array<{ id?: string; reasoning?: boolean | null }> };
-  const ids = (listedBody.models ?? []).map((item) => item.id).filter((id): id is string => Boolean(id));
+  const listed = await send(`/api/connections/${connection.id}/models`);
+  if (listed.text.includes(providerKey)) fail("the model list contained the key");
+  const listedBody = JSON.parse(listed.text) as { models?: ListedModel[] };
+  const ids = (listedBody.models ?? []).map((item) => item.id);
   const chosen = listedBody.models?.find((item) => item.id === model);
-  if (!listed.ok || !ids.includes(model) || ids.length < 2) {
+  if (listed.status !== 200 || !ids.includes(model) || ids.length < 2) {
     fail(`model list incomplete status=${listed.status} count=${ids.length}`);
   }
-  console.log(`models=${ids.length} ${model} reasoning=${chosen?.reasoning === true ? "yes" : chosen?.reasoning === false ? "no" : "unknown"}`);
+  const reasoning = chosen?.caps?.reasoning;
+  console.log(`models=${ids.length} ${model} reasoning=${reasoning === true ? "yes" : reasoning === false ? "no" : "unknown"}`);
 
   const created = await request("/api/chats", { method: "POST" });
   const createdBody = (await created.json()) as { id?: string };

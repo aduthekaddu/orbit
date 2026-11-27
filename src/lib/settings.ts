@@ -1,30 +1,19 @@
 import { eq } from "drizzle-orm";
-import { normalizeBaseUrl } from "./base-url";
 import { Redactor, redactUrl, resolveMaskedUrl } from "./chat-errors";
+import { installRedactionSecrets, listConnections, redactionSecrets, toPublicConnection } from "./connections";
 import { getDb } from "./db";
 import { sandboxEnabled } from "./sandbox/enabled";
 import { settings } from "./db/schema";
 import { resolveGithubMcpUrl } from "./tools/github";
 
-export const REASONING_EFFORTS = ["low", "medium", "high"] as const;
-export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
-
 export type SettingsRecord = {
-  baseUrl: string;
-  apiKey: string;
   searxngUrl: string;
   tavilyApiKey: string;
   githubToken: string;
   githubMcpUrl: string;
-  model: string;
-  reasoningEffort: ReasoningEffort;
 };
 
 export type PublicSettings = {
-  baseUrl: string;
-  model: string;
-  reasoningEffort: ReasoningEffort;
-  keySet: boolean;
   searxngUrl: string;
   tavilyKeySet: boolean;
   githubTokenSet: boolean;
@@ -32,71 +21,53 @@ export type PublicSettings = {
   sandbox: boolean;
 };
 
-function asEffort(value: string): ReasoningEffort {
-  if (value === "low" || value === "high" || value === "medium") return value;
-  return "medium";
-}
+const NO_SETTINGS: SettingsRecord = { searxngUrl: "", tavilyApiKey: "", githubToken: "", githubMcpUrl: "" };
 
-export function getSettings(): SettingsRecord | null {
+/** The settings row, or empty settings when nothing was saved yet, so a user with only a connection can chat. */
+export function getSettings(): SettingsRecord {
   const row = getDb().select().from(settings).where(eq(settings.id, 1)).get();
-  if (!row) return null;
-  return {
-    baseUrl: row.baseUrl,
-    apiKey: row.apiKey,
-    searxngUrl: row.searxngUrl,
-    tavilyApiKey: row.tavilyApiKey,
-    githubToken: row.githubToken,
-    githubMcpUrl: row.githubMcpUrl,
-    model: row.model,
-    reasoningEffort: asEffort(row.reasoningEffort),
-  };
+  if (!row) return NO_SETTINGS;
+  return { searxngUrl: row.searxngUrl, tavilyApiKey: row.tavilyApiKey, githubToken: row.githubToken, githubMcpUrl: row.githubMcpUrl };
 }
 
-export function toPublicSettings(row: SettingsRecord | null): PublicSettings {
-  const redact = new Redactor(row);
+/** One request's redactor: settings credentials, readable connection keys, and saved base URLs. */
+export function requestRedactor(userId: string, row: SettingsRecord = getSettings()) {
+  return new Redactor(row, ...redactionSecrets(userId));
+}
+
+export function publicConnections(userId: string, row: SettingsRecord = getSettings()) {
+  const redact = requestRedactor(userId, row);
+  return listConnections(userId).map((connection) => toPublicConnection(connection, redact));
+}
+
+// A provider key copied into a settings URL must stay off the page too, and the masked URL the page sends back must
+// match the saved one, so showing and saving both mask with every connection secret.
+function settingsRedactor(row: SettingsRecord) {
+  return new Redactor(row, ...installRedactionSecrets());
+}
+
+export function toPublicSettings(row: SettingsRecord): PublicSettings {
+  const redact = settingsRedactor(row);
   return {
-    baseUrl: row ? redactUrl(row.baseUrl, redact) : "",
-    model: row?.model ?? "",
-    reasoningEffort: row?.reasoningEffort ?? "medium",
-    keySet: Boolean(row?.apiKey),
-    searxngUrl: row ? redactUrl(row.searxngUrl, redact) : "",
-    tavilyKeySet: Boolean(row?.tavilyApiKey),
-    githubTokenSet: Boolean(row?.githubToken),
-    githubMcpUrl: redactUrl(resolveGithubMcpUrl(row?.githubMcpUrl), redact),
+    searxngUrl: redactUrl(row.searxngUrl, redact),
+    tavilyKeySet: Boolean(row.tavilyApiKey),
+    githubTokenSet: Boolean(row.githubToken),
+    githubMcpUrl: redactUrl(resolveGithubMcpUrl(row.githubMcpUrl), redact),
     sandbox: sandboxEnabled(),
   };
-}
-
-export function matchesSavedBaseUrl(submitted: string, current: SettingsRecord): boolean {
-  const normalized = normalizeBaseUrl(submitted);
-  if (normalized === normalizeBaseUrl(current.baseUrl)) return true;
-  if (!current.baseUrl) return false;
-  const masked = redactUrl(current.baseUrl, new Redactor(current));
-  return normalized === normalizeBaseUrl(masked);
 }
 
 const trimSearx = (value: string) => value.trim().replace(/\/+$/, "");
 
 export type ResolvedSettingsUrls =
-  | { ok: true; baseUrl: string; searxngUrl: string; githubMcpUrl: string }
+  | { ok: true; searxngUrl: string; githubMcpUrl: string }
   | { ok: false; error: string };
 
-export function resolveSettingsUrls(
-  input: { baseUrl: string; searxngUrl?: string; githubMcpUrl?: string },
-  current: SettingsRecord | null,
-): ResolvedSettingsUrls {
-  const currentRedact = new Redactor(current);
-  const base = resolveMaskedUrl({
-    submitted: input.baseUrl,
-    saved: current?.baseUrl ?? "",
-    redact: currentRedact,
-    normalize: normalizeBaseUrl,
-    fieldLabel: "Base URL",
-  });
-  if (!base.ok) return base;
+export function resolveSettingsUrls(input: { searxngUrl?: string; githubMcpUrl?: string }, current: SettingsRecord): ResolvedSettingsUrls {
+  const currentRedact = settingsRedactor(current);
   const searx = resolveMaskedUrl({
     submitted: input.searxngUrl,
-    saved: current?.searxngUrl ?? "",
+    saved: current.searxngUrl,
     redact: currentRedact,
     normalize: trimSearx,
     fieldLabel: "SearXNG URL",
@@ -104,42 +75,26 @@ export function resolveSettingsUrls(
   if (!searx.ok) return searx;
   const mcp = resolveMaskedUrl({
     submitted: input.githubMcpUrl,
-    saved: current?.githubMcpUrl ?? "",
+    saved: current.githubMcpUrl,
     redact: currentRedact,
     normalize: (value) => value.trim(),
     fieldLabel: "GitHub MCP URL",
-    displaySaved: resolveGithubMcpUrl(current?.githubMcpUrl),
+    displaySaved: resolveGithubMcpUrl(current.githubMcpUrl),
   });
   if (!mcp.ok) return mcp;
-  return { ok: true, baseUrl: base.url, searxngUrl: searx.url, githubMcpUrl: mcp.url };
+  return { ok: true, searxngUrl: searx.url, githubMcpUrl: mcp.url };
 }
 
-export function saveSettings(input: {
-  baseUrl: string;
-  apiKey?: string;
-  searxngUrl?: string;
-  tavilyApiKey?: string | null;
-  githubToken?: string | null;
-  githubMcpUrl?: string;
-  model: string;
-  reasoningEffort: ReasoningEffort;
-}) {
+export function saveSettings(input: { searxngUrl?: string; tavilyApiKey?: string | null; githubToken?: string | null; githubMcpUrl?: string }) {
   const current = getSettings();
   const resolved = resolveSettingsUrls(input, current);
   if (!resolved.ok) throw new Error(resolved.error);
-  const sameSavedBase = current !== null && normalizeBaseUrl(resolved.baseUrl) === normalizeBaseUrl(current.baseUrl);
-  const requestedKey = input.apiKey?.trim() ?? "";
-  const apiKey = requestedKey || (sameSavedBase ? current.apiKey : "");
   const values = {
     id: 1,
-    baseUrl: resolved.baseUrl,
-    apiKey,
     searxngUrl: resolved.searxngUrl,
-    tavilyApiKey: input.tavilyApiKey === null ? "" : input.tavilyApiKey?.trim() || current?.tavilyApiKey || "",
-    githubToken: input.githubToken === null ? "" : input.githubToken?.trim() || current?.githubToken || "",
+    tavilyApiKey: input.tavilyApiKey === null ? "" : input.tavilyApiKey?.trim() || current.tavilyApiKey,
+    githubToken: input.githubToken === null ? "" : input.githubToken?.trim() || current.githubToken,
     githubMcpUrl: resolved.githubMcpUrl,
-    model: input.model.trim(),
-    reasoningEffort: input.reasoningEffort,
     updatedAt: new Date(),
   };
   getDb().insert(settings).values(values).onConflictDoUpdate({ target: settings.id, set: values }).run();

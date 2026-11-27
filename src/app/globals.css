@@ -201,6 +201,12 @@
 @theme {
   --container-page: 42.5rem;
   --spacing-tool-content: 15rem;
+  --spacing-picker: 24rem;
+  --spacing-picker-height: 60vh;
+  --spacing-sheet-height: 80dvh;
+  /* A touch row stays 44px when a smaller text size shrinks rem. */
+  --spacing-touch: max(2.75rem, 44px);
+  --ring-width-focus: 3px;
 
   --text-prose: 1rem;
   --text-prose--line-height: 1.65;

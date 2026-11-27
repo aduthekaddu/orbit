@@ -1,8 +1,5 @@
-export default async function sandbox({ page, origin, mockUrl, step, shot }) {
-  const settings = await page.request.put(`${origin}/api/settings`, {
-    data: { baseUrl: mockUrl, apiKey: "test-key-not-real", model: "mock-genui", reasoningEffort: "low" },
-  });
-  if (!settings.ok()) throw new Error(`mock settings returned ${settings.status()}`);
+export default async function sandbox({ page, origin, useProvider, step, shot }) {
+  await useProvider();
   const response = await page.request.post(`${origin}/api/chats`);
   const { id } = await response.json();
   await page.goto(`${origin}/c/${id}`);
