@@ -881,7 +881,7 @@ async function driveSettings() {
     [defaults.status === 200 && body(defaults).connectionId === id && body(defaults).effort === "high", "the default model did not save"],
     [badEffort.status === 400, "an unknown effort was accepted"],
     [settings.status === 200 && settingsFields === "githubMcpUrl,githubTokenReadable,githubTokenSet", "GET /api/settings did not return the public GitHub fields"],
-    [adminSettings.status === 200 && adminFields === "dreamHour,hostingMode,sandbox,sandboxAvailable,searxngUrl,tavilyKeyReadable,tavilyKeySet" && body(adminSettings).hostingMode === "personal", "GET /api/admin/settings did not return the public Personal settings"],
+    [adminSettings.status === 200 && adminFields === "dreamHour,hostingMode,sandbox,sandboxAvailable,searxngUrl,signupMode,tavilyKeyReadable,tavilyKeySet" && body(adminSettings).hostingMode === "personal" && body(adminSettings).signupMode === "invite", "GET /api/admin/settings did not return the public Personal settings"],
     [removed.status === 200 && Array.isArray(afterDelete) && !afterDelete.some((item) => item.id === id), "the connection was not deleted"],
     [defaultsAfterDelete.connectionId !== id, "the defaults still name the deleted connection"],
     [!responseHasKey, "a response leaked the key"],

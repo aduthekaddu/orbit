@@ -10,7 +10,7 @@ const derived = [
 ];
 const instance = ["__drizzle_migrations", "instance_settings", "pending_connection", "sqlite_sequence", "verification"];
 
-test("every SQLite table has an owner or a documented instance purpose, and user rows cascade", () => {
+test("every SQLite table has an owner or a documented instance purpose, and user rows cascade", (t) => {
   const sqlite = getDb().$client;
   try {
     const tables = sqlite.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").pluck().all();
@@ -65,6 +65,16 @@ test("every SQLite table has an owner or a documented instance purpose, and user
     assert.equal(needle("messages_fts", "alphamessage"), 1);
     assert.equal(sqlite.prepare("SELECT count(*) FROM instance_settings").pluck().get(), 1);
     assert.deepEqual(sqlite.pragma("foreign_key_check"), []);
+    const counts = Object.fromEntries([...direct, "memories_vec"].map((table) => [
+      table, sqlite.prepare(`SELECT count(*) FROM ${table} WHERE user_id = 'beta'`).pluck().get(),
+    ]));
+    t.diagnostic(`Removed member rows ${JSON.stringify({
+      ...counts,
+      user: sqlite.prepare("SELECT count(*) FROM user WHERE id = 'beta'").pluck().get(),
+      messages: sqlite.prepare("SELECT count(*) FROM messages WHERE chat_id = 'beta'").pluck().get(),
+      messages_fts: needle("messages_fts", "betamessage"),
+      memories_fts: needle("memories_fts", "betamemory"),
+    })}`);
   } finally {
     sqlite.close();
   }
