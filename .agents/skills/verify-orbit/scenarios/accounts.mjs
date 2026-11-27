@@ -160,6 +160,8 @@ export default async function accounts({ page, origin, step, shot, mockUrl }) {
     const teamChat = await sendChat(team, "[qa:plain] Say pong for the Team browser check.");
     step("Team member can chat using their own model default", teamChat.startsWith("/c/"));
     await sendChat(team, "[qa:remember] Remember I practice the cello.", "Saved.");
+    const memberMemories = await getJSON(`${origin}/api/memories`, team.request);
+    assert.ok(memberMemories.memories.some((entry) => entry.text.includes("practice the cello")), "member can see their own saved memory");
 
     await team.goto(`${origin}/settings`);
     for (const name of ["Appearance", "Default model", "Models", "Memory", "GitHub"]) await heading(team, name).waitFor();
@@ -170,8 +172,8 @@ export default async function accounts({ page, origin, step, shot, mockUrl }) {
     await desktopTeam.goto(`${origin}/settings`);
     await heading(desktopTeam, "Models").waitFor();
     await shot("team-member-settings", desktopTeam);
-    const shared = (await getJSON(`${origin}/api/connections`, team.request)).connections;
-    assert.ok(shared.length > 0);
+    const shared = await getJSON(`${origin}/api/connections`, team.request);
+    assert.ok(Array.isArray(shared) && shared.length > 0, "Team receives a list of connections");
     step("Team connections expose only id, kind, and label", shared.every((connection) => Object.keys(connection).sort().join(",") === "id,kind,label"));
     const blockedAdd = await team.request.post(`${origin}/api/connections`, {
       data: { kind: "openai-compatible", label: "Refused", baseUrl: mockUrl, apiKey: "test-key-not-real" },
