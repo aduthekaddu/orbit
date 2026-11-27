@@ -51,9 +51,21 @@ function capTitle(text: string) {
   return Array.from(text.slice(0, MAX_TITLE * 2)).slice(0, MAX_TITLE).join("").trimEnd();
 }
 
+// Drops every tag and every stray angle bracket in one pass, so no tag piece survives.
+function withoutTags(raw: string) {
+  let text = "";
+  let inTag = false;
+  for (const char of raw) {
+    if (char === "<") inTag = true;
+    else if (char === ">") inTag = false;
+    else if (!inTag) text += char;
+  }
+  return text;
+}
+
 function cleanTitle(raw: string | null): string {
   if (raw === null) return "";
-  return capTitle(decodeEntities(raw.replace(/<[^<>]*>/g, "").replace(/[<>]/g, "")).replace(/\s+/g, " ").trim());
+  return capTitle(decodeEntities(withoutTags(raw)).replace(/\s+/g, " ").trim());
 }
 
 function markupTitle(kind: "html" | "svg", source: string): string {
