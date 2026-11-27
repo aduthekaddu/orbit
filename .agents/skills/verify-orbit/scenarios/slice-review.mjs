@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import * as sqliteVec from "sqlite-vec";
 
 const widths = [1440, 390];
 const memoryId = "qa-slice-review-memory";
@@ -7,14 +8,18 @@ const date = "2099-01-01";
 export default async function sliceReview({ page, origin, useProvider, step, shot }) {
   await useProvider();
   const cookies = await page.context().cookies();
+  const session = await (await page.request.get(`${origin}/api/auth/get-session`)).json();
+  if (!session?.user?.id) throw new Error("The review fixture requires a signed-in account.");
+  const userId = session.user.id;
   const db = new Database(".verify/sandbox/data/orbit.db", { fileMustExist: true, timeout: 5_000 });
   try {
-    db.prepare("INSERT INTO memories(id, kind, text, text_norm, created_at) VALUES (?, 'fact', ?, ?, ?)").run(
-      memoryId, "Review fixture memory", "review fixture memory", Date.now(),
+    sqliteVec.load(db);
+    db.prepare("INSERT INTO memories(id, user_id, kind, text, text_norm, created_at) VALUES (?, ?, 'fact', ?, ?, ?)").run(
+      memoryId, userId, "Review fixture memory", "review fixture memory", Date.now(),
     );
     db.prepare(`INSERT INTO memory_runs
-      (date, state, started_at, finished_at, chat_ids, done_chat_ids, retry_chat_ids, added, merged, error)
-      VALUES (?, 'failed', ?, ?, '[]', '[]', '[]', 0, 0, 'Dream failed')`).run(date, Date.now() - 1000, Date.now());
+      (user_id, date, state, started_at, finished_at, chat_ids, done_chat_ids, retry_chat_ids, added, merged, error)
+      VALUES (?, ?, 'failed', ?, ?, '[]', '[]', '[]', 0, 0, 'Dream failed')`).run(userId, date, Date.now() - 1000, Date.now());
 
     for (const width of widths) {
       const touch = width === 390;
@@ -211,8 +216,11 @@ export default async function sliceReview({ page, origin, useProvider, step, sho
       }
     }
   } finally {
-    db.prepare("DELETE FROM memory_runs WHERE date = ?").run(date);
-    db.prepare("DELETE FROM memories WHERE id = ?").run(memoryId);
-    db.close();
+    try {
+      db.prepare("DELETE FROM memory_runs WHERE user_id = ? AND date = ?").run(userId, date);
+      db.prepare("DELETE FROM memories WHERE user_id = ? AND id = ?").run(userId, memoryId);
+    } finally {
+      db.close();
+    }
   }
 }
