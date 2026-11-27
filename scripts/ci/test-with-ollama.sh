@@ -38,4 +38,7 @@ if [[ "$actual_threads" != "$threads" ]]; then
   exit 1
 fi
 printf 'Ollama fixture uses the pinned weights with %s inference threads.\n' "$actual_threads"
-timeout 120s npm test -- --require-all --shuffle
+# The deadline catches a hung suite, not a slow one. Measured on hosted runners with the slowest
+# files started first (#274): 86 s on Node 22 and 109.5 s on Node 24 for 1215 tests, and one
+# commit's runs vary by about 30 s. 180 s leaves room for that spread and for new tests.
+timeout 180s npm test -- --require-all --shuffle

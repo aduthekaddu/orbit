@@ -17,12 +17,15 @@ after(() => {
 type RunOptions = {
   seed?: string;
   workers?: string | null;
+  slow?: string[];
 };
 
-function makeProject(files: Record<string, string>) {
+function makeProject(files: Record<string, string>, slow: string[] = []) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-test-runner-"));
   dirs.push(dir);
   fs.mkdirSync(path.join(dir, "src"));
+  fs.mkdirSync(path.join(dir, "scripts"));
+  fs.writeFileSync(path.join(dir, "scripts", "slow-test-files.txt"), `# Fixture list\n${slow.join("\n")}\n`);
   fs.symlinkSync(modules, path.join(dir, "node_modules"), "dir");
   fs.symlinkSync(path.join(process.cwd(), "drizzle"), path.join(dir, "drizzle"), "dir");
   for (const [name, content] of Object.entries(files)) {
@@ -40,7 +43,7 @@ function makeProject(files: Record<string, string>) {
 }
 
 function runSuite(source: string | Record<string, string>, args: string[] = [], options: RunOptions = {}) {
-  const { dir, env, tmp } = makeProject(typeof source === "string" ? { "fixture.test.ts": source } : source);
+  const { dir, env, tmp } = makeProject(typeof source === "string" ? { "fixture.test.ts": source } : source, options.slow);
   if (options.seed !== undefined) env.ORBIT_TEST_SEED = options.seed;
   const workers = options.workers === undefined ? "1" : options.workers;
   if (workers !== null) env.ORBIT_TEST_WORKERS = workers;
@@ -78,7 +81,7 @@ test("the seed reproduces file dispatch order without losing TS or TSX tests", (
     const result = runSuite(fixtures, args, { seed });
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stderr, new RegExp(`Orbit test order seed: ${seed} \\(4 files, 1 worker\\)`));
-    return [...result.stdout.matchAll(/^ok \d+ - fixture (\w+)$/gm)].map((match) => match[1]);
+    return fixtureOrder(result.stdout);
   };
   const shuffled = runOrder(["--require-all", "--shuffle"], "419");
   const replayed = runOrder(["--require-all"], "419");
@@ -86,6 +89,46 @@ test("the seed reproduces file dispatch order without losing TS or TSX tests", (
   assert.deepEqual([...shuffled].sort(), ["alpha", "beta", "delta", "gamma"]);
   assert.deepEqual(shuffled, replayed);
   assert.notDeepEqual(shuffled, different);
+});
+
+// One worker runs one file at a time, so the TAP order is the dispatch order.
+function fixtureOrder(stdout: string) {
+  return [...stdout.matchAll(/^ok \d+ - fixture (\w+)$/gm)].map((match) => match[1]);
+}
+
+test("listed slow files start first in list order, and the seed shuffles only the rest", () => {
+  const fixtures = Object.fromEntries(["alpha", "beta", "gamma", "delta", "zeta"].map((name) => [
+    `${name}.test.${name === "beta" ? "tsx" : "ts"}`,
+    `test("fixture ${name}", () => {});`,
+  ]));
+  const slow = ["src/zeta.test.ts", "src/beta.test.tsx"];
+  const runOrder = (args: string[], seed?: string) => {
+    const result = runSuite(fixtures, ["--require-all", ...args], { seed, slow });
+    assert.equal(result.status, 0, result.stderr);
+    return fixtureOrder(result.stdout);
+  };
+  const orders = ["419", "192", "7"].map((seed) => {
+    const order = runOrder(["--shuffle"], seed);
+    assert.deepEqual(order.slice(0, 2), ["zeta", "beta"], `seed ${seed} did not start the listed files first`);
+    assert.deepEqual(order.slice(2).sort(), ["alpha", "delta", "gamma"], `seed ${seed} lost or repeated a file`);
+    return order.join(" ");
+  });
+  assert.equal(runOrder([], "419").join(" "), orders[0], "seed 419 did not repeat its order");
+  assert.ok(new Set(orders).size > 1, `three seeds gave one order: ${orders[0]}`);
+  assert.deepEqual(runOrder([]), ["zeta", "beta", "alpha", "delta", "gamma"], "an unshuffled run sorts the rest");
+});
+
+test("a slow-file entry that is not one test file stops the run before any file starts", () => {
+  const fixtures = { "alpha.test.ts": `test("fixture alpha", () => {});` };
+  for (const [slow, message] of [
+    [["src/renamed.test.ts"], /scripts\/slow-test-files\.txt lists src\/renamed\.test\.ts, which is not a test file/],
+    [["src/alpha.test.ts", "src/alpha.test.ts"], /scripts\/slow-test-files\.txt lists src\/alpha\.test\.ts twice/],
+  ] as const) {
+    const result = runSuite(fixtures, ["--require-all", "--shuffle"], { seed: "419", slow: [...slow] });
+    assert.equal(result.status, 1, `the runner accepted ${slow.join(", ")}`);
+    assert.match(result.stderr, message);
+    assert.deepEqual(fixtureOrder(result.stdout), []);
+  }
 });
 
 test("shuffling still fails the full-suite gate for a skipped suite", () => {
