@@ -52,7 +52,7 @@ function RowTrigger({ className, ...props }: React.ComponentProps<"button">) {
         className,
       )}
     >
-      <DotsThreeIcon weight="bold" className="size-4" />
+      <DotsThreeIcon weight="regular" className="size-3.5" />
     </button>
   );
 }

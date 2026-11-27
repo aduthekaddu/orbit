@@ -25,8 +25,10 @@ const renamedChat = z.object({ id: z.string(), title: z.string() });
 const deletedChat = z.undefined();
 
 // A rename shows at once. `base` is the server's title when it was sent: once the server's list shows another
-// title, the edit has landed or someone else renamed the chat, and the list wins.
-type TitleEdit = { title: string; base: string; seq: number; saved: boolean };
+// title, the edit has landed or someone else renamed the chat, and the list wins. `previous` is the saved rename
+// a failure falls back to while the list has not caught up with it yet.
+type SavedTitle = { title: string; base: string; seq: number; saved: true };
+type TitleEdit = SavedTitle | { title: string; base: string; seq: number; saved: false; previous: SavedTitle | null };
 
 function chatApi(id: string) {
   return `/api/chats/${encodeURIComponent(id)}`;
@@ -170,7 +172,10 @@ export function AppShell({
     const base = chats.find((item) => item.id === chat.id)?.title ?? chat.title;
     const seq = ++renameSeq.current;
     latestRename.current.set(chat.id, seq);
-    setTitleEdits((edits) => new Map(edits).set(chat.id, { title, base, seq, saved: false }));
+    setTitleEdits((edits) => {
+      const previous = edits.get(chat.id);
+      return new Map(edits).set(chat.id, { title, base, seq, saved: false, previous: previous?.saved ? previous : null });
+    });
     setRenameFailure(0);
     void requestJson(chatApi(chat.id), { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ title }) }, {
       parse: renamedChat,
@@ -179,7 +184,7 @@ export function AppShell({
         latestRename.current.delete(chat.id);
         setTitleEdits((edits) => {
           const edit = edits.get(chat.id);
-          return edit?.seq === seq ? new Map(edits).set(chat.id, { ...edit, title: saved.title, saved: true }) : edits;
+          return edit?.seq === seq ? new Map(edits).set(chat.id, { title: saved.title, base: edit.base, seq, saved: true }) : edits;
         });
         router.refresh();
       },
@@ -187,9 +192,11 @@ export function AppShell({
         if (latestRename.current.get(chat.id) !== seq) return;
         latestRename.current.delete(chat.id);
         setTitleEdits((edits) => {
-          if (edits.get(chat.id)?.seq !== seq) return edits;
+          const edit = edits.get(chat.id);
+          if (edit?.seq !== seq || edit.saved) return edits;
           const next = new Map(edits);
-          next.delete(chat.id);
+          if (edit.previous) next.set(chat.id, edit.previous);
+          else next.delete(chat.id);
           return next;
         });
         setRenameFailure(seq);
@@ -271,8 +278,8 @@ export function AppShell({
     const pending = deletes.pending;
     if (!pending) return;
     dispatchDelete({ type: "undo" });
-    // Back to the chat from the draft its delete opened. A page picked since then stays open.
-    if (pending.wasOpen && onDraft) router.push(`/c/${pending.chat.id}`);
+    // Back to the chat from the draft its delete opened, or before that draft has loaded. A page picked since stays.
+    if (pending.wasOpen && (onDraft || pathname === `/c/${pending.chat.id}`)) router.push(`/c/${pending.chat.id}`);
     else window.setTimeout(() => focusChatRow(pending.chat.id), 0);
   }
 
