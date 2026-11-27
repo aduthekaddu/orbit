@@ -151,7 +151,11 @@ export default async function modelPicker({ page, origin, mockUrl, step, shot, u
   await page.locator("[data-connection-row]", { hasText: "Anthropic" }).waitFor({ timeout: 20_000 });
   const listed = await api("GET", "/api/connections");
   const settingsRead = await api("GET", "/api/settings");
-  step("settings response has no key", ![createdText, listed.text, settingsRead.text].some(holdsKey) && !/"apiKey"/.test(listed.text), "a connections or settings response carried a key");
+  const adminSettingsRead = await api("GET", "/api/admin/settings");
+  step("settings responses have no provider key",
+    settingsRead.status === 200 && adminSettingsRead.status === 200 &&
+    ![createdText, listed.text, settingsRead.text, adminSettingsRead.text].some(holdsKey) && !/"apiKey"/.test(listed.text),
+    "a settings read failed or a response returned a key");
   const anthropic = listed.json().find((connection) => connection.kind === "anthropic");
   const mock = listed.json().find((connection) => connection.kind === "openai-compatible");
 

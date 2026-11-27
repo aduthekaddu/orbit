@@ -155,14 +155,16 @@ async function main() {
     const schema = await import("../../src/lib/db/schema.ts");
     const { createChat, persistIncoming } = await import("../../src/lib/messages.ts");
     const { runDream } = await import("../../src/lib/memory/dream.ts");
+    const { parseViewer } = await import("../../src/lib/policy.ts");
+    const viewer = parseViewer({ id: "qa-user", role: "admin" });
 
     const { addConnection, saveModelDefaults } = await import("../../src/lib/connections.ts");
 
-    db.insert(schema.user).values({ id: "qa-user", name: "QA", email: "qa@orbit.local", emailVerified: true }).run();
+    db.insert(schema.user).values({ ...viewer, name: "QA", email: "qa@orbit.local", emailVerified: true }).run();
     const redact = new Redactor(null);
-    const added = await addConnection("qa-user", { kind: "openai-compatible", label: "Mock", baseUrl: provider.url, apiKey: "mock-key-not-real" }, redact);
+    const added = await addConnection(viewer.id, { kind: "openai-compatible", label: "Mock", baseUrl: provider.url, apiKey: "mock-key-not-real" }, () => redact);
     if (!added.ok) throw new Error(`adding the mock connection failed: ${added.reason}`);
-    saveModelDefaults("qa-user", { connectionId: added.connection.id, model: "mock-genui", effort: "medium" });
+    saveModelDefaults(viewer.id, { connectionId: added.connection.id, model: "mock-genui", effort: "medium" });
 
     const date = "2099-08-08";
     const base = Date.parse(`${date}T12:00:00Z`);
@@ -172,14 +174,14 @@ async function main() {
       { chat: "C", text: unrelated.right },
     ];
     seeds.forEach((seed, index) => {
-      const chat = createChat("qa-user");
+      const chat = createChat(viewer.id);
       const id = crypto.randomUUID();
       persistIncoming(chat.id, [{ id, role: "user", parts: [{ type: "text", text: seed.text }] }], redact);
       db.$client.prepare("UPDATE messages SET created_at = ? WHERE id = ?").run(base + index * 60_000, id);
       line(`seeded chat ${seed.chat}`, JSON.stringify(seed.text));
     });
 
-    const row = await runDream({ manual: true, date, now: new Date(Date.parse(`${date}T16:00:00Z`)) });
+    const row = await runDream({ viewer, manual: true, date, now: new Date(Date.parse(`${date}T16:00:00Z`)) });
     globalThis.fetch = realFetch;
     if (!row) throw new Error("dream did not start");
     line("run", JSON.stringify({ date: row.date, state: row.state, chats: row.chatIds.length, added: row.added, merged: row.merged, error: row.error }));

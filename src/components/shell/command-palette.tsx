@@ -4,12 +4,13 @@ import { Fragment, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { Command, defaultFilter } from "cmdk";
-import { BrainIcon, ChatCircleIcon, GearSixIcon, MagnifyingGlassIcon, NotePencilIcon } from "@phosphor-icons/react";
+import { BrainIcon, ChatCircleIcon, GearSixIcon, MagnifyingGlassIcon, NotePencilIcon, ShieldCheckIcon } from "@phosphor-icons/react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ScrollFade } from "@/components/ui/scroll-fade";
 import { chatLabel, type ChatSummary } from "@/components/chat/chat-row-menu";
 import { ShortcutKbd } from "./shortcuts";
 import { useLoaded } from "@/lib/request-json";
+import type { Role } from "@/lib/session";
 import { paletteSearchNotice } from "./palette-search";
 
 const itemClass =
@@ -46,6 +47,7 @@ export function CommandPalette({
   open,
   onOpenChange,
   chats,
+  role,
   hiddenChatIds,
   onNewChat,
   onAction,
@@ -53,6 +55,7 @@ export function CommandPalette({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   chats: ChatSummary[];
+  role: Role;
   /** Chats deleted or waiting for Undo. Their message hits stay out of the list. */
   hiddenChatIds: ReadonlySet<string>;
   onNewChat: () => void;
@@ -120,6 +123,12 @@ export function CommandPalette({
                   <BrainIcon weight="light" className="size-4" />
                   Memory
                 </Command.Item>
+                {role === "admin" ? (
+                  <Command.Item value="Admin" onSelect={() => run(() => router.push("/admin"))} className={itemClass}>
+                    <ShieldCheckIcon weight="light" className="size-4" />
+                    Admin
+                  </Command.Item>
+                ) : null}
               </Command.Group>
               {chats.length > 0 && (
                 <Command.Group heading="Chats" className={groupClass}>

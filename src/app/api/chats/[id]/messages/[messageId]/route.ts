@@ -1,7 +1,7 @@
 import { getChatForUser, touchChat, updateMessageText } from "@/lib/messages";
 import { LIMITS, r } from "@/lib/route-schema";
-import { getSession, unauthorized } from "@/lib/session";
-import { requestRedactor } from "@/lib/settings";
+import { sessionFrom, unauthorized } from "@/lib/session";
+import { requestRedactor } from "@/lib/request-redactor";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ const paramsSchema = r.object({
 });
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string; messageId: string }> }) {
-  const session = await getSession();
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const params = paramsSchema.safeParse(await context.params);
   if (!params.success) return Response.json({ error: "Not found" }, { status: 404 });
@@ -26,7 +26,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (!chat) return Response.json({ error: "Not found" }, { status: 404 });
   const parsed = patchSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid message text" }, { status: 400 });
-  const redact = requestRedactor(session.user.id);
+  const redact = requestRedactor(session.user);
   if (!updateMessageText(chat.id, messageId, parsed.data.text, redact, parsed.data.partIndex)) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }

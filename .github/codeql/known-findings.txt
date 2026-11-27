@@ -7,7 +7,6 @@
 js/incomplete-multi-character-sanitization src/lib/tools/search.ts 2ed12a66c48874ba:1
 
 # authSecret checks that the secret file exists and then reads or creates it, so two starting processes can race.
-js/file-system-race src/lib/auth.ts 8d547aa7e2bdf4f3:1
 
 # The native build probe checks for an addon file and then creates it. It only runs in development and CI.
 js/file-system-race scripts/qa/sandbox-native-build.mjs 35a0931e370156b:1

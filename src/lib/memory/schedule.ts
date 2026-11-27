@@ -1,5 +1,6 @@
 import { getDb } from "../db";
-import { readEnv } from "../env";
+import { getInstance } from "../instance-settings";
+import { parseViewer, type Viewer } from "../policy";
 import type { MemoryRun } from "./run-state";
 
 export type Tonight = {
@@ -10,14 +11,6 @@ export type Tonight = {
 
 export function systemTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
-}
-
-export function dreamHour(): number {
-  const raw = readEnv("ORBIT_DREAM_HOUR");
-  if (!raw) return 3;
-  const hour = Number(raw);
-  if (!Number.isInteger(hour) || hour < 0 || hour > 23) return 3;
-  return hour;
 }
 
 export function localStamp(now: Date, timeZone: string): { date: string; minutes: number } {
@@ -59,26 +52,36 @@ export function shouldStartDream(input: { now: Date; hour: number; timeZone: str
   const tonight = input.tonight;
   if (!tonight) return true;
   if (tonight.state !== "running") return false;
-  if (tonight.leaseUntil && tonight.leaseUntil.getTime() > input.now.getTime()) return false;
+  if (tonight.leaseUntil && tonight.leaseUntil.getTime() >= input.now.getTime()) return false;
   return true;
 }
 
-function readTonight(date: string): Tonight | null {
-  const row = getDb().$client
-    .prepare("SELECT state, started_at AS startedAt, lease_until AS leaseUntil FROM memory_runs WHERE date = ?")
-    .get(date) as { state: string; startedAt: number; leaseUntil: number | null } | undefined;
-  if (!row || (row.state !== "running" && row.state !== "done" && row.state !== "failed")) return null;
-  return {
-    state: row.state,
-    startedAt: new Date(row.startedAt),
-    leaseUntil: row.leaseUntil == null ? null : new Date(row.leaseUntil),
-  };
+export function memoryEnabledViewers(): Viewer[] {
+  return getDb().$client.prepare(
+    `SELECT user.id, user.role FROM user
+     LEFT JOIN user_preferences ON user_preferences.user_id = user.id
+     WHERE coalesce(user_preferences.memory, 'on') = 'on'
+     ORDER BY user.created_at, user.id`,
+  ).all().map(parseViewer);
 }
 
-export function maybeDream(now: Date): boolean {
+export function dueDreamViewers(now: Date): Viewer[] {
   const timeZone = systemTimeZone();
-  const date = localStamp(now, timeZone).date;
-  return shouldStartDream({ now, hour: dreamHour(), timeZone, tonight: readTonight(date) });
+  const hour = getInstance().dreamHour;
+  const { date, minutes } = localStamp(now, timeZone);
+  if (minutes < hour * 60) return [];
+  const run = getDb().$client.prepare(
+    "SELECT state, started_at AS startedAt, lease_until AS leaseUntil FROM memory_runs WHERE user_id = ? AND date = ?",
+  );
+  return memoryEnabledViewers().filter((viewer) => {
+    const row = run.get(viewer.id, date) as { state: Tonight["state"]; startedAt: number; leaseUntil: number | null } | undefined;
+    const tonight = row ? {
+      state: row.state,
+      startedAt: new Date(row.startedAt),
+      leaseUntil: row.leaseUntil === null ? null : new Date(row.leaseUntil),
+    } : null;
+    return shouldStartDream({ now, hour, timeZone, tonight });
+  });
 }
 
 export function dreamSchedulerEnabled(): boolean {
@@ -92,14 +95,29 @@ let timer: ReturnType<typeof setInterval> | undefined;
 
 export function startDreamScheduler(): void {
   if (!dreamSchedulerEnabled() || timer) return;
-  const tick = () => {
-    const now = new Date();
-    if (!maybeDream(now)) return;
-    void import("./dream")
-      .then(({ runDream }) => runDream({ now }))
-      .catch((error: unknown) => {
-        console.log(JSON.stringify({ dream: "failed", error: error instanceof Error ? error.name : "Error" }));
-      });
+  let running = false;
+  const tick = async () => {
+    if (running) return;
+    running = true;
+    try {
+      const now = new Date();
+      const viewers = dueDreamViewers(now);
+      if (viewers.length === 0) return;
+      const { runDream } = await import("./dream");
+      const date = localStamp(now, systemTimeZone()).date;
+      for (const viewer of viewers) {
+        try {
+          const run = await runDream({ viewer, date });
+          if (run) console.log(JSON.stringify({ dream: run.date, userId: viewer.id, state: run.state, chats: run.chatIds.length, added: run.added, merged: run.merged }));
+        } catch (error) {
+          console.error(JSON.stringify({ dream: "failed", userId: viewer.id, error: error instanceof Error ? error.name : "Error" }));
+        }
+      }
+    } catch (error) {
+      console.error(JSON.stringify({ dream: "failed", error: error instanceof Error ? error.name : "Error" }));
+    } finally {
+      running = false;
+    }
   };
   timer = setInterval(tick, 60_000);
   timer.unref();

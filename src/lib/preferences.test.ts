@@ -1,16 +1,15 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import test, { after, before } from "node:test";
 import { eq } from "drizzle-orm";
 import { DEFAULT_APPEARANCE } from "./appearance";
 import { getDb } from "./db";
 import * as schema from "./db/schema";
-import { getPreferences, savePreferences } from "./preferences";
+import { getMemoryEnabled, getPreferences, savePreferences } from "./preferences";
+import type { UserId } from "./session";
 
-const originalCwd = process.cwd();
-const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-preferences-"));
+const memberA = "u-a" as UserId;
+const memberB = "u-b" as UserId;
+const defaults = { ...DEFAULT_APPEARANCE, memory: "on" };
 
 function addUser(id: string) {
   const now = new Date();
@@ -22,45 +21,52 @@ function rowsFor(userId: string) {
 }
 
 before(() => {
-  fs.cpSync(path.join(originalCwd, "drizzle"), path.join(sandbox, "drizzle"), { recursive: true });
-  process.chdir(sandbox);
-  addUser("u-a");
+  addUser(memberA);
+  addUser(memberB);
 });
 
 after(() => {
   getDb().$client.close();
-  process.chdir(originalCwd);
-  fs.rmSync(sandbox, { recursive: true, force: true });
 });
 
 test("a user with no saved row gets the defaults", () => {
-  assert.deepEqual(getPreferences("u-a"), DEFAULT_APPEARANCE);
-  assert.equal(rowsFor("u-a").length, 0);
+  assert.deepEqual(getPreferences(memberA), defaults);
+  assert.equal(rowsFor(memberA).length, 0);
 });
 
 test("a patch saves one field and a later patch keeps it", () => {
-  assert.deepEqual(savePreferences("u-a", { theme: "light" }), { ...DEFAULT_APPEARANCE, theme: "light" });
-  assert.deepEqual(savePreferences("u-a", { textSize: "lg" }), { ...DEFAULT_APPEARANCE, theme: "light", textSize: "lg" });
-  assert.deepEqual(getPreferences("u-a"), { ...DEFAULT_APPEARANCE, theme: "light", textSize: "lg" });
-  assert.deepEqual(getPreferences("someone-else"), DEFAULT_APPEARANCE);
+  assert.deepEqual(savePreferences(memberA, { theme: "light" }), { ...defaults, theme: "light" });
+  assert.deepEqual(savePreferences(memberA, { textSize: "lg" }), { ...defaults, theme: "light", textSize: "lg" });
+  assert.deepEqual(getPreferences(memberA), { ...defaults, theme: "light", textSize: "lg" });
+  assert.deepEqual(getPreferences(memberB), defaults);
 });
 
 test("the same patch twice leaves one row with the same values", () => {
-  const first = savePreferences("u-a", { accent: "sky", chatWidth: "wide" });
-  const second = savePreferences("u-a", { accent: "sky", chatWidth: "wide" });
+  const first = savePreferences(memberA, { accent: "sky", chatWidth: "wide" });
+  const second = savePreferences(memberA, { accent: "sky", chatWidth: "wide" });
   assert.deepEqual(second, first);
-  assert.equal(rowsFor("u-a").length, 1);
+  assert.equal(rowsFor(memberA).length, 1);
 });
 
 test("a bad stored value reads as its default and the next save replaces it", () => {
-  getDb().update(schema.userPreferences).set({ replyFont: "comic" }).where(eq(schema.userPreferences.userId, "u-a")).run();
-  assert.equal(getPreferences("u-a").replyFont, "sans");
-  assert.equal(getPreferences("u-a").accent, "sky");
-  savePreferences("u-a", { replyFont: "serif" });
-  assert.equal(rowsFor("u-a")[0].replyFont, "serif");
+  getDb().update(schema.userPreferences).set({ replyFont: "comic" }).where(eq(schema.userPreferences.userId, memberA)).run();
+  assert.equal(getPreferences(memberA).replyFont, "sans");
+  assert.equal(getPreferences(memberA).accent, "sky");
+  savePreferences(memberA, { replyFont: "serif" });
+  assert.equal(rowsFor(memberA)[0].replyFont, "serif");
+});
+
+test("switching memory off preserves other settings and only affects that user", () => {
+  assert.equal(getMemoryEnabled(memberA), true);
+  assert.equal(getMemoryEnabled(memberB), true);
+  assert.equal(savePreferences(memberA, { memory: "off" }).memory, "off");
+  assert.equal(getMemoryEnabled(memberA), false);
+  assert.equal(getMemoryEnabled(memberB), true);
+  assert.equal(savePreferences(memberA, { theme: "light" }).memory, "off");
+  assert.equal(getPreferences(memberB).memory, "on");
 });
 
 test("deleting the user deletes their preferences", () => {
-  getDb().delete(schema.user).where(eq(schema.user.id, "u-a")).run();
-  assert.equal(rowsFor("u-a").length, 0);
+  getDb().delete(schema.user).where(eq(schema.user.id, memberA)).run();
+  assert.equal(rowsFor(memberA).length, 0);
 });

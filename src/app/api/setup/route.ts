@@ -1,4 +1,4 @@
-import { signupOpen } from "@/lib/db";
+import { signupOpen } from "@/lib/instance-settings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

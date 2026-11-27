@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { readEnv } from "../env";
+import type { UserId } from "../policy";
 import { listUnembedded, writeVectors } from "./store";
 
 export const EMBED_MODEL = "nomic-embed-text";
@@ -56,8 +57,8 @@ export async function embed(texts: string[], kind: EmbedKind, timeoutMs = TIMEOU
   return { ok: true, vectors: parsed.data.embeddings };
 }
 
-async function fillPending(): Promise<EmbedPendingResult> {
-  const rows = listUnembedded();
+async function fillPending(userId: UserId): Promise<EmbedPendingResult> {
+  const rows = listUnembedded(userId);
   let embedded = 0;
   for (let index = 0; index < rows.length; index += BATCH) {
     const batch = rows.slice(index, index + BATCH);
@@ -71,8 +72,8 @@ async function fillPending(): Promise<EmbedPendingResult> {
 
 let chain: Promise<EmbedPendingResult> = Promise.resolve({ ok: true, embedded: 0 });
 
-export function embedPending(): Promise<EmbedPendingResult> {
-  const run = chain.then(() => fillPending(), () => fillPending());
+export function embedPending(userId: UserId): Promise<EmbedPendingResult> {
+  const run = chain.then(() => fillPending(userId), () => fillPending(userId));
   chain = run.then(
     (result) => result,
     () => ({ ok: false, error: "Ollama is unreachable", embedded: 0 }),
@@ -123,10 +124,10 @@ export async function embedQuery(text: string, timeoutMs = QUERY_EMBED_TIMEOUT_M
   return result;
 }
 
-export async function memoryEmbeddings(): Promise<OllamaStatus> {
+export async function memoryEmbeddings(userId: UserId): Promise<OllamaStatus> {
   const status = await ollamaStatus();
   if (!status.ok) return status;
-  const filled = await embedPending();
+  const filled = await embedPending(userId);
   if (!filled.ok) {
     const failed = { ok: false as const, error: filled.error };
     rememberStatus(failed);

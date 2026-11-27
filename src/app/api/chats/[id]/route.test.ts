@@ -1,3 +1,4 @@
+import { parseViewer } from "@/lib/policy";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { registerHooks } from "node:module";
@@ -13,7 +14,7 @@ import { finishChatReply, planChatWrite } from "@/lib/messages";
 import { saveMemory } from "@/lib/memory/store";
 import { bindReplyPlan, findReplyRun, releaseReplyRun, reserveReplyRun, startReplyRun } from "@/lib/reply-runs";
 import { searchMessages } from "@/lib/search";
-import { saveSettings } from "@/lib/settings";
+import { saveInstance } from "@/lib/instance-settings";
 
 const ME = "u-chat-owner";
 const OTHER = "u-chat-other";
@@ -23,7 +24,7 @@ const STORED_KEY = "made-up-tavily-key-0042";
 // returns whichever user a test signs in as, or no session.
 const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-chats-route-"));
 const sessionStub = path.join(stubDir, "session.cjs");
-fs.writeFileSync(sessionStub, `exports.getSession = async () => (globalThis.__orbitSignedIn ? { user: { id: globalThis.__orbitSignedIn } } : null);
+fs.writeFileSync(sessionStub, `exports.sessionFrom = async () => (globalThis.__orbitSignedIn ? { user: globalThis.__orbitSignedIn } : null);
 exports.unauthorized = () => Response.json({ error: "Unauthorized" }, { status: 401 });`);
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -31,7 +32,7 @@ const hooks = registerHooks({
     return nextResolve(specifier, context);
   },
 });
-const signedIn = globalThis as { __orbitSignedIn?: string | null };
+const signedIn = globalThis as { __orbitSignedIn?: ReturnType<typeof parseViewer> | null };
 
 type Route = typeof import("./route");
 let route: Route;
@@ -40,8 +41,8 @@ const redact = new Redactor(null);
 before(async () => {
   const db = getDb();
   db.$client.exec("DROP TRIGGER IF EXISTS user_single_row");
-  for (const id of [ME, OTHER]) db.insert(schema.user).values({ id, name: id, email: `${id}@orbit.local` }).run();
-  saveSettings({ tavilyApiKey: STORED_KEY });
+  for (const id of [ME, OTHER]) db.insert(schema.user).values({ ...viewer(id), name: id, email: `${id}@orbit.local` }).run();
+  assert.ok(saveInstance(viewer(ME).id, { tavilyApiKey: STORED_KEY }).ok);
   route = await import("./route");
 });
 
@@ -51,8 +52,12 @@ after(() => {
   fs.rmSync(stubDir, { recursive: true, force: true });
 });
 
+function viewer(id: string) {
+  return parseViewer({ id, role: id === ME ? "admin" : "member" });
+}
+
 function signIn(userId: string | null) {
-  signedIn.__orbitSignedIn = userId;
+  signedIn.__orbitSignedIn = userId ? viewer(userId) : null;
 }
 
 function chat(id: string, userId = ME, title = "New chat", updatedAt = new Date(1_000)) {
@@ -166,7 +171,7 @@ test("PATCH answers 404 for another user's or a missing chat and 401 when signed
 test("DELETE removes the chat and its messages with an empty 204, keeps the search index whole, and keeps linked memories", async () => {
   chat("delete-me", ME, "Gone");
   turn("delete-me", "the figbarrow plan", "figbarrow answer");
-  const memory = saveMemory({ text: "The plan is figbarrow", kind: "fact", source: "dream", sourceChatId: "delete-me", sourceMessageId: "delete-me-u" });
+  const memory = saveMemory(parseViewer({ id: ME, role: "member" }).id, { text: "The plan is figbarrow", kind: "fact", source: "dream", sourceChatId: "delete-me", sourceMessageId: "delete-me-u" });
   signIn(ME);
   assert.equal(searchMessages(ME, "figbarrow").length, 2);
   assert.deepEqual(await answer(await remove("delete-me")), { status: 204, body: null, text: "" });

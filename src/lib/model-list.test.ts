@@ -1,3 +1,4 @@
+import { parseViewer } from "./policy";
 import assert from "node:assert/strict";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
@@ -123,12 +124,14 @@ after(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
+const fixtureOwner = parseViewer({ id: "u-models", role: "admin" }).id;
+
 function openai(id: string): ProviderConnection {
-  return { id, userId: "u-models", kind: "openai-compatible", label: "Fixture", baseUrl: `${base}/v1`, createdAt: new Date() };
+  return { id, userId: fixtureOwner, kind: "openai-compatible", label: "Fixture", baseUrl: `${base}/v1`, createdAt: new Date() };
 }
 
 function anthropic(id: string): ProviderConnection {
-  return { id, userId: "u-models", kind: "anthropic", label: "Claude", createdAt: new Date() };
+  return { id, userId: fixtureOwner, kind: "anthropic", label: "Claude", createdAt: new Date() };
 }
 
 function byId(models: ListedModel[] | null, id: string) {
@@ -261,7 +264,7 @@ function mockFetch(t: TestContext, respond: (url: string) => Response) {
 }
 
 function at(baseUrl: string, id: string): ProviderConnection {
-  return { id, userId: "u-models", kind: "openai-compatible", label: "Fixture", baseUrl, createdAt: new Date() };
+  return { id, userId: fixtureOwner, kind: "openai-compatible", label: "Fixture", baseUrl, createdAt: new Date() };
 }
 
 test("a throwing OpenCode primary falls back to the Go model list with the saved key", async (t) => {

@@ -1,5 +1,5 @@
 import { eventually } from "../../../../src/lib/eventually.mjs";
-import { settingsForm, settingsSave } from "../../../../scripts/qa/settings-save.mjs";
+import { githubForm, githubSave } from "../../../../scripts/qa/settings-save.mjs";
 
 // Fails each browser request with page.route and checks what the screen shows.
 
@@ -17,7 +17,7 @@ export default async function requestFailures({ page, origin, step, shot }) {
   const chatUrl = `${origin}/c/${id}`;
 
   // New chat opens a draft at /new and sends no request, so it has no failure to show. chat-manage covers drafts.
-  const saveButton = settingsSave(page);
+  const saveButton = githubSave(page);
 
   const failedLabel = page.getByText("Failed", { exact: true }).first();
   const zeroModels = page.getByText(/^\s*0\s+models?\s*$/).first();
@@ -57,7 +57,7 @@ export default async function requestFailures({ page, origin, step, shot }) {
   });
   await saveButton.click();
   const savePending = await disabled(saveButton);
-  await settingsForm(page).evaluate((form) => form.requestSubmit());
+  await githubForm(page).evaluate((form) => form.requestSubmit());
   const saveRequests = heldSaves.length;
   await Promise.all(heldSaves.splice(0).map((route) => route.continue().catch(() => {})));
   await page.unrouteAll({ behavior: "ignoreErrors" });

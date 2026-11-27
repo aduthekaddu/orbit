@@ -597,8 +597,8 @@ function localDate(now = new Date()) {
   return new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }
 
-function runDream(env) {
-  const result = spawnSync("npm", ["run", "dream"], { cwd: repoRoot, encoding: "utf8", env: { ...process.env, ORBIT_DATA_DIR: dataDir, ORBIT_QA_TAGS: "1", ...env } });
+function runDream(email, env) {
+  const result = spawnSync("npm", ["run", "dream", "--", "--user", email], { cwd: repoRoot, encoding: "utf8", env: { ...process.env, ORBIT_DATA_DIR: dataDir, ORBIT_QA_TAGS: "1", ...env } });
   const last = `${result.stdout}`.trim().split("\n").filter((line) => line.startsWith("{")).at(-1) ?? "";
   return { code: result.status, last };
 }
@@ -627,6 +627,9 @@ async function startOllama() {
 // A dream without a provider fails. Saving a connection and default model must hide that failure, and the
 // finished run's time must be formatted in the browser's time zone.
 async function checkMemory({ page, origin, useProvider, step, shot }) {
+  const session = await (await page.request.get(`${origin}/api/auth/get-session`)).json();
+  if (!session?.user?.id || !session.user.email) throw new Error("The dream fixture requires a signed-in account.");
+  const { id: userId, email } = session.user;
   const connections = await (await page.request.get(`${origin}/api/connections`)).json();
   for (const connection of connections) await page.request.delete(`${origin}/api/connections/${connection.id}`);
   const today = localDate();
@@ -634,11 +637,11 @@ async function checkMemory({ page, origin, useProvider, step, shot }) {
   try {
     db.pragma("busy_timeout = 5000");
     // The server's start-up dream can already have written today's run, and a manual run reopens only a failed one.
-    db.prepare("DELETE FROM memory_runs WHERE date = ? AND state != 'running'").run(today);
+    db.prepare("DELETE FROM memory_runs WHERE user_id = ? AND date = ? AND state != 'running'").run(userId, today);
   } finally {
     db.close();
   }
-  const failed = runDream({});
+  const failed = runDream(email, {});
   step("a dream with no provider fails with No provider is saved", failed.code !== 0 && failed.last.includes("No provider is saved"), `exit ${failed.code} ${failed.last}`);
   await useProvider();
 
@@ -647,17 +650,17 @@ async function checkMemory({ page, origin, useProvider, step, shot }) {
   step("after saving a connection and default model /memory hides No provider is saved", staleShown === 0, `${staleShown} matches`);
   await stale.context.close();
 
-  const memoryIds = () => readDb((db) => db.prepare("SELECT id FROM memories").all().map((row) => row.id));
+  const memoryIds = () => readDb((db) => db.prepare("SELECT id FROM memories WHERE user_id = ?").all(userId).map((row) => row.id));
   const kept = new Set(memoryIds());
   const ollama = await startOllama();
   let done;
   try {
-    done = runDream({ ORBIT_OLLAMA_URL: ollama.url });
+    done = runDream(email, { ORBIT_OLLAMA_URL: ollama.url });
   } finally {
     await ollama.stop();
   }
   try {
-    await showDreamStatus({ page, origin, step, shot, done, today });
+    await showDreamStatus({ page, origin, step, shot, done, today, userId });
   } finally {
     // The dream saves prompts that carry [qa:...] tags as memories. Later turns would send them to the mock and
     // change its scenario, so delete what this dream added.
@@ -665,9 +668,9 @@ async function checkMemory({ page, origin, useProvider, step, shot }) {
   }
 }
 
-async function showDreamStatus({ page, origin, step, shot, done, today }) {
+async function showDreamStatus({ page, origin, step, shot, done, today, userId }) {
   step("a dream with a provider finishes", done.code === 0 && done.last.includes('"state":"done"'), `exit ${done.code} ${done.last}`);
-  const run = readDb((db) => db.prepare("SELECT finished_at AS finishedAt, chat_ids AS chatIds, added, merged FROM memory_runs WHERE date = ?").get(today));
+  const run = readDb((db) => db.prepare("SELECT finished_at AS finishedAt, chat_ids AS chatIds, added, merged FROM memory_runs WHERE user_id = ? AND date = ?").get(userId, today));
   const at = new Date(run.finishedAt);
   const expectedDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: BROWSER_TIME_ZONE }).format(at);
   const [hour, minute] = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: BROWSER_TIME_ZONE }).format(at).split(":").map(Number);

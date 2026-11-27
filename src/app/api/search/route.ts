@@ -1,5 +1,5 @@
 import { searchMessages } from "@/lib/search";
-import { getSession, unauthorized } from "@/lib/session";
+import { sessionFrom, unauthorized } from "@/lib/session";
 import { LIMITS, r } from "@/lib/route-schema";
 
 export const runtime = "nodejs";
@@ -10,7 +10,7 @@ const querySchema = r.object({
 });
 
 export async function GET(request: Request) {
-  const session = await getSession();
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const parsed = querySchema.safeParse({
     q: new URL(request.url).searchParams.get("q") ?? "",

@@ -5,7 +5,7 @@ export default async function searchFinalUi({ page, origin, useProvider, step, s
   const mock = await startMockSearxng();
   try {
     await useProvider();
-    const saved = await page.request.put(`${origin}/api/settings`, { data: { searxngUrl: mock.url, tavilyApiKey: null } });
+    const saved = await page.request.put(`${origin}/api/admin/settings`, { data: { searxngUrl: mock.url, tavilyApiKey: null } });
     assert.equal(saved.status(), 200);
     for (const kind of ["card", "artifact"]) {
       const { id } = await (await page.request.post(`${origin}/api/chats`)).json();

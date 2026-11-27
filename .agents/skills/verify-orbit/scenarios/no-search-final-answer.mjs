@@ -4,9 +4,9 @@ const answer = "Answered after four notes.";
 
 export default async function noSearchFinalAnswer({ page, origin, useProvider, step, shot }) {
   await useProvider();
-  const saved = await page.request.put(`${origin}/api/settings`, { data: { searxngUrl: "", tavilyApiKey: null } });
+  const saved = await page.request.put(`${origin}/api/admin/settings`, { data: { searxngUrl: "", tavilyApiKey: null } });
   assert.equal(saved.status(), 200);
-  const settings = await (await page.request.get(`${origin}/api/settings`)).json();
+  const settings = await (await page.request.get(`${origin}/api/admin/settings`)).json();
   step("search is off", settings.searxngUrl === "" && settings.tavilyKeySet === false);
   try {
     const { id } = await (await page.request.post(`${origin}/api/chats`)).json();

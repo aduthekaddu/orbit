@@ -23,7 +23,7 @@ test("only advance in dream.ts writes memory_runs", () => {
   assert.deepEqual(
     elsewhere,
     [],
-    `Change a dream run with advance(date, event) in ${WRITER}, which applies transition from run-state.ts, instead of writing memory_runs:\n${elsewhere.join("\n")}`,
+    `Change a dream run with advance(userId, date, event) in ${WRITER}, which applies transition from run-state.ts, instead of writing memory_runs:\n${elsewhere.join("\n")}`,
   );
   const inWriter = writes.filter((write) => write.startsWith(`${WRITER}:`));
   assert.equal(inWriter.length, 1, `${WRITER} must write memory_runs in one statement, WRITE_RUN in advance:\n${inWriter.join("\n")}`);

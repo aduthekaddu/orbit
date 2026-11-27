@@ -5,7 +5,8 @@ import test, { before, after } from "node:test";
 import { createRequire } from "node:module";
 import Database from "better-sqlite3";
 import { getDb, registerMigrationFunctions } from "../db";
-import * as schema from "../db/schema";
+import { chats, user } from "../db/schema";
+import { parseViewer } from "../policy";
 import { dataDirectory } from "../paths";
 import { rememberFact } from "../tools/memory";
 import * as embed from "./embed";
@@ -18,7 +19,10 @@ delete process.env.ORBIT_OLLAMA_URL;
 
 let mock: { url: string; stop: () => Promise<void> } | undefined;
 
+const viewer = parseViewer({ id: "memory-admin", role: "admin" });
+
 before(async () => {
+  getDb().insert(user).values({ ...viewer, name: "Memory admin", email: "memory-admin@orbit.test" }).run();
   mock = await startMockOllama();
   process.env.ORBIT_OLLAMA_URL = mock.url;
 });
@@ -151,7 +155,7 @@ test("upgrading an existing database keeps the memory and gives it an unknown so
     db.prepare("INSERT INTO memories (id, kind, text, text_norm, created_at) VALUES ('legacy', 'fact', 'My old memory', 'my old memory', 1)").run();
     const old = db.prepare("SELECT * FROM memories WHERE id = 'legacy'").get();
     assert.ok(old && typeof old === "object");
-    apply(migrations.filter((name) => name > "0010_github_settings.sql"));
+    apply(["0011_memory_source.sql"]);
     assert.deepEqual(db.prepare("SELECT * FROM memories WHERE id = 'legacy'").get(), { ...old, source: "unknown" });
     assert.deepEqual(db.prepare("SELECT rowid FROM memories_fts WHERE memories_fts MATCH 'memory'").all(), [{ rowid: 1 }]);
   } finally {
@@ -161,8 +165,8 @@ test("upgrading an existing database keeps the memory and gives it an unknown so
 
 test("a memory's vector stays on that memory after vacuum", async () => {
   const { store, embed } = requireStore();
-  const saved = store.saveMemory({ text: "Vacuum keeps the vectorkey token", kind: "fact", source: "tool" });
-  const embedded = await embed.embedPending();
+  const saved = store.saveMemory(viewer.id, { text: "Vacuum keeps the vectorkey token", kind: "fact", source: "tool" });
+  const embedded = await embed.embedPending(viewer.id);
   assert.equal(embedded.ok, true, embedded.ok ? undefined : embedded.error);
   const db = getDb();
   const pk = db.$client.prepare("SELECT type AS type FROM pragma_table_info('memories') WHERE pk = 1").get() as { type: string };
@@ -179,40 +183,40 @@ test("a repeated fact keeps the original text and source", () => {
   const { store } = requireStore();
   const original = { text: "I deploy to Fly.io", kind: "fact", source: "tool" } as const;
   const duplicate = { text: "  i   deploy   to fly.io ", kind: "preference", source: "dream" } as const;
-  const first = store.saveMemory(original);
-  const second = store.saveMemory(duplicate);
+  const first = store.saveMemory(viewer.id, original);
+  const second = store.saveMemory(viewer.id, duplicate);
   assert.equal(second.id, first.id);
   assert.equal(second.kind, "fact");
   assert.partialDeepStrictEqual(second, { text: original.text, source: "tool" });
-  assert.equal(store.listMemories().filter((memory) => memory.id === first.id).length, 1);
+  assert.equal(store.listMemories(viewer.id).filter((memory) => memory.id === first.id).length, 1);
 });
 
 test("memory text longer than 500 characters is refused", () => {
   const { store } = requireStore();
-  assert.throws(() => store.saveMemory({ text: "a".repeat(501), kind: "fact", source: "tool" }), /500/);
-  assert.throws(() => store.saveMemory({ text: "   ", kind: "fact", source: "tool" }), /empty/i);
+  assert.throws(() => store.saveMemory(viewer.id, { text: "a".repeat(501), kind: "fact", source: "tool" }), /500/);
+  assert.throws(() => store.saveMemory(viewer.id, { text: "   ", kind: "fact", source: "tool" }), /empty/i);
 });
 
 test("full text search finds a saved memory", () => {
   const { store } = requireStore();
-  const saved = store.saveMemory({ text: "The zebramemory lives in the north", kind: "fact", source: "tool" });
-  const hits = store.listMemories("zebramemory");
+  const saved = store.saveMemory(viewer.id, { text: "The zebramemory lives in the north", kind: "fact", source: "tool" });
+  const hits = store.listMemories(viewer.id, "zebramemory");
   assert.deepEqual(hits.map((memory) => memory.id), [saved.id]);
-  assert.equal(store.listMemories("notawordinhere").length, 0);
+  assert.equal(store.listMemories(viewer.id, "notawordinhere").length, 0);
 });
 
 test("delete removes the memory from the table, the text index, and the vector index", async () => {
   const { store, embed } = requireStore();
-  const saved = store.saveMemory({ text: "Please deletememorytoken today", kind: "summary", source: "tool" });
-  const filled = await embed.embedPending();
+  const saved = store.saveMemory(viewer.id, { text: "Please deletememorytoken today", kind: "summary", source: "tool" });
+  const filled = await embed.embedPending(viewer.id);
   assert.equal(filled.ok, true);
-  const embedded = store.getMemory(saved.id);
+  const embedded = store.getMemory(viewer.id, saved.id);
   assert.equal(embedded?.embedded, true);
   const db = getDb();
   const located = db.$client.prepare("SELECT rowid AS rowid FROM memories WHERE id = ?").get(saved.id) as { rowid: number };
-  assert.equal(store.deleteMemory(saved.id), true);
-  assert.equal(store.getMemory(saved.id), null);
-  assert.equal(store.listMemories("deletememorytoken").length, 0);
+  assert.equal(store.deleteMemory(viewer.id, saved.id), true);
+  assert.equal(store.getMemory(viewer.id, saved.id), null);
+  assert.equal(store.listMemories(viewer.id, "deletememorytoken").length, 0);
   const row = db.$client.prepare("SELECT count(*) AS n FROM memories_vec WHERE rowid = cast(? AS integer)").get(located.rowid) as { n: number };
   const indexed = db.$client.prepare("SELECT count(*) AS n FROM memories_fts WHERE memories_fts MATCH ?").get('"deletememorytoken"') as { n: number };
   assert.equal(indexed.n, 0);
@@ -238,9 +242,9 @@ for (const { name, original, edit } of [
 ] as const) {
   test(`memory attribution stays the same when you ${name}`, () => {
     const { store } = requireStore();
-    const saved = store.saveMemory(original);
-    store.updateMemory(saved.id, { ...edit, source: "user" });
-    const updated = store.getMemory(saved.id);
+    const saved = store.saveMemory(viewer.id, original);
+    store.updateMemory(viewer.id, saved.id, { ...edit, source: "user" });
+    const updated = store.getMemory(viewer.id, saved.id);
     assert.equal(updated?.kind, edit.kind);
     assert.equal(updated?.source, original.source);
   });
@@ -248,42 +252,55 @@ for (const { name, original, edit } of [
 
 test("editing the text clears the vector until embeddings run again", async () => {
   const { store, embed } = requireStore();
-  const saved = store.saveMemory({ text: "Original embedclear token", kind: "fact", source: "tool" });
-  assert.equal((await embed.embedPending()).ok, true);
-  const updated = store.updateMemory(saved.id, { text: "Rewritten embedclear token", kind: "preference", source: "user" });
+  const saved = store.saveMemory(viewer.id, { text: "Original embedclear token", kind: "fact", source: "tool" });
+  assert.equal((await embed.embedPending(viewer.id)).ok, true);
+  const updated = store.updateMemory(viewer.id, saved.id, { text: "Rewritten embedclear token", kind: "preference", source: "user" });
   assert.equal(updated?.kind, "preference");
   assert.equal(updated?.source, "user");
   assert.equal(updated?.embedded, false);
-  assert.equal(store.listMemories("Original").length, 0);
-  assert.equal(store.listMemories("Rewritten").length, 1);
-  assert.equal((await embed.embedPending()).ok, true);
-  assert.equal(store.getMemory(saved.id)?.embedded, true);
+  assert.equal(store.listMemories(viewer.id, "Original").length, 0);
+  assert.equal(store.listMemories(viewer.id, "Rewritten").length, 1);
+  assert.equal((await embed.embedPending(viewer.id)).ok, true);
+  assert.equal(store.getMemory(viewer.id, saved.id)?.embedded, true);
 });
 
 test("a vector for the old text does not mark the rewritten text as embedded", async () => {
   const { store } = requireStore();
-  const saved = store.saveMemory({ text: "Stale vector token original", kind: "fact", source: "tool" });
+  const saved = store.saveMemory(viewer.id, { text: "Stale vector token original", kind: "fact", source: "tool" });
   const db = getDb();
   const located = db.$client.prepare("SELECT rowid AS rowid FROM memories WHERE id = ?").get(saved.id) as { rowid: number };
   const vector = Array.from({ length: 768 }, () => 0);
   vector[0] = 1;
-  store.updateMemory(saved.id, { text: "Stale vector token rewritten", kind: "fact", source: "user" });
+  store.updateMemory(viewer.id, saved.id, { text: "Stale vector token rewritten", kind: "fact", source: "user" });
   store.writeVectors([{ rowid: located.rowid, text: "Stale vector token original", vector }]);
-  assert.equal(store.getMemory(saved.id)?.embedded, false);
+  assert.equal(store.getMemory(viewer.id, saved.id)?.embedded, false);
   store.writeVectors([{ rowid: located.rowid, text: "Stale vector token rewritten", vector }]);
-  assert.equal(store.getMemory(saved.id)?.embedded, true);
+  assert.equal(store.getMemory(viewer.id, saved.id)?.embedded, true);
 });
 
 test("remember keeps the chat when the message id is missing", () => {
   const { store } = requireStore();
   const db = getDb();
   const now = new Date();
-  db.insert(schema.user).values({ id: "mem-user", name: "Mem", email: "mem-user@orbit.local", emailVerified: true }).run();
-  db.insert(schema.chats).values({ id: "mem-chat", userId: "mem-user", title: "Host", createdAt: now, updatedAt: now }).run();
-  const saved = rememberFact({ chatId: "mem-chat", messageId: "missing-message" }, { text: "Remember the chat link token", kind: "fact" });
+  db.insert(chats).values({ id: "mem-chat", userId: viewer.id, title: "Host", createdAt: now, updatedAt: now }).run();
+  const saved = rememberFact(viewer.id, { chatId: "mem-chat", messageId: "missing-message" }, { text: "Remember the chat link token", kind: "fact" });
   assert.equal("id" in saved, true);
-  const memory = store.getMemory("id" in saved ? saved.id : "");
+  const memory = store.getMemory(viewer.id, "id" in saved ? saved.id : "");
   assert.equal(memory?.sourceChatId, "mem-chat");
   assert.equal(memory?.sourceMessageId, null);
   assert.partialDeepStrictEqual(memory, { source: "tool" });
+});
+
+test("deduplication, updates, and text searches stay within the account", () => {
+  const member = parseViewer({ id: "memory-member", role: "member" });
+  getDb().insert(user).values({ ...member, name: "Memory member", email: "memory-member@orbit.test" }).run();
+  const adminNote = store.saveMemory(viewer.id, { text: "Export to canarybucket", kind: "fact", source: "tool" });
+  const memberNote = store.saveMemory(member.id, { text: "  export  to canarybucket ", kind: "fact", source: "tool" });
+
+  assert.notEqual(memberNote.id, adminNote.id);
+  assert.deepEqual(store.listMemories(member.id, "canarybucket").map((memory) => memory.id), [memberNote.id]);
+  assert.equal(store.getMemory(member.id, adminNote.id), null);
+  assert.equal(store.updateMemory(member.id, adminNote.id, { text: "Changed", kind: "fact", source: "user" }), null);
+  assert.equal(store.deleteMemory(member.id, adminNote.id), false);
+  assert.deepEqual(store.getMemory(viewer.id, adminNote.id), adminNote);
 });

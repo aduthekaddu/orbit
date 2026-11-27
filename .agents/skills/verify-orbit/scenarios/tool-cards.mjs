@@ -77,7 +77,7 @@ function pageWidth() {
   return { scrollWidth: document.documentElement.scrollWidth, bodyWidth: document.body.scrollWidth, width: document.documentElement.clientWidth };
 }
 
-export default async function toolCards({ page, origin, mockUrl, step, shot }) {
+export default async function toolCards({ page, origin, step, shot }) {
   const browser = page.context().browser();
   const cookies = await page.context().cookies();
   const contexts = [];
@@ -86,8 +86,8 @@ export default async function toolCards({ page, origin, mockUrl, step, shot }) {
   const before = new Set((await listMemories()).map((memory) => memory.id));
 
   try {
-    const saved = await page.request.put(`${origin}/api/settings`, { data: {
-      baseUrl: mockUrl, model: "mock-genui", reasoningEffort: "low", searxngUrl: searxng.url, tavilyApiKey: null,
+    const saved = await page.request.put(`${origin}/api/admin/settings`, { data: {
+      searxngUrl: searxng.url, tavilyApiKey: null,
     } });
     step("search settings point at the SearXNG fixture", saved.status() === 200, `status ${saved.status()}`);
 
@@ -209,8 +209,8 @@ export default async function toolCards({ page, origin, mockUrl, step, shot }) {
   } finally {
     for (const context of contexts) await context.close().catch(() => {});
     if (searxng) await searxng.close();
-    await page.request.put(`${origin}/api/settings`, { data: {
-      baseUrl: mockUrl, model: "mock-genui", reasoningEffort: "low", searxngUrl: "", tavilyApiKey: null,
+    await page.request.put(`${origin}/api/admin/settings`, { data: {
+      searxngUrl: "", tavilyApiKey: null,
     } });
     // Delete only the memory this run saved, so later scenarios on this server never recall it.
     for (const saved of (await listMemories()).filter((memory) => memory.text === MEMORY && !before.has(memory.id))) {

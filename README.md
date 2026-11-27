@@ -65,7 +65,7 @@ Planned features are listed in the [roadmap](docs/roadmap.md).
 
 4. Open <http://127.0.0.1:3210> and create your account.
 
-The server process runs as the `node` user, uid 1000. Compose starts the entrypoint as root so it can give `./data` to that user, then drops root before the server listens. After the first start, `./data` is owned by uid 1000. The container stores its data in `./data`. Compose publishes the app on `127.0.0.1:3210` and SearXNG on `127.0.0.1:8888`. Other machines cannot reach either port. Existing databases keep their saved settings. Add `http://searxng:8080` under **Settings > Search** when upgrading a Compose installation.
+The server process runs as the `node` user, uid 1000. Compose starts the entrypoint as root so it can give `./data` to that user, then drops root before the server listens. After the first start, `./data` is owned by uid 1000. The container stores its data in `./data`. Compose publishes the app on `127.0.0.1:3210` and SearXNG on `127.0.0.1:8888`. Other machines cannot reach either port. Existing databases keep their saved settings. Add `http://searxng:8080` under **Admin > Search** when upgrading a Compose installation.
 
 Earlier images ran the server as root, so an existing `./data` belongs to root. `docker compose up -d --build` fixes that on the next start. If you build and start the image with `docker run`, start it once as root:
 
@@ -104,13 +104,13 @@ Every variable is optional.
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `ORBIT_BASE_URL`, `ORBIT_API_KEY`, `ORBIT_MODEL` | Empty | When the first account is created, save an OpenAI-compatible connection from the base URL and key, with `ORBIT_MODEL` as the default model. After that, connections live in the database and these variables are not read again. |
-| `ORBIT_SECRET_KEY` | Generated into `data/secret-key` | 64 hex characters. The key that encrypts saved provider API keys. See [Back up your data](#back-up-your-data). |
+| `ORBIT_SECRET_KEY` | Generated into `data/secret-key` | 64 hex characters. The key that encrypts provider API keys, the Tavily key, and GitHub tokens. See [Back up your data](#back-up-your-data). |
 | `ORBIT_ANTHROPIC_BASE_URL` | `https://api.anthropic.com/v1` | Where Anthropic connections send messages and list models. |
-| `ORBIT_SEARXNG_URL` | Empty, or `http://searxng:8080` in Compose | Seed the search backend URL on a new database. For a local Next.js server, use `http://127.0.0.1:8888`. |
-| `ORBIT_TAVILY_API_KEY` | Empty | Seed the server-side Tavily key on a new database. Tavily runs when SearXNG fails or returns no results. |
-| `ORBIT_GITHUB_TOKEN` | Empty | Seed the server-side GitHub token on a new database. Tools stay read-only and cover repositories, issues, and pull requests. The token is sent only to `api.githubcopilot.com`, `github.com`, and `api.github.com` over HTTPS. |
+| `ORBIT_SEARXNG_URL` | Empty, or `http://searxng:8080` in Compose | Seed the instance search URL on a new database. For a local Next.js server, use `http://127.0.0.1:8888`. |
+| `ORBIT_TAVILY_API_KEY` | Empty | Seed the instance Tavily key on a new database. Tavily runs when SearXNG fails or returns no results. |
+| `ORBIT_GITHUB_TOKEN` | Empty | Seed the first admin account’s GitHub token when that account signs up. Tools stay read-only and cover repositories, issues, and pull requests. The token is sent only to `api.githubcopilot.com`, `github.com`, and `api.github.com` over HTTPS. |
 | `ORBIT_OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama base URL for memory embeddings. The model is `nomic-embed-text`. Compose defaults to `http://host.docker.internal:11434`. |
-| `ORBIT_DREAM_HOUR` | `3` | Local hour when the nightly memory pass starts. The Docker image runs UTC unless `TZ` is set, so 3 means 03:00 UTC there. |
+| `ORBIT_DREAM_HOUR` | `3` | Seed the nightly memory hour on install or upgrade. Change it under **Admin > Dreaming**. The Docker image runs UTC unless `TZ` is set, so 3 means 03:00 UTC there. |
 | `ORBIT_SANDBOX` | Off | Source builds use `on` to enable `run_code`. Compose requires the [sandbox override](#enable-the-code-sandbox). Settings shows whether it is on. |
 | `DOCKER_HOST` | Local Docker socket for source builds | Configure the local connection for source builds. Default Compose omits it. The sandbox override sets a private proxy. Remote Docker hosts are unsupported. |
 | `ORBIT_DATA_DIR` | `./data` | Where Orbit keeps `orbit.db`, `secret-key`, and `auth-secret`. |
@@ -122,7 +122,7 @@ Every variable is optional.
 
 ### Back up your data
 
-Orbit keeps everything in its data directory, `./data` unless `ORBIT_DATA_DIR` says otherwise. Stop Orbit, then copy the whole directory. Keep `secret-key` with `orbit.db`. Provider API keys in `orbit.db` are encrypted with it, so a database restored without it cannot use them, and each connection needs its API key entered again. If you set `ORBIT_SECRET_KEY`, keep that value instead. `auth-secret` signs sessions. Without it, you sign in again.
+Orbit keeps everything in its data directory, `./data` unless `ORBIT_DATA_DIR` says otherwise. Stop Orbit, then copy the whole directory. Keep `secret-key` with `orbit.db`. Orbit uses it to encrypt provider API keys, the Tavily key, and GitHub tokens. If you restore the database without the key, enter those credentials again. If you set `ORBIT_SECRET_KEY`, keep that value instead. `auth-secret` signs sessions. Without it, you sign in again.
 
 ### Memory embeddings
 

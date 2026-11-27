@@ -13,7 +13,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const collapsed = (await cookies()).get(SIDEBAR_COOKIE)?.value === "collapsed";
   return (
     <TooltipProvider>
-      <AppShell chats={chats} email={session.user.email} initialCollapsed={collapsed}>
+      <AppShell chats={chats} email={session.user.email} role={session.user.role} initialCollapsed={collapsed}>
         {children}
       </AppShell>
     </TooltipProvider>

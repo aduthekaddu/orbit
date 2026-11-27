@@ -44,7 +44,20 @@ function spawnBoot(install: Install, env: Record<string, string>, script: string
   );
 }
 
-function boot(install: Install, env: Record<string, string> = {}, script = "const { getDb } = await import(process.argv[1]); getDb();") {
+const BOOT_LEGACY = `const { createRequire } = await import("node:module");
+const require = createRequire(process.argv[1]);
+const fs = require("node:fs");
+const { migrateAndScrub, registerMigrationFunctions } = await import(process.argv[1]);
+fs.mkdirSync(process.env.ORBIT_DATA_DIR, { recursive: true });
+const sqlite = new (require("better-sqlite3"))(process.env.ORBIT_DATA_DIR + "/orbit.db");
+sqlite.pragma("journal_mode = WAL");
+sqlite.pragma("foreign_keys = ON");
+require("sqlite-vec").load(sqlite);
+registerMigrationFunctions(sqlite);
+migrateAndScrub(require("drizzle-orm/better-sqlite3").drizzle(sqlite), sqlite, "drizzle");
+`;
+
+function boot(install: Install, env: Record<string, string> = {}, script = BOOT_LEGACY + "sqlite.close();") {
   const result = spawnBoot(install, env, script);
   assert.equal(result.status, 0, result.stderr || result.stdout);
   return result.stdout.trim();
@@ -72,8 +85,8 @@ function preSliceInstall(name: string, env: Record<string, string> = {}): Instal
   return install;
 }
 
-function upgrade(install: Install) {
-  copyMigrations(install.dir, null);
+function upgrade(install: Install, lastIdx: number | null = 16) {
+  copyMigrations(install.dir, lastIdx);
   boot(install);
 }
 
@@ -179,7 +192,7 @@ test("a server that dies after the upgrade commits leaves no plain key in its fi
     db.prepare("insert into user (id, name, email, email_verified) values ('u-crash', 'Crash', 'crash@orbit.local', 0)").run();
     db.prepare("insert into settings (id, base_url, api_key, model, reasoning_effort, updated_at) values (1, 'http://127.0.0.1:9/v1', ?, 'mock-genui', 'low', 0)").run(key);
   });
-  copyMigrations(install.dir, null);
+  copyMigrations(install.dir, 16);
   const crashed = spawnBoot(install, {}, MIGRATE_THEN_CRASH);
   assert.equal(crashed.signal, "SIGKILL", crashed.stderr || crashed.stdout);
   assert.notDeepEqual(holdsKey(install, key), [], "the committed upgrade alone leaves the plain key in the files");
@@ -188,8 +201,8 @@ test("a server that dies after the upgrade commits leaves no plain key in its fi
   const running = boot(
     install,
     {},
-    `const { getDb } = await import(process.argv[1]); getDb();
-     const fs = await import("node:fs");
+    BOOT_LEGACY + `
+
      const files = ["orbit.db", "orbit.db-wal"].filter((name) => {
        const file = process.env.ORBIT_DATA_DIR + "/" + name;
        return fs.existsSync(file) && fs.readFileSync(file).includes(${JSON.stringify(key)});
@@ -239,14 +252,19 @@ test("an install nobody signed up to keeps its provider in pending_connection un
   assert.equal(decrypt(install, String(row.api_key_ciphertext)), key);
   assert.equal(pending.settingsColumns.includes("api_key"), false);
 
+  upgrade(install, null);
   withDb(install, (db) => {
-    db.prepare("insert into user (id, name, email, email_verified) values ('u-first', 'First', 'first@orbit.local', 0)").run();
+    db.prepare("insert into user (id, name, email, role) values ('u-first', 'First', 'first@orbit.local', 'admin')").run();
   });
   // The stored copy wins over the environment, and a second run changes nothing.
   boot(
     install,
     { ORBIT_BASE_URL: "http://127.0.0.1:7/v1", ORBIT_API_KEY: "sk-made-up-env-key-0002", ORBIT_MODEL: "env-model" },
-    "const { seedConnection } = await import(process.argv[2]); seedConnection('u-first'); seedConnection('u-first');",
+    `const { seedConnection } = await import(process.argv[2]);
+     const { parseViewer } = await import(new URL("../policy.ts", process.argv[1]).href);
+     const viewer = parseViewer({ id: "u-first", role: "admin" });
+     seedConnection(viewer);
+     seedConnection(viewer);`,
   );
 
   const adopted = withDb(install, (db) => ({
@@ -290,7 +308,7 @@ test("an install with no provider upgrades with nothing to move", () => {
 test("signing up gives the first account the provider from the environment, as its default", () => {
   const key = "sk-made-up-signup-key-0001";
   const install = preSliceInstall("signup");
-  upgrade(install);
+  upgrade(install, null);
   boot(
     install,
     { ORBIT_BASE_URL: "http://127.0.0.1:9/v1", ORBIT_API_KEY: key, ORBIT_MODEL: "env-model" },
@@ -321,7 +339,7 @@ for (const source of ["pending", "environment"] as const) {
         db.prepare("insert into settings (id, base_url, api_key, model, reasoning_effort, updated_at) values (1, 'http://127.0.0.1:9/v1', ?, 'mock-genui', 'high', 0)").run(key);
       });
     }
-    upgrade(install);
+    upgrade(install, null);
     const outcome = JSON.parse(
       boot(
         install,
@@ -329,7 +347,8 @@ for (const source of ["pending", "environment"] as const) {
         `const { getDb } = await import(process.argv[1]);
          const { getAuth } = await import(new URL("../auth.ts", process.argv[1]).href);
          const { LOCAL_AUTH_URL } = await import(new URL("../auth-origins.ts", process.argv[1]).href);
-         const { resolveChoice } = await import(new URL("../model-choice.ts", process.argv[1]).href);
+         const { resolveChoice, NOTHING_PINNED } = await import(new URL("../model-choice.ts", process.argv[1]).href);
+         const { parseViewer } = await import(new URL("../policy.ts", process.argv[1]).href);
          getDb().$client.exec("CREATE TEMP TRIGGER seed_fails BEFORE INSERT ON provider_connections BEGIN SELECT RAISE(ABORT, 'seed failed near ${envKey}'); END");
          const logged = [];
          const consoleError = console.error;
@@ -342,7 +361,7 @@ for (const source of ["pending", "environment"] as const) {
          }
          const connectionsAfterSignup = getDb().$client.prepare("select count(*) as n from provider_connections").get().n;
          getDb().$client.exec("DROP TRIGGER temp.seed_fails");
-         const resolved = resolveChoice(signedUp.user.id, { connectionId: null, model: null, reasoningEffort: null });
+         const resolved = resolveChoice(parseViewer(signedUp.user), NOTHING_PINNED);
          console.log(JSON.stringify({ email: signedUp.user.email, logged, connectionsAfterSignup, resolved: resolved.ok ? resolved.choice : resolved.reason }));`,
       ).split("\n").at(-1)!,
     );

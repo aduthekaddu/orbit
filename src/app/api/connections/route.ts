@@ -1,7 +1,7 @@
 import { addConnection, toPublicConnection } from "@/lib/connections";
 import { LIMITS, r } from "@/lib/route-schema";
-import { publicConnections, requestRedactor } from "@/lib/settings";
-import { getSession, unauthorized } from "@/lib/session";
+import { publicConnections, requestRedactor } from "@/lib/request-redactor";
+import { sessionFrom, unauthorized } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,20 +20,20 @@ const postSchema = r.discriminatedUnion("kind", [
   }),
 ]);
 
-export async function GET() {
-  const session = await getSession();
+export async function GET(request: Request) {
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
-  return Response.json(publicConnections(session.user.id));
+  return Response.json(publicConnections(session.user));
 }
 
 export async function POST(request: Request) {
-  const session = await getSession();
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const parsed = postSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Check the label, base URL, and API key." }, { status: 400 });
-  const saved = await addConnection(session.user.id, parsed.data, requestRedactor);
+  const saved = await addConnection(session.user.id, parsed.data, () => requestRedactor(session.user));
   if (!saved.ok && saved.reason === "invalid") return Response.json({ error: saved.error }, { status: 400 });
   if (!saved.ok) return Response.json({ error: "Could not reach the provider." }, { status: 502 });
-  const redact = requestRedactor(session.user.id);
+  const redact = requestRedactor(session.user);
   return Response.json(toPublicConnection(saved.connection, redact), { status: 201 });
 }

@@ -1,6 +1,6 @@
 # Settings
 
-Settings stores provider connections, the default model, and the search and GitHub settings on the server. Each connection's API key is encrypted in the database. The browser receives `keySet` and never a key.
+Settings holds each account's provider connections, default model, GitHub token, and Memory setting. Admin holds Search, Code sandbox, and Dreaming. Orbit encrypts credentials in the database and sends only their status to the browser.
 
 ## Sub-features
 
@@ -41,5 +41,5 @@ The summary and screenshots are in `.verify/evidence/settings-review/`.
 ## Gotchas
 
 - Adding a connection, or changing its base URL or key, lists the provider's models first. The drive starts the mock provider when none runs, and `cleanup` stops it.
-- `GET /api/settings` holds only the search, GitHub, and sandbox fields. A `PUT /api/settings` with provider fields returns 200 and changes nothing, because the route drops unknown fields.
+- `GET /api/settings` returns the account's public GitHub fields. `GET /api/admin/settings` returns the public Admin fields only for an admin.
 - A real provider check is the chat drive, which needs `ORBIT_BASE_URL` and `ORBIT_API_KEY`.

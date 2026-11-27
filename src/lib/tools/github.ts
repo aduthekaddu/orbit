@@ -1,7 +1,10 @@
+import { createHash } from "node:crypto";
 import { createMCPClient, type MCPClient } from "@ai-sdk/mcp";
 import type { Tool } from "ai";
 import { REDACTED, Redactor, resolveMaskedUrl, type StoredCredentials } from "../chat-errors";
 import type { ConnectionSecrets } from "../connections";
+import type { UserId } from "../policy";
+import type { UserGithubRecord } from "../user-github";
 import { githubLogin } from "./github-links";
 
 export const DEFAULT_GITHUB_MCP_URL = "https://api.githubcopilot.com/mcp/";
@@ -466,6 +469,7 @@ async function listedTools(client: MCPClient, signal: AbortSignal | undefined, t
 }
 
 export async function githubTools(
+  userId: UserId,
   settings: GithubSettings,
   input?: { signal?: AbortSignal; now?: number; tools?: string; setupMs?: number; redact?: Redactor },
 ): Promise<McpToolSet> {
@@ -492,7 +496,7 @@ export async function githubTools(
       signal: input?.signal,
     });
   const now = input?.now ?? Date.now();
-  const key = `${mcpUrl}\n${GITHUB_TOOLSETS}\n${extraTools}\n${token}`;
+  const key = createHash("sha256").update(JSON.stringify([userId, mcpUrl, GITHUB_TOOLSETS, extraTools, token])).digest("hex");
   const cached = listCache.get(key);
   if (cached && cached.expires > now) return warmTools(cached, () => open(setupMs), redact, input?.signal);
   const connection = open(timeoutMs());
@@ -510,13 +514,14 @@ export async function githubTools(
 }
 
 export async function openGithubTurn(
+  userId: UserId,
   settings: GithubSettings,
   signal?: AbortSignal,
   options?: { setupMs?: number; redact?: Redactor },
 ): Promise<McpToolSet> {
   if (!settings.githubToken) return emptySet();
   try {
-    return await githubTools(settings, { signal, setupMs: options?.setupMs, redact: options?.redact });
+    return await githubTools(userId, settings, { signal, setupMs: options?.setupMs, redact: options?.redact });
   } catch (error) {
     if (signal?.aborted) throw error;
     const redact = options?.redact ?? new Redactor(settings);
@@ -528,11 +533,16 @@ export async function openGithubTurn(
 // A token submitted with the check replaces the stored one for this request, and the redactor covers both. Settings
 // masks the saved URL with `connectionSecrets` too, so the URL it shows matches here.
 export async function checkGithub(
-  stored: GithubSettings,
+  userId: UserId,
+  stored: GithubSettings & Pick<UserGithubRecord, "githubTokenReadable">,
   submitted: { token?: string; mcpUrl?: string } = {},
   signal?: AbortSignal,
   connectionSecrets: readonly ConnectionSecrets[] = [],
 ): Promise<{ ok: true; login: string } | { ok: false; error: string }> {
+  const submittedToken = submitted.token?.trim();
+  if (!submittedToken && stored.githubTokenReadable === false) {
+    return { ok: false, error: "Saved GitHub token is unreadable. Enter it again." };
+  }
   const storedRedact = new Redactor(stored, ...connectionSecrets);
   const resolvedMcp = resolveMaskedUrl({
     submitted: submitted.mcpUrl,
@@ -545,13 +555,13 @@ export async function checkGithub(
   if (!resolvedMcp.ok) return { ok: false, error: resolvedMcp.error };
   const settings = {
     ...stored,
-    githubToken: submitted.token?.trim() || stored.githubToken,
+    githubToken: submittedToken || stored.githubToken,
     githubMcpUrl: resolvedMcp.url,
   };
   const redact = new Redactor(stored, settings, ...connectionSecrets);
   if (!settings.githubToken.trim()) return { ok: false, error: "Add a GitHub token." };
   try {
-    const opened = await githubTools(settings, { signal, tools: GITHUB_CHECK_TOOLS, redact });
+    const opened = await githubTools(userId, settings, { signal, tools: GITHUB_CHECK_TOOLS, redact });
     try {
       const tool = opened.tools.github_get_me;
       if (!tool?.execute) return { ok: false, error: "GitHub is unavailable." };

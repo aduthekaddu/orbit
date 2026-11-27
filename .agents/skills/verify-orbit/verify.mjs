@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
+import { hashPassword } from "better-auth/crypto";
 import { ownerFromEnv, parseSandboxOwner } from "../../../src/lib/sandbox/owner.mjs";
 import { connectProvider } from "../../../scripts/qa/connect-provider.mjs";
 
@@ -27,6 +28,8 @@ const evidenceRoot = path.join(verifyDir, "evidence");
 
 const VERIFY_EMAIL = "verify@orbit.local";
 const VERIFY_PASSWORD = "orbit-verify-pass";
+const MEMBER_EMAIL = "member@orbit.local";
+const MEMBER_PASSWORD = "orbit-member-pass";
 const FAKE_KEY = "test-key-not-real";
 
 function fail(message) {
@@ -159,7 +162,7 @@ function makeSandbox() {
 
 function redact(text) {
   let out = text;
-  for (const value of [process.env.ORBIT_API_KEY, process.env.BETTER_AUTH_SECRET, VERIFY_PASSWORD, FAKE_KEY]) {
+  for (const value of [process.env.ORBIT_API_KEY, process.env.BETTER_AUTH_SECRET, VERIFY_PASSWORD, MEMBER_PASSWORD, FAKE_KEY]) {
     if (value) out = out.split(value).join("[redacted]");
   }
   return out;
@@ -670,26 +673,58 @@ async function signInVerify() {
     if (created.status !== 200) fail(`signup status ${created.status}`);
     return cookies;
   }
+  await signInAccount({ email: VERIFY_EMAIL, password: VERIFY_PASSWORD }, cookies);
+  return cookies;
+}
+
+async function signInAccount(credentials, cookies = new Map()) {
   // better-auth allows 3 sign-ins per 10 seconds, and back-to-back browse runs reach that.
   let signed = { status: 429, retryAfter: 0 };
   for (let attempt = 0; attempt < 3 && signed.status === 429; attempt += 1) {
     if (attempt > 0) await sleep((signed.retryAfter || 10) * 1000);
-    signed = await request("/api/auth/sign-in/email", {
-      method: "POST",
-      cookies,
-      json: { email: VERIFY_EMAIL, password: VERIFY_PASSWORD },
-    });
+    signed = await request("/api/auth/sign-in/email", { method: "POST", cookies, json: credentials });
   }
-  if (signed.status !== 200) {
-    fail(`sign-in status ${signed.status}. Signup is closed and the verify account cannot sign in. Use an empty sandbox.`);
-  }
+  if (signed.status !== 200) throw new Error(`sign-in status ${signed.status} for ${credentials.email}. Use an empty sandbox.`);
   return cookies;
+}
+
+async function seedMember() {
+  assertOurServer();
+  const password = await hashPassword(MEMBER_PASSWORD);
+  assertOurServer();
+  const sandboxPath = fs.realpathSync(sandbox);
+  const dbPath = fs.realpathSync(path.join(sandbox, "data", "orbit.db"));
+  if (!dbPath.startsWith(sandboxPath + path.sep)) throw new Error("The database is outside the verify sandbox.");
+  const database = new Database(dbPath, { fileMustExist: true });
+  try {
+    database.pragma("foreign_keys = ON");
+    database.transaction(() => {
+      const admin = database.prepare("SELECT role FROM user WHERE email = ?").get(VERIFY_EMAIL);
+      if (admin?.role !== "admin") throw new Error("The verify admin is missing. Run launch --mock first.");
+      const member = database.prepare("SELECT role FROM user WHERE email = ?").get(MEMBER_EMAIL);
+      if (member) {
+        if (member.role !== "member") throw new Error("The verify member has the wrong role.");
+        return;
+      }
+      const id = crypto.randomUUID();
+      database.prepare("INSERT INTO user (id, email, name, email_verified, role) VALUES (?, ?, 'Member', 1, 'member')")
+        .run(id, MEMBER_EMAIL);
+      database.prepare("INSERT INTO account (id, account_id, provider_id, user_id, password) VALUES (?, ?, 'credential', ?, ?)")
+        .run(crypto.randomUUID(), id, id, password);
+    }).immediate();
+  } finally {
+    database.close();
+  }
+  return { email: MEMBER_EMAIL, password: MEMBER_PASSWORD };
 }
 
 async function driveSignup() {
   assertOurServer();
   const lines = [];
   const cookies = new Map();
+  const beforeSetup = await request("/api/setup");
+  const openBefore = beforeSetup.status === 200 && JSON.parse(beforeSetup.text).signupOpen === true;
+  lines.push(`setup before signup open ${openBefore ? "yes" : "no"}`);
   const page = await request("/signup");
   lines.push(`signup page status ${page.status}`);
   lines.push(`signup page has Create account ${page.text.includes("Create account") ? "yes" : "no"}`);
@@ -707,6 +742,9 @@ async function driveSignup() {
     writeEvidence("signup", lines);
     fail(`signup status ${created.status}`);
   }
+  const afterSetup = await request("/api/setup");
+  const closedAfter = afterSetup.status === 200 && JSON.parse(afterSetup.text).signupOpen === false;
+  lines.push(`setup after signup open ${closedAfter ? "no" : "not confirmed closed"}`);
   // With no chats, / redirects to a draft at /c/<id>?new. The chats row appears with the first message.
   const home = await request("/", { cookies });
   lines.push(`home status ${home.status}`);
@@ -735,10 +773,10 @@ async function driveSignup() {
   lines.push(`logged out chats status ${loggedOut.status}`);
   const dbPath = path.join(sandbox, "data", "orbit.db");
   const sqlite = new Database(dbPath, { readonly: true, fileMustExist: true });
-  const users = sqlite.prepare("select count(*) as n from user").get().n;
+  const users = sqlite.prepare("select role from user").all();
   const chats = sqlite.prepare("select count(*) as n from chats").get().n;
   sqlite.close();
-  lines.push(`db users ${users}`);
+  lines.push(`db users ${users.length}, first role ${users[0]?.role ?? "none"}`);
   lines.push(`db chats ${chats}`);
   const again = await request("/api/auth/sign-up/email", {
     method: "POST",
@@ -749,7 +787,8 @@ async function driveSignup() {
   if (chatPage.status !== 200 || !chatPage.text.includes("Connect a provider")) fail("draft page does not show the provider form");
   if (listed.status !== 200 || count !== 0) fail(`chat list has ${count} chats before the first message`);
   if (loggedOut.status !== 401) fail(`logged out chats status ${loggedOut.status}`);
-  if (users !== 1 || chats !== 0) fail(`db users ${users} chats ${chats}, expected 1 and 0`);
+  if (!openBefore || !closedAfter) fail("GET /api/setup did not close signup after the first account");
+  if (users.length !== 1 || users[0]?.role !== "admin" || chats !== 0) fail("expected one admin account and no saved chats");
   if (again.status !== 403) fail(`second signup status ${again.status}`);
   console.log("drive signup passed");
 }
@@ -796,6 +835,7 @@ async function driveSettings() {
   const defaults = await track("/api/preferences/model", { method: "PUT", json: { connectionId: id, model: MOCK_MODEL, effort: "high" } });
   const badEffort = await track("/api/preferences/model", { method: "PUT", json: { connectionId: id, model: MOCK_MODEL, effort: "turbo" } });
   const settings = await track("/api/settings");
+  const adminSettings = await track("/api/admin/settings");
   const removed = await track(`/api/connections/${id}`, { method: "DELETE" });
   const afterDelete = body(await track("/api/connections"));
   const defaultsAfterDelete = body(await track("/api/preferences/model"));
@@ -807,8 +847,9 @@ async function driveSettings() {
     const file = path.join(dataDir, name);
     return fs.existsSync(file) && fs.readFileSync(file).includes(FAKE_KEY);
   });
-  const responseHasKey = responses.some((text) => text.includes(FAKE_KEY) || text.includes('"apiKey"'));
+  const responseHasKey = responses.some((text) => text.includes(FAKE_KEY) || /"(?:apiKey|githubToken|tavilyApiKey)"\s*:/.test(text));
   const settingsFields = Object.keys(body(settings)).sort().join(",");
+  const adminFields = Object.keys(body(adminSettings)).sort().join(",");
   const pageHasSections = ["Connections", "Default model"].every((label) => page.text.includes(label));
   const lines = [
     `settings page status ${page.status}`,
@@ -822,7 +863,8 @@ async function driveSettings() {
     `base after rejected change ${afterMove?.baseUrl ?? "none"}`,
     `defaults status ${defaults.status} model ${body(defaults).model ?? "none"} effort ${body(defaults).effort ?? "none"} names connection ${body(defaults).connectionId === id ? "yes" : "no"}`,
     `unknown effort status ${badEffort.status}`,
-    `settings fields ${settingsFields}`,
+    `GitHub settings status ${settings.status} fields ${settingsFields}`,
+    `admin settings status ${adminSettings.status} fields ${adminFields}`,
     `delete status ${removed.status} listed after ${Array.isArray(afterDelete) && afterDelete.some((item) => item.id === id) ? "yes" : "no"}`,
     `defaults after delete connection ${defaultsAfterDelete.connectionId ?? "none"}`,
     `any response has the key or an apiKey field ${responseHasKey ? "yes" : "no"}`,
@@ -838,7 +880,8 @@ async function driveSettings() {
     [moved.status === 400 && /api key/i.test(body(moved).error ?? "") && afterMove?.baseUrl === baseUrl, "a base URL change without a key was not rejected"],
     [defaults.status === 200 && body(defaults).connectionId === id && body(defaults).effort === "high", "the default model did not save"],
     [badEffort.status === 400, "an unknown effort was accepted"],
-    [settings.status === 200 && !/baseUrl|keySet|model|reasoningEffort/.test(settingsFields), "GET /api/settings still has provider fields"],
+    [settings.status === 200 && settingsFields === "githubMcpUrl,githubTokenReadable,githubTokenSet", "GET /api/settings did not return the public GitHub fields"],
+    [adminSettings.status === 200 && adminFields === "dreamHour,hostingMode,sandbox,sandboxAvailable,searxngUrl,tavilyKeyReadable,tavilyKeySet" && body(adminSettings).hostingMode === "personal", "GET /api/admin/settings did not return the public Personal settings"],
     [removed.status === 200 && Array.isArray(afterDelete) && !afterDelete.some((item) => item.id === id), "the connection was not deleted"],
     [defaultsAfterDelete.connectionId !== id, "the defaults still name the deleted connection"],
     [!responseHasKey, "a response leaked the key"],
@@ -935,10 +978,14 @@ async function browse(scenario) {
   const cookies = await signInVerify();
   const { chromium } = await import("playwright");
   const browser = await chromium.launch({ executablePath: chromePath() });
-  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  await context.addCookies(
-    [...cookies.entries()].map(([name, value]) => ({ name, value, url: ORIGIN, httpOnly: true, sameSite: "Lax" })),
-  );
+  async function sessionContext(session) {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await context.addCookies(
+      [...session.entries()].map(([name, value]) => ({ name, value, url: ORIGIN, httpOnly: true, sameSite: "Lax" })),
+    );
+    return context;
+  }
+  const context = await sessionContext(cookies);
   const page = await context.newPage();
   const evidence = path.join(evidenceRoot, scenario);
   fs.rmSync(evidence, { recursive: true, force: true });
@@ -962,7 +1009,8 @@ async function browse(scenario) {
     // With no baseUrl, useProvider connects the mock and makes it the default model.
     const useProvider = (provider = {}) =>
       connectProvider(signedSend(cookies), provider.baseUrl ? provider : { ...mockProvider(mockUrl()), ...provider });
-    const context = { page, origin: ORIGIN, step, shot, useProvider };
+    const signInMember = async () => sessionContext(await signInAccount(await seedMember()));
+    const context = { page, origin: ORIGIN, step, shot, useProvider, seedMember, signInMember };
     // Only a scenario that reads mockUrl needs the mock, so the check runs on that read.
     Object.defineProperty(context, "mockUrl", { enumerable: true, get: mockUrl });
     await run(context);
@@ -1019,16 +1067,14 @@ function seedDreamChats(database, userId) {
   run();
 }
 
-function dreamSnapshot(database, date) {
-  const memories = database.prepare("SELECT count(*) AS n FROM memories").get().n;
-  const table = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memory_runs'").get();
-  if (!table) return { memories, run: null };
+function dreamSnapshot(database, userId, date) {
+  const memories = database.prepare("SELECT count(*) AS n FROM memories WHERE user_id = ?").get(userId).n;
   const run = database
     .prepare(
       `SELECT date, state, added, merged, error, chat_ids AS chatIds, done_chat_ids AS doneChatIds, retry_chat_ids AS retryChatIds
-       FROM memory_runs WHERE date = ?`,
+       FROM memory_runs WHERE user_id = ? AND date = ?`,
     )
-    .get(date);
+    .get(userId, date);
   return { memories, run: run ?? null };
 }
 
@@ -1043,7 +1089,7 @@ function formatDreamSnapshot(snapshot) {
 
 function runDreamCli(ollamaUrl) {
   return new Promise((resolve) => {
-    const child = spawn("npm", ["run", "dream"], {
+    const child = spawn("npm", ["run", "dream", "--", "--user", VERIFY_EMAIL], {
       cwd: repoRoot,
       env: {
         ...process.env,
@@ -1120,12 +1166,12 @@ async function driveDream() {
   assertOurServer();
   const date = localDreamDate();
   const database = openSandboxDb();
-  const user = database.prepare("SELECT id FROM user LIMIT 1").get();
+  const user = database.prepare("SELECT id FROM user WHERE email = ? AND role = 'admin'").get(VERIFY_EMAIL);
   if (!user) {
     database.close();
     fail("no user in the sandbox. Run launch --mock first.");
   }
-  const before = dreamSnapshot(database, date);
+  const before = dreamSnapshot(database, user.id, date);
   const lines = [`before ${formatDreamSnapshot(before).replaceAll("\n", " | ")}`];
   if (!before.run) seedDreamChats(database, user.id);
   database.close();
@@ -1136,7 +1182,7 @@ async function driveDream() {
     const result = await runDreamCli(ollama.url);
     lines.push(`dream exit ${result.code}`);
     const afterDb = openSandboxDb();
-    const after = dreamSnapshot(afterDb, date);
+    const after = dreamSnapshot(afterDb, user.id, date);
     afterDb.close();
     const summary = formatDreamSnapshot(after);
     lines.push(summary);
@@ -1203,9 +1249,9 @@ async function localBrowserSignin(lines) {
     }
     const settings = await page.goto(`${ORIGIN}/settings`, { waitUntil: "domcontentloaded" });
     const settingsPath = new URL(page.url()).pathname;
-    const hasLabels = settingsPath === "/settings" && (await page.getByText("SearXNG URL").count()) > 0;
+    const hasLabels = settingsPath === "/settings" && (await page.getByRole("heading", { name: "GitHub", exact: true }).count()) > 0;
     lines.push(`local settings status ${settings?.status() ?? 0} path ${settingsPath}`);
-    lines.push(`local settings has SearXNG URL ${hasLabels ? "yes" : "no"}`);
+    lines.push(`local settings has GitHub ${hasLabels ? "yes" : "no"}`);
     const dir = path.join(evidenceRoot, "public");
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, "local-settings.png");
@@ -1264,6 +1310,9 @@ if (command === "launch") {
   if (mock) await connectMock(mock);
 } else if (command === "doctor") {
   await doctor();
+} else if (command === "seed-member") {
+  const member = await seedMember();
+  console.log(`member ready email=${member.email}`);
 } else if (command === "cleanup") {
   await cleanup();
 } else if (command === "drive" && feature === "signup") {
@@ -1281,5 +1330,5 @@ if (command === "launch") {
 } else if (command === "browse") {
   await browse(feature);
 } else {
-  fail("usage: verify.mjs launch [--mock] | doctor | cleanup | drive signup | drive signin | drive settings | drive chat | drive dream | drive public | browse <scenario>");
+  fail("usage: verify.mjs launch [--mock] | doctor | seed-member | cleanup | drive signup | drive signin | drive settings | drive chat | drive dream | drive public | browse <scenario>");
 }

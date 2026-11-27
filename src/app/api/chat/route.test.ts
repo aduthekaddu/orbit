@@ -19,11 +19,14 @@ import { chatChoice, setChatChoice, type ModelChoice } from "@/lib/model-choice"
 import { cachedCaps, listModels } from "@/lib/model-list";
 import { discardReplyRun, findReplyRun, releaseReplyRun, replyResponse, reserveReplyRun, stopReplyRun } from "@/lib/reply-runs";
 import { encryptSecret } from "@/lib/secrets";
-import { getSettings, saveSettings } from "@/lib/settings";
+import { getInstance, saveInstance } from "@/lib/instance-settings";
+import { getGithub, saveGithub } from "@/lib/user-github";
+import { parseViewer } from "@/lib/policy";
 
 const PROVIDER_KEY = "made-up-provider-key-0001";
 const TAVILY_KEY = "made-up-tavily-key-0002";
-const USER_ID = "u-route";
+const viewer = parseViewer({ id: "u-route", role: "admin" });
+const USER_ID = viewer.id;
 // Any of these seeds the settings row when it is absent, and a real GitHub token would open a real connection.
 const SEEDED_ENV = ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL", "ORBIT_SEARXNG_URL", "ORBIT_TAVILY_API_KEY", "ORBIT_GITHUB_TOKEN"];
 const CONSOLE_METHODS = ["error", "warn", "log", "info", "debug"] as const;
@@ -32,7 +35,7 @@ const CONSOLE_METHODS = ["error", "warn", "log", "info", "debug"] as const;
 // need a Next.js request scope. These stubs stand in for them so the test drives the real handler.
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-chat-route-"));
 const stubs: Record<string, string> = {
-  "@/lib/session": `exports.getSession = async () => ({ user: { id: ${JSON.stringify(USER_ID)} } });
+  "@/lib/session": `exports.sessionFrom = async () => ({ user: { id: ${JSON.stringify(USER_ID)}, role: "admin" } });
 exports.unauthorized = () => Response.json({ error: "Unauthorized" }, { status: 401 });`,
   "next/server": `exports.after = (task) => { globalThis.__orbitAfter.push(Promise.resolve(typeof task === "function" ? task() : task)); };`,
 };
@@ -250,11 +253,11 @@ before(async () => {
   db.insert(schema.providerConnections)
     .values({ id: ANTHROPIC_ID, userId: USER_ID, kind: "anthropic", label: "Claude", apiKeyCiphertext: encryptSecret(PROVIDER_KEY), createdAt: now })
     .run();
-  saveSettings({
-    tavilyApiKey: TAVILY_KEY,
+  assert.ok(saveInstance(viewer.id, { tavilyApiKey: TAVILY_KEY }).ok);
+  assert.ok(saveGithub(viewer.id, {
     githubToken: github.token,
     githubMcpUrl: `${github.url}?mode=error-token&echo=${encodeURIComponent(`${TAVILY_KEY} and ${PROVIDER_KEY}`)}`,
-  });
+  }).ok);
   route = await import("./route");
   ({ PATCH: editReply } = await import("../chats/[id]/messages/[messageId]/route"));
 });
@@ -512,8 +515,9 @@ test("a queued send masks with the provider and settings values captured after i
   const providerValue = "fixture-provider-value-after";
   const settingsValue = "fixture-settings-value-after";
   const db = getDb();
-  const settingsBefore = getSettings();
-  saveSettings({ githubToken: null });
+  const settingsBefore = getInstance();
+  const githubBefore = getGithub(viewer.id);
+  assert.ok(saveGithub(viewer.id, { githubToken: null }).ok);
   db.insert(schema.providerConnections).values({
     id: connectionId, userId: USER_ID, kind: "openai-compatible", label: "Snapshot",
     baseUrl: "https://provider.invalid/v1", apiKeyCiphertext: encryptSecret("fixture-provider-value-before"), createdAt: new Date(),
@@ -533,7 +537,7 @@ test("a queued send masks with the provider and settings values captured after i
     try {
       await Promise.race([slot.waiting, sent.then(() => assert.fail("the send did not wait for its slot"))]);
       db.$client.prepare("update provider_connections set api_key_ciphertext = ? where id = ?").run(encryptSecret(providerValue), connectionId);
-      saveSettings({ tavilyApiKey: settingsValue });
+      assert.ok(saveInstance(viewer.id, { tavilyApiKey: settingsValue }).ok);
     } finally {
       slot.release();
     }
@@ -543,7 +547,8 @@ test("a queued send masks with the provider and settings values captured after i
     await Promise.allSettled(afterTasks);
     assert.ok(observed.length > 0 && observed.every(Boolean), "the send uses both values from the current snapshot");
   } finally {
-    saveSettings({ githubToken: settingsBefore.githubToken, tavilyApiKey: settingsBefore.tavilyApiKey });
+    assert.ok(saveGithub(viewer.id, { githubToken: githubBefore.githubToken }).ok);
+    assert.ok(saveInstance(viewer.id, { tavilyApiKey: settingsBefore.tavilyApiKey }).ok);
     deleteConnection(USER_ID, connectionId);
   }
 });

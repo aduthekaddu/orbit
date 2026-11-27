@@ -6,18 +6,15 @@ import { getModelDefaults } from "@/lib/connections";
 import { effortLevels } from "@/lib/effort";
 import { cachedCaps } from "@/lib/model-list";
 import { chatExists, getChatForUser, messageRepository } from "@/lib/messages";
-import { resolveChoice } from "@/lib/model-choice";
+import { NOTHING_PINNED, resolveChoice } from "@/lib/model-choice";
 import { artifactHistory } from "@/lib/artifacts/history";
 import { LIMITS } from "@/lib/route-schema";
 import { requireUser } from "@/lib/session";
-import { publicConnections } from "@/lib/settings";
+import { publicConnections } from "@/lib/request-redactor";
 import { focusedHead, toRepository } from "@/lib/chat-tree";
 import { findActiveReplyRun } from "@/lib/reply-runs";
 
 export const dynamic = "force-dynamic";
-
-// A draft has no row yet, so it resolves the user's defaults like a chat with nothing pinned.
-const NOTHING_PINNED = { connectionId: null, model: null, reasoningEffort: null };
 
 export default async function ChatPage({
   params,
@@ -44,7 +41,7 @@ export default async function ChatPage({
   const active = isDraft ? null : findActiveReplyRun(id, session.user.id);
   const liveReplyId = active && selectedHead === active.promptId ? active.replyId : null;
   const restorePending = isDraft ? false : active ? liveReplyId !== null : selectedHead === saved.headId;
-  const resolved = resolveChoice(session.user.id, chat ?? NOTHING_PINNED);
+  const resolved = resolveChoice(session.user, chat ?? NOTHING_PINNED);
   if (!resolved.ok && repository.messages.length === 0) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto pt-[8vh] scrollbar-thin">
@@ -53,14 +50,14 @@ export default async function ChatPage({
         </div>
         <div className="mx-auto w-full max-w-page px-6 py-10">
           <h1 className="mb-6 text-xl font-semibold tracking-tight">Connect a provider</h1>
-          <FirstRun reason={resolved.reason} initialConnections={publicConnections(session.user.id)} defaults={getModelDefaults(session.user.id)} />
+          <FirstRun reason={resolved.reason} initialConnections={publicConnections(session.user)} defaults={getModelDefaults(session.user.id)} />
         </div>
       </div>
     );
   }
   return (
     <div className="min-h-0 flex-1">
-      <ChatPanel key={`${id}:${focusMessageId ?? ""}`} chatId={id} isDraft={isDraft} focusMessageId={focusMessageId} initialHistory={repository} choice={resolved.ok || resolved.reason === "key-unreadable" ? resolved.choice : null} choiceLevels={resolved.ok ? effortLevels(resolved.connection.kind, cachedCaps(resolved.connection.id, resolved.choice.model)) : null} connections={publicConnections(session.user.id)} liveReplyId={liveReplyId} restorePending={restorePending} />
+      <ChatPanel key={`${id}:${focusMessageId ?? ""}`} chatId={id} isDraft={isDraft} focusMessageId={focusMessageId} initialHistory={repository} choice={resolved.ok || resolved.reason === "key-unreadable" ? resolved.choice : null} choiceLevels={resolved.ok ? effortLevels(resolved.connection.kind, cachedCaps(resolved.connection.id, resolved.choice.model)) : null} connections={publicConnections(session.user)} liveReplyId={liveReplyId} restorePending={restorePending} />
     </div>
   );
 }

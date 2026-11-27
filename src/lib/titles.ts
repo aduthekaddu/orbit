@@ -28,10 +28,11 @@ export function startChatTitle(input: {
   fallbackTitle: string;
   model: LanguageModel;
   call: { options: EffortCallOptions; maxOutputTokens: number };
+  inputRedact: Redactor;
   redact: Redactor;
   onError: (message: string) => void;
 }): void {
-  const firstMessage = input.redact.text(input.firstMessage.trim());
+  const firstMessage = input.inputRedact.text(input.firstMessage.trim());
   if (input.messagesBeforeTurn !== 0 || !firstMessage || !input.fallbackTitle) return;
   const pending = saveTitle(input, firstMessage);
   after(() => pending);

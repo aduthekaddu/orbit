@@ -1,7 +1,7 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { getDb } = await import("./lib/db");
-    getDb();
+    const { getInstance } = await import("./lib/instance-settings");
+    getInstance();
     const { startDreamScheduler } = await import("./lib/memory/schedule");
     startDreamScheduler();
     const { sandboxEnabled } = await import("./lib/sandbox/enabled");

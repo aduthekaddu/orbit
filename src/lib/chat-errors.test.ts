@@ -5,7 +5,7 @@ import { simulateReadableStream, stepCountIs, streamText, toUIMessageStream } fr
 import { MockLanguageModelV4 } from "ai/test";
 import { getTableColumns } from "drizzle-orm";
 import { CREDENTIAL_NOUNS, logProviderError, REDACTED, Redactor, redactUrl, streamErrorMessage, type SettingsLabels, type StoredCredentials } from "./chat-errors";
-import { settings } from "./db/schema";
+import { instanceSettings, userGithub } from "./db/schema";
 import { renderUiTool } from "./genui/tool";
 import { createRunCodeTool } from "./tools/run-code";
 
@@ -242,8 +242,8 @@ test("a settings field named like a credential must be labelled one", () => {
 });
 
 test("every settings column named like a credential is masked", () => {
-  const credentialName = new RegExp(`(?:${CREDENTIAL_NOUNS.join("|")})s?\\d*$`, "i");
-  const columns = Object.keys(getTableColumns(settings));
+  const credentialName = new RegExp(`(?:${CREDENTIAL_NOUNS.join("|")})s?\\d*(?:Ciphertext)?$`, "i");
+  const columns = [...Object.keys(getTableColumns(instanceSettings)), ...Object.keys(getTableColumns(userGithub))];
   const values = Object.fromEntries(columns.map((column) => [column, `made-up-${column}-value-0006`]));
   const all = new Redactor(values as unknown as StoredCredentials);
   const named = columns.filter((column) => credentialName.test(column));

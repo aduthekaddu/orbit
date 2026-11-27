@@ -31,7 +31,8 @@ function importInChild(modulePath: string, options: { cwd?: string; env: NodeJS.
 
 const DB_REACHING_MODULES = [
   "./src/lib/db/index.ts",
-  "./src/lib/settings.ts",
+  "./src/lib/instance-settings.ts",
+  "./src/lib/user-github.ts",
   "./src/lib/preferences.ts",
   "./src/lib/messages.ts",
   "./src/lib/secrets.ts",
@@ -79,11 +80,11 @@ test("importing a db-reaching module without ORBIT_DATA_DIR in a test process ne
   delete env.ORBIT_DATA_DIR;
   delete env.BETTER_AUTH_SECRET;
 
-  const settingsUrl = pathToFileURL(path.join(repo, "src/lib/settings.ts")).href;
+  const settingsUrl = pathToFileURL(path.join(repo, "src/lib/instance-settings.ts")).href;
   const result = importInChild(settingsUrl, {
     cwd,
     env,
-    script: `const mod = await import(process.argv[1]); console.log(typeof mod.toPublicSettings);`,
+    script: `const mod = await import(process.argv[1]); console.log(typeof mod.toPublicInstance);`,
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);

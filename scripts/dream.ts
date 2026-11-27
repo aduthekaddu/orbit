@@ -1,47 +1,67 @@
+import { parseArgs } from "node:util";
 import { z } from "zod";
+import { getDb } from "../src/lib/db";
 import { runDream } from "../src/lib/memory/dream";
+import { memoryEnabledViewers } from "../src/lib/memory/schedule";
+import { parseViewer } from "../src/lib/policy";
+import { getMemoryEnabled } from "../src/lib/preferences";
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
-function readDate(argv: string[]): string | undefined {
-  let date: string | undefined;
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg !== "--date") {
-      console.error("usage: npm run dream -- [--date YYYY-MM-DD]");
-      process.exit(1);
-    }
-    const parsed = dateSchema.safeParse(argv[index + 1]);
-    if (!parsed.success) {
-      console.error("date must be YYYY-MM-DD");
-      process.exit(1);
-    }
-    date = parsed.data;
-    index += 1;
+function readOptions() {
+  try {
+    return parseArgs({
+      options: { date: { type: "string" }, user: { type: "string" } },
+      allowPositionals: false,
+    }).values;
+  } catch {
+    console.error("Usage: npm run dream -- [--date YYYY-MM-DD] [--user <email>]");
+    process.exit(1);
   }
-  return date;
 }
 
 async function main() {
-  const date = readDate(process.argv.slice(2));
-  const row = await runDream({ manual: true, date });
-  if (!row) {
-    console.error("dream did not start");
-    process.exit(1);
+  const options = readOptions();
+  const date = dateSchema.optional().safeParse(options.date);
+  if (!date.success) {
+    console.error("Date must be YYYY-MM-DD");
+    process.exitCode = 1;
+    return;
   }
-  console.log(
-    JSON.stringify({
-      date: row.date,
-      state: row.state,
-      chats: row.chatIds.length,
-      done: row.doneChatIds.length,
-      retry: row.retryChatIds.length,
-      added: row.added,
-      merged: row.merged,
-      error: row.error,
-    }),
-  );
-  if (row.state === "failed") process.exit(1);
+  const selected = options.user === undefined
+    ? undefined
+    : getDb().$client.prepare("SELECT id, role FROM user WHERE email = ?").get(options.user);
+  if (options.user !== undefined && !selected) {
+    console.error("No account matches that email");
+    process.exitCode = 1;
+    return;
+  }
+  const viewers = selected ? [parseViewer(selected)] : memoryEnabledViewers();
+  for (const viewer of viewers) {
+    try {
+      const row = await runDream({ viewer, manual: true, date: date.data });
+      if (!row && !getMemoryEnabled(viewer.id)) {
+        console.log(JSON.stringify({ userId: viewer.id, state: "skipped", reason: "Memory is off" }));
+        continue;
+      }
+      if (!row) throw new Error("Dream did not start");
+      console.log(JSON.stringify({
+        userId: viewer.id,
+        date: row.date,
+        state: row.state,
+        chats: row.chatIds.length,
+        done: row.doneChatIds.length,
+        retry: row.retryChatIds.length,
+        added: row.added,
+        merged: row.merged,
+        error: row.error,
+      }));
+      if (row.state === "failed") process.exitCode = 1;
+    } catch (error) {
+      console.log(JSON.stringify({ userId: viewer.id, state: "failed", error: error instanceof Error ? error.name : "Error" }));
+      process.exitCode = 1;
+    }
+  }
 }
 
-main();
+void main();

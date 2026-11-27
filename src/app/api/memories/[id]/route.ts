@@ -1,6 +1,6 @@
-import { cleanMemoryText, deleteMemory, memoryJson, MemoryRejected, updateMemory } from "@/lib/memory/store";
-import { requestRedactor } from "@/lib/settings";
-import { getSession, unauthorized } from "@/lib/session";
+import { cleanMemoryText, deleteMemory, getMemory, memoryJson, MemoryRejected, updateMemory } from "@/lib/memory/store";
+import { requestRedactor } from "@/lib/request-redactor";
+import { sessionFrom, unauthorized } from "@/lib/session";
 import { LIMITS, r } from "@/lib/route-schema";
 
 export const runtime = "nodejs";
@@ -16,17 +16,17 @@ const bodySchema = r.object({
 });
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const params = paramsSchema.safeParse(await context.params);
-  if (!params.success) return Response.json({ error: "Not found" }, { status: 404 });
+  if (!params.success || !getMemory(session.user.id, params.data.id)) return Response.json({ error: "Not found" }, { status: 404 });
   const json = await request.json().catch(() => null);
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) return Response.json({ error: "Invalid memory" }, { status: 400 });
   try {
-    const redact = requestRedactor(session.user.id);
+    const redact = requestRedactor(session.user);
     const text = redact.text(cleanMemoryText(redact.text(parsed.data.text)));
-    const memory = updateMemory(params.data.id, { ...parsed.data, text, source: "user" });
+    const memory = updateMemory(session.user.id, params.data.id, { ...parsed.data, text, source: "user" });
     if (!memory) return Response.json({ error: "Not found" }, { status: 404 });
     return Response.json({ memory: memoryJson(memory) });
   } catch (error) {
@@ -35,11 +35,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   }
 }
 
-export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const params = paramsSchema.safeParse(await context.params);
   if (!params.success) return Response.json({ error: "Not found" }, { status: 404 });
-  if (!deleteMemory(params.data.id)) return Response.json({ error: "Not found" }, { status: 404 });
+  if (!deleteMemory(session.user.id, params.data.id)) return Response.json({ error: "Not found" }, { status: 404 });
   return Response.json({ id: params.data.id });
 }

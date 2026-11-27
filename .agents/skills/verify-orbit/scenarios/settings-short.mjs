@@ -1,9 +1,9 @@
-import { settingsSave } from "../../../../scripts/qa/settings-save.mjs";
+import { githubSave } from "../../../../scripts/qa/settings-save.mjs";
 export default async function settingsShort({ page, origin, step, shot }) {
   await page.setViewportSize({ width: 390, height: 568 });
   await page.goto(`${origin}/settings`);
 
-  const save = settingsSave(page);
+  const save = githubSave(page);
   await save.waitFor({ timeout: 10_000 });
   await save.scrollIntoViewIfNeeded();
   const box = await save.boundingBox();

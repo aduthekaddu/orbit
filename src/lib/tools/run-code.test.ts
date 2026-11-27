@@ -5,7 +5,9 @@ import test, { after, type TestContext } from "node:test";
 import http from "node:http";
 import { once } from "node:events";
 import { getDb } from "../db";
-import { toolsFor } from "./index";
+import { Redactor } from "../chat-errors";
+import { parseViewer } from "../policy";
+import { toolsFor, type ToolContext } from "./index";
 import { createRunCodeTool } from "./run-code";
 import { runCodeInputSchema } from "../sandbox/spec";
 
@@ -13,14 +15,16 @@ after(() => {
   getDb().$client.close();
 });
 
-test("run_code exists only when the server explicitly enables it", () => {
+test("run_code requires the server gate and the admin switch", () => {
   const original = process.env.ORBIT_SANDBOX;
-  const settings = { baseUrl: "http://localhost/v1", apiKey: "fake", model: "fake", reasoningEffort: "low" as const, searxngUrl: "", tavilyApiKey: "", githubToken: "", githubMcpUrl: "" };
+  const settings = sandboxSettings();
   try {
     for (const value of [undefined, "off", "true", "ON", "on"]) {
       if (value === undefined) delete process.env.ORBIT_SANDBOX;
       else process.env.ORBIT_SANDBOX = value;
-      assert.equal("run_code" in toolsFor(settings), value === "on");
+      for (const sandbox of ["on", "off"] as const) {
+        assert.equal("run_code" in toolsFor(sandboxContext(settings, sandbox)), value === "on" && sandbox === "on");
+      }
     }
   } finally {
     if (original === undefined) delete process.env.ORBIT_SANDBOX;
@@ -225,6 +229,14 @@ function sandboxSettings() {
   };
 }
 
+function sandboxContext(settings: ReturnType<typeof sandboxSettings>, sandbox: ToolContext["instance"]["sandbox"] = "on"): ToolContext {
+  const viewer = parseViewer({ id: "sandbox-admin", role: "admin" });
+  return {
+    instance: { ...settings, sandbox },
+    user: { id: viewer.id, memory: true, github: settings },
+  };
+}
+
 function enableSandbox(t: TestContext) {
   const originalSandbox = process.env.ORBIT_SANDBOX;
   process.env.ORBIT_SANDBOX = "on";
@@ -242,7 +254,7 @@ test("run_code masks stored credentials in stdout, stderr, and ANSI-split output
     emit(2, `err ${settings.tavilyApiKey}\n`);
     finish(0);
   });
-  const tool = toolsFor(settings).run_code;
+  const tool = toolsFor(sandboxContext(settings), undefined, undefined, new Redactor(settings)).run_code;
   assert.ok(tool?.execute);
   const output = (await tool.execute({ language: "python", code: "print(1)" }, { toolCallId: "rc1", messages: [], context: {} })) as {
     stdout: string;
@@ -259,7 +271,7 @@ test("run_code masks a stored credential that straddles the 64 KiB output cap wi
     emit(1, "a".repeat(65_530) + settings.apiKey + "tail");
     finish(0);
   });
-  const tool = toolsFor(settings).run_code;
+  const tool = toolsFor(sandboxContext(settings), undefined, undefined, new Redactor(settings)).run_code;
   assert.ok(tool?.execute);
   const output = (await tool.execute({ language: "python", code: "print(1)" }, { toolCallId: "rc2", messages: [], context: {} })) as {
     stdout: string;
@@ -281,7 +293,7 @@ test("run_code masks stored credentials collected before a stopped run is cancel
   });
   const { createStoppedRuns } = await import("./stopped-runs");
   const stopped = createStoppedRuns();
-  const tool = toolsFor(settings, stopped).run_code;
+  const tool = toolsFor(sandboxContext(settings), stopped, undefined, new Redactor(settings)).run_code;
   assert.ok(tool?.execute);
   const pending = Promise.resolve(tool.execute({ language: "python", code: "while True: pass" }, { toolCallId: "rc3", messages: [], abortSignal: controller.signal, context: {} }));
   await readyToStop.promise;
@@ -293,7 +305,7 @@ test("run_code masks stored credentials collected before a stopped run is cancel
 
 test("render_ui masks stored credentials in its returned spec output", async () => {
   const settings = sandboxSettings();
-  const tool = toolsFor(settings).render_ui;
+  const tool = toolsFor(sandboxContext(settings), undefined, undefined, new Redactor(settings)).render_ui;
   assert.ok(tool?.execute);
   const result = await tool.execute(
     {
@@ -316,7 +328,7 @@ test("run_code masks misaligned Basic-auth base64 credentials streamed across st
     for (let i = 0; i < line.length; i += 4) emit(1, line.slice(i, i + 4));
     finish(0);
   });
-  const tool = toolsFor(settings).run_code;
+  const tool = toolsFor(sandboxContext(settings), undefined, undefined, new Redactor(settings)).run_code;
   assert.ok(tool?.execute);
   const output = (await tool.execute({ language: "python", code: "print(1)" }, { toolCallId: "rc-b64", messages: [], context: {} })) as {
     stdout: string;

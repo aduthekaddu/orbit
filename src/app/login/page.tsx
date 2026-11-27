@@ -1,6 +1,6 @@
 import { AuthShell } from "@/components/auth/auth-shell";
 import { LoginForm } from "@/components/auth/auth-form";
-import { signupOpen } from "@/lib/db";
+import { signupOpen } from "@/lib/instance-settings";
 
 export const dynamic = "force-dynamic";
 

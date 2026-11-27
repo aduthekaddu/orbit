@@ -29,6 +29,8 @@ assert.ok(script, "the login page references a static script");
 const page = ["frame-src 'none'", "frame-ancestors 'none'"];
 const responses = [
   { path: "/login", label: "login page", status: 200, frame: page },
+  { path: "/admin", label: "admin page", status: 200, cookie, frame: page },
+  { path: "/admin", label: "signed-out admin page", status: 307, frame: page, location: "/login" },
   { path: `/c/${id}`, label: "chat page", status: 200, cookie, frame: page },
   { path: "/response-headers-missing-page", label: "missing page", status: 404, cookie },
   { path: "/api/chats", label: "signed-in API", status: 200, cookie },
@@ -44,6 +46,10 @@ for (const response of responses) {
   });
   await body?.cancel();
   check(`${label} returns HTTP ${status}`, actualStatus === status, `got ${actualStatus}`);
+  if (response.location) {
+    const location = headers.get("location");
+    check(`${label} redirects to ${response.location}`, location !== null && new URL(location, origin).pathname === response.location, `got ${location}`);
+  }
   for (const [name, expected] of Object.entries({
     "x-content-type-options": "nosniff",
     "referrer-policy": "same-origin",
