@@ -233,12 +233,14 @@ export function AppShell({
   }
 
   const commitDelete = useCallback((id: string) => {
-    // StrictMode, pagehide and the committing effect can all reach one id.
+    // StrictMode, pagehide and the committing effect can all reach one id while its DELETE is in flight. The id
+    // leaves once the server answers, so a chat saved again under it can be deleted again.
     if (sentDeletes.current.has(id)) return;
     sentDeletes.current.add(id);
     // Once this page hears back, the next one has nothing to send again for this chat.
     const answered = () => writeLeavingDeletes(readLeavingDeletes().filter((leaving) => leaving !== id));
     function committed() {
+      sentDeletes.current.delete(id);
       answered();
       forgetReplyCheckpoint(id);
       setDeletedIds((ids) => new Set(ids).add(id));

@@ -32,6 +32,7 @@ At each width:
 - **Delete** during `[qa:slow]`, then Undo, reattaches and all 50 words finish.
 - **Delete** during `[qa:slow]` with no Undo sends one `DELETE` after 5 seconds. Then `GET /api/chats/<id>` and `/stream` answer 404, the palette finds no hit for the prompt's word, and `messages_fts` passes `integrity-check`.
 - **Delete** followed by a reload commits through `pagehide` before the 5 seconds end, and the reloaded sidebar drops the row.
+- A chat that a request the page did not send has saved keeps its `/c/<id>?new` history entry. After **Delete** lands, Back opens that id as a draft, and its first message saves the chat again. A second **Delete** in the same page sends one more `DELETE`, and `GET /api/chats/<id>` answers 404.
 - A `DELETE` 500 restores the row and shows `Could not delete`. A double click on **Delete** sends one request. `DELETE` on a missing id answers 404.
 - The footer shows **Memory** and **Settings** links and the email as plain text. **Sign out** opens `Sign out?`, and **Cancel** keeps the session. Cancel returns focus to Sign out without opening its tooltip, so on a phone one Escape closes the drawer. At 360 the scenario confirms, lands on `/login`, and `GET /api/chats` answers 401, so it runs last.
 

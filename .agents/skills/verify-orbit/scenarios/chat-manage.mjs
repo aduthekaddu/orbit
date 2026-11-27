@@ -128,12 +128,13 @@ function viewportRun(context, { label, touch, page }) {
     await picker.waitFor({ state: "detached", timeout: 5_000 });
   }
 
-  // Opens the row menu for one chat and returns its menu items.
+  // Opens the row menu for one chat and returns its menu items. Without a label it takes the row's one Actions button.
   async function menu(id, label) {
     const container = await list();
     const row = rowLink(container, id).locator("..");
     if (!touch) await rowLink(container, id).hover();
-    await (await need(row.getByRole("button", { name: `Actions for ${label}` }), `Actions for ${label} row button`)).click();
+    const name = label === undefined ? /^Actions for / : `Actions for ${label}`;
+    await (await need(row.getByRole("button", { name }), `Actions for ${label ?? id} row button`)).click();
     const rename = await need(page.getByRole("menuitem", { name: "Rename" }), "Rename menu item", 5_000);
     return { container, row, rename, remove: page.getByRole("menuitem", { name: "Delete" }) };
   }
@@ -408,6 +409,52 @@ function viewportRun(context, { label, touch, page }) {
     step(`${label}: reloading right after Delete commits it through pagehide`, status === 404 && elapsed < UNDO_MS && listed === 0, `status ${status} after ${elapsed}ms, rows ${listed}`);
   }
 
+  // A tab can still hold a `/c/<id>?new` entry for a chat it has since deleted. Back opens a draft under that id, and
+  // its first message saves the chat again. Deleting it again in the same page must send a second DELETE.
+  async function deleteRecreated() {
+    const id = crypto.randomUUID();
+    await page.goto(`${origin}/c/${id}?new`);
+    await composer.waitFor({ timeout: 15_000 });
+    // Saved by a request this page did not send, so this history entry keeps ?new.
+    const saved = await page.request.post(`${origin}/api/chat`, {
+      data: { id, messages: [{ id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: `[qa:plain] saved elsewhere ${label}` }] }] },
+    });
+    await saved.body();
+    if (saved.status() !== 200) throw new Error(`POST /api/chat for ${id} answered ${saved.status()}`);
+    // The next reply's refresh lists the saved chat.
+    await newDraft();
+    await send(`[qa:plain] list the saved chat ${label}`);
+    await replyDone("pong");
+    await need(rowLink(await list(), id), "the chat saved by the request", 10_000);
+    async function deleteAndExpire() {
+      const deletes = requests("DELETE", id);
+      const opened = await menu(id);
+      await opened.remove.click();
+      await toast().waitFor({ timeout: 3_000 });
+      await toast().waitFor({ state: "hidden", timeout: UNDO_MS + 5_000 });
+      const status = await eventually(() => api.status(`/api/chats/${id}`), (value) => value === 404, { timeoutMs: 10_000, what: "GET /api/chats/<id> to answer 404" }).catch(() => api.status(`/api/chats/${id}`));
+      deletes.stop();
+      return { status, sent: deletes.seen.length };
+    }
+    const first = await deleteAndExpire();
+    await closeList();
+    await page.goBack();
+    const reopened = await eventually(() => page.url(), (url) => draftId(url) === id, { timeoutMs: 10_000, what: "Back to open the deleted id as a draft" }).catch(() => page.url());
+    // The URL changes before the draft renders, and a send into the chat still on screen would go to that chat.
+    await eventually(() => page.locator("[data-message-role]").count(), (count) => count === 0, { timeoutMs: 10_000, what: "the empty draft to replace the last chat" });
+    await composer.waitFor({ timeout: 15_000 });
+    await send(`[qa:plain] saved again ${label}`);
+    await replyDone("pong");
+    await need(rowLink(await list(), id), "the chat saved again", 10_000);
+    const second = await deleteAndExpire();
+    await closeList();
+    step(
+      `${label}: a chat saved again under an id this page deleted deletes again`,
+      first.status === 404 && first.sent === 1 && draftId(reopened) === id && second.status === 404 && second.sent === 1,
+      `first delete ${first.status} with ${first.sent} DELETE, Back ${reopened}, second delete ${second.status} with ${second.sent} DELETE`,
+    );
+  }
+
   async function failedDelete(id, title) {
     const deletes = requests("DELETE", id);
     await page.route(`**/api/chats/${id}`, (route) => (route.request().method() === "DELETE" ? route.fulfill({ status: 500, contentType: "application/json", body: '{"error":"boom"}' }) : route.fallback()));
@@ -473,6 +520,7 @@ function viewportRun(context, { label, touch, page }) {
     const reloadChat = chatId(page.url());
     await api.name(reloadChat, `Reload ${label}`);
     await deleteThenReload(reloadChat, `Reload ${label}`);
+    await deleteRecreated();
     await failedDelete(reloaded, `Other ${label}`);
     await footer({ confirm: last });
   };
