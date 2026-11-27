@@ -5,7 +5,7 @@ import path from "node:path";
 import test, { after, before } from "node:test";
 import { pathToFileURL } from "node:url";
 import { LOCAL_AUTH_URL } from "@/lib/auth-origins";
-import { createTwoAccounts } from "@/lib/auth-test-helpers";
+import { createTestAccount, createTwoAccounts } from "@/lib/auth-test-helpers";
 import { seedTestConnection } from "@/lib/connection-fixture";
 import { getDb } from "@/lib/db";
 import { saveMemory, writeVectors } from "@/lib/memory/store";
@@ -222,6 +222,11 @@ test("a full reply quota in either account leaves the other account a slot", asy
 
 test("every API handler has a session and cross-account behavior check", async (t) => {
   const specs: Spec[] = [
+    { route: "admin/invites", method: "GET", status: 403 },
+    { route: "admin/invites", method: "POST", status: 403 },
+    { route: "admin/invites/[id]", method: "DELETE", status: 403, params: { id: "invite" } },
+    { route: "admin/users", method: "GET", status: 403 },
+    { route: "admin/users/[id]", method: "DELETE", status: 403, params: { id: "member" } },
     { route: "admin/settings", method: "GET", status: 403 },
     { route: "admin/settings", method: "PUT", status: 403, input: { dreamHour: 22 } },
     { route: "settings", method: "GET", status: 200, body: privateSettings },
@@ -248,9 +253,9 @@ test("every API handler has a session and cross-account behavior check", async (
     { route: "memories/[id]", method: "PATCH", status: 404, params: { id: adminNote }, input: { text: "changed", kind: "fact" } },
     { route: "memories/[id]", method: "DELETE", status: 404, params: { id: adminNote } },
     { route: "connections", method: "GET", status: 200 },
-    { route: "connections", method: "POST", status: 201, input: { kind: "openai-compatible", label: "Member", apiKey: crypto.randomUUID(), baseUrl: provider } },
-    { route: "connections/[id]", method: "PATCH", status: 404, params: { id: adminConnection }, input: { label: "Changed" } },
-    { route: "connections/[id]", method: "DELETE", status: 404, params: { id: adminConnection } },
+    { route: "connections", method: "POST", status: 403, input: { kind: "openai-compatible", label: "Member", apiKey: crypto.randomUUID(), baseUrl: provider } },
+    { route: "connections/[id]", method: "PATCH", status: 403, params: { id: adminConnection }, input: { label: "Changed" } },
+    { route: "connections/[id]", method: "DELETE", status: 403, params: { id: adminConnection } },
     { route: "connections/[id]/models", method: "GET", status: 404, params: { id: adminConnection } },
     { route: "connections/[id]/hidden-models", method: "PUT", status: 404, params: { id: adminConnection }, input: { modelId: "admin-model", hidden: true } },
   ];
@@ -300,8 +305,7 @@ test("every API handler has a session and cross-account behavior check", async (
     if (spec.route === "chats" && spec.method === "GET") assert.deepEqual(body.chats.map((chat: { id: string }) => chat.id), [memberChat]);
     if (spec.route === "chats" && spec.method === "POST") assert.equal(sqlite.prepare("SELECT user_id FROM chats WHERE id = ?").pluck().get(body.id), accounts.member.viewer.id);
     if (spec.route === "connections" && spec.method === "GET") assert.equal(body.some((entry: { id: string }) => entry.id === adminConnection), false);
-    if (spec.route === "connections" && spec.method === "POST") assert.equal(sqlite.prepare("SELECT user_id FROM provider_connections WHERE id = ?").pluck().get(body.id), accounts.member.viewer.id);
-    else assert.equal(providerCalls, callsBefore, label);
+    assert.equal(providerCalls, callsBefore, label);
     assert.deepEqual(snapshot(accounts.admin.viewer.id), afterAdmin, label);
     assert.ok(pendingRun?.ok);
     assert.equal(pendingRun.run.controller.signal.aborted, false, label);
@@ -328,7 +332,120 @@ test("every API handler has a session and cross-account behavior check", async (
   assert.equal((await saved.json()).githubTokenSet, true);
   assert.deepEqual(snapshot(accounts.admin.viewer.id), afterAdmin);
 
-  sqlite.prepare("DELETE FROM user WHERE id = ?").run(member);
+  const removed = await routeRequest({ route: "admin/users/[id]", method: "DELETE", params: { id: member } }, accounts.admin.cookie);
+  assert.equal(removed.status, 200);
+  assert.deepEqual(await removed.json(), { ok: true });
+  const remaining = snapshot(member);
+  for (const rows of [...remaining.owned, remaining.messages, remaining.vectors]) assert.deepEqual(rows, []);
+  assert.equal(remaining.user, undefined);
   assert.equal((await routeRequest({ route: "settings", method: "GET" }, accounts.member.cookie)).status, 401);
   assert.deepEqual(snapshot(accounts.admin.viewer.id), afterAdmin);
+});
+
+test("hosting routes enforce connection ownership and signup across modes", async (t) => {
+  const admin = accounts.admin;
+  const member = await createTestAccount({ role: "member", name: "Member B2", email: "member-b2@orbit.test" });
+  const other = await createTestAccount({ role: "member", name: "Member C", email: "member-c@orbit.test" });
+  const ownedConnection = seedTestConnection(member.viewer.id, { baseUrl: provider, apiKey: crypto.randomUUID(), model: memberModel });
+  const chatId = "host-mode-isolation";
+  const note = saveMemory(member.viewer.id, { text: "Private mode fixture", kind: "fact", source: "user" });
+  sqlite.prepare("INSERT INTO chats (id, user_id, created_at, updated_at) VALUES (?, ?, 1, 1)").run(chatId, member.viewer.id);
+  sqlite.prepare("INSERT INTO messages (id, chat_id, role, content, parts, position, created_at) VALUES (?, ?, 'assistant', 'Private mode fixture', '[]', 0, 1)").run("private-reply", chatId);
+  const setMode = (input: object) => routeRequest({ route: "admin/settings", method: "PUT", input }, admin.cookie);
+  const setup = async () => (await routeRequest({ route: "setup", method: "GET" })).json();
+  const list = (cookie: string) => routeRequest({ route: "connections", method: "GET" }, cookie);
+  const connection = (id: string, method: string, input?: object) => ({ route: "connections/[id]", method, params: { id }, input });
+  const add = (baseUrl: string) => ({
+    route: "connections", method: "POST", input: { kind: "openai-compatible", label: "Fixture", apiKey: crypto.randomUUID(), baseUrl },
+  });
+  const models = (id: string) => ({ route: "connections/[id]/models", method: "GET", params: { id } });
+  const hidden = (id: string) => ({
+    route: "connections/[id]/hidden-models", method: "PUT", params: { id }, input: { modelId: memberModel, hidden: true },
+  });
+  const choose = (connectionId: string) => ({
+    route: "preferences/model", method: "PUT", input: { connectionId, model: memberModel, effort: "medium" },
+  });
+  const turn = (connectionId: string) => ({
+    route: "chat", method: "POST", input: { ...chatBody(chatId), modelChoice: { connectionId, model: memberModel, effort: "medium" } },
+  });
+  const unauthorizedAdmin = [
+    { route: "chats/[id]", method: "GET", params: { id: chatId } },
+    { route: "chats/[id]", method: "PATCH", params: { id: chatId }, input: { title: "No access" } },
+    { route: "chats/[id]", method: "DELETE", params: { id: chatId } },
+    { route: "chats/[id]/messages/[messageId]", method: "PATCH", params: { id: chatId, messageId: "private-reply" }, input: { text: "No access" } },
+    { route: "chats/[id]/stream", method: "GET", params: { id: chatId } },
+    { route: "chats/[id]/stop", method: "POST", params: { id: chatId } },
+    turn(adminConnection),
+    { route: "memories/[id]", method: "DELETE", params: { id: note.id } },
+    { route: "memories/[id]", method: "PATCH", params: { id: note.id }, input: { text: "No access" } },
+  ];
+  const assertAdminIsolation = async () => {
+    const before = snapshot(member.viewer.id);
+    for (const spec of unauthorizedAdmin) {
+      assert.equal((await routeRequest(spec, admin.cookie)).status, 404, `${spec.method} ${spec.route}`);
+    }
+    assert.deepEqual(await (await routeRequest({ route: "search", method: "GET", query: "?q=Private" }, admin.cookie)).json(), { hits: [] });
+    assert.deepEqual(await (await routeRequest({ route: "memories", method: "GET", query: "?q=Private" }, admin.cookie)).json(), { memories: [] });
+    assert.deepEqual(snapshot(member.viewer.id), before);
+  };
+
+  try {
+    const createInvite = { route: "admin/invites", method: "POST" };
+    const listUsers = { route: "admin/users", method: "GET" };
+    const remove = { route: "admin/users/[id]", method: "DELETE", params: { id: admin.viewer.id } };
+    assert.equal((await routeRequest(createInvite, admin.cookie)).status, 409);
+    assert.equal((await routeRequest(remove, admin.cookie)).status, 409);
+    const usersResponse = await routeRequest(listUsers, admin.cookie);
+    assert.equal(usersResponse.status, 200);
+    const { users } = await usersResponse.json();
+    assert.equal(users.length, 3);
+    for (const account of users) assert.deepEqual(Object.keys(account).sort(), ["createdAt", "email", "id", "name", "role"]);
+
+    assert.equal((await setMode({ hostingMode: "team" })).status, 200);
+    assert.equal((await setMode({ hostingMode: "personal" })).status, 409);
+    assert.equal((await setMode({ signupMode: "open" })).status, 400);
+    assert.deepEqual(await setup(), { signupOpen: false });
+    assert.equal((await routeRequest(createInvite, admin.cookie)).status, 201);
+    const shared = await (await list(member.cookie)).json();
+    assert.equal(shared.length, 1);
+    assert.deepEqual(Object.keys(shared[0]).sort(), ["id", "kind", "label"]);
+    assert.equal(shared[0].id, adminConnection);
+    for (const spec of [add(provider), connection(adminConnection, "PATCH", { label: "No access" }), connection(adminConnection, "DELETE")]) {
+      assert.equal((await routeRequest(spec, member.cookie)).status, 403);
+    }
+    t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
+      assert.ok(new Request(input).url.startsWith(provider));
+      return Response.json({ data: [{ id: memberModel }] });
+    });
+    assert.equal((await routeRequest(models(adminConnection), member.cookie)).status, 200);
+    assert.equal((await routeRequest(models(ownedConnection), member.cookie)).status, 404);
+    assert.equal((await routeRequest(choose(ownedConnection), member.cookie)).status, 404);
+    const untouched = snapshot(other.viewer.id);
+    const adminBefore = snapshot(admin.viewer.id);
+    assert.equal((await routeRequest(hidden(adminConnection), member.cookie)).status, 200);
+    assert.equal((await routeRequest(choose(adminConnection), member.cookie)).status, 200);
+    assert.deepEqual(snapshot(other.viewer.id), untouched);
+    assert.deepEqual(snapshot(admin.viewer.id), adminBefore);
+    await assertAdminIsolation();
+
+    assert.equal((await setMode({ hostingMode: "community" })).status, 200);
+    assert.deepEqual(await setup(), { signupOpen: false });
+    assert.equal((await setMode({ signupMode: "open" })).status, 200);
+    assert.deepEqual(await setup(), { signupOpen: true });
+    const own = await (await list(member.cookie)).json();
+    assert.deepEqual(own.map((entry: { id: string }) => entry.id), [ownedConnection]);
+    assert.equal(own[0].keySet, true);
+    assert.equal((await routeRequest(add("http://127.0.0.1/v1"), member.cookie)).status, 400);
+    for (const spec of [connection(adminConnection, "PATCH", { label: "No access" }), connection(adminConnection, "DELETE"), models(adminConnection), hidden(adminConnection), choose(adminConnection), turn(adminConnection)]) {
+      assert.equal((await routeRequest(spec, member.cookie)).status, 404);
+    }
+    for (const spec of [connection(ownedConnection, "DELETE"), models(ownedConnection), hidden(ownedConnection), choose(ownedConnection)]) {
+      assert.equal((await routeRequest(spec, admin.cookie)).status, 404);
+    }
+    await assertAdminIsolation();
+  } finally {
+    sqlite.prepare("DELETE FROM user WHERE id IN (?, ?)").run(member.viewer.id, other.viewer.id);
+  }
+  assert.equal((await setMode({ hostingMode: "personal" })).status, 200);
+  assert.deepEqual(await setup(), { signupOpen: false });
 });
