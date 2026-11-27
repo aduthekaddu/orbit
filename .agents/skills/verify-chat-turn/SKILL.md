@@ -1,6 +1,6 @@
 ---
 name: verify-chat-turn
-description: Model-check how Orbit writes chat messages, with TLC on the TLA+ models in docs/architecture. Use when a change touches POST /api/chat, planChatWrite, persistIncoming, finishChatReply, insertMessage, savedText, unchanged, updateMessageText, messageRepository, assistantHasVisiblePart, settleInterruptedParts, isPath or replaceTextParts, when src/lib/model-sync.test.ts fails, or to check a new order of sends, regenerates, edits and stops across tabs.
+description: Model-check how Orbit writes chat messages, with TLC on the TLA+ models in docs/architecture. Use when a change touches POST /api/chat, beginTurn, planChatWrite, persistIncoming, finishChatReply, insertMessage, savedText, unchanged, updateMessageText, messageRepository, assistantHasVisiblePart, settleInterruptedParts, isPath or replaceTextParts, when src/lib/model-sync.test.ts fails, or to check a new order of sends, regenerates, edits and stops across tabs.
 ---
 
 # Verify the chat turn
@@ -18,7 +18,7 @@ At this repo's code, `ReplyAnswersItsPrompt` holds because no writer changes a p
 
 Each action is one step that no other step can split. Three actions join a server effect with a later one:
 
-- `ChatWrite.Plan` joins `planChatWrite` with the `listMessages` call in `POST` that reads the saved reply a request continues. `planChatWrite` checks P and copies P and R in one transaction. No `await` separates it from `listMessages`, so in one Node process no other request runs between them. Orbit runs one server process on one SQLite file, in one container. With two processes another request could edit R between the two calls. The stream would then continue the edited R, and `finishChatReply` would refuse the reply because R no longer matches its copy. If a change adds an `await` between the calls, or Orbit runs more than one server process, split `Plan`.
+- `ChatWrite.Plan` joins `beginTurn` with the `storedAssistantParts` call in `POST` that reads the saved reply a request continues. `beginTurn` creates the chat row for a first prompt and runs `planChatWrite` in one transaction. `planChatWrite` checks P and copies P and R. No `await` separates `beginTurn` from `storedAssistantParts`, so in one Node process no other request runs between them. Orbit runs one server process on one SQLite file, in one container. With two processes another request could edit R between the two calls. The stream would then continue the edited R, and `finishChatReply` would refuse the reply because R no longer matches its copy. If a change adds an `await` between the calls, or Orbit runs more than one server process, split `Plan`.
 - `ChatWrite.Load` joins the server's read of the rows with the browser showing them. The tab cannot send or edit until it shows them, and no other action reads its copy. A split version found nothing new in any config.
 - `ChatTurn` joins each write with the status the browser shows, though provider setup, `stopped.apply` and tool cleanup are awaited around the write.
 
