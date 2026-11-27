@@ -58,6 +58,22 @@ export function claimInvite(db: InviteStore, tokenHash: string, now: number) {
   )).run().changes === 1;
 }
 
+export function installInviteSpend(db: OrbitDb, claimedInviteHash: () => string | null) {
+  db.$client.function("orbit_claimed_invite_hash", claimedInviteHash);
+  // A completed user INSERT and its invite spend must survive a crash together.
+  db.$client.exec(`
+    CREATE TEMP TRIGGER IF NOT EXISTS spend_claimed_invite
+    AFTER INSERT ON main.user
+    WHEN NEW.role = 'member' AND orbit_claimed_invite_hash() IS NOT NULL
+    BEGIN
+      UPDATE invites
+      SET used_at = max(claimed_at, cast(unixepoch('subsecond') * 1000 as integer)), used_by = NEW.id
+      WHERE token_hash = orbit_claimed_invite_hash() AND used_at IS NULL AND claimed_at IS NOT NULL;
+      SELECT RAISE(ABORT, 'Invite not valid') WHERE changes() <> 1;
+    END;
+  `);
+}
+
 export function spendInvite(token: string, userId: string) {
   const tokenHash = inviteTokenHash(token);
   if (!tokenHash) return;

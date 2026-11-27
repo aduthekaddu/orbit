@@ -9,7 +9,7 @@ import { accountCount, getDb } from "./db";
 import { account, session, user, verification } from "./db/schema";
 import { readEnv } from "./env";
 import { getInstance } from "./instance-settings";
-import { claimInvite, pendingInviteHash, spendInvite } from "./invites";
+import { claimInvite, installInviteSpend, pendingInviteHash, spendInvite } from "./invites";
 import { dataDirectory } from "./paths";
 import { parseViewer, policyFor } from "./policy";
 import { readOrCreateSecretFile } from "./secrets";
@@ -40,9 +40,13 @@ export function orbitAuthOptions() {
   } as const;
 }
 
-const globalAuth = globalThis as typeof globalThis & { __orbitActiveSignups?: Set<Promise<void>> };
+type AuthRequest = { finished: Promise<void>; claimedInviteHash: string | null };
+const globalAuth = globalThis as typeof globalThis & {
+  __orbitActiveSignups?: Set<Promise<void>>;
+  __orbitAuthRequest?: AsyncLocalStorage<AuthRequest>;
+};
 const activeSignups = globalAuth.__orbitActiveSignups ??= new Set();
-const authRequest = new AsyncLocalStorage<Promise<void>>();
+const authRequest = globalAuth.__orbitAuthRequest ??= new AsyncLocalStorage<AuthRequest>();
 
 export async function afterActiveSignups<T>(mutate: () => T): Promise<T> {
   while (activeSignups.size > 0) await Promise.allSettled(activeSignups);
@@ -51,6 +55,7 @@ export async function afterActiveSignups<T>(mutate: () => T): Promise<T> {
 
 function createAuth() {
   const options = orbitAuthOptions();
+  installInviteSpend(getDb(), () => authRequest.getStore()?.claimedInviteHash ?? null);
   const auth = betterAuth({
     ...options,
     emailAndPassword: {
@@ -62,7 +67,8 @@ function createAuth() {
         create: {
           before: async (user, ctx) => {
             const token = ctx?.getHeader?.("x-orbit-invite")?.trim() || null;
-            const approved = getDb().transaction((tx) => {
+            const currentRequest = authRequest.getStore();
+            const { approved, claimedInviteHash } = getDb().transaction((tx) => {
               const accounts = accountCount(tx);
               const now = Date.now();
               const tokenHash = accounts > 0 && token ? pendingInviteHash(tx, token, now) : null;
@@ -74,11 +80,16 @@ function createAuth() {
               if (decision.invite === "consume" && (!tokenHash || !claimInvite(tx, tokenHash, now))) {
                 throw new APIError("FORBIDDEN", { message: "Invite not valid" });
               }
-              return { data: { ...user, role: decision.role } };
+              return {
+                approved: { data: { ...user, role: decision.role } },
+                claimedInviteHash: decision.invite === "consume" ? tokenHash : null,
+              };
             }, { behavior: "immediate" });
-            // Better Auth awaits between approval, user INSERT, and invite spend.
-            const finished = authRequest.getStore();
-            if (finished) activeSignups.add(finished);
+            // Better Auth awaits between approval and the user INSERT.
+            if (currentRequest) {
+              currentRequest.claimedInviteHash = claimedInviteHash;
+              activeSignups.add(currentRequest.finished);
+            }
             return approved;
           },
           after: async (created, ctx) => {
@@ -88,8 +99,10 @@ function createAuth() {
               trySeedAdminGithub(viewer);
               return;
             }
-            const token = ctx?.getHeader?.("x-orbit-invite")?.trim();
-            if (token) spendInvite(token, viewer.id);
+            if (!authRequest.getStore()) {
+              const token = ctx?.getHeader?.("x-orbit-invite")?.trim();
+              if (token) spendInvite(token, viewer.id);
+            }
           },
         },
       },
@@ -101,7 +114,7 @@ function createAuth() {
   });
   function handler(request: Request) {
     const { promise, resolve } = Promise.withResolvers<void>();
-    return authRequest.run(promise, async () => {
+    return authRequest.run({ finished: promise, claimedInviteHash: null }, async () => {
       try {
         return await auth.handler(request);
       } finally {
