@@ -21,11 +21,14 @@ async function select(page, field, value) {
 async function chooseDefault(page) {
   const form = page.getByRole("form", { name: "Default model", exact: true });
   await form.getByRole("combobox", { name: "Model", exact: true }).click();
-  await page.getByRole("option", { name: "mock-genui", exact: true }).click();
+  await page.getByRole("option", { name: "mock-reasoner", exact: true }).click();
   await form.getByRole("radio", { name: "Low", exact: true }).click();
   const saved = apiResponse(page, "/api/preferences/model", "PUT");
   await form.getByRole("button", { name: "Save", exact: true }).click();
-  assert.equal((await saved).status(), 200, "save each member's own default model");
+  const response = await saved;
+  assert.equal(response.status(), 200, "save each member's own default model");
+  const { model, effort } = await response.json();
+  assert.deepEqual({ model, effort }, { model: "mock-reasoner", effort: "low" });
 }
 
 async function sendChat(page, prompt, reply = "pong") {
