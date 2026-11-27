@@ -441,8 +441,8 @@ export function chatExists(id: string): boolean {
 }
 
 /** Renames the user's chat and leaves updated_at alone, so the sidebar order stays. Null when it is not theirs. */
-export function renameChat(id: string, userId: string, title: string, redact?: Redactor): { id: string; title: string } | null {
-  const clean = (redact ? redact.text(title) : title).replace(/\s+/g, " ").trim();
+export function renameChat(id: string, userId: string, title: string, redact: Redactor): { id: string; title: string } | null {
+  const clean = redact.text(redact.text(title).replace(/\s+/g, " ").trim());
   const result = getDb().update(chats).set({ title: clean }).where(and(eq(chats.id, id), eq(chats.userId, userId))).run();
   return result.changes === 0 ? null : { id, title: clean };
 }

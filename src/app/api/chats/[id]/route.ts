@@ -1,5 +1,5 @@
 import { deleteChat, getChatForUser, messageRepository, renameChat } from "@/lib/messages";
-import { discardReplyRun } from "@/lib/reply-runs";
+import { deleteAfterReply } from "@/lib/reply-runs";
 import { LIMITS, r, readJsonBody } from "@/lib/route-schema";
 import { getSession, unauthorized } from "@/lib/session";
 import { requestRedactor } from "@/lib/settings";
@@ -54,8 +54,6 @@ export async function DELETE(_request: Request, context: Context) {
   const { id } = params.data;
   // Ownership first, so nobody can stop another user's reply.
   if (!getChatForUser(id, session.user.id)) return notFound();
-  // The reply's onEnd saves nothing for a discarded run, and the run ends before its rows go.
-  await discardReplyRun(id);
-  if (!deleteChat(id, session.user.id)) return notFound();
+  if (!(await deleteAfterReply(id, () => deleteChat(id, session.user.id)))) return notFound();
   return new Response(null, { status: 204 });
 }

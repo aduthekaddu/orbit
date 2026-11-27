@@ -66,7 +66,10 @@ function formatTime(value: string) {
 // Call only in the browser, so the times are in the reader's time zone.
 function dreamLine(status: Exclude<DreamStatus, { state: "never" }>) {
   if (status.state === "running") return `Dreaming since ${formatTime(status.startedAt)}`;
-  if (status.state === "failed") return `Dream failed ${formatDayTime(status.finishedAt)}. ${status.error}`;
+  if (status.state === "failed") {
+    const line = `Dream failed ${formatDayTime(status.finishedAt)}`;
+    return status.error === "Dream failed" ? line : `${line}. ${status.error}`;
+  }
   const chats = `${status.chats} ${status.chats === 1 ? "chat" : "chats"}`;
   return `Last dream ${formatDayTime(status.finishedAt)}. ${chats}, ${status.added} added, ${status.merged} merged`;
 }

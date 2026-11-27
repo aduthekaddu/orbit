@@ -24,7 +24,7 @@ export function Notices({ children }: { children: React.ReactNode }) {
  * Counts down UNDO_MS for each new `subject`, then calls `onExpire`. The countdown pauses while the toast reports
  * hover or focus, and keeps its remaining time when the toast moves between the drawer and the page.
  */
-export function useUndoCountdown(subject: object | null, onExpire: () => void) {
+export function useUndoCountdown<T extends object>(subject: T | null, onExpire: (subject: T) => void) {
   const [paused, setPaused] = useState(false);
   const remaining = useRef(UNDO_MS);
   const expire = useRef(onExpire);
@@ -37,7 +37,7 @@ export function useUndoCountdown(subject: object | null, onExpire: () => void) {
   useEffect(() => {
     if (!subject || paused) return;
     const started = Date.now();
-    const timer = window.setTimeout(() => expire.current(), remaining.current);
+    const timer = window.setTimeout(() => expire.current(subject), remaining.current);
     return () => {
       window.clearTimeout(timer);
       remaining.current = Math.max(0, remaining.current - (Date.now() - started));

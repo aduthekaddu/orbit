@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import Database from "better-sqlite3";
 import { focusedHead } from "./chat-tree";
 import { getDb } from "./db";
-import { getChatForUser, messageRepository, plainText } from "./messages";
+import { getChatForUser, messageRepository } from "./messages";
 
 /** A run of snippet text, flagged when it is a word the search matched. */
 export type SnippetPart = { text: string; match: boolean };
@@ -20,38 +21,103 @@ type SearchRow = {
   messageId: string;
   role: string;
   snippet: string;
+  marked: number;
 };
 
-// FTS5 wraps each match in these private-use characters. Markdown cleanup leaves them alone, and the scan below drops them.
-const MATCH_START = "\uE000";
-const MATCH_END = "\uE001";
+type Markers = { start: string; end: string };
+type MarkedText = { text: string; matches: Uint8Array };
+
 const ELLIPSIS = "…";
 
-/**
- * Plain text parts from an FTS5 snippet with match markers. A leading ellipsis is set aside so a heading or list
- * marker right after it is still dropped. Literal brackets in the message stay plain text.
- */
-export function snippetParts(snippet: string): SnippetPart[] {
-  const cut = snippet.startsWith(ELLIPSIS);
-  const text = (cut ? ELLIPSIS : "") + plainText(cut ? snippet.slice(ELLIPSIS.length) : snippet);
-  const parts: SnippetPart[] = [];
-  let match = false;
-  let start = 0;
-  const push = (end: number) => {
-    if (end <= start) return;
-    const piece = text.slice(start, end);
-    const last = parts.at(-1);
-    if (last?.match === match) last.text += piece;
-    else parts.push({ text: piece, match });
-  };
-  for (let index = 0; index < text.length; index++) {
-    const char = text[index];
-    if (char !== MATCH_START && char !== MATCH_END) continue;
-    push(index);
-    start = index + 1;
-    match = char === MATCH_START;
+function unmark(snippet: string, markers: Markers | undefined): MarkedText {
+  const matches = new Uint8Array(snippet.length);
+  if (!markers) return { text: snippet, matches };
+
+  const pieces: string[] = [];
+  let offset = 0;
+  let length = 0;
+  for (;;) {
+    const open = snippet.indexOf(markers.start, offset);
+    if (open < 0) break;
+    const start = open + markers.start.length;
+    const end = snippet.indexOf(markers.end, start);
+    if (end < 0) break;
+    pieces.push(snippet.slice(offset, open), snippet.slice(start, end));
+    length += open - offset;
+    matches.fill(1, length, length + end - start);
+    length += end - start;
+    offset = end + markers.end.length;
   }
-  push(text.length);
+  pieces.push(snippet.slice(offset));
+  return { text: pieces.join(""), matches };
+}
+
+// Apply a Markdown removal to unmarked text and carry over the match flags for the characters that remain.
+// Group 1, when present, is the displayed text. Padding separates a fenced block from its surrounding text.
+function project(input: MarkedText, pattern: RegExp, padding = "", foldWhitespace = false): MarkedText {
+  const pieces: string[] = [];
+  const matches = new Uint8Array(input.text.length);
+  let offset = 0;
+  let length = 0;
+  function keep(start: number, end: number) {
+    if (start === end) return;
+    pieces.push(input.text.slice(start, end));
+    matches.set(input.matches.subarray(start, end), length);
+    length += end - start;
+  }
+  for (const match of input.text.matchAll(pattern)) {
+    keep(offset, match.index);
+    const range = match.indices?.[1];
+    if (padding) {
+      pieces.push(padding);
+      if (foldWhitespace) matches[length] = input.matches[match.index];
+      length++;
+    }
+    if (range) keep(...range);
+    if (padding && range) {
+      pieces.push(padding);
+      length++;
+    }
+    offset = match.index + match[0].length;
+  }
+  if (offset === 0) return input;
+  keep(offset, input.text.length);
+  return { text: pieces.join(""), matches };
+}
+
+const EMPHASIS = [
+  /(?<![\p{L}\p{N}*])\*\*(?=\S)([^*\n]+)(?<=\S)\*\*(?![\p{L}\p{N}*])/dgu,
+  /(?<![\p{L}\p{N}_])__(?=\S)([^_\n]+)(?<=\S)__(?![\p{L}\p{N}_])/dgu,
+  /~~(?=\S)([^~\n]+)(?<=\S)~~/dg,
+  /(?<![\p{L}\p{N}*])\*(?=\S)([^*\n]+)(?<=\S)\*(?![\p{L}\p{N}*])/dgu,
+  /(?<![\p{L}\p{N}_])_(?=\S)([^_\n]+)(?<=\S)_(?![\p{L}\p{N}_])/dgu,
+  /`([^`\n]+)`/dg,
+];
+
+export function snippetParts(snippet: string, markers?: Markers): SnippetPart[] {
+  const cut = snippet.startsWith(ELLIPSIS);
+  let view = unmark(cut ? snippet.slice(ELLIPSIS.length) : snippet, markers);
+  view = project(view, /```[^\n]*\n?([\s\S]*?)(?:```|$)/dg, " ");
+  view = project(view, /!?\[([^\[\]]*)\]\([^()\s]*\)/dg);
+  view = project(view, /^\s{0,3}(?:#{1,6}|>|[-*+]|\d+[.)])\s+/gm);
+  for (const pattern of EMPHASIS) view = project(view, pattern);
+  view = project(view, /\s+/g, " ", true);
+  const parts: SnippetPart[] = [];
+  const from = view.text.length - view.text.trimStart().length;
+  const to = view.text.trimEnd().length;
+  let start = from;
+  for (let end = from + 1; end <= to; end++) {
+    if (end !== to && view.matches[end] === view.matches[start]) continue;
+    const text = view.text.slice(start, end);
+    const match = view.matches[start] === 1;
+    parts.push({ text, match });
+    start = end;
+  }
+  if (cut) {
+    const first = parts[0];
+    if (first && !first.match) first.text = ELLIPSIS + first.text;
+    else parts.unshift({ text: ELLIPSIS, match: false });
+  }
   return parts;
 }
 
@@ -97,6 +163,10 @@ export function toOrMatchQuery(input: string): string | null {
 export function searchMessages(userId: string, q: string): SearchHit[] {
   const match = toMatchQuery(q);
   if (!match) return [];
+  // These delimiters are separate from literal private-use glyphs in messages. If an old row happens to
+  // contain this request's prefix, let SQLite return the same snippet without highlight delimiters.
+  const prefix = `\uE000${randomUUID()}:`;
+  const markers = { start: `${prefix}s\uE001`, end: `${prefix}e\uE001` };
   try {
     const rows = getDb().$client
       .prepare(
@@ -104,20 +174,22 @@ export function searchMessages(userId: string, q: string): SearchHit[] {
                 chats.title AS chatTitle,
                 messages.id AS messageId,
                 messages.role AS role,
-                snippet(messages_fts, 0, char(57344), char(57345), '…', 12) AS snippet
+                instr(messages.content, @prefix) = 0 AS marked,
+                CASE WHEN instr(messages.content, @prefix) = 0
+                  THEN snippet(messages_fts, 0, @start, @end, '…', 12)
+                  ELSE snippet(messages_fts, 0, '', '', '…', 12)
+                END AS snippet
          FROM messages_fts
          JOIN messages ON messages.rowid = messages_fts.rowid
          JOIN chats ON chats.id = messages.chat_id
-         WHERE messages_fts MATCH ?
-           AND chats.user_id = ?
+         WHERE messages_fts MATCH @match
+           AND chats.user_id = @userId
            AND messages.role IN ('user', 'assistant')
          ORDER BY bm25(messages_fts)
          LIMIT 20`,
       )
-      .all(match, userId) as SearchRow[];
-    return rows.flatMap((row) =>
-      row.role === "user" || row.role === "assistant" ? [{ ...row, role: row.role, snippet: snippetParts(row.snippet) }] : [],
-    );
+      .all({ match, userId, prefix, ...markers }) as SearchRow[];
+    return rows.map(({ marked, snippet, ...row }) => ({ ...row, snippet: snippetParts(snippet, marked ? markers : undefined) }));
   } catch (error) {
     console.error("[search] query failed", {
       code: error instanceof Database.SqliteError ? error.code : "UNKNOWN",

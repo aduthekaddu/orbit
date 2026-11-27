@@ -63,6 +63,13 @@ test("a React title is the name of its default export", () => {
   assert.equal(title("react", "const App = () => null;\nexport default App"), "App");
 });
 
+test("React title extraction handles generator declarations and standalone names", () => {
+  assert.equal(title("react", "export default function* Carousel() { yield <div />; }"), "Carousel");
+  assert.equal(title("react", "export default async function* Pages() { yield null; }"), "Pages");
+  assert.equal(title("react", "const Board = () => null;\nexport default Board  ;  \n"), "Board");
+  assert.equal(title("react", "export default Board.render();"), "React component");
+});
+
 test("a React component without a named default export falls back", () => {
   assert.equal(title("react", "export default () => <button>Count</button>;"), "React component");
   assert.equal(title("react", "export default function () { return null; }"), "React component");

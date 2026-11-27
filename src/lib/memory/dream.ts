@@ -143,7 +143,7 @@ function changedChatIds(date: string, end: number): string[] {
   const rows = getDb().$client
     .prepare("SELECT DISTINCT chat_id AS id FROM messages WHERE created_at > ? AND created_at <= ?")
     .all(start, end) as { id: string }[];
-  const retry = previousRun(date)?.retryChatIds ?? [];
+  const retry = previousRun(date)?.retryChatIds.filter(chatExists) ?? [];
   return [...new Set([...rows.map((row) => row.id), ...retry])].sort();
 }
 

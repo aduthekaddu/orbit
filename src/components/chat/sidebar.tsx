@@ -42,7 +42,7 @@ export function Sidebar({
   onRename: (chat: ChatSummary, title: string) => void;
   onDelete: (chat: ChatSummary) => void;
   /** Runs before Sign out ends the session. */
-  beforeSignOut: () => Promise<void>;
+  beforeSignOut: () => Promise<boolean>;
   onCollapse?: () => void;
   /** Called when a link is followed, including the current page's, which changes no route. */
   onNavigate?: () => void;
@@ -152,7 +152,7 @@ export function Sidebar({
   );
 }
 
-function SignOut({ beforeSignOut }: { beforeSignOut: () => Promise<void> }) {
+function SignOut({ beforeSignOut }: { beforeSignOut: () => Promise<boolean> }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [tip, setTip] = useState(false);
@@ -166,7 +166,10 @@ function SignOut({ beforeSignOut }: { beforeSignOut: () => Promise<void> }) {
   async function signOut() {
     if (busy) return;
     dispatch({ type: "submit" });
-    await beforeSignOut();
+    if (!(await beforeSignOut())) {
+      dispatch({ type: "fail", error: "Could not delete chat" });
+      return;
+    }
     // A network failure rejects, and an HTTP error resolves with `error`.
     const result = await authClient.signOut().catch(() => null);
     if (!result || result.error) {

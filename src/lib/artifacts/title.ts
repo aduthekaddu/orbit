@@ -11,11 +11,6 @@ const MAX_SCAN = 100_000;
 
 const ENTITIES: Record<string, string> = { lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", "#39": "'", "#x27": "'" };
 
-const REACT_EXPORTS = [
-  /\bexport\s+default\s+(?:async\s+)?function\b\s*\*?\s*([A-Za-z_$][\w$]*)/,
-  /\bexport\s+default\s+class\s+([A-Za-z_$][\w$]*)/,
-  /\bexport\s+default\s+([A-Za-z_$][\w$]*)\s*;?\s*$/m,
-];
 const NOT_A_NAME = new Set(["async", "class", "function", "new", "null", "true", "false", "this", "undefined", "void", "typeof", "await"]);
 
 function isBoundary(char: string | undefined) {
@@ -78,12 +73,49 @@ function markupTitle(kind: "html" | "svg", source: string): string {
   return title || cleanTitle(elementText(source, lower, "h1")) || cleanTitle(elementText(source, lower, "h2"));
 }
 
-function reactTitle(source: string): string {
-  for (const pattern of REACT_EXPORTS) {
-    const name = pattern.exec(source)?.[1];
-    if (name && !NOT_A_NAME.has(name)) return capTitle(name);
+function skipSpace(source: string, start: number, singleLine = false) {
+  let end = start;
+  while (end < source.length && /\s/.test(source[end])) {
+    if (singleLine && /[\r\n\u2028\u2029]/.test(source[end])) break;
+    end++;
   }
-  return "";
+  return end;
+}
+
+function reactTitle(source: string): string {
+  const identifier = /[A-Za-z_$][\w$]*/y;
+  const readName = (at: number) => {
+    identifier.lastIndex = at;
+    return identifier.exec(source)?.[0] ?? "";
+  };
+  let className = "";
+  let bareName = "";
+  // Each prefix and its whitespace are consumed once. Look ahead only through this declaration.
+  for (const prefix of source.matchAll(/\bexport\s+default\s+/g)) {
+    const start = prefix.index + prefix[0].length;
+    let word = readName(start);
+    let end = start + word.length;
+    if (word === "async") {
+      const next = skipSpace(source, end);
+      if (next === end || readName(next) !== "function") continue;
+      word = "function";
+      end = next + word.length;
+    }
+    if (word === "function" || word === "class") {
+      let nameAt = skipSpace(source, end);
+      if (word === "function" && source[nameAt] === "*") nameAt = skipSpace(source, nameAt + 1);
+      if (word === "class" && nameAt === end) continue;
+      const name = readName(nameAt);
+      if (!name || NOT_A_NAME.has(name)) continue;
+      if (word === "function") return capTitle(name);
+      className ||= name;
+    } else if (!bareName && word && !NOT_A_NAME.has(word)) {
+      end = skipSpace(source, end, true);
+      if (source[end] === ";") end = skipSpace(source, end + 1, true);
+      if (end === source.length || /[\r\n\u2028\u2029]/.test(source[end])) bareName = word;
+    }
+  }
+  return capTitle(className || bareName);
 }
 
 /** A short name for an artifact, read from its own code. Render it as text only. */

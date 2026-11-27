@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { NotePencilIcon, SidebarSimpleIcon } from "@phosphor-icons/react";
@@ -14,7 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { chatLabel, focusChatRow, type ChatSummary } from "@/components/chat/chat-row-menu";
 import { Sidebar } from "@/components/chat/sidebar";
 import { DESKTOP_QUERY } from "@/components/use-desktop";
-import { chatDeleteReducer, hiddenChatIds, initialChatDelete, undoReopensChat } from "./chat-delete";
+import { chatDeleteReducer, hiddenChatIds, initialChatDelete, undoReopensChat, type ChatDeleteEvent } from "./chat-delete";
 import { CommandPalette } from "./command-palette";
 import { HeaderSlotContext } from "./header-slot";
 import { ShortcutKbd, useShortcuts } from "./shortcuts";
@@ -97,19 +97,18 @@ export function AppShell({
   // Keys the "Could not rename" alert, so a second failure restarts its time. 0 shows none.
   const [renameFailure, setRenameFailure] = useState(0);
 
-  const [deletes, dispatchDelete] = useReducer(chatDeleteReducer, initialChatDelete);
+  const [deletes, setDeletes] = useState(initialChatDelete);
+  // Browser departure can happen in the same event as a delete or Undo, before React renders again.
+  const liveDeletes = useRef(initialChatDelete);
+  const dispatchDelete = useCallback((event: ChatDeleteEvent) => {
+    const next = chatDeleteReducer(liveDeletes.current, event);
+    liveDeletes.current = next;
+    setDeletes(next);
+  }, []);
   // Deleted on the server, but still in `chats` until the refresh lands.
   const [deletedIds, setDeletedIds] = useState<ReadonlySet<string>>(() => new Set());
-  // Each DELETE in flight, by chat id.
-  const sentDeletes = useRef(new Map<string, Promise<void>>());
+  const sentDeletes = useRef(new Map<string, Promise<boolean>>());
   const refreshAfterDeletes = useRef(false);
-  const pendingDelete = useRef(deletes.pending);
-  const committingDeletes = useRef(deletes.committing);
-  useEffect(() => {
-    pendingDelete.current = deletes.pending;
-    committingDeletes.current = deletes.committing;
-  });
-  const setUndoPaused = useUndoCountdown(deletes.pending, () => dispatchDelete({ type: "expire" }));
 
   const hidden = hiddenChatIds(deletes);
   const removedIds: ReadonlySet<string> = new Set([...hidden, ...deletedIds]);
@@ -233,40 +232,37 @@ export function AppShell({
     });
   }
 
-  const commitDelete = useCallback((id: string) => {
-    // StrictMode, pagehide and the committing effect can all reach one id while its DELETE is in flight. The id
-    // leaves once the server answers, so a chat saved again under it can be deleted again.
-    if (sentDeletes.current.has(id)) return;
-    // Once this page hears back, the next one has nothing to send again for this chat.
-    const answered = () => writeLeavingDeletes(readLeavingDeletes().filter((leaving) => leaving !== id));
-    function committed() {
-      sentDeletes.current.delete(id);
-      answered();
-      forgetReplyCheckpoint(id);
-      setDeletedIds((ids) => new Set(ids).add(id));
-      refreshAfterDeletes.current = true;
-      dispatchDelete({ type: "committed", id });
-    }
-    // keepalive lets the DELETE outlive a reload or a closed tab.
-    const request = requestJson(chatApi(id), { method: "DELETE", keepalive: true }, {
-      parse: deletedChat,
-      onOk: committed,
-      onFailed: (failure) => {
-        if (failure.kind === "http" && failure.status === 404) {
-          committed();
-          return;
-        }
-        answered();
-        sentDeletes.current.delete(id);
-        dispatchDelete({ type: "failed", id });
-      },
-    });
-    sentDeletes.current.set(id, request);
-  }, []);
+  const commitDeletes = useCallback(() => liveDeletes.current.committing.map(({ id }) => {
+    const existing = sentDeletes.current.get(id);
+    if (existing) return existing;
 
-  useEffect(() => {
-    for (const chat of deletes.committing) commitDelete(chat.id);
-  }, [deletes.committing, commitDelete]);
+    const { promise, resolve } = Promise.withResolvers<boolean>();
+    sentDeletes.current.set(id, promise);
+    function settle(removed: boolean) {
+      writeLeavingDeletes(readLeavingDeletes().filter((leaving) => leaving !== id));
+      if (removed) {
+        forgetReplyCheckpoint(id);
+        setDeletedIds((ids) => new Set(ids).add(id));
+        refreshAfterDeletes.current = true;
+      }
+      dispatchDelete({ type: removed ? "committed" : "failed", id });
+      sentDeletes.current.delete(id);
+      resolve(removed);
+    }
+    // Keepalive lets the DELETE outlive a reload or closed tab.
+    void requestJson(chatApi(id), { method: "DELETE", keepalive: true }, {
+      parse: deletedChat,
+      onOk: () => settle(true),
+      onFailed: (failure) => settle(failure.kind === "http" && failure.status === 404),
+    });
+    return promise;
+  }), [dispatchDelete]);
+
+  const setUndoPaused = useUndoCountdown(deletes.pending, (subject) => {
+    if (liveDeletes.current.pending !== subject) return;
+    dispatchDelete({ type: "expire" });
+    commitDeletes();
+  });
 
   useEffect(() => {
     if (deletes.committing.length > 0 || !refreshAfterDeletes.current) return;
@@ -278,14 +274,11 @@ export function AppShell({
   // leaves from inside the event.
   useEffect(() => {
     function commitPending() {
-      const pending = pendingDelete.current;
-      const leaving = committingDeletes.current.map((chat) => chat.id);
-      if (pending) {
-        commitDelete(pending.chat.id);
-        leaving.push(pending.chat.id);
-        dispatchDelete({ type: "expire" });
-      }
-      if (leaving.length > 0) writeLeavingDeletes([...new Set([...readLeavingDeletes(), ...leaving])]);
+      dispatchDelete({ type: "expire" });
+      const leaving = liveDeletes.current.committing.map((chat) => chat.id);
+      if (leaving.length === 0) return;
+      writeLeavingDeletes([...new Set([...readLeavingDeletes(), ...leaving])]);
+      commitDeletes();
     }
     function onVisibilityChange() {
       if (document.visibilityState === "hidden") commitPending();
@@ -296,17 +289,13 @@ export function AppShell({
       window.removeEventListener("pagehide", commitPending);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [commitDelete]);
+  }, [commitDeletes, dispatchDelete]);
 
   // Sign out ends the session and leaves without a pagehide, and a DELETE that reaches the server after it answers
   // 401. A delete still waiting for Undo is sent now, and Sign out waits until every DELETE in flight has an answer.
   async function settleDeletes() {
-    const pending = pendingDelete.current;
-    if (pending) {
-      commitDelete(pending.chat.id);
-      dispatchDelete({ type: "expire" });
-    }
-    await Promise.all(sentDeletes.current.values());
+    dispatchDelete({ type: "expire" });
+    return (await Promise.all(commitDeletes())).every(Boolean);
   }
 
   // The list this page rendered with can still hold chats the last page deleted as it went away.
@@ -318,13 +307,15 @@ export function AppShell({
     // A chat the list no longer holds is already gone.
     writeLeavingDeletes(listed.map((chat) => chat.id));
     dispatchDelete({ type: "commit", chats: listed });
-  }, []);
+    commitDeletes();
+  }, [commitDeletes, dispatchDelete]);
 
   // A server reply keeps running when the chat closes, so Undo can reopen it mid-stream.
   function deleteChat(chat: ChatSummary) {
-    if (removedIds.has(chat.id)) return;
+    if (removedIds.has(chat.id) || hiddenChatIds(liveDeletes.current).has(chat.id)) return;
     const wasOpen = pathname === `/c/${chat.id}`;
     dispatchDelete({ type: "delete", chat, wasOpen });
+    commitDeletes();
     if (wasOpen) {
       setDrawerOpen(false);
       router.push("/new");
@@ -332,7 +323,7 @@ export function AppShell({
   }
 
   function undoDelete() {
-    const pending = deletes.pending;
+    const pending = liveDeletes.current.pending;
     if (!pending) return;
     dispatchDelete({ type: "undo" });
     if (undoReopensChat(pending, window.location.href)) router.push(`/c/${pending.chat.id}`);
@@ -343,7 +334,9 @@ export function AppShell({
   function skipToContent(event: React.MouseEvent<HTMLAnchorElement>) {
     event.preventDefault();
     const content = document.getElementById("content");
-    const composer = content?.querySelector<HTMLTextAreaElement>("textarea:not([disabled])");
+    const composer = pathname.startsWith("/c/")
+      ? content?.querySelector<HTMLTextAreaElement>("textarea[data-chat-composer]:not([disabled])")
+      : null;
     (composer ?? content)?.focus();
   }
 

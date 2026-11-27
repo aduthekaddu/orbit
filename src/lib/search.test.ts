@@ -8,6 +8,7 @@ import * as messages from "./messages";
 import * as search from "./search";
 
 const redact = new Redactor(null);
+const fixtureMarkers = { start: "\uE000", end: "\uE001" };
 
 let db: OrbitDb;
 
@@ -307,11 +308,27 @@ test("a snippet drops markdown markers, also where a heading follows the leading
   assert.match(joined(hit?.snippet), / Kettlewing notes bold code$/);
 
   // FTS5 starts a snippet at a token, so this is the shape plainText sees when a cut lands on a marker.
-  assert.deepEqual(search.snippetParts("…## \uE000Deploy\uE001 steps\n- **run** [it](https://example.com/\uE000deploy\uE001)"), [
+  assert.deepEqual(search.snippetParts("…## \uE000Deploy\uE001 steps\n- **run** [it](https://example.com/\uE000deploy\uE001)", fixtureMarkers), [
     { text: "…", match: false },
     { text: "Deploy", match: true },
     { text: " steps run it", match: false },
   ]);
+});
+
+test("a snippet preserves literal identifiers and terminal glyphs", () => {
+  const text = "Status \uE000 row_id and 2 * 3 \uE001 are columns.";
+  assert.equal(reply("c1", [prompt("m-literal")], part("m-literal", "assistant", text)), true);
+  const hit = search.searchMessages("u1", "columns").find((row) => row.messageId === "m-literal");
+  assert.equal(joined(hit?.snippet), text);
+  assert.deepEqual(matched(hit?.snippet), ["columns"]);
+});
+
+test("a phrase spanning a markdown link highlights only the displayed link label", () => {
+  const text = "See [orbitguide](https://example.com/notes) and read the next line.";
+  assert.equal(reply("c1", [prompt("m-link")], part("m-link", "assistant", text)), true);
+  const hit = search.searchMessages("u1", "orbitguide](https").find((row) => row.messageId === "m-link");
+  assert.equal(joined(hit?.snippet), "See orbitguide and read the next line.");
+  assert.deepEqual(matched(hit?.snippet), ["orbitguide"]);
 });
 
 test("literal brackets in a message stay plain text in its snippet", () => {
@@ -336,6 +353,6 @@ test("a snippet of one 50,000-letter run is built within a second and carries no
   assert.doesNotMatch(joined(hit?.snippet), /[\uE000\uE001]/);
   const parts = "\uE000a\uE001 ".repeat(25_000);
   const scanned = performance.now();
-  assert.equal(search.snippetParts(parts).filter((part) => part.match).length, 25_000);
+  assert.equal(search.snippetParts(parts, fixtureMarkers).filter((part) => part.match).length, 25_000);
   assert.ok(performance.now() - scanned < 1_000, "scanning 25,000 matches took over a second");
 });

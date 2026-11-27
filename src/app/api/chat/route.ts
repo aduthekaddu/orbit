@@ -148,6 +148,8 @@ export async function POST(request: Request) {
   };
 
   try {
+    // Deletion can discard a reservation before this request resumes to write its prompt.
+    if (signal.reason === "discarded") return Response.json({ error: "Not found" }, { status: 404 });
     // A stopping reply can delay this send. Read the choice, credentials, and settings after claiming the slot.
     // A chat deleted while the send waited stays deleted.
     const latestChat = getChatForUser(chatId, userId);

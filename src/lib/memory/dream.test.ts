@@ -9,7 +9,7 @@ import { seedTestConnection } from "../connection-fixture";
 import { saveModelDefaults } from "../connections";
 import { getDb } from "../db";
 import * as schema from "../db/schema";
-import { createChat, finishChatReply, listMessages, persistIncoming, planChatWrite } from "../messages";
+import { createChat, deleteChat, finishChatReply, listMessages, persistIncoming, planChatWrite } from "../messages";
 import { resolveChoice } from "../model-choice";
 import { dataDirectory } from "../paths";
 import { encryptSecret } from "../secrets";
@@ -365,6 +365,20 @@ test("a failed page applies nothing and the retry reads the whole window", async
   assert.deepEqual(retry.retryChatIds, []);
   assert.equal(memoryTexts().includes(early), true);
   assert.equal(memoryTexts().includes(late), true);
+});
+
+test("a deleted retry chat neither probes Ollama nor counts toward the next dream", async (t) => {
+  resetChats();
+  const { chatId } = seedChat("[qa:dream-fail] I like garden walks", at("2099-09-01", 12));
+  const first = await dream.runDream({ manual: true, date: "2099-09-01", now: new Date(at("2099-09-01", 16)) });
+  assert.deepEqual(first?.retryChatIds, [chatId]);
+  assert.equal(deleteChat(chatId, "dream-user"), true);
+
+  const fetch = t.mock.method(globalThis, "fetch", async () => new Response(null, { status: 503 }));
+  const next = await dream.runDream({ manual: true, date: "2099-09-02", now: new Date(at("2099-09-02", 16)) });
+  assert.equal(next?.state, "done");
+  assert.deepEqual(next?.chatIds, []);
+  assert.equal(fetch.mock.callCount(), 0);
 });
 
 test("a night that fails before its chats keeps them for the next night", async () => {

@@ -16,6 +16,7 @@ import {
   persistIncoming,
   planChatWrite,
   plainText,
+  createChat,
   renameChat,
   storedAssistantParts,
   updateMessageText,
@@ -406,4 +407,13 @@ test("beginTurn answers not-found for another user's chat and writes nothing to 
   );
   assert.deepEqual(listMessages("turn-other"), before);
   assert.equal(chatRow("turn-other")?.user_id, OTHER);
+});
+
+test("rename applies its display redactor to the normalized title", (t) => {
+  const chat = createChat("u1");
+  const display = new Redactor(null);
+  const text = t.mock.method(display, "text", (value: string) => value === "Trip plans" ? "Display title" : value);
+  const renamed = renameChat(chat.id, "u1", " Trip  plans ", display);
+  assert.deepEqual(text.mock.calls.map((call) => call.arguments[0]), [" Trip  plans ", "Trip plans"]);
+  assert.equal(renamed?.title, "Display title");
 });
