@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { chatDeleteReducer, hiddenChatIds, initialChatDelete, type ChatDeleteEvent, type ChatDeleteState } from "./chat-delete";
+import { chatDeleteReducer, hiddenChatIds, initialChatDelete, undoReopensChat, type ChatDeleteEvent, type ChatDeleteState } from "./chat-delete";
 
 const alpha = { id: "alpha", title: "Alpha", updatedAt: "2026-11-01T10:00:00.000Z" };
 const beta = { id: "beta", title: "Beta", updatedAt: "2026-11-01T09:00:00.000Z" };
@@ -128,4 +128,19 @@ test("deletes sent as the last page went away commit again, hidden until the ser
   const failed = chatDeleteReducer(sent, { type: "failed", id: "alpha" });
   assert.deepEqual(failed, { pending: null, committing: [beta], failed: alpha });
   assert.deepEqual(hidden(failed), ["beta"]);
+});
+
+test("Undo reopens the deleted chat from the draft its delete opened, and not from a chat saved since", () => {
+  const origin = "http://127.0.0.1:3210";
+  const open = { chat: alpha, wasOpen: true };
+  // Before the draft has loaded, on /new, and on the draft while it keeps ?new.
+  assert.equal(undoReopensChat(open, `${origin}/c/alpha`), true);
+  assert.equal(undoReopensChat(open, `${origin}/new`), true);
+  assert.equal(undoReopensChat(open, `${origin}/c/draft-1?new`), true);
+  // The draft's first message committed and dropped ?new, before the sidebar lists the new chat.
+  assert.equal(undoReopensChat(open, `${origin}/c/draft-1`), false);
+  // A page picked since stays, and so does a chat that was not open when it was deleted.
+  assert.equal(undoReopensChat(open, `${origin}/c/beta`), false);
+  assert.equal(undoReopensChat(open, `${origin}/settings`), false);
+  assert.equal(undoReopensChat({ chat: alpha, wasOpen: false }, `${origin}/c/draft-1?new`), false);
 });

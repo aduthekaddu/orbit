@@ -14,7 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { chatLabel, focusChatRow, type ChatSummary } from "@/components/chat/chat-row-menu";
 import { Sidebar } from "@/components/chat/sidebar";
 import { DESKTOP_QUERY } from "@/components/use-desktop";
-import { chatDeleteReducer, hiddenChatIds, initialChatDelete } from "./chat-delete";
+import { chatDeleteReducer, hiddenChatIds, initialChatDelete, undoReopensChat } from "./chat-delete";
 import { CommandPalette } from "./command-palette";
 import { HeaderSlotContext } from "./header-slot";
 import { ShortcutKbd, useShortcuts } from "./shortcuts";
@@ -319,14 +319,11 @@ export function AppShell({
     }
   }
 
-  const onDraft = pathname === "/new" || (pathname.startsWith("/c/") && !chats.some((chat) => pathname === `/c/${chat.id}`));
-
   function undoDelete() {
     const pending = deletes.pending;
     if (!pending) return;
     dispatchDelete({ type: "undo" });
-    // Back to the chat from the draft its delete opened, or before that draft has loaded. A page picked since stays.
-    if (pending.wasOpen && (onDraft || pathname === `/c/${pending.chat.id}`)) router.push(`/c/${pending.chat.id}`);
+    if (undoReopensChat(pending, window.location.href)) router.push(`/c/${pending.chat.id}`);
     else window.setTimeout(() => focusChatRow(pending.chat.id), 0);
   }
 

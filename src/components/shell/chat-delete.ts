@@ -63,3 +63,14 @@ export function chatDeleteReducer(state: ChatDeleteState, event: ChatDeleteEvent
       return state.failed ? { ...state, failed: null } : state;
   }
 }
+
+/**
+ * Whether Undo goes back to the deleted chat: from the draft its delete opened, or before that draft has loaded. A
+ * draft keeps `?new` until its first message commits, so a chat saved since, or another page picked since, stays.
+ */
+export function undoReopensChat(pending: NonNullable<ChatDeleteState["pending"]>, href: string): boolean {
+  if (!pending.wasOpen) return false;
+  const url = new URL(href);
+  const onDraft = url.pathname === "/new" || (url.pathname.startsWith("/c/") && url.searchParams.has("new"));
+  return onDraft || url.pathname === `/c/${pending.chat.id}`;
+}
