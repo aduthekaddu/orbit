@@ -15,6 +15,8 @@ export type ChatDeleteEvent =
   | { type: "delete"; chat: ChatSummary; wasOpen: boolean }
   | { type: "undo" }
   | { type: "expire" }
+  // DELETEs that left as the last page went away. The page that follows sends them again.
+  | { type: "commit"; chats: ChatSummary[] }
   | { type: "committed"; id: string }
   | { type: "failed"; id: string }
   | { type: "dismiss" };
@@ -43,6 +45,11 @@ export function chatDeleteReducer(state: ChatDeleteState, event: ChatDeleteEvent
       return state.pending ? { ...state, pending: null } : state;
     case "expire":
       return state.pending ? { ...state, pending: null, committing: [...state.committing, state.pending.chat] } : state;
+    case "commit": {
+      const hidden = hiddenChatIds(state);
+      const added = event.chats.filter((chat) => !hidden.has(chat.id));
+      return added.length === 0 ? state : { ...state, committing: [...state.committing, ...added] };
+    }
     case "committed": {
       if (!state.committing.some((chat) => chat.id === event.id)) return state;
       return { ...state, committing: state.committing.filter((chat) => chat.id !== event.id) };

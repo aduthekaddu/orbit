@@ -6,6 +6,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { NotePencilIcon, SidebarSimpleIcon } from "@phosphor-icons/react";
 import { z } from "zod";
 import { requestJson } from "@/lib/request-json";
+import { LIMITS } from "@/lib/route-schema";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogOverlay, DialogPortal, DialogTitle } from "@/components/ui/dialog";
@@ -40,6 +41,29 @@ function forgetReplyCheckpoint(id: string) {
     window.sessionStorage.removeItem(`orbit-stream:${id}`);
   } catch {
     // Nothing was stored when the browser blocks storage.
+  }
+}
+
+// Chats whose DELETE left as the page went away. A reload renders its sidebar before that DELETE lands, so the
+// next page in this tab hides them and sends the DELETE again, which answers 404 once the first one has landed.
+const LEAVING_DELETES = "orbit-leaving-deletes";
+const leavingDeletes = z.array(z.string().max(LIMITS.id)).max(100).catch([]);
+
+function readLeavingDeletes(): string[] {
+  try {
+    return leavingDeletes.parse(JSON.parse(window.sessionStorage.getItem(LEAVING_DELETES) ?? "[]"));
+  } catch {
+    // Blocked storage or a broken entry holds nothing to send.
+    return [];
+  }
+}
+
+function writeLeavingDeletes(ids: string[]) {
+  try {
+    if (ids.length === 0) window.sessionStorage.removeItem(LEAVING_DELETES);
+    else window.sessionStorage.setItem(LEAVING_DELETES, JSON.stringify(ids));
+  } catch {
+    // With storage blocked, the next page lists the chat until its list refreshes.
   }
 }
 
@@ -79,8 +103,10 @@ export function AppShell({
   const sentDeletes = useRef(new Set<string>());
   const refreshAfterDeletes = useRef(false);
   const pendingDelete = useRef(deletes.pending);
+  const committingDeletes = useRef(deletes.committing);
   useEffect(() => {
     pendingDelete.current = deletes.pending;
+    committingDeletes.current = deletes.committing;
   });
   const setUndoPaused = useUndoCountdown(deletes.pending, () => dispatchDelete({ type: "expire" }));
 
@@ -210,7 +236,10 @@ export function AppShell({
     // StrictMode, pagehide and the committing effect can all reach one id.
     if (sentDeletes.current.has(id)) return;
     sentDeletes.current.add(id);
+    // Once this page hears back, the next one has nothing to send again for this chat.
+    const answered = () => writeLeavingDeletes(readLeavingDeletes().filter((leaving) => leaving !== id));
     function committed() {
+      answered();
       forgetReplyCheckpoint(id);
       setDeletedIds((ids) => new Set(ids).add(id));
       refreshAfterDeletes.current = true;
@@ -225,6 +254,7 @@ export function AppShell({
           committed();
           return;
         }
+        answered();
         sentDeletes.current.delete(id);
         dispatchDelete({ type: "failed", id });
       },
@@ -246,9 +276,13 @@ export function AppShell({
   useEffect(() => {
     function commitPending() {
       const pending = pendingDelete.current;
-      if (!pending) return;
-      commitDelete(pending.chat.id);
-      dispatchDelete({ type: "expire" });
+      const leaving = committingDeletes.current.map((chat) => chat.id);
+      if (pending) {
+        commitDelete(pending.chat.id);
+        leaving.push(pending.chat.id);
+        dispatchDelete({ type: "expire" });
+      }
+      if (leaving.length > 0) writeLeavingDeletes([...new Set([...readLeavingDeletes(), ...leaving])]);
     }
     function onVisibilityChange() {
       if (document.visibilityState === "hidden") commitPending();
@@ -260,6 +294,17 @@ export function AppShell({
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [commitDelete]);
+
+  // The list this page rendered with can still hold chats the last page deleted as it went away.
+  const firstChats = useRef(chats);
+  useEffect(() => {
+    const leaving = new Set(readLeavingDeletes());
+    if (leaving.size === 0) return;
+    const listed = firstChats.current.filter((chat) => leaving.has(chat.id));
+    // A chat the list no longer holds is already gone.
+    writeLeavingDeletes(listed.map((chat) => chat.id));
+    dispatchDelete({ type: "commit", chats: listed });
+  }, []);
 
   // A server reply keeps running when the chat closes, so Undo can reopen it mid-stream.
   function deleteChat(chat: ChatSummary) {

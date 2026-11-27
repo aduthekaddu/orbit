@@ -114,3 +114,18 @@ test("undo, expire, committed and failed with nothing to act on change nothing",
   assert.equal(chatDeleteReducer(pending, { type: "failed", id: "alpha" }), pending);
   assert.equal(chatDeleteReducer(pending, { type: "committed", id: "beta" }), pending);
 });
+
+test("deletes sent as the last page went away commit again, hidden until the server answers", () => {
+  const sent = chatDeleteReducer(initialChatDelete, { type: "commit", chats: [alpha, beta] });
+  assert.deepEqual(sent, { pending: null, committing: [alpha, beta], failed: null });
+  assert.deepEqual(hidden(sent), ["alpha", "beta"]);
+
+  // A chat that is already hidden is not sent twice, and an empty list changes nothing.
+  assert.equal(chatDeleteReducer(sent, { type: "commit", chats: [alpha] }), sent);
+  assert.equal(chatDeleteReducer(initialChatDelete, { type: "commit", chats: [] }), initialChatDelete);
+
+  // A failure puts the chat back and names it, as for any delete.
+  const failed = chatDeleteReducer(sent, { type: "failed", id: "alpha" });
+  assert.deepEqual(failed, { pending: null, committing: [beta], failed: alpha });
+  assert.deepEqual(hidden(failed), ["beta"]);
+});
