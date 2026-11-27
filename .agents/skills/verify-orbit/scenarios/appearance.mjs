@@ -309,8 +309,10 @@ export default async function appearance({ page, origin, step, shot }) {
         await page.goto(settingsUrl);
         await pick(name);
         await page.goto(chatUrl);
-        await page.locator('aside nav a[aria-current="page"]').waitFor({ timeout: 10_000 });
-        markers.push(`${name} ${await page.evaluate(() => getComputedStyle(document.querySelector('aside nav a[aria-current="page"]'), "::before").backgroundColor)}`);
+        // The marker is the active row's ::before, so it stays beside the row's link and its Actions button.
+        const activeRow = page.locator('aside nav [data-chat-row]:has(a[aria-current="page"])');
+        await activeRow.waitFor({ timeout: 10_000 });
+        markers.push(`${name} ${await activeRow.evaluate((row) => getComputedStyle(row, "::before").backgroundColor)}`);
       }
       step("each accent gives the active chat marker its own color", new Set(markers.map((marker) => marker.split(" ").slice(1).join(" "))).size === 4, markers.join(", "));
     } else {
