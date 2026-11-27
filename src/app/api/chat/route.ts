@@ -22,7 +22,7 @@ import { bindReplyPlan, releaseReplyRun, replyResponse, reserveReplyRun, startRe
 import { startChatTitle } from "@/lib/titles";
 import { getInstance } from "@/lib/instance-settings";
 import { getMemoryEnabled } from "@/lib/preferences";
-import { requestRedactor } from "@/lib/request-redactor";
+import { modelRedactors } from "@/lib/request-redactor";
 import { getGithub } from "@/lib/user-github";
 import { LIMITS, r, readJsonBody } from "@/lib/route-schema";
 import { sessionFrom, unauthorized } from "@/lib/session";
@@ -163,11 +163,13 @@ export async function POST(request: Request) {
     const instance = getInstance();
     const github = getGithub(userId);
     const memory = getMemoryEnabled(userId);
-    const redact = requestRedactor(session.user, instance, github).withCredentials({ apiKey, baseUrl: connection.kind === "openai-compatible" ? connection.baseUrl : undefined });
+    const { input: inputRedact, output: redact } = modelRedactors(
+      session.user, { apiKey, baseUrl: connection.kind === "openai-compatible" ? connection.baseUrl : undefined }, instance, github,
+    );
     logRequestError = (message) => redact.logError("chat request error", message);
     const incoming = parsed.data.messages;
     // No await from here to storedAssistantParts, so the turn's rows and the saved reply it continues are one read.
-    const turn = beginTurn(chatId, userId, incoming, redact, parsed.data.trigger, parsed.data.editMessageId);
+    const turn = beginTurn(chatId, userId, incoming, inputRedact, parsed.data.trigger, parsed.data.editMessageId);
     if (!turn.ok) {
       if (turn.error === "not-found") {
         return Response.json({ error: "Not found" }, { status: 404 });
@@ -195,16 +197,17 @@ export async function POST(request: Request) {
     const firstUser = incoming.find((message) => message.role === "user");
     const lastUser = incoming.findLast((message) => message.role === "user");
     const title = textFromParts(firstUser?.parts).trim();
-    if (title) touchChat(chat.id, title, redact);
+    if (title) touchChat(chat.id, title, inputRedact);
     else touchChat(chat.id);
     if (title) {
       startChatTitle({
         messagesBeforeTurn,
         chatId: chat.id,
-        firstMessage: redact.text(title),
-        fallbackTitle: redactChatTitle(title, redact),
+        firstMessage: title,
+        fallbackTitle: redactChatTitle(title, inputRedact),
         model: languageModelFor({ connection, apiKey, model: choice.model, chatId: chat.id }),
         call: titleCallOptions(connection.kind, levels, adaptiveThinking),
+        inputRedact,
         redact,
         onError: (message) => redact.logError("chat title", message),
       });

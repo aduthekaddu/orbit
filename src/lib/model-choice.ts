@@ -56,7 +56,7 @@ function fromDefaults(viewer: Viewer): ResolvedChoice {
   }
   if (!connection) return { ok: false, reason: "no-connection" };
   const defaults = getModelDefaults(viewer.id);
-  if (!defaults.connectionId || !defaults.model) return { ok: false, reason: "no-model" };
+  if (defaults.connectionId !== connection.id || !defaults.model) return { ok: false, reason: "no-model" };
   return { ok: true, connection, choice: { connectionId: connection.id, model: defaults.model, effort: defaults.effort ?? DEFAULT_EFFORT } };
 }
 

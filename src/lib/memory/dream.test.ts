@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import test, { before, after } from "node:test";
@@ -13,6 +13,7 @@ import { createChat, deleteChat, finishChatReply, listMessages, persistIncoming,
 import { NOTHING_PINNED, resolveChoice } from "../model-choice";
 import { parseViewer } from "../policy";
 import { dataDirectory } from "../paths";
+import { savePreferences } from "../preferences";
 import { encryptSecret } from "../secrets";
 import * as dream from "./dream";
 import * as embed from "./embed";
@@ -367,6 +368,37 @@ test("a failed page applies nothing and the retry reads the whole window", async
   assert.deepEqual(retry.retryChatIds, []);
   assert.equal(memoryTexts().includes(early), true);
   assert.equal(memoryTexts().includes(late), true);
+});
+
+test("a manual dream for an opted-out account does not start a run", async () => {
+  resetChats();
+  const date = "2099-10-10";
+  seedChat("I like morning walks", at(date, 12));
+  savePreferences(viewer.id, { memory: "off" });
+  try {
+    const run = await dream.runDream({ viewer, manual: true, date, now: new Date(at(date, 16)) });
+    assert.equal(run, null);
+    assert.equal(getDb().$client.prepare("SELECT count(*) FROM memory_runs WHERE user_id = ?").pluck().get(viewer.id), 0);
+    assert.equal(store.listMemories(viewer.id).length, 0);
+  } finally {
+    savePreferences(viewer.id, { memory: "on" });
+  }
+});
+
+test("the dream CLI skips an explicitly selected account with Memory off", () => {
+  resetChats();
+  savePreferences(viewer.id, { memory: "off" });
+  try {
+    const cli = spawnSync(process.execPath, ["--import", "tsx", "scripts/dream.ts", "--user", "dream@orbit.local", "--date", "2099-10-11"], {
+      encoding: "utf8",
+      timeout: 10_000,
+    });
+    assert.equal(cli.status, 0, cli.stderr);
+    assert.partialDeepStrictEqual(JSON.parse(cli.stdout), { state: "skipped", reason: "Memory is off" });
+    assert.equal(getDb().$client.prepare("SELECT count(*) FROM memory_runs WHERE user_id = ?").pluck().get(viewer.id), 0);
+  } finally {
+    savePreferences(viewer.id, { memory: "on" });
+  }
 });
 
 test("a deleted retry chat neither probes Ollama nor counts toward the next dream", async (t) => {

@@ -145,6 +145,16 @@ test("without ORBIT_SECRET_KEY, the first write creates data/secret-key with mod
   assert.deepEqual(inChild(dataDir, undefined, DECRYPT_OR_REPORT)(stored), { plain: PLAIN });
 });
 
+test("the concurrent-create fallback corrects the permission of the winning fixture file", (t) => {
+  const file = path.join(childDataDir(), "secret-key");
+  t.mock.method(fs, "linkSync", () => {
+    fs.writeFileSync(file, OTHER_KEY_HEX, { mode: 0o644 });
+    throw Object.assign(new Error("file already exists"), { code: "EEXIST" });
+  });
+  assert.equal(secrets.readOrCreateSecretFile(file), OTHER_KEY_HEX);
+  assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+});
+
 test("another key or a lost key file throws SecretUnreadable", () => {
   const dataDir = childDataDir();
   const stored = inChild(dataDir, undefined, "console.log(JSON.stringify(m.encryptSecret(input)));")(PLAIN);

@@ -11,7 +11,11 @@ import { getDb } from "@/lib/db";
 import { saveMemory, writeVectors } from "@/lib/memory/store";
 import { saveInstance } from "@/lib/instance-settings";
 import { savePreferences } from "@/lib/preferences";
-import { bindReplyPlan, findReplyRun, releaseReplyRun, reserveReplyRun } from "@/lib/reply-runs";
+import { deleteChat } from "@/lib/messages";
+import {
+  bindReplyPlan, discardReplyRun, findReplyRun, MAX_RUNNING_PER_USER, releaseReplyRun, reserveReplyRun, startReplyRun,
+} from "@/lib/reply-runs";
+import type { UserId } from "@/lib/policy";
 import { encryptSecret } from "@/lib/secrets";
 import { saveGithub } from "@/lib/user-github";
 
@@ -48,6 +52,7 @@ const routes = new Map<string, Handler>();
 const sqlite = getDb().$client;
 let accounts: Accounts;
 let adminConnection: string;
+let memberConnection: string;
 let adminNote: string;
 let pendingRun: Awaited<ReturnType<typeof reserveReplyRun>> | undefined;
 
@@ -64,7 +69,7 @@ before(async () => {
   const admin = accounts.admin.viewer.id;
   const member = accounts.member.viewer.id;
   adminConnection = seedTestConnection(admin, { baseUrl: provider, apiKey: crypto.randomUUID(), model: "admin-model" });
-  seedTestConnection(member, { baseUrl: provider, apiKey: crypto.randomUUID(), model: memberModel });
+  memberConnection = seedTestConnection(member, { baseUrl: provider, apiKey: crypto.randomUUID(), model: memberModel });
   assert.ok(saveInstance(admin, { searxngUrl: "https://search.example", tavilyApiKey: crypto.randomUUID() }).ok);
   assert.ok(saveGithub(admin, { githubToken: crypto.randomUUID() }).ok);
   savePreferences(admin, { theme: "light", memory: "off" });
@@ -105,8 +110,7 @@ function routeRequest(spec: Omit<Spec, "status">, cookie?: string) {
   }), { params: Promise.resolve(params) });
 }
 
-function adminSnapshot() {
-  const id = accounts.admin.viewer.id;
+function snapshot(id: UserId) {
   const direct = ["account", "session", "chats", "provider_connections", "hidden_models", "memories", "memory_runs", "user_github", "user_preferences"];
   return {
     owned: direct.map((table) => sqlite.prepare(`SELECT * FROM ${table} WHERE user_id = ? ORDER BY rowid`).all(id)),
@@ -121,6 +125,100 @@ function adminSnapshot() {
 
 const chatBody = (id: string, message = "member-prompt", text = "Member prompt") => ({ id, messages: [{ id: message, role: "user", parts: [{ type: "text", text }] }] });
 const privateSettings = { githubTokenSet: false, githubTokenReadable: true, githubMcpUrl: "https://api.githubcopilot.com/mcp/" };
+
+test("admin access preserves a member's private data, live stream, and completed replay", async () => {
+  const { admin, member } = accounts;
+  const id = "member-ownership-chat";
+  const replyId = "member-ownership-reply";
+  const messages = [{ type: "text", text: "Benign fixture note" }];
+  sqlite.prepare("INSERT INTO chats(id, user_id, title, created_at, updated_at, head_id) VALUES (?, ?, 'Fixture', 1, 1, ?)").run(id, member.viewer.id, replyId);
+  sqlite.prepare("INSERT INTO messages(id, chat_id, role, content, parts, position, created_at) VALUES (?, ?, 'assistant', 'Benign fixture note', ?, 0, 1)").run(replyId, id, JSON.stringify(messages));
+  const memory = saveMemory(member.viewer.id, { text: "I like jasmine tea", kind: "preference", source: "user", sourceChatId: id });
+  const reserved = await reserveReplyRun(id, member.viewer.id);
+  assert.ok(reserved.ok);
+  bindReplyPlan(reserved.run, replyId, "member-ownership-prompt");
+
+  let finish!: () => void;
+  startReplyRun(reserved.run, new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: "text-start", id: "fixture-text" });
+      controller.enqueue({ type: "text-delta", id: "fixture-text", delta: "Fixture reply" });
+      finish = () => controller.close();
+    },
+  }), () => null);
+
+  const stream = { route: "chats/[id]/stream", method: "GET", params: { id }, query: `?replyId=${replyId}` };
+  try {
+    const memberBefore = snapshot(member.viewer.id);
+    const operations: Omit<Spec, "status">[] = [
+      { route: "chats/[id]", method: "GET", params: { id } },
+      { route: "chats/[id]", method: "PATCH", params: { id }, input: { title: "Fixture title" } },
+      { route: "chats/[id]", method: "DELETE", params: { id } },
+      { route: "chats/[id]/messages/[messageId]", method: "PATCH", params: { id, messageId: replyId }, input: { text: "Fixture reply" } },
+      { route: "chats/[id]/stop", method: "POST", params: { id } },
+      { route: "chat", method: "POST", input: chatBody(id, "ownership-prompt", "Fixture prompt") },
+      { route: "memories/[id]", method: "PATCH", params: { id: memory.id }, input: { text: "Fixture memory" } },
+      { route: "memories/[id]", method: "DELETE", params: { id: memory.id } },
+      { route: "connections/[id]", method: "PATCH", params: { id: memberConnection }, input: { label: "Fixture connection" } },
+      { route: "connections/[id]", method: "DELETE", params: { id: memberConnection } },
+      { route: "connections/[id]/models", method: "GET", params: { id: memberConnection } },
+      { route: "connections/[id]/hidden-models", method: "PUT", params: { id: memberConnection }, input: { modelId: memberModel, hidden: true } },
+      { route: "preferences/model", method: "PUT", input: { connectionId: memberConnection, model: memberModel, effort: "medium" } },
+      stream,
+    ];
+    for (const operation of operations) {
+      assert.equal((await routeRequest(operation, admin.cookie)).status, 404, `${operation.method} ${operation.route}`);
+    }
+    assert.equal(reserved.run.controller.signal.aborted, false);
+    const live = await routeRequest(stream, member.cookie);
+    assert.equal(live.status, 200);
+    await live.body?.cancel();
+    finish();
+    await reserved.run.done;
+
+    assert.equal((await routeRequest(stream, admin.cookie)).status, 404);
+    const replay = await routeRequest(stream, member.cookie);
+    assert.equal(replay.status, 200);
+    assert.match(await replay.text(), /Fixture reply/);
+    const adminNotes = await routeRequest({ route: "memories", method: "GET", query: "?q=jasmine" }, admin.cookie);
+    assert.deepEqual(await adminNotes.json(), { memories: [] });
+    const adminSearch = await routeRequest({ route: "search", method: "GET", query: "?q=Benign" }, admin.cookie);
+    assert.deepEqual(await adminSearch.json(), { hits: [] });
+    assert.deepEqual(snapshot(member.viewer.id), memberBefore);
+  } finally {
+    if (!findReplyRun(id, member.viewer.id, replyId)) releaseReplyRun(reserved.run);
+    else {
+      if (findReplyRun(id, member.viewer.id)) finish();
+      await discardReplyRun(id);
+    }
+    sqlite.prepare("DELETE FROM memories WHERE id = ?").run(memory.id);
+    deleteChat(id, member.viewer.id);
+  }
+});
+
+test("a full reply quota in either account leaves the other account a slot", async (t) => {
+  assert.ok(pendingRun?.ok);
+  const baselineRun = pendingRun.run;
+  for (const [full, other] of [[accounts.admin, accounts.member], [accounts.member, accounts.admin]]) {
+    await t.test(full.viewer.role, async () => {
+      const runs = [];
+      try {
+        const count = MAX_RUNNING_PER_USER - Number(full.viewer.id === baselineRun.userId);
+        for (let i = 0; i < count; i++) {
+          const reserved = await reserveReplyRun(`quota-${full.viewer.role}-${i}`, full.viewer.id);
+          assert.ok(reserved.ok);
+          runs.push(reserved.run);
+        }
+        assert.deepEqual(await reserveReplyRun(`quota-extra-${full.viewer.role}`, full.viewer.id), { ok: false, reason: "user-limit" });
+        const spare = await reserveReplyRun(`quota-other-${full.viewer.role}`, other.viewer.id);
+        assert.ok(spare.ok);
+        runs.push(spare.run);
+      } finally {
+        for (const run of runs) releaseReplyRun(run);
+      }
+    });
+  }
+});
 
 test("every API handler has a session and cross-account behavior check", async (t) => {
   const specs: Spec[] = [
@@ -179,7 +277,7 @@ test("every API handler has a session and cross-account behavior check", async (
     return new Response(chunks.join("") + "data: [DONE]\n\n", { headers: { "content-type": "text/event-stream" } });
   });
 
-  const before = adminSnapshot();
+  const before = snapshot(accounts.admin.viewer.id);
   const adminRead = await routeRequest({ route: "admin/settings", method: "GET" }, accounts.admin.cookie);
   assert.equal(adminRead.status, 200);
   const adminBody = await adminRead.json();
@@ -187,7 +285,7 @@ test("every API handler has a session and cross-account behavior check", async (
   assert.equal("tavilyApiKey" in adminBody, false);
   assert.equal((await routeRequest({ route: "admin/settings", method: "PUT", input: { dreamHour: 8 } }, accounts.admin.cookie)).status, 200);
   assert.equal((await (await routeRequest({ route: "admin/settings", method: "GET" }, accounts.admin.cookie)).json()).dreamHour, 8);
-  const afterAdmin = adminSnapshot();
+  const afterAdmin = snapshot(accounts.admin.viewer.id);
   assert.notDeepEqual(afterAdmin.instance, before.instance);
 
   for (const spec of specs) {
@@ -204,7 +302,7 @@ test("every API handler has a session and cross-account behavior check", async (
     if (spec.route === "connections" && spec.method === "GET") assert.equal(body.some((entry: { id: string }) => entry.id === adminConnection), false);
     if (spec.route === "connections" && spec.method === "POST") assert.equal(sqlite.prepare("SELECT user_id FROM provider_connections WHERE id = ?").pluck().get(body.id), accounts.member.viewer.id);
     else assert.equal(providerCalls, callsBefore, label);
-    assert.deepEqual(adminSnapshot(), afterAdmin, label);
+    assert.deepEqual(snapshot(accounts.admin.viewer.id), afterAdmin, label);
     assert.ok(pendingRun?.ok);
     assert.equal(pendingRun.run.controller.signal.aborted, false, label);
     assert.equal(findReplyRun(adminChat, accounts.admin.viewer.id)?.run, pendingRun.run, label);
@@ -228,9 +326,9 @@ test("every API handler has a session and cross-account behavior check", async (
   const saved = await routeRequest(save, accounts.member.cookie);
   assert.equal(saved.status, 200);
   assert.equal((await saved.json()).githubTokenSet, true);
-  assert.deepEqual(adminSnapshot(), afterAdmin);
+  assert.deepEqual(snapshot(accounts.admin.viewer.id), afterAdmin);
 
   sqlite.prepare("DELETE FROM user WHERE id = ?").run(member);
   assert.equal((await routeRequest({ route: "settings", method: "GET" }, accounts.member.cookie)).status, 401);
-  assert.deepEqual(adminSnapshot(), afterAdmin);
+  assert.deepEqual(snapshot(accounts.admin.viewer.id), afterAdmin);
 });

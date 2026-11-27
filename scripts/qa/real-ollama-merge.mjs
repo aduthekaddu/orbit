@@ -162,7 +162,7 @@ async function main() {
 
     db.insert(schema.user).values({ ...viewer, name: "QA", email: "qa@orbit.local", emailVerified: true }).run();
     const redact = new Redactor(null);
-    const added = await addConnection(viewer.id, { kind: "openai-compatible", label: "Mock", baseUrl: provider.url, apiKey: "mock-key-not-real" }, redact);
+    const added = await addConnection(viewer.id, { kind: "openai-compatible", label: "Mock", baseUrl: provider.url, apiKey: "mock-key-not-real" }, () => redact);
     if (!added.ok) throw new Error(`adding the mock connection failed: ${added.reason}`);
     saveModelDefaults(viewer.id, { connectionId: added.connection.id, model: "mock-genui", effort: "medium" });
 

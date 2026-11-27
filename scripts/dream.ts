@@ -4,6 +4,7 @@ import { getDb } from "../src/lib/db";
 import { runDream } from "../src/lib/memory/dream";
 import { memoryEnabledViewers } from "../src/lib/memory/schedule";
 import { parseViewer } from "../src/lib/policy";
+import { getMemoryEnabled } from "../src/lib/preferences";
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -39,6 +40,10 @@ async function main() {
   for (const viewer of viewers) {
     try {
       const row = await runDream({ viewer, manual: true, date: date.data });
+      if (!row && !getMemoryEnabled(viewer.id)) {
+        console.log(JSON.stringify({ userId: viewer.id, state: "skipped", reason: "Memory is off" }));
+        continue;
+      }
       if (!row) throw new Error("Dream did not start");
       console.log(JSON.stringify({
         userId: viewer.id,

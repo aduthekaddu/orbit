@@ -6,8 +6,9 @@ import { getDb } from "../db";
 import { getChatForUser } from "../messages";
 import { NOTHING_PINNED, resolveChoice } from "../model-choice";
 import type { UserId, Viewer } from "../policy";
+import { getMemoryEnabled } from "../preferences";
 import { languageModelFor } from "../provider";
-import { requestRedactor } from "../request-redactor";
+import { modelRedactors } from "../request-redactor";
 import { embed, embedPending } from "./embed";
 import { parseRun, storedRow, transition, unfinishedChatIds, type MemoryRun, type RunEvent } from "./run-state";
 import { localMidnight, localStamp, systemTimeZone } from "./schedule";
@@ -328,12 +329,13 @@ export async function dreamChat(viewer: Viewer, chatId: string, input: { date: s
   try {
     const resolved = resolveChoice(viewer, NOTHING_PINNED);
     if (!resolved.ok) throw new Error(NO_PROVIDER);
-    redact = requestRedactor(viewer);
-    const apiKey = connectionApiKey(userId, resolved.connection.id);
+    const { connection } = resolved;
+    const apiKey = connectionApiKey(userId, connection.id);
+    redact = modelRedactors(viewer, { apiKey, baseUrl: connection.kind === "openai-compatible" ? connection.baseUrl : undefined }).output;
     for (let offset = 0; offset < messages.length; offset += PAGE) {
       if (!renew(userId, input.date, input.owner)) return "lost";
       const generated = await generateObject({
-        model: languageModelFor({ connection: resolved.connection, apiKey, model: resolved.choice.model, chatId }),
+        model: languageModelFor({ connection, apiKey, model: resolved.choice.model, chatId }),
         schema: candidateList,
         prompt: promptFor(messages.slice(offset, offset + PAGE)),
         maxRetries: 0,
@@ -372,6 +374,7 @@ export async function dreamChat(viewer: Viewer, chatId: string, input: { date: s
 export async function runDream(input: { viewer: Viewer; now?: Date; date?: string; manual?: boolean }): Promise<MemoryRun | null> {
   const { viewer } = input;
   const userId = viewer.id;
+  if (!getMemoryEnabled(userId)) return null;
   const now = input.now ?? new Date();
   const date = input.date ?? localStamp(now, systemTimeZone()).date;
   const owner = crypto.randomUUID();

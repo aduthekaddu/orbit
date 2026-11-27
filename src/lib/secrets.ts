@@ -51,7 +51,9 @@ export function readOrCreateSecretFile(file: string) {
   } finally {
     fs.rmSync(temporary, { force: true });
   }
-  return fs.readFileSync(file, "utf8").trim();
+  const saved = readPrivateFile(file);
+  if (saved === null) throw new Error("The secret key file disappeared before it could be read.");
+  return saved;
 }
 
 function existingKey(): Buffer | null {

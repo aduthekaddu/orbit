@@ -24,7 +24,7 @@ const STORED_KEY = "made-up-tavily-key-0042";
 // returns whichever user a test signs in as, or no session.
 const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-chats-route-"));
 const sessionStub = path.join(stubDir, "session.cjs");
-fs.writeFileSync(sessionStub, `exports.sessionFrom = async () => (globalThis.__orbitSignedIn ? { user: { id: globalThis.__orbitSignedIn } } : null);
+fs.writeFileSync(sessionStub, `exports.sessionFrom = async () => (globalThis.__orbitSignedIn ? { user: globalThis.__orbitSignedIn } : null);
 exports.unauthorized = () => Response.json({ error: "Unauthorized" }, { status: 401 });`);
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -32,7 +32,7 @@ const hooks = registerHooks({
     return nextResolve(specifier, context);
   },
 });
-const signedIn = globalThis as { __orbitSignedIn?: string | null };
+const signedIn = globalThis as { __orbitSignedIn?: ReturnType<typeof parseViewer> | null };
 
 type Route = typeof import("./route");
 let route: Route;
@@ -41,8 +41,8 @@ const redact = new Redactor(null);
 before(async () => {
   const db = getDb();
   db.$client.exec("DROP TRIGGER IF EXISTS user_single_row");
-  for (const id of [ME, OTHER]) db.insert(schema.user).values({ id, name: id, email: `${id}@orbit.local` }).run();
-  assert.ok(saveInstance(parseViewer({ id: ME, role: "admin" }).id, { tavilyApiKey: STORED_KEY }).ok);
+  for (const id of [ME, OTHER]) db.insert(schema.user).values({ ...viewer(id), name: id, email: `${id}@orbit.local` }).run();
+  assert.ok(saveInstance(viewer(ME).id, { tavilyApiKey: STORED_KEY }).ok);
   route = await import("./route");
 });
 
@@ -52,8 +52,12 @@ after(() => {
   fs.rmSync(stubDir, { recursive: true, force: true });
 });
 
+function viewer(id: string) {
+  return parseViewer({ id, role: id === ME ? "admin" : "member" });
+}
+
 function signIn(userId: string | null) {
-  signedIn.__orbitSignedIn = userId;
+  signedIn.__orbitSignedIn = userId ? viewer(userId) : null;
 }
 
 function chat(id: string, userId = ME, title = "New chat", updatedAt = new Date(1_000)) {

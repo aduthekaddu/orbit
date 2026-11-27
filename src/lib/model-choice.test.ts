@@ -7,7 +7,7 @@ import { addConnection as saveConnection, deleteConnection, listConnections, see
 import { getDb } from "./db";
 import { chats } from "./db/schema";
 import { finishChatReply, getChatForUser, listMessages, planChatWrite } from "./messages";
-import { resolveChoice, setChatChoice, type ModelChoice, type ReplyRecord } from "./model-choice";
+import { NOTHING_PINNED, resolveChoice, setChatChoice, type ModelChoice, type ReplyRecord } from "./model-choice";
 import { parseViewer, type Role } from "./policy";
 import { encryptSecret } from "./secrets";
 
@@ -150,6 +150,16 @@ test("a user with no connection and no defaults resolves to no-connection", () =
 
 test("a connection with no model to use resolves to no-model", () => {
   assert.deepEqual(resolveChoice(parseViewer({ id: NO_MODEL, role: "member" }), chat("chat-no-model", NO_MODEL)), { ok: false, reason: "no-model" });
+});
+
+test("a stale default model is not used with a different connection", () => {
+  const viewer = parseViewer({ id: ONE, role: "member" });
+  setDefaults(ONE, "conn-other", "ordinary-model", "medium");
+  try {
+    assert.deepEqual(resolveChoice(viewer, NOTHING_PINNED), { ok: false, reason: "no-model" });
+  } finally {
+    setDefaults(ONE, "conn-openai", "default-model", "medium");
+  }
 });
 
 test("a connection whose key cannot be decrypted resolves to key-unreadable and keeps the choice for the chip", () => {
