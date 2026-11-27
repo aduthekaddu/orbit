@@ -12,7 +12,9 @@ export class SecretUnreadable extends Error {
 }
 
 const VERSION = "v1";
-const ASSOCIATED_DATA = Buffer.from("provider_connections.api_key", "utf8");
+const ASSOCIATED_DATA = "provider_connections.api_key";
+export const TAVILY_AAD = "instance_settings.tavily_api_key";
+export const GITHUB_AAD = "user_github.token";
 const KEY_HEX = /^[0-9a-f]{64}$/i;
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
 
@@ -54,16 +56,17 @@ function createdKey() {
   return readKeyFile(file);
 }
 
-export function encryptSecret(plain: string): string {
+export function encryptSecret(plain: string, aad = ASSOCIATED_DATA): string {
+  if (!plain) return "";
   const key = existingKey() ?? createdKey();
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
-  cipher.setAAD(ASSOCIATED_DATA);
+  cipher.setAAD(Buffer.from(aad, "utf8"));
   const ciphertext = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
   return [VERSION, iv, cipher.getAuthTag(), ciphertext].map((part) => (typeof part === "string" ? part : part.toString("base64url"))).join(".");
 }
 
-export function decryptSecret(stored: string): string {
+export function decryptSecret(stored: string, aad = ASSOCIATED_DATA): string {
   const parts = stored.split(".");
   if (parts.length !== 4 || parts[0] !== VERSION || !parts.slice(1).every((part) => BASE64URL.test(part))) throw new SecretUnreadable();
   const [iv, tag, ciphertext] = parts.slice(1).map((part) => Buffer.from(part, "base64url"));
@@ -77,7 +80,7 @@ export function decryptSecret(stored: string): string {
   if (!key) throw new SecretUnreadable();
   try {
     const decipher = createDecipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
-    decipher.setAAD(ASSOCIATED_DATA);
+    decipher.setAAD(Buffer.from(aad, "utf8"));
     decipher.setAuthTag(tag);
     return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
   } catch {

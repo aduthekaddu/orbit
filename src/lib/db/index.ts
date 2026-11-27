@@ -6,9 +6,10 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { eq } from "drizzle-orm";
 import { readEnv } from "../env";
+import { parseEnvDreamHour } from "../memory/dream-hour";
 import { dataDirectory } from "../paths";
 import { stripTerminalControls } from "../sandbox/terminal";
-import { encryptSecret } from "../secrets";
+import { encryptSecret, TAVILY_AAD } from "../secrets";
 import { withMigrationLock } from "./migration-lock";
 import * as schema from "./schema";
 
@@ -20,14 +21,16 @@ function restrictDbFile(dataDir: string, name: "orbit.db" | "orbit.db-wal" | "or
   }
 }
 
-function seedSettings(db: ReturnType<typeof drizzle<typeof schema>>) {
-  const existing = db.select({ id: schema.settings.id }).from(schema.settings).where(eq(schema.settings.id, 1)).get();
-  if (existing) return;
-  const searxngUrl = readEnv("ORBIT_SEARXNG_URL") ?? "";
-  const tavilyApiKey = readEnv("ORBIT_TAVILY_API_KEY") ?? "";
-  const githubToken = readEnv("ORBIT_GITHUB_TOKEN") ?? "";
-  if (!searxngUrl && !tavilyApiKey && !githubToken) return;
-  db.insert(schema.settings).values({ id: 1, searxngUrl, tavilyApiKey, githubToken, githubMcpUrl: "", updatedAt: new Date() }).run();
+function seedInstanceSettings(db: ReturnType<typeof drizzle<typeof schema>>) {
+  const table = schema.instanceSettings;
+  if (db.select({ id: table.id }).from(table).where(eq(table.id, 1)).get()) return;
+  db.insert(table).values({
+    id: 1,
+    searxngUrl: readEnv("ORBIT_SEARXNG_URL") ?? "",
+    tavilyKeyCiphertext: encryptSecret(readEnv("ORBIT_TAVILY_API_KEY") ?? "", TAVILY_AAD),
+    dreamHour: parseEnvDreamHour(),
+    updatedAt: new Date(),
+  }).onConflictDoNothing().run();
 }
 
 /** The label of a provider moved out of settings. It never throws, so a saved URL that does not parse cannot block the upgrade. */
@@ -46,11 +49,13 @@ export function registerMigrationFunctions(sqlite: Database.Database) {
   // Migration 0014 calls these to move the provider key out of settings, encrypted.
   sqlite.function("orbit_encrypt_secret", (text) => (typeof text === "string" ? encryptSecret(text) : null));
   sqlite.function("orbit_url_host", { deterministic: true }, urlHostLabel);
+  sqlite.function("orbit_encrypt_field", (text, aad) => typeof text === "string" && typeof aad === "string" ? encryptSecret(text, aad) : null);
+  sqlite.function("orbit_env_dream_hour", parseEnvDreamHour);
 }
 
 const SCRUB_PENDING = 1;
 
-// Migration 0015 drops the plain key with its column and sets user_version to SCRUB_PENDING in the same transaction.
+// Migrations 0015 and 0018 set SCRUB_PENDING in the same transaction that removes plaintext credential columns.
 // SQLite leaves the old bytes in free space and the WAL, so every open scrubs until a checkpoint copies the whole WAL
 // back, which also covers a crash between the migration and the scrub, and a reader that kept the checkpoint busy.
 function scrubDroppedSecrets(sqlite: Database.Database) {
@@ -93,16 +98,7 @@ function openDb() {
       withMigrationLock(() => migrateAndScrub(db, sqlite, migrationsFolder), { dir: dataDir });
     }
 
-    sqlite.exec(`
-      CREATE TRIGGER IF NOT EXISTS user_single_row
-      BEFORE INSERT ON user
-      WHEN (SELECT COUNT(*) FROM user) >= 1
-      BEGIN
-        SELECT RAISE(ABORT, 'signup closed');
-      END;
-    `);
-
-    seedSettings(db);
+    seedInstanceSettings(db);
     return db;
   } catch (error) {
     sqlite.close();
@@ -119,7 +115,7 @@ export function getDb(): OrbitDb {
   return cached;
 }
 
-export function signupOpen() {
-  const row = getDb().$client.prepare("select count(*) as n from user").get() as { n: number };
-  return row.n === 0;
+export function accountCount(db = getDb()) {
+  const row = db.$client.prepare("select count(*) as n from user").get() as { n: number };
+  return row.n;
 }

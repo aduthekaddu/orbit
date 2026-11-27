@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const user = sqliteTable("user", {
+  role: text("role", { enum: ["admin", "member"] }).notNull().default("member"),
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
@@ -13,7 +14,7 @@ export const user = sqliteTable("user", {
   updatedAt: integer("updated_at", { mode: "timestamp_ms" })
     .notNull()
     .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`),
-});
+}, (table) => [uniqueIndex("user_one_admin_idx").on(table.role).where(sql`${table.role} = 'admin'`)]);
 
 export const session = sqliteTable(
   "session",
@@ -79,12 +80,23 @@ export const verification = sqliteTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
 
-export const settings = sqliteTable("settings", {
+export const instanceSettings = sqliteTable("instance_settings", {
   id: integer("id").primaryKey(),
+  hostingMode: text("hosting_mode").notNull().default("personal"),
   searxngUrl: text("searxng_url").notNull().default(""),
-  tavilyApiKey: text("tavily_api_key").notNull().default(""),
-  githubToken: text("github_token").notNull().default(""),
-  githubMcpUrl: text("github_mcp_url").notNull().default(""),
+  tavilyKeyCiphertext: text("tavily_key_ciphertext").notNull().default(""),
+  sandbox: text("sandbox", { enum: ["on", "off"] }).notNull().default("on"),
+  dreamHour: integer("dream_hour").notNull().default(3),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  check("instance_settings_single_row", sql`${table.id} = 1`),
+  check("instance_settings_dream_hour", sql`${table.dreamHour} >= 0 AND ${table.dreamHour} <= 23`),
+]);
+
+export const userGithub = sqliteTable("user_github", {
+  userId: text("user_id").primaryKey().notNull().references(() => user.id, { onDelete: "cascade" }),
+  tokenCiphertext: text("token_ciphertext").notNull().default(""),
+  mcpUrl: text("mcp_url").notNull().default(""),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
 
@@ -183,6 +195,7 @@ export const memories = sqliteTable(
   {
     seq: integer("seq").primaryKey({ autoIncrement: true }),
     id: text("id").notNull().unique(),
+    userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
     kind: text("kind").notNull(),
     text: text("text").notNull(),
     textNorm: text("text_norm").notNull(),
@@ -192,11 +205,15 @@ export const memories = sqliteTable(
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
   },
-  (table) => [uniqueIndex("memories_text_norm_idx").on(table.textNorm)],
+  (table) => [
+    index("memories_user_id_idx").on(table.userId),
+    uniqueIndex("memories_user_text_norm_idx").on(table.userId, table.textNorm),
+  ],
 );
 
 export const memoryRuns = sqliteTable("memory_runs", {
-  date: text("date").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  date: text("date").notNull(),
   state: text("state").notNull(),
   startedAt: integer("started_at", { mode: "timestamp_ms" }).notNull(),
   finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
@@ -208,12 +225,13 @@ export const memoryRuns = sqliteTable("memory_runs", {
   added: integer("added").notNull(),
   merged: integer("merged").notNull(),
   error: text("error"),
-});
+}, (table) => [primaryKey({ columns: [table.userId, table.date] })]);
 
 export const userPreferences = sqliteTable("user_preferences", {
   userId: text("user_id")
     .primaryKey()
     .references(() => user.id, { onDelete: "cascade" }),
+  memory: text("memory", { enum: ["on", "off"] }).notNull().default("on"),
   theme: text("theme").notNull().default("dark"),
   textSize: text("text_size").notNull().default("md"),
   replyFont: text("reply_font").notNull().default("sans"),
