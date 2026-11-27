@@ -470,12 +470,80 @@ async function checkPalette(page, { label, step, shot }) {
   await dialog.waitFor({ state: "hidden", timeout: 5_000 });
 }
 
+// Which prompt controls show: the rail, and every Prompts button outside it (the rail's own trigger has that name
+// too). Exactly one of the two must show at every width.
+function promptControls(page) {
+  return page.evaluate(() => {
+    const shown = (node) => node.getClientRects().length > 0 && getComputedStyle(node).visibility !== "hidden";
+    const rail = document.querySelector('nav[aria-label="Prompts in this chat"]');
+    const buttons = [...document.querySelectorAll('button[aria-label="Prompts"]')].filter((button) => !button.closest("nav") && shown(button));
+    const aside = document.querySelector("aside");
+    const thread = window.__viewportOf(document.querySelector("[data-turn-id]"));
+    return {
+      rail: Boolean(rail && shown(rail)),
+      buttons: buttons.map((button) => (button.closest("header") ? "header" : button.closest("[data-jump-strip]") ? "strip" : "elsewhere")),
+      sidebar: aside ? Math.round(aside.getBoundingClientRect().width) : 0,
+      thread: thread ? Math.round(thread.getBoundingClientRect().width) : 0,
+    };
+  });
+}
+const exactlyOne = (controls) => controls.rail !== (controls.buttons.length === 1) && controls.buttons.length <= 1;
+
+// After a resize or a sidebar toggle the controls settle within a frame or two, once the sidebar width transition ends.
+async function settledControls(page, expected) {
+  return eventually(() => promptControls(page), (controls) => exactlyOne(controls) && expected(controls), { timeoutMs: 3_000, what: "the prompt controls to settle" }).catch(() => promptControls(page));
+}
+
+// The tick rail needs a thread 52rem wide. Narrower, a Prompts button opens the same list in the sheet: in the header
+// while the header shows, and in the Jump to latest strip while the open sidebar hides the header (768px and up).
+async function checkPromptsWidths(page, { step, shot }) {
+  const sidebarToggle = async (name) => {
+    await page.getByRole("button", { name, exact: true }).first().click();
+  };
+  try {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    const open = await settledControls(page, (controls) => controls.sidebar > 0 && !controls.rail);
+    step("1024 with the sidebar open: the rail does not fit and exactly one Prompts button shows", open.sidebar > 0 && !open.rail && exactlyOne(open), JSON.stringify(open));
+    await shot("prompts-1024");
+    const sheet = page.getByRole("dialog", { name: "Prompts" });
+    let opened = false;
+    if (open.buttons.length === 1) {
+      await page.locator('header button[aria-label="Prompts"]:visible, [data-jump-strip] button[aria-label="Prompts"]:visible').first().click();
+      opened = await visible(sheet, 5_000);
+    }
+    const rows = opened ? await sheet.getByRole("button").filter({ hasText: /\S/ }).count() : 0;
+    if (opened) await sheet.getByRole("button").filter({ hasText: "Fold line 1 " }).first().click();
+    const landed = opened
+      ? await eventually(
+          () => page.evaluate(() => ({ sheet: document.querySelector('[role="dialog"]') !== null, focused: document.activeElement?.closest("[data-turn-id]") === document.querySelector("[data-turn-id]") })),
+          (state) => !state.sheet && state.focused,
+          { timeoutMs: 5_000, what: "the sheet to close and the first prompt to take focus" },
+        ).catch(() => null)
+      : null;
+    step("1024 with the sidebar open: the Prompts button opens the sheet and a pick focuses the prompt", opened && rows >= 5 && Boolean(landed), `sheet ${opened}, rows ${rows}, landed ${JSON.stringify(landed)}`);
+
+    await sidebarToggle("Close sidebar");
+    const closed = await settledControls(page, (controls) => controls.sidebar === 0);
+    step("1024 with the sidebar closed: the thread fits the rail and no Prompts button shows", closed.sidebar === 0 && closed.rail && closed.buttons.length === 0, JSON.stringify(closed));
+    await page.setViewportSize({ width: 800, height: 1024 });
+    const narrow = await settledControls(page, (controls) => !controls.rail);
+    step("800 with the sidebar closed: the header Prompts button shows instead of the rail", !narrow.rail && narrow.buttons.length === 1 && narrow.buttons[0] === "header", JSON.stringify(narrow));
+  } finally {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    if ((await promptControls(page)).sidebar === 0) await sidebarToggle("Open sidebar");
+  }
+  const back = await settledControls(page, (controls) => controls.sidebar > 0 && controls.rail);
+  step("1440 with the sidebar open again: the rail shows and no Prompts button does", back.sidebar > 0 && back.rail && back.buttons.length === 0, JSON.stringify(back));
+}
+
 async function checkPrompts(page, { label, touch, step, shot }) {
   await sendPrompt(page, "[qa:plain] fifth prompt");
   await replyDone(page, "pong");
   const headerButton = page.locator("header").getByRole("button", { name: "Prompts", exact: true });
   if (!touch) {
-    step(`${label}: desktop keeps the prompt rail and shows no header Prompts button`, (await headerButton.count()) === 0 && (await page.getByRole("navigation", { name: "Prompts in this chat" }).isVisible()), `header buttons ${await headerButton.count()}`);
+    const desktop = await settledControls(page, (controls) => controls.rail);
+    step(`${label}: desktop keeps the prompt rail and shows no Prompts button`, desktop.rail && desktop.buttons.length === 0, JSON.stringify(desktop));
+    await checkPromptsWidths(page, { step, shot });
     return;
   }
   await (await need(headerButton, "header Prompts button")).click();

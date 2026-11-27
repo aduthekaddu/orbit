@@ -48,11 +48,12 @@ At each width, in one chat made with `POST /api/chats`:
 - `[qa:artifact-form]` shows a `[data-artifact-card]` with `Signup form`, `HTML`, and no raw code. While it streams, **Open** is disabled and the mark spins. **Open Signup form** opens a panel with that title. The frame body uses Orbit's `--background`, a sans font, and `--radius` on its button. Download suggests `signup-form.html`. The Code tab has `span.token` spans and its text equals the saved source. With the `light` theme the frame is light with dark text. The theme is put back afterwards.
 - `[qa:wide-code]` scrolls sideways until **Wrap** turns `aria-pressed="true"` and the block fits.
 - The palette rows fit the dialog. Hits for `firewall` and `deploy` mark the match in `<mark>` and show no raw `[ ]` or `#` once `[qa:...]` tags are set aside. A chat renamed to a long title truncates with an ellipsis.
-- With five prompts, a phone header **Prompts** button opens the `Prompts` sheet. One row has `aria-current="location"`, and tapping the first prompt closes the sheet, scrolls to it, and focuses it. At 1440 the rail shows and the header button does not.
+- With five prompts, a phone header **Prompts** button opens the `Prompts` sheet. One row has `aria-current="location"`, and tapping the first prompt closes the sheet, scrolls to it, and focuses it.
+- At every width exactly one of the rail and a **Prompts** button shows (the rail's own trigger is left out). At 1440 the rail shows. At 1024×768 with the sidebar open the thread is under 52rem and the header is hidden, so the button shows in the Jump to latest strip, opens the sheet, and a pick focuses the prompt. With the sidebar closed, 1024 shows the rail and 800 shows the header button. The scenario opens the sidebar again at 1440.
 
 Then once: the scenario deletes the connections, clears today's dream run, runs `npm run dream` (it fails with `No provider is saved`), connects the mock again, and checks that `/memory` hides that error. A second dream with a local mock Ollama finishes, and `/memory` at each width shows `Last dream <date>, <time>. N chats, N added, N merged` in the browser time zone `Asia/Kolkata`. The scenario deletes the memories that dream added, because they hold `[qa:...]` tags that would steer later mock replies.
 
-Screenshots: `folded-390.png`, `touch-actions-390.png`, `streaming-top.png`, `jump-strip-390.png`, `artifact-card.png`, `artifact-dark.png`, `artifact-light.png`, `code-tab.png`, `wrap-390.png`, `palette-390.png`, `prompts-sheet-390.png`, `memory-status.png`, plus `streaming-top-390.png` and `streaming-top-360.png`.
+Screenshots: `folded-390.png`, `touch-actions-390.png`, `streaming-top.png`, `jump-strip-390.png`, `artifact-card.png`, `artifact-dark.png`, `artifact-light.png`, `code-tab.png`, `wrap-390.png`, `palette-390.png`, `prompts-sheet-390.png`, `prompts-1024.png`, `memory-status.png`, plus `streaming-top-390.png` and `streaming-top-360.png`.
 
 ## Gotchas
 

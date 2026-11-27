@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, type RefObject } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useAuiState } from "@assistant-ui/react";
 import { ListBulletsIcon } from "@phosphor-icons/react";
@@ -12,7 +12,22 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 
 const MIN_TURNS = 3;
 
-export function ThreadMap({ viewport }: { viewport: RefObject<HTMLElement | null> }) {
+/** Where the prompt list opens from: the tick rail, or a Prompts button in the header or the Jump to latest strip. */
+export type PromptsPlace = "rail" | "header" | "strip";
+
+/**
+ * Exactly one control shows. The rail needs a thread 52rem wide, a container query on the thread, so ThreadMap reads
+ * whether the rail is displayed instead of repeating that width. Without the rail, the button goes in the header while
+ * the header shows. From 768px with the sidebar open the header is hidden, so the button goes in the strip.
+ */
+export function promptsPlace(railShown: boolean, headerShown: boolean): PromptsPlace {
+  if (railShown) return "rail";
+  return headerShown ? "header" : "strip";
+}
+
+const displayed = (element: Element | null) => element !== null && element.getClientRects().length > 0;
+
+export function ThreadMap({ viewport, stripSlot }: { viewport: RefObject<HTMLElement | null>; stripSlot: HTMLElement | null }) {
   const messages = useAuiState((state) => state.thread.messages);
   const turns = useMemo<Turn[]>(
     () =>
@@ -34,7 +49,25 @@ export function ThreadMap({ viewport }: { viewport: RefObject<HTMLElement | null
   const headerSlot = useHeaderSlot();
   const trigger = useRef<HTMLButtonElement>(null);
   const rail = useRef<HTMLOListElement>(null);
+  const nav = useRef<HTMLElement>(null);
   const panelId = useId();
+  // Unknown until measured, so the first render, on the server too, has no button. The layout effect measures before
+  // the first paint, and the observer fires when the rail or the header starts or stops displaying.
+  const [place, setPlace] = useState<PromptsPlace | null>(null);
+  const mapped = turns.length >= MIN_TURNS;
+
+  useLayoutEffect(() => {
+    const railElement = nav.current;
+    if (!mapped || !railElement) return;
+    const header = headerSlot?.parentElement ?? null;
+    const measure = () => setPlace(promptsPlace(displayed(railElement), displayed(header)));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(railElement);
+    if (header) observer.observe(header);
+    return () => observer.disconnect();
+  }, [mapped, headerSlot]);
+  const buttonSlot = place === "header" ? headerSlot : place === "strip" ? stripSlot : null;
 
   useEffect(() => {
     const root = viewport.current;
@@ -110,11 +143,12 @@ export function ThreadMap({ viewport }: { viewport: RefObject<HTMLElement | null
     return () => window.removeEventListener("keydown", onKeyDown);
   });
 
-  if (turns.length < MIN_TURNS) return null;
+  if (!mapped) return null;
 
   return (
     <>
       <nav
+        ref={nav}
         aria-label="Prompts in this chat"
         className="group/map absolute top-1/2 right-2 z-10 hidden -translate-y-1/2 @[52rem]/thread:block"
         onBlur={(event) => {
@@ -185,17 +219,17 @@ export function ThreadMap({ viewport }: { viewport: RefObject<HTMLElement | null
           />
         </div>
       </nav>
-      {/* Phones have no room for the rail, so a header button opens the same list in a bottom sheet. A pick closes the
-          sheet first and jumps once focus is free to leave it, so the prompt keeps focus instead of the header button. */}
+      {/* A thread too narrow for the rail gets a button that opens the same list in a bottom sheet. A pick closes the
+          sheet first and jumps once focus is free to leave it, so the prompt keeps focus instead of the button. */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        {headerSlot
+        {buttonSlot
           ? createPortal(
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon-sm" aria-label="Prompts" className="text-muted-foreground hover:text-foreground md:hidden">
+                <Button variant="ghost" size="icon-sm" aria-label="Prompts" className="text-muted-foreground hover:text-foreground">
                   <ListBulletsIcon weight="light" className="size-[18px]" />
                 </Button>
               </SheetTrigger>,
-              headerSlot,
+              buttonSlot,
             )
           : null}
         <SheetContent

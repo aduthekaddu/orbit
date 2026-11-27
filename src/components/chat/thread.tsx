@@ -30,6 +30,8 @@ export function Thread({ ready, focusMessageId, hasHistory }: { ready: boolean; 
   // refreshes the page, and assistant-ui would run the first-load scroll then. ChatPanel remounts per chat and ?m=.
   const [scrollToBottomOnLoad] = useState(hasHistory && !focusMessageId);
   const viewport = useRef<HTMLDivElement>(null);
+  // The thread map puts its Prompts button here when the rail does not fit and the header is hidden.
+  const [promptsSlot, setPromptsSlot] = useState<HTMLElement | null>(null);
   useEffect(() => {
     const root = viewport.current;
     if (!focusMessageId || view !== "messages" || !root) return;
@@ -84,7 +86,7 @@ export function Thread({ ready, focusMessageId, hasHistory }: { ready: boolean; 
               <ThreadPrimitive.ViewportFooter className="pointer-events-none sticky bottom-0 mt-auto">
                 <div aria-hidden className="h-4 bg-gradient-to-t from-background to-transparent" />
                 <div className="pointer-events-auto bg-background pb-[max(1rem,env(safe-area-inset-bottom))]">
-                  <div data-jump-strip className="flex h-11 items-center justify-center bg-background">
+                  <div data-jump-strip className="relative flex h-11 items-center justify-center bg-background">
                     {view === "messages" && (
                       <ThreadPrimitive.ScrollToBottom
                         data-scroll-to-bottom
@@ -94,6 +96,7 @@ export function Thread({ ready, focusMessageId, hasHistory }: { ready: boolean; 
                         Jump to latest
                       </ThreadPrimitive.ScrollToBottom>
                     )}
+                    <div ref={setPromptsSlot} className="absolute inset-y-0 right-0 flex items-center" />
                   </div>
                   <div className="mx-auto w-full max-w-chat">
                     <Composer ready={ready} />
@@ -103,7 +106,7 @@ export function Thread({ ready, focusMessageId, hasHistory }: { ready: boolean; 
             </>
           )}
         </ThreadPrimitive.Viewport>
-        {view === "messages" ? <ThreadMap viewport={viewport} /> : null}
+        {view === "messages" ? <ThreadMap viewport={viewport} stripSlot={promptsSlot} /> : null}
       </ThreadPrimitive.Root>
     </TooltipProvider>
   );
