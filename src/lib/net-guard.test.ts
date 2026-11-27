@@ -69,19 +69,24 @@ test("the guarded transport checks socket destinations and redirects with local 
   const { guardedFetch, checkProviderUrl } = await import("./net-guard");
   const blocklist = new BlockList();
   blocklist.addAddress("127.0.0.2");
-  const lookup = async (hostname: string) => hostname === "mixed.fixture.invalid"
-    ? [{ address: "127.0.0.1", family: 4 }, { address: "127.0.0.2", family: 4 }]
-    : [{ address: hostname === "blocked.fixture.invalid" ? "127.0.0.2" : "127.0.0.1", family: 4 }];
+  let lookupsForChangingHost = 0;
+  const lookup = async (hostname: string) => {
+    if (hostname === "mixed.fixture.invalid") return [{ address: "127.0.0.1", family: 4 }, { address: "127.0.0.2", family: 4 }];
+    const changed = hostname === "changing.fixture.invalid" && ++lookupsForChangingHost > 1;
+    return [{ address: changed ? "127.0.0.2" : "127.0.0.1", family: 4 }];
+  };
   const fetch = guardedFetch(blocklist, { lookup, allowsHttp: () => true });
   const fixtureResponse = await fetch(`http://allowed.fixture.invalid:${publicPort}/`, { signal: AbortSignal.timeout(2000) });
   assert.equal(await fixtureResponse.text(), "allowed fixture");
   assert.equal(await checkProviderUrl(`https://allowed.fixture.invalid:${publicPort}/`, { lookup, blocklist }), true);
   assert.equal(await checkProviderUrl(`https://mixed.fixture.invalid:${publicPort}/`, { lookup, blocklist }), false);
+  assert.equal(await checkProviderUrl(`https://changing.fixture.invalid:${deniedPort}/`, { lookup, blocklist }), true);
   for (const url of [
-    `http://127.0.0.2:${deniedPort}/`, `http://blocked.fixture.invalid:${deniedPort}/`,
+    `http://127.0.0.2:${deniedPort}/`, `http://changing.fixture.invalid:${deniedPort}/`,
     `http://mixed.fixture.invalid:${publicPort}/`, `http://127.0.0.1:${publicPort}/redirect`,
   ]) {
     await assert.rejects(fetch(url, { signal: AbortSignal.timeout(2000) }), (error: unknown) => error instanceof TypeError, url);
   }
+  assert.equal(lookupsForChangingHost, 2);
   assert.equal(privateRequests, 0);
 });
