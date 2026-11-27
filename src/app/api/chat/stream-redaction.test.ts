@@ -8,6 +8,7 @@ import test, { after, before } from "node:test";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
+import { mockGithubToken, startMockMcp, type MockMcp } from "../../../../scripts/qa/mock-mcp.mjs";
 import { getDb, type OrbitDb } from "@/lib/db";
 import * as schema from "@/lib/db/schema";
 import * as messages from "@/lib/messages";
@@ -16,7 +17,7 @@ import { saveSettings } from "@/lib/settings";
 
 const PROVIDER_KEY = "made-up-provider-key-0001";
 const TAVILY_KEY = "made-up-tavily-key-0002";
-const GITHUB_TOKEN = "made-up-github-token-0003";
+const GITHUB_TOKEN = mockGithubToken;
 const USER_ID = "u-stream-redact";
 const SEEDED_ENV = ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL", "ORBIT_SEARXNG_URL", "ORBIT_TAVILY_API_KEY", "ORBIT_GITHUB_TOKEN"];
 
@@ -57,8 +58,9 @@ let route: typeof import("./route");
 let replay: typeof import("../chats/[id]/stream/route").GET;
 let stop: typeof import("../chats/[id]/stop/route").POST;
 let db: OrbitDb | undefined;
+let github: MockMcp;
 const originalCwd = process.cwd();
-const originalEnv = Object.fromEntries(["ORBIT_OLLAMA_URL", "ORBIT_SANDBOX", ...SEEDED_ENV].map((name) => [name, process.env[name]]));
+const originalEnv = Object.fromEntries(["ORBIT_OLLAMA_URL", "ORBIT_SANDBOX", "ORBIT_GITHUB_MCP_FIXTURE", ...SEEDED_ENV].map((name) => [name, process.env[name]]));
 
 const USAGE = {
   inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
@@ -74,7 +76,7 @@ function setCredentials(keys?: { apiKey?: string; tavilyApiKey?: string; githubT
   saveSettings({
     tavilyApiKey: keys?.tavilyApiKey ?? TAVILY_KEY,
     githubToken: keys?.githubToken ?? GITHUB_TOKEN,
-    githubMcpUrl: "https://api.githubcopilot.com/mcp/",
+    githubMcpUrl: github.url,
   });
 }
 
@@ -82,6 +84,8 @@ before(async () => {
   for (const name of SEEDED_ENV) delete process.env[name];
   process.env.ORBIT_OLLAMA_URL = "http://127.0.0.1:9";
   process.env.ORBIT_SANDBOX = "off";
+  process.env.ORBIT_GITHUB_MCP_FIXTURE = "1";
+  github = await startMockMcp();
   fs.cpSync(path.join(originalCwd, "drizzle"), path.join(sandbox, "drizzle"), { recursive: true });
   process.chdir(sandbox);
 
@@ -96,6 +100,7 @@ before(async () => {
 
 after(async () => {
   await Promise.allSettled(afterTasks);
+  await github?.close();
   db?.$client.close();
   process.chdir(originalCwd);
   for (const [name, value] of Object.entries(originalEnv)) {
