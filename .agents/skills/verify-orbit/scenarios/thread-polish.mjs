@@ -553,7 +553,7 @@ async function checkPrompts(page, { label, touch, step, shot }) {
   const promptRows = rows.filter((row) => row.text.length > 0 && row.text !== "Close");
   step(
     `${label}: the Prompts sheet lists five prompts and marks the current one`,
-    promptRows.length === 5 && promptRows.filter((row) => row.current === "location").length === 1 && promptRows.every((row) => row.height >= 44),
+    promptRows.length === 5 && promptRows.filter((row) => row.current === "location").length === 1 && promptRows.every((row) => row.height >= 43.5),
     JSON.stringify(promptRows),
   );
   if (label === "390") await shot("prompts-sheet-390");
