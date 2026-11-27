@@ -212,6 +212,10 @@ PASS a short message still gets a reply
 
 Screenshot: `too-long.png`.
 
+### chat-manage and thread-polish
+
+Slice 16's scenarios. `chat-manage` checks draft chats, rename, delete with a five-second undo, and the sidebar footer with the Sign out confirmation. `thread-polish` checks the message fold, touch actions, top-anchored streaming, the Jump to latest strip, artifact cards, code Wrap, palette rows, the phone Prompts sheet, and the Memory page dream status. Both run at 1440×900, 390×844, and 360×740. See [Thread polish](thread-polish.md).
+
 ## Gotchas
 
 - The mock counts `fail-first` failures for each prompt text. `retry-stop` adds the time to the prompt, so a second run fails three times again.

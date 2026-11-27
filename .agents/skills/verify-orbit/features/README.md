@@ -40,6 +40,7 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 - [Reading and appearance](./appearance.md) measures reply type, line length, input sizes, and contrast in every theme, and checks that saved appearance paints from the server.
 - [Widgets and tool lines](./widgets.md) checks that `render_ui` draws one surface with formatted numbers, colored callouts, and a capped table, and that finished tool calls shrink to one line.
 - [Browse](./browse.md) drives Chrome for retry and stop, the palette, short-screen settings, failed requests, the empty chat, sign out, and the thread map shortcut.
+- [Thread polish](./thread-polish.md) checks draft chats, rename and delete with undo, the sidebar footer, the message fold, streaming position, artifact cards, code Wrap, palette rows, the phone Prompts sheet, and the dream status.
 
 - [Branching](./branching.md) keeps edited prompts and regenerated answers, switches versions, and restores the last written branch.
 - [History search](./search.md) finds a message from the command palette and titles a new chat.
