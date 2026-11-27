@@ -15,6 +15,8 @@ export const orbitCodeTheme: PrismTheme = {
     { types: ["builtin", "class-name"], style: { color: "var(--syntax-class)" } },
     { types: ["property", "property-access"], style: { color: "var(--syntax-function)" } },
     { types: ["operator", "entity", "url"], style: { color: "var(--syntax-operator)" } },
+    { types: ["tag"], style: { color: "var(--syntax-function)" } },
+    { types: ["attr-name", "selector"], style: { color: "var(--syntax-class)" } },
     { types: ["punctuation"], style: { color: "var(--syntax-punctuation)" } },
     { types: ["decorator", "interpolation-punctuation", "format-spec"], style: { color: "var(--syntax-builtin)" } },
   ],

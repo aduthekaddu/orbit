@@ -42,6 +42,7 @@ test("the Code tab highlights the source with Prism token spans", () => {
   const { code } = codeTab(SOURCES[0][1]);
   assert.match(code, /<span[^>]*class="token[^"]*tag/);
   assert.match(code, /<span[^>]*class="token[^"]*attr-value/);
+  assert.match(code, /<span class="token tag" style="color:var\(--syntax-function\)">title<\/span>/, "tag names are colored");
   const tsx = codeTab(SOURCES[4][1]).code;
   assert.match(tsx, /<span[^>]*class="token[^"]*keyword/);
 });
