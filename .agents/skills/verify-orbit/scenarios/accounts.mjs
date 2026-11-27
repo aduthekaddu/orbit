@@ -141,7 +141,10 @@ export default async function accounts({ page, origin, step, shot, mockUrl }) {
     await team.reload();
     await teamSignup.waitFor();
     await fits(team, 390, "Invite signup after refresh");
-    await shot("invite-signup", team);
+    await shot("invite-signup-390", team);
+    await signedOut.goto(teamLink);
+    await signedOut.getByRole("button", { name: "Create account", exact: true }).waitFor();
+    await shot("invite-signup", signedOut);
     let submissions = 0;
     team.on("request", (outgoing) => { if (new URL(outgoing.url()).pathname === "/api/auth/sign-up/email") submissions += 1; });
     await signup(team, teamEmail, { doubleSubmit: true });
@@ -157,7 +160,12 @@ export default async function accounts({ page, origin, step, shot, mockUrl }) {
     await team.goto(`${origin}/settings`);
     for (const name of ["Appearance", "Default model", "Models", "Memory", "GitHub"]) await heading(team, name).waitFor();
     step("Team settings hides the Connections management card", await heading(team, "Connections").count() === 0);
-    await shot("team-member-settings", team);
+    await fits(team, 390, "Team settings");
+    await shot("team-member-settings-390", team);
+    const desktopTeam = await newPage({ viewport: desktop, storageState: await team.context().storageState() });
+    await desktopTeam.goto(`${origin}/settings`);
+    await heading(desktopTeam, "Models").waitFor();
+    await shot("team-member-settings", desktopTeam);
     const shared = (await getJSON(`${origin}/api/connections`, team.request)).connections;
     assert.ok(shared.length > 0);
     step("Team connections expose only id, kind, and label", shared.every((connection) => Object.keys(connection).sort().join(",") === "id,kind,label"));
@@ -227,7 +235,10 @@ export default async function accounts({ page, origin, step, shot, mockUrl }) {
     assert.equal((await team.request.get(`${origin}/api/chats`)).status(), 401, "removed member's session immediately fails");
     await team.goto(`${origin}${teamChat}`);
     await team.waitForURL((url) => url.pathname === "/login");
-    await shot("removed-member-login", team);
+    await shot("removed-member-login-390", team);
+    await desktopTeam.goto(`${origin}${teamChat}`);
+    await desktopTeam.waitForURL((url) => url.pathname === "/login");
+    await shot("removed-member-login", desktopTeam);
     await signedOut.goto(teamLink);
     await heading(signedOut, "Invite not valid").waitFor();
     step("Removed member is signed out and the link stays spent", true);
