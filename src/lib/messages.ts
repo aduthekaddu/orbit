@@ -62,15 +62,23 @@ export function ensureChat(id: string, userId: string) {
   return db.select().from(chats).where(eq(chats.id, id)).get() ?? null;
 }
 
-/** A one-line sidebar title from the first message: code, markdown markers, and line breaks dropped. */
-export function chatTitle(text: string): string {
-  const plain = text
+/**
+ * Markdown as one line of plain text: code fences, link targets, heading and list markers, emphasis, and line breaks
+ * dropped, every word kept. No pattern can rescan a long run: link text and targets stop at the next bracket or paren.
+ */
+export function plainText(markdown: string): string {
+  return markdown
     .replace(/```[^\n]*\n?([\s\S]*?)(```|$)/g, " $1 ")
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/!?\[([^[\]]*)\]\([^()\s]*\)/g, "$1")
     .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+[.)])\s+/gm, "")
     .replace(/(\*\*|__|~~|[*_`])/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** A one-line sidebar title from the first message: plainText cut to 80 characters. */
+export function chatTitle(text: string): string {
+  const plain = plainText(text);
   if (plain.length <= 80) return plain;
   const cut = plain.slice(0, 80);
   const space = cut.lastIndexOf(" ");
@@ -246,6 +254,52 @@ export type ReplyPlan = {
 
 export type ChatWritePlan = ReplyPlan | { error: "invalid-edit" | "no-prompt" | "cross-chat" | "stale" };
 
+export type BeginTurnResult =
+  | { ok: true; chat: typeof chats.$inferSelect; write: ReplyPlan; messagesBeforeTurn: number }
+  | { ok: false; error: "not-found" | "invalid-edit" | "no-prompt" | "cross-chat" | "stale" };
+
+class TurnRefused extends Error {
+  constructor(readonly reason: Exclude<BeginTurnResult, { ok: true }>["error"]) {
+    super(reason);
+  }
+}
+
+/**
+ * Starts a turn in one transaction: it creates the chat when it does not exist yet, then plans the write with
+ * planChatWrite. A refused plan rolls the whole transaction back, so a chat row exists only with its first prompt.
+ * Another user's chat, or a regenerate of a chat that is gone, is not-found and writes nothing.
+ */
+export function beginTurn(
+  chatId: string,
+  userId: string,
+  incoming: IncomingMessage[],
+  redact: Redactor,
+  trigger?: string,
+  editMessageId?: string,
+): BeginTurnResult {
+  const db = getDb();
+  try {
+    return db.transaction((): BeginTurnResult => {
+      const existing = db.select().from(chats).where(eq(chats.id, chatId)).get();
+      if (existing && existing.userId !== userId) return { ok: false, error: "not-found" };
+      if (!existing && trigger === "regenerate-message") return { ok: false, error: "not-found" };
+      const messagesBeforeTurn = storedMessageCount(chatId);
+      if (!existing) {
+        const now = new Date();
+        db.insert(chats).values({ id: chatId, userId, title: "New chat", createdAt: now, updatedAt: now }).run();
+      }
+      const write = planChatWrite(chatId, incoming, redact, trigger, editMessageId);
+      if ("error" in write) throw new TurnRefused(write.error);
+      const chat = db.select().from(chats).where(eq(chats.id, chatId)).get();
+      if (!chat) throw new Error("The chat row is missing inside its own turn");
+      return { ok: true, chat, write, messagesBeforeTurn };
+    });
+  } catch (error) {
+    if (error instanceof TurnRefused) return { ok: false, error: error.reason };
+    throw error;
+  }
+}
+
 export function planChatWrite(
   chatId: string,
   incoming: IncomingMessage[],
@@ -393,6 +447,32 @@ export function listChats(userId: string) {
       title: chat.title,
       updatedAt: chat.updatedAt.toISOString(),
     }));
+}
+
+/** Whether a chat with this id exists, whoever owns it. A route that gets another user's id answers 404. */
+export function chatExists(id: string): boolean {
+  return getDb().select({ id: chats.id }).from(chats).where(eq(chats.id, id)).get() !== undefined;
+}
+
+/** Renames the user's chat and leaves updated_at alone, so the sidebar order stays. Null when it is not theirs. */
+export function renameChat(id: string, userId: string, title: string, redact?: Redactor): { id: string; title: string } | null {
+  const clean = (redact ? redact.text(title) : title).replace(/\s+/g, " ").trim();
+  const result = getDb().update(chats).set({ title: clean }).where(and(eq(chats.id, id), eq(chats.userId, userId))).run();
+  return result.changes === 0 ? null : { id, title: clean };
+}
+
+/**
+ * Deletes the user's chat in one transaction. Messages go first, so the messages_fts_ad trigger removes each one
+ * from search. Memories keep their row and lose the source through ON DELETE SET NULL. False when it is not theirs.
+ */
+export function deleteChat(id: string, userId: string): boolean {
+  const db = getDb();
+  return db.transaction(() => {
+    if (!getChatForUser(id, userId)) return false;
+    db.delete(messages).where(eq(messages.chatId, id)).run();
+    db.delete(chats).where(and(eq(chats.id, id), eq(chats.userId, userId))).run();
+    return true;
+  });
 }
 
 export function getChatForUser(id: string, userId: string) {
