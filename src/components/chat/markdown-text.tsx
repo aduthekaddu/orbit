@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState, type ComponentProps, type ElementType, type JSX } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ComponentProps, type ElementType, type JSX } from "react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import { useAui, useAuiState } from "@assistant-ui/react";
 import { useAISDKChat } from "@assistant-ui/react-ai-sdk";
@@ -101,18 +101,25 @@ export function MarkdownText({ className, editable = false }: { className?: stri
   const sourceIndex = sourceMessage && textOrdinal !== undefined ? textPartIndex(sourceMessage.parts, textOrdinal) : undefined;
   const running = useAuiState((s) => s.message.status?.type === "running");
   const [active, setActive] = useState<number | null>(null);
+  const [wrapped, setWrapped] = useState<ReadonlySet<number>>(() => new Set());
+  const toggleWrap = useCallback((index: number) => setWrapped((current) => {
+    const next = new Set(current);
+    if (!next.delete(index)) next.add(index);
+    return next;
+  }), []);
   const { save, saving, error } = useSaveMessageText();
 
   const codeEdit = useMemo(
     () => ({
       enabled: editable && Boolean(messageId) && !running,
-      text: partText, textOrdinal, active, setActive, messageId, saving, error,
+      streaming: running,
+      text: partText, textOrdinal, active, setActive, messageId, saving, error, wrapped, toggleWrap,
       save: (id: string, text: string) => {
         if (sourceIndex === undefined) return Promise.resolve(false);
         return save(id, text, sourceIndex);
       },
     }),
-    [editable, messageId, running, partText, textOrdinal, active, save, saving, error, sourceIndex],
+    [editable, messageId, running, partText, textOrdinal, active, save, saving, error, sourceIndex, wrapped, toggleWrap],
   );
 
   return (

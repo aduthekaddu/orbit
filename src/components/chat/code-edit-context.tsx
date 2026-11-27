@@ -12,6 +12,11 @@ export type CodeEditContextValue = {
   messageId: string;
   saving: boolean;
   error: string;
+  /** The message is still streaming, so an artifact in it is not finished yet. */
+  streaming: boolean;
+  /** Code blocks, by `data-code-index`, whose lines wrap. */
+  wrapped: ReadonlySet<number>;
+  toggleWrap: (index: number) => void;
 };
 
 export const CodeEditContext = createContext<CodeEditContextValue | null>(null);
