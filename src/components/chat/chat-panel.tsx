@@ -13,6 +13,7 @@ import type { ModelChoice } from "@/lib/model-choice";
 import { ArtifactProvider } from "@/components/artifacts/use-artifact";
 import { ArtifactWorkspace } from "@/components/artifacts/artifact-panel";
 import { ChatIdProvider } from "./chat-id";
+import { dropNewParam } from "./draft-url";
 import { ModelChoiceProvider } from "./model-picker";
 import { createReplyLink, ReplyLink } from "./reply-link";
 import { StoppedRunSync } from "./stopped-run-sync";
@@ -20,6 +21,7 @@ import { Thread } from "./thread";
 
 export function ChatPanel({
   chatId,
+  isDraft = false,
   initialHistory,
   focusMessageId,
   choice: resolvedChoice,
@@ -29,6 +31,8 @@ export function ChatPanel({
   restorePending = true,
 }: {
   chatId: string;
+  /** `/c/<id>?new` with no chats row yet. The first send creates the row. */
+  isDraft?: boolean;
   initialHistory: ReturnType<typeof toRepository>;
   focusMessageId: string | null;
   choice: ModelChoice | null;
@@ -50,6 +54,18 @@ export function ChatPanel({
   const [stopped, setStopped] = useState<string[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const link = useMemo(() => createReplyLink(chatId, () => router.refresh()), [chatId, router]);
+  // A reply ID proves POST /api/chat committed the chat and its prompt, so a reload must open the saved chat.
+  const committedDraft = useRef(false);
+  const draft = useRef(isDraft);
+  useEffect(() => {
+    draft.current = isDraft;
+    // A send that dropped before its headers lands here once a refresh finds the committed row.
+    if (!isDraft) dropNewParam();
+  }, [isDraft]);
+  useEffect(() => () => {
+    // Leaving mid-stream skips the refresh at the reply's end, and the sidebar would miss the new chat.
+    if (draft.current && committedDraft.current) router.refresh();
+  }, [router]);
   const { state } = useSyncExternalStore(link.subscribe, link.getSnapshot, link.getServerSnapshot);
   const rows = useMemo(() => initialHistory.messages.map(({ parentId, message }) => ({ id: message.id, parentId })), [initialHistory]);
   const savedIds = useMemo(() => new Set(rows.map((message) => message.id)), [rows]);
@@ -61,7 +77,13 @@ export function ChatPanel({
       return id;
     },
     modelChoice: () => sendChoice.current,
-    onReplyId: link.accept,
+    onReplyId: (replyId) => {
+      if (draft.current) {
+        committedDraft.current = true;
+        dropNewParam();
+      }
+      link.accept(replyId);
+    },
     onReconnectResponse: link.reconnectResponse,
     onServerTime: link.syncClock,
   }), [chatId, link]);

@@ -29,7 +29,6 @@ function useToday() {
 export function Sidebar({
   chats,
   email,
-  newChatPending,
   onNewChat,
   onSearch,
   onCollapse,
@@ -37,7 +36,6 @@ export function Sidebar({
 }: {
   chats: ChatSummary[];
   email: string;
-  newChatPending: boolean;
   onNewChat: () => void;
   onSearch: () => void;
   onCollapse?: () => void;
@@ -83,7 +81,7 @@ export function Sidebar({
         )}
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon-sm" onClick={onNewChat} disabled={newChatPending} aria-label="New chat" className="text-muted-foreground hover:text-foreground">
+            <Button variant="ghost" size="icon-sm" onClick={onNewChat} aria-label="New chat" className="text-muted-foreground hover:text-foreground">
               <NotePencilIcon weight="light" className="size-[18px]" />
             </Button>
           </TooltipTrigger>
