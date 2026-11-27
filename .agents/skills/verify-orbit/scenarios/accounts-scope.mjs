@@ -151,6 +151,7 @@ export default async function accountsScope({ page, origin, step, shot, useProvi
     assert.equal((await savedOff).status(), 200);
     await member.reload();
     step("Memory remains Off after refresh", await memory.getAttribute("aria-checked") === "false");
+    await memory.scrollIntoViewIfNeeded();
     await shot("memory-off", member);
     const offQuery = "[qa:plain] Where does orbit-member-canary-18a deploy with Memory off?";
     const offOffset = fs.readFileSync(requestLog, "utf8").length;
