@@ -7,7 +7,7 @@ Orbit is a self-hosted chat app, shaped like ChatGPT or Claude, that runs on you
 - Stream a conversation against any OpenAI-compatible endpoint, or against the Anthropic API from slice 17. To change provider, you change a base URL, a key, and a model id.
 - Keep every account, chat, and setting in one SQLite file on your machine. Orbit does not depend on a hosted chat platform.
 - Keep the provider API key on the server. The browser only learns whether a key is set.
-- Serve one person by default. From slice 18, an admin can host Orbit for a team or for other people instead ([ADR 0002](adr/0002-several-users.md)).
+- Serve one person by default. The admin can host Orbit for a team or for a community ([ADR 0002](adr/0002-several-users.md)).
 - Add tools as adapters behind the same chat, not as a new backend.
 
 ## Non-goals
@@ -36,7 +36,7 @@ Orbit is a self-hosted chat app, shaped like ChatGPT or Claude, that runs on you
 | 15 | [Widgets and tool cards](slices/15.md) | Generated UI and tool results read as part of the reply, with real color and formatted numbers. | Planned |
 | 16 | [Messages, artifact cards, phone fixes, rename and delete](slices/16.md) | Long messages collapse, artifacts get a card and a themed preview, phone layouts stop clipping, and chats can be renamed and deleted. | Shipped in #273 |
 | 17 | [Model and effort in the chat, plus Anthropic](slices/17.md) | Pick the model and effort for each chat from the composer. Add an Anthropic key. | Shipped in #264 |
-| 18 | [Accounts and hosting modes](slices/18.md) | Host Orbit for yourself, a team, or other people, with invites and per-user data. | Planned |
+| 18 | [Accounts and hosting modes](slices/18.md) | Host Orbit for yourself, a team, or other people, with invites and per-user data. | 18a shipped in #279. 18b in #281. |
 | 19 | [Tools page and tools sheet](slices/19.md) | Test every tool from one page, and switch tools on or off for a chat. | Planned |
 | 20 | [Files](slices/20.md) | Attach files to a chat, and find, download, or delete them later. | Planned |
 | 21 | [Artifacts page](slices/21.md) | Find, rename, download, and compare versions of every artifact. | Planned |

@@ -1,6 +1,6 @@
 # Orbit
 
-Orbit is a self-hosted chat app, shaped like ChatGPT or Claude, for one person who wants to use any OpenAI-compatible model from their own machine and keep every chat in a local SQLite file.
+Orbit is a self-hosted chat app for OpenAI-compatible models and Anthropic. You can run it for yourself, for a team, or for a community. Orbit keeps each account’s chats in a local SQLite file.
 
 ![An Orbit chat with a reasoning disclosure, a table, and a code block](docs/design/screenshots/11-done.png)
 
@@ -19,10 +19,10 @@ Orbit is a self-hosted chat app, shaped like ChatGPT or Claude, for one person w
 - Read your GitHub repositories, issues, and pull requests when you save a GitHub token.
 - Remember facts across chats. The model saves a memory, and a `/memory` page lists, searches, edits, and deletes them.
 - A nightly job turns the day's chats into memories.
-- Keep chats, settings, and the account in `data/orbit.db`. The API key stays on the server.
+- Keep accounts, chats, and settings in `data/orbit.db`. Provider keys stay on the server.
 - Work on a phone at 390 px wide.
 - Run short Python and JavaScript programs in isolated containers when the operator enables the code sandbox.
-- Serve one account. Signup closes after the first one.
+- Give each account its own chats, memories, appearance, and GitHub settings.
 
 Planned features are listed in the [roadmap](docs/roadmap.md).
 
@@ -97,6 +97,18 @@ The entrypoint gives `/app/data`, or the directory in `ORBIT_DATA_DIR` when you 
 
 For development with hot reload, run `npm run dev` instead of steps 2 and 3.
 
+### Choose a hosting mode
+
+The first account is the admin. Open **Admin → Hosting** to choose how people join and whose provider connections they use.
+
+| Mode | Who can join | Provider connections |
+| --- | --- | --- |
+| Personal | Signup closes after the first account. | The admin’s own connections. |
+| Team | The admin shares a single-use invite that expires after seven days. | Members use the admin’s connections and choose their own default model. |
+| Community | Signup is by invite. The admin can open signup to anyone. | Each account adds its own connection. Provider URLs must use public HTTPS. |
+
+An invite link appears when you create it. Copy it before leaving the page. Changing hosting modes revokes pending invites. To return to Personal, first remove the other accounts under **Admin → Users**. Removing an account signs it out and deletes its data.
+
 ### Configuration
 
 Every variable is optional.
@@ -155,7 +167,7 @@ Each run has only the image's standard library. It has no network or persistent 
 
 ### Deploy behind Cloudflare
 
-You can reach Orbit from a phone or another computer through a Cloudflare tunnel. The tunnel makes an outbound connection to Cloudflare, so no port opens on your machine. Cloudflare Access asks who you are before any request reaches Orbit, and Orbit's own sign-in still runs after that.
+You can reach Orbit from a phone or another computer through a Cloudflare tunnel. The tunnel makes an outbound connection to Cloudflare, so no port opens on your machine. Cloudflare Access can check who reaches the tunnel. Orbit uses its own account sign-in in every mode.
 
 ```text
 phone → Cloudflare → Access login → tunnel → cloudflared container → http://orbit:3210 → Orbit sign-in
@@ -179,10 +191,12 @@ You need a Cloudflare account with a domain on it. The free plan covers tunnels 
 
 	With the sandbox override, add `-f docker-compose.yml -f docker-compose.sandbox.yml` before `--profile public`.
 
-3. Check that Access is in front. Without an Access login, the public URL answers `302` to a `cloudflareaccess.com` address.
+3. If you use Access, check it from a signed-out browser. An unauthenticated request to the public URL answers `302` to a `cloudflareaccess.com` address.
 
 	```sh
 	curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' https://orbit.example.com/
 	```
+
+For Team, add each member’s email to the Access Allow policy before sending their Orbit invite. For Community, you can run without Access or use an Allow policy with **Include → Login Methods → One-time PIN**. This lets anyone who can receive the PIN reach Orbit. Orbit still applies the signup setting you chose. [Cloudflare Access policies](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/)
 
 A plain `docker compose up` starts no tunnel. Orbit stays on `127.0.0.1:3210` on your machine either way. With an `https` public URL, the session cookie is marked `Secure`, and browsers still accept it on `http://127.0.0.1:3210`. See [Security](SECURITY.md#cloudflare-access) for what Access protects.
