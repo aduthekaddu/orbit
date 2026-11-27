@@ -999,9 +999,9 @@ async function browse(scenario) {
     console.log(line);
     return ok;
   };
-  const shot = async (name, target = page) => {
+  const shot = async (name, target = page, options = {}) => {
     const file = path.join(evidence, `${name}.png`);
-    await target.screenshot({ path: file, mask: [target.locator("[data-evidence-redact]")] });
+    await target.screenshot({ ...options, path: file, mask: [target.locator("[data-evidence-redact]")] });
     console.log(`shot ${path.relative(repoRoot, file)}`);
   };
   try {

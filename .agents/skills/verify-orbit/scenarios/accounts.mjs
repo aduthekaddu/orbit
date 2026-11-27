@@ -126,7 +126,7 @@ export default async function accounts({ page, origin, step, shot, mockUrl }) {
     await page.getByRole("button", { name: "Copied", exact: true }).waitFor();
     step("Copy places the one-time link on the clipboard", await page.evaluate(async (link) => await navigator.clipboard.readText() === link, teamLink));
     await page.evaluate(() => navigator.clipboard.writeText(""));
-    await shot("invite-created");
+    await shot("invite-created", page, { maskColor: "#3d434c" });
     await page.reload();
     const pending = await invites();
     await page.getByRole("button", { name: "Revoke", exact: true }).waitFor();
@@ -167,10 +167,12 @@ export default async function accounts({ page, origin, step, shot, mockUrl }) {
     for (const name of ["Appearance", "Default model", "Models", "Memory", "GitHub"]) await heading(team, name).waitFor();
     step("Team settings hides the Connections management card", await heading(team, "Connections").count() === 0);
     await fits(team, 390, "Team settings");
+    await heading(team, "Default model").evaluate((element) => element.scrollIntoView({ block: "start" }));
     await shot("team-member-settings-390", team);
     const desktopTeam = await newPage({ viewport: desktop, storageState: await team.context().storageState() });
     await desktopTeam.goto(`${origin}/settings`);
     await heading(desktopTeam, "Models").waitFor();
+    await heading(desktopTeam, "Default model").evaluate((element) => element.scrollIntoView({ block: "start" }));
     await shot("team-member-settings", desktopTeam);
     const shared = await getJSON(`${origin}/api/connections`, team.request);
     assert.ok(Array.isArray(shared) && shared.length > 0, "Team receives a list of connections");
@@ -226,7 +228,7 @@ export default async function accounts({ page, origin, step, shot, mockUrl }) {
       const dialog = admin.getByRole("dialog", { name: "Remove account", exact: true });
       await dialog.getByText(teamEmail, { exact: true }).waitFor();
       await fits(admin, width, "Remove dialog");
-      await shot(width === 1280 ? "remove-dialog" : `remove-dialog-${width}`, admin);
+      await shot(width === 1280 ? "remove-dialog" : `remove-dialog-${width}`, admin, { animations: "disabled" });
       if (width !== 360) {
         await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
         await dialog.waitFor({ state: "hidden" });
