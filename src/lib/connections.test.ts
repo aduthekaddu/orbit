@@ -12,7 +12,7 @@ import { ensureChat } from "./messages";
 import { cachedCaps } from "./model-list";
 import { dataDirectory } from "./paths";
 import { getPreferences, savePreferences } from "./preferences";
-import { saveSettings } from "./settings";
+import { getSettings, requestRedactor, saveSettings, toPublicSettings } from "./settings";
 
 const ONE = "u-connections-one";
 const TWO = "u-connections-two";
@@ -272,6 +272,67 @@ test("an unreadable key's error does not name the connection", async () => {
   }
 });
 
+test("saved URL credentials remain in the redaction set when the connection key is unreadable", () => {
+  const value = "fixture-url-value-17";
+  const db = getDb().$client;
+  db.prepare("insert into provider_connections (id, user_id, kind, label, base_url, api_key_ciphertext, created_at) values ('conn-url-unreadable', ?, 'openai-compatible', 'Fixture', ?, 'unreadable', 0)")
+    .run(ONE, `https://provider.invalid/v1?token=${value}`);
+  try {
+    assert.equal(requestRedactor(ONE).text(value), "[redacted]");
+    const settings = toPublicSettings({ ...getSettings(), searxngUrl: `https://search.invalid/${value}` });
+    assert.equal(settings.searxngUrl, "https://search.invalid/[redacted]");
+  } finally {
+    db.prepare("delete from provider_connections where id = 'conn-url-unreadable'").run();
+  }
+});
+
+test("connection label validation uses settings, stored keys, and proposed URL credentials", async (t) => {
+  const provider = t.mock.method(globalThis, "fetch", async () => Response.json({ data: [{ id: "fixture-model" }] }));
+  const before = await list();
+  const urlValue = "fixture-url-value-18";
+  for (const value of [TAVILY_KEY, ANTHROPIC_KEY, urlValue]) {
+    const result = await create({
+      kind: "openai-compatible", label: `Fixture ${value}`,
+      baseUrl: `https://provider.invalid/v1?token=${urlValue}`, apiKey: "fixture-new-value",
+    });
+    assert.equal(result.status, 400);
+  }
+  const rotation = await patch(openaiId, { label: `Fixture ${OPENAI_KEY}`, apiKey: "fixture-rotated-value" });
+  assert.equal(rotation.status, 400);
+  assert.equal(provider.mock.callCount(), 0, "invalid labels are rejected before contacting the provider");
+  assert.deepEqual(await list(), before);
+
+  const writeLabel = getDb().$client.prepare("update provider_connections set label = ? where id = ?");
+  const previousLabel = before.find((connection) => connection.id === openaiId)?.label;
+  assert.ok(previousLabel);
+  writeLabel.run(`Legacy ${TAVILY_KEY}`, openaiId);
+  try {
+    assert.equal((await list()).find((connection) => connection.id === openaiId)?.label, "Legacy [redacted]");
+  } finally {
+    writeLabel.run(previousLabel, openaiId);
+  }
+});
+
+test("connection responses and URL edits agree for settings and sibling-connection credentials", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => Response.json({ data: [{ id: "fixture-model" }] }));
+  for (const value of [TAVILY_KEY, ANTHROPIC_KEY]) {
+    const saved = await create({
+      kind: "openai-compatible", label: "Round trip", baseUrl: `https://provider.invalid/v1/${value}`, apiKey: "fixture-new-value",
+    });
+    assert.equal(saved.status, 201);
+    const { id, baseUrl } = saved.json() as Connection;
+    try {
+      assert.equal(baseUrl, "https://provider.invalid/v1/[redacted]");
+      assert.equal((await list()).find((connection) => connection.id === id)?.baseUrl, baseUrl);
+      const renamed = await patch(id, { label: "Renamed round trip", baseUrl });
+      assert.equal(renamed.status, 200);
+      assert.equal(renamed.json().baseUrl, baseUrl);
+    } finally {
+      await remove(id);
+    }
+  }
+});
+
 test("a hidden model stays listed and is named in hidden until it is shown again", async () => {
   assert.equal((await hide(openaiId, "openai/gpt-5", true)).status, 200);
   const hidden = (await modelsOf(openaiId)).json() as { models: { id: string }[]; hidden: string[] };
@@ -290,6 +351,38 @@ test("a model id that repeats a credential of the user is dropped before the lis
   }
   assert.deepEqual((listed.json().models as { id: string }[]).map((model) => model.id), ["fixture-model", "openai/gpt-5"], "a masked id would be sent back under the wrong name");
   assert.equal(cachedCaps(openaiId, "echo-[redacted]"), null, "the caps cache holds a masked id");
+});
+
+test("deleting a connection during a pending edit leaves no saved edit or cached caps", async (t) => {
+  const baseUrl = "http://provider.invalid/v1";
+  const started = Promise.withResolvers<void>();
+  const providerReply = Promise.withResolvers<Response>();
+  let hold = false;
+  t.mock.method(globalThis, "fetch", async () => {
+    if (!hold) return Response.json({ data: [{ id: "pending-model" }] });
+    started.resolve();
+    return providerReply.promise;
+  });
+  const created = await create({ kind: "openai-compatible", label: "Pending edit", baseUrl, apiKey: "fixture-initial" });
+  assert.equal(created.status, 201);
+  const { id } = created.json() as Connection;
+  assert.ok(cachedCaps(id, "pending-model"));
+
+  hold = true;
+  const editing = patch(id, { apiKey: "fixture-replacement" });
+  let capsAfterDelete: ReturnType<typeof cachedCaps> = null;
+  try {
+    await started.promise;
+    assert.equal((await remove(id)).status, 200);
+    capsAfterDelete = cachedCaps(id, "pending-model");
+  } finally {
+    providerReply.resolve(Response.json({ data: [{ id: "pending-model" }] }));
+    await editing;
+  }
+  assert.equal((await editing).status, 404, "an edit of the deleted row reports not found");
+  assert.equal(capsAfterDelete, null, "DELETE evicts existing caps");
+  assert.equal(cachedCaps(id, "pending-model"), null, "an edit cannot restore deleted caps");
+  assert.equal((await list()).some((connection) => connection.id === id), false);
 });
 
 test("deleting a connection clears the chats and defaults that use it, and old replies keep their model and effort", async () => {

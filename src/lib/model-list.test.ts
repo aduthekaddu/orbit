@@ -17,6 +17,16 @@ let server: http.Server;
 let base = "";
 const originalAnthropicBase = process.env.ORBIT_ANTHROPIC_BASE_URL;
 
+test("the model list uses one masking pass across credential sources", async (t) => {
+  const first = "fixture-first-shared";
+  const second = "shared-fixture-second";
+  const label = "fixture-first-shared-fixture-second";
+  const redact = new Redactor({ tavilyApiKey: second });
+  t.mock.method(globalThis, "fetch", async () => Response.json({ data: [{ id: "one-model", name: label }] }));
+  const models = await listModels(openai("conn-one-masking-pass"), first, redact);
+  assert.equal(byId(models, "one-model").label, "[redacted]");
+});
+
 function claude(id: string, name: string, context: number, options: { efforts: string[]; canTurnOffThinking: boolean; budgetThinking?: boolean }) {
   const levels = ["low", "medium", "high", "xhigh", "max"];
   return {

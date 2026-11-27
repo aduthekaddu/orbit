@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test, { after, before } from "node:test";
 import { Redactor } from "./chat-errors";
-import { deleteConnection, listConnections } from "./connections";
+import { addConnection as saveConnection, deleteConnection, listConnections, seedConnection } from "./connections";
 import { getDb } from "./db";
 import { ensureChat, finishChatReply, listMessages, planChatWrite } from "./messages";
 import { resolveChoice, setChatChoice, type ModelChoice, type ReplyRecord } from "./model-choice";
@@ -197,5 +197,46 @@ test("a user who deleted the connection made from the environment does not get i
     assert.deepEqual(listConnections(user), []);
   } finally {
     for (const name of ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL"]) delete process.env[name];
+  }
+});
+
+test("model choice retries environment setup after the first account's transient write failure", () => {
+  const user = "u-choice-env-retry";
+  addUser(user);
+  const env = { ORBIT_BASE_URL: "http://provider.invalid/v1", ORBIT_API_KEY: "fixture-env-value", ORBIT_MODEL: "env-model" };
+  Object.assign(process.env, env);
+  try {
+    sql("CREATE TEMP TRIGGER fail_seed BEFORE INSERT ON provider_connections BEGIN SELECT RAISE(ABORT, 'fixture write failure'); END");
+    try {
+      assert.throws(() => seedConnection(user));
+      assert.deepEqual(listConnections(user), []);
+    } finally {
+      sql("DROP TRIGGER fail_seed");
+    }
+    const choice = resolved(user, "chat-env-retry");
+    assert.equal(choice.choice.model, "env-model");
+    assert.equal(deleteConnection(user, choice.connection.id), true);
+    assert.deepEqual(resolveChoice(user, chat("chat-env-retry-deleted", user)), { ok: false, reason: "no-connection" });
+  } finally {
+    for (const name of Object.keys(env)) delete process.env[name];
+  }
+});
+
+test("adding and deleting a manual connection closes any pending provider adoption", async (t) => {
+  const user = "u-choice-pending-replaced";
+  addUser(user);
+  sql("insert into pending_connection (id, base_url, api_key_ciphertext, model, effort, created_at) values (1, ?, ?, ?, ?, 0)",
+    "http://prior-provider.invalid/v1", encryptSecret(KEY), "prior-model", "low");
+  t.mock.method(globalThis, "fetch", async () => Response.json({ data: [{ id: "manual-model" }] }));
+  try {
+    const saved = await saveConnection(user, {
+      kind: "openai-compatible", label: "Manual", baseUrl: "http://provider.invalid/v1", apiKey: "fixture-manual-value",
+    }, () => new Redactor(null));
+    assert.ok(saved.ok);
+    assert.equal(deleteConnection(user, saved.connection.id), true);
+    assert.deepEqual(resolveChoice(user, chat("chat-pending-replaced", user)), { ok: false, reason: "no-connection" });
+    assert.deepEqual(listConnections(user), []);
+  } finally {
+    sql("delete from pending_connection");
   }
 });

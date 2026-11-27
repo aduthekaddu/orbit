@@ -5,8 +5,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";
 import { LOCAL_AUTH_URL, resolveAuthBaseUrl, resolveTrustedOrigins } from "./auth-origins";
-import { Redactor } from "./chat-errors";
-import { seedConnection } from "./connections";
+import { trySeedConnection } from "./connections";
 import { getDb, signupOpen } from "./db";
 import { account, session, user, verification } from "./db/schema";
 import { readEnv } from "./env";
@@ -54,14 +53,9 @@ function createAuth() {
             }
           },
           // The first account takes the provider the install was set up with. The account exists by now, so a failure
-          // must not fail the signup: it is logged, and resolving a chat retries the pending row.
+          // must not fail the signup. Resolving a chat can retry setup.
           after: async (created) => {
-            try {
-              seedConnection(created.id, "pending-or-env");
-            } catch (error) {
-              const redact = new Redactor(null, { apiKey: readEnv("ORBIT_API_KEY"), baseUrl: readEnv("ORBIT_BASE_URL") });
-              redact.logError("connection seed failed", error instanceof Error ? error.message : String(error));
-            }
+            trySeedConnection(created.id);
           },
         },
       },
