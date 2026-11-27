@@ -21,7 +21,7 @@ Orbit grows in slices. A slice is one pull request that ships one user-visible c
 | 15 | [Widgets and tool cards](15.md) | `feat/widgets-tool-cards` | Planned |
 | 16 | [Messages, artifact cards, phone fixes, rename and delete](16.md) | `feat/thread-polish` | Shipped in #273 |
 | 17 | [Model and effort in the chat, plus Anthropic](17.md) | `feat/model-picker` | Shipped in #264 |
-| 18 | [Accounts and hosting modes](18.md) | `feat/accounts`, then `feat/accounts-modes` | 18a shipped in #279. 18b in #281. |
+| 18 | [Accounts and hosting modes](18.md) | `feat/accounts`, then `feat/accounts-modes` | Shipped in #279 and #281 |
 | 19 | [Tools page and tools sheet](19.md) | `feat/tools-page` | Planned |
 | 20 | [Files](20.md) | `feat/files` | Planned |
 | 21 | [Artifacts page](21.md) | `feat/artifacts-page` | Planned |
