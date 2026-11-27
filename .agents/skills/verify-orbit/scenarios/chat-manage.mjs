@@ -475,7 +475,7 @@ function viewportRun(context, { label, touch, page }) {
     step(`${label}: DELETE on a missing id answers 404`, missing.status() === 404, `status ${missing.status()}`);
   }
 
-  async function footer({ confirm }) {
+  async function footer({ confirm, chat }) {
     const container = await list();
     const memory = container.getByRole("link", { name: "Memory", exact: true });
     const settings = container.getByRole("link", { name: "Settings", exact: true });
@@ -498,10 +498,24 @@ function viewportRun(context, { label, touch, page }) {
       await closeList();
       return;
     }
+    // Sign out inside a delete's Undo window: the delete must land while the session still holds.
+    const deletes = requests("DELETE", chat.id);
+    const opened = await menu(chat.id, chat.title);
+    const clicked = Date.now();
+    await opened.remove.click();
+    await toast().waitFor({ timeout: 3_000 });
     await (await list()).getByRole("button", { name: "Sign out" }).click();
     await page.getByRole("dialog", { name: "Sign out?" }).getByRole("button", { name: "Sign out" }).click();
     const left = await page.waitForURL(/\/login$/, { timeout: 10_000 }).then(() => true, () => false);
+    const elapsed = Date.now() - clicked;
     step(`${label}: confirming Sign out opens /login and ends the session`, left && (await api.status("/api/chats")) === 401, `url ${page.url()}`);
+    const row = await eventually(() => chatRow(chat.id), (value) => value === null, { timeoutMs: UNDO_MS, what: "the chat deleted before Sign out to leave the database" }).catch(() => chatRow(chat.id));
+    deletes.stop();
+    step(
+      `${label}: Sign out inside the Undo window still deletes the chat`,
+      left && elapsed < UNDO_MS && row === null && deletes.seen.length === 1,
+      `left ${left} after ${elapsed}ms, row ${JSON.stringify(row)}, DELETE requests ${deletes.seen.length}`,
+    );
   }
 
   return async ({ last }) => {
@@ -522,7 +536,7 @@ function viewportRun(context, { label, touch, page }) {
     await deleteThenReload(reloadChat, `Reload ${label}`);
     await deleteRecreated();
     await failedDelete(reloaded, `Other ${label}`);
-    await footer({ confirm: last });
+    await footer({ confirm: last, chat: { id: reloaded, title: `Other ${label}` } });
   };
 }
 

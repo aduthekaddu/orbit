@@ -31,6 +31,7 @@ export function Sidebar({
   onSearch,
   onRename,
   onDelete,
+  beforeSignOut,
   onCollapse,
   onNavigate,
 }: {
@@ -40,6 +41,8 @@ export function Sidebar({
   onSearch: () => void;
   onRename: (chat: ChatSummary, title: string) => void;
   onDelete: (chat: ChatSummary) => void;
+  /** Runs before Sign out ends the session. */
+  beforeSignOut: () => Promise<void>;
   onCollapse?: () => void;
   /** Called when a link is followed, including the current page's, which changes no route. */
   onNavigate?: () => void;
@@ -142,14 +145,14 @@ export function Sidebar({
             {email.charAt(0)}
           </span>
           <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">{email}</span>
-          <SignOut />
+          <SignOut beforeSignOut={beforeSignOut} />
         </div>
       </div>
     </div>
   );
 }
 
-function SignOut() {
+function SignOut({ beforeSignOut }: { beforeSignOut: () => Promise<void> }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [tip, setTip] = useState(false);
@@ -163,6 +166,7 @@ function SignOut() {
   async function signOut() {
     if (busy) return;
     dispatch({ type: "submit" });
+    await beforeSignOut();
     // A network failure rejects, and an HTTP error resolves with `error`.
     const result = await authClient.signOut().catch(() => null);
     if (!result || result.error) {

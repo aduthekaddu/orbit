@@ -100,7 +100,8 @@ export function AppShell({
   const [deletes, dispatchDelete] = useReducer(chatDeleteReducer, initialChatDelete);
   // Deleted on the server, but still in `chats` until the refresh lands.
   const [deletedIds, setDeletedIds] = useState<ReadonlySet<string>>(() => new Set());
-  const sentDeletes = useRef(new Set<string>());
+  // Each DELETE in flight, by chat id.
+  const sentDeletes = useRef(new Map<string, Promise<void>>());
   const refreshAfterDeletes = useRef(false);
   const pendingDelete = useRef(deletes.pending);
   const committingDeletes = useRef(deletes.committing);
@@ -236,7 +237,6 @@ export function AppShell({
     // StrictMode, pagehide and the committing effect can all reach one id while its DELETE is in flight. The id
     // leaves once the server answers, so a chat saved again under it can be deleted again.
     if (sentDeletes.current.has(id)) return;
-    sentDeletes.current.add(id);
     // Once this page hears back, the next one has nothing to send again for this chat.
     const answered = () => writeLeavingDeletes(readLeavingDeletes().filter((leaving) => leaving !== id));
     function committed() {
@@ -248,7 +248,7 @@ export function AppShell({
       dispatchDelete({ type: "committed", id });
     }
     // keepalive lets the DELETE outlive a reload or a closed tab.
-    void requestJson(chatApi(id), { method: "DELETE", keepalive: true }, {
+    const request = requestJson(chatApi(id), { method: "DELETE", keepalive: true }, {
       parse: deletedChat,
       onOk: committed,
       onFailed: (failure) => {
@@ -261,6 +261,7 @@ export function AppShell({
         dispatchDelete({ type: "failed", id });
       },
     });
+    sentDeletes.current.set(id, request);
   }, []);
 
   useEffect(() => {
@@ -296,6 +297,17 @@ export function AppShell({
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [commitDelete]);
+
+  // Sign out ends the session and leaves without a pagehide, and a DELETE that reaches the server after it answers
+  // 401. A delete still waiting for Undo is sent now, and Sign out waits until every DELETE in flight has an answer.
+  async function settleDeletes() {
+    const pending = pendingDelete.current;
+    if (pending) {
+      commitDelete(pending.chat.id);
+      dispatchDelete({ type: "expire" });
+    }
+    await Promise.all(sentDeletes.current.values());
+  }
 
   // The list this page rendered with can still hold chats the last page deleted as it went away.
   const firstChats = useRef(chats);
@@ -355,6 +367,7 @@ export function AppShell({
     onSearch: () => setPalette(true),
     onRename: renameChat,
     onDelete: deleteChat,
+    beforeSignOut: settleDeletes,
   };
 
   return (
