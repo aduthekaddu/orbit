@@ -1,18 +1,21 @@
 import type { ConnectionSecrets } from "./connections";
-import type { settings } from "./db/schema";
+import type { instanceSettings, userGithub } from "./db/schema";
+import type { InstanceSearchSecrets } from "./instance-settings";
 import { stripTerminalControlsWithMap } from "./sandbox/terminal";
-import type { SettingsRecord } from "./settings";
+import type { UserGithubSecrets } from "./user-github";
 
 const INPUT_ERROR = /^(?:AI_InvalidToolInputError: )?Invalid input for tool ([\w-]+): (.*)$/s;
 const ISSUES_MARK = "\nError message: ";
 const MODEL_FAILED = "The model request failed";
 
-type StoredColumn = Exclude<keyof typeof settings.$inferSelect, "id" | "updatedAt">;
+type StoredColumn =
+  | Exclude<keyof typeof instanceSettings.$inferSelect, "id" | "updatedAt">
+  | Exclude<keyof typeof userGithub.$inferSelect, "userId" | "updatedAt">;
 
 // A field whose name ends in one of these, optionally plural, numbered or both, must be labelled a credential.
 // The rest may take either label.
 export const CREDENTIAL_NOUNS = ["key", "token", "secret", "password", "passwd", "passphrase", "pat", "credential", "cookie", "jwt"] as const;
-type CredentialName = `${string}${(typeof CREDENTIAL_NOUNS)[number]}${"" | "s"}${"" | `${number}`}`;
+type CredentialName = `${string}${(typeof CREDENTIAL_NOUNS)[number]}${"" | "s"}${"" | `${number}`}${"" | "ciphertext"}`;
 export type SettingsLabels<Field extends string> = {
   [Name in Field]: Lowercase<Name> extends CredentialName ? "credential" : "credential" | "setting";
 };
@@ -20,13 +23,19 @@ export type SettingsLabels<Field extends string> = {
 // Every stored setting, every settings column, and every decrypted provider connection field must be listed here, so
 // a new credential cannot be added without the Redactor covering it.
 const SETTINGS_FIELDS = {
+  hostingMode: "setting",
+  sandbox: "setting",
+  dreamHour: "setting",
+  tavilyKeyCiphertext: "credential",
+  tokenCiphertext: "credential",
+  mcpUrl: "setting",
   baseUrl: "setting",
   apiKey: "credential",
   searxngUrl: "setting",
   tavilyApiKey: "credential",
   githubToken: "credential",
   githubMcpUrl: "setting",
-} as const satisfies SettingsLabels<keyof SettingsRecord | StoredColumn | keyof ConnectionSecrets>;
+} as const satisfies SettingsLabels<keyof InstanceSearchSecrets | keyof UserGithubSecrets | StoredColumn | keyof ConnectionSecrets>;
 
 type SettingsField = keyof typeof SETTINGS_FIELDS;
 type CredentialField = { [Field in SettingsField]: (typeof SETTINGS_FIELDS)[Field] extends "credential" ? Field : never }[SettingsField];
