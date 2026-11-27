@@ -29,9 +29,11 @@ async function chooseDefault(page) {
 
 async function sendChat(page, prompt, reply = "pong") {
   const composer = page.getByPlaceholder("Ask anything", { exact: true });
+  const replies = page.locator('[data-message-role="assistant"]').getByText(reply, { exact: true });
+  const before = await replies.count();
   await composer.fill(prompt);
   await composer.press("Enter");
-  await page.locator('[data-message-role="assistant"]').getByText(reply, { exact: true }).last().waitFor({ timeout: 30_000 });
+  await replies.nth(before).waitFor({ timeout: 30_000 });
   await page.getByRole("button", { name: "Send", exact: true }).waitFor();
   return new URL(page.url()).pathname;
 }
@@ -135,9 +137,10 @@ export default async function accounts({ page, origin, step, shot, mockUrl }) {
     await team.getByLabel("Name", { exact: true }).fill("A".repeat(500));
     await team.getByLabel("Email", { exact: true }).fill("invalid-email");
     assert.equal(await team.getByLabel("Email", { exact: true }).evaluate((input) => input.validity.typeMismatch), true, "email field rejects a wrong format");
+    await fits(team, 390, "Invite signup with long input");
     await team.reload();
     await teamSignup.waitFor();
-    await fits(team, 390, "Invite signup");
+    await fits(team, 390, "Invite signup after refresh");
     await shot("invite-signup", team);
     let submissions = 0;
     team.on("request", (outgoing) => { if (new URL(outgoing.url()).pathname === "/api/auth/sign-up/email") submissions += 1; });
