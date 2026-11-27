@@ -53,7 +53,23 @@ export function ChatPanel({
   }, [choice]);
   const [stopped, setStopped] = useState<string[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
-  const link = useMemo(() => createReplyLink(chatId, () => router.refresh()), [chatId, router]);
+  // Offline, a refresh cannot fetch the page, so Next loads it in full instead, and the browser shows its offline
+  // page and then reloads, which drops a draft's picked model. The refresh waits for the connection.
+  const refreshOnline = useRef<AbortController | null>(null);
+  useEffect(() => () => refreshOnline.current?.abort(), []);
+  const link = useMemo(() => createReplyLink(chatId, () => {
+    if (navigator.onLine) {
+      router.refresh();
+      return;
+    }
+    if (refreshOnline.current && !refreshOnline.current.signal.aborted) return;
+    const waiting = new AbortController();
+    refreshOnline.current = waiting;
+    window.addEventListener("online", () => {
+      waiting.abort();
+      router.refresh();
+    }, { once: true, signal: waiting.signal });
+  }), [chatId, router]);
   // A reply ID proves POST /api/chat committed the chat and its prompt, so a reload must open the saved chat.
   const committedDraft = useRef(false);
   const draft = useRef(isDraft);
