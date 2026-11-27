@@ -25,8 +25,8 @@ import { parseViewer } from "@/lib/policy";
 
 const PROVIDER_KEY = "made-up-provider-key-0001";
 const TAVILY_KEY = "made-up-tavily-key-0002";
-const USER_ID = "u-route";
-const viewer = parseViewer({ id: USER_ID, role: "admin" });
+const viewer = parseViewer({ id: "u-route", role: "admin" });
+const USER_ID = viewer.id;
 // Any of these seeds the settings row when it is absent, and a real GitHub token would open a real connection.
 const SEEDED_ENV = ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL", "ORBIT_SEARXNG_URL", "ORBIT_TAVILY_API_KEY", "ORBIT_GITHUB_TOKEN"];
 const CONSOLE_METHODS = ["error", "warn", "log", "info", "debug"] as const;

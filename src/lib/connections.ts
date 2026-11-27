@@ -9,14 +9,14 @@ import { DEFAULT_EFFORT, isEffort, type Effort } from "./effort";
 import { readEnv } from "./env";
 import { clearModelCaps, listModels, rememberModelCaps } from "./model-list";
 import { getInstance } from "./instance-settings";
-import { policyFor, type Viewer } from "./policy";
+import { policyFor, type UserId, type Viewer } from "./policy";
 import { decryptSecret, encryptSecret, SecretUnreadable } from "./secrets";
 
 export type ConnectionKind = "openai-compatible" | "anthropic";
 
 export type ProviderConnection =
-  | { id: string; userId: string; kind: "openai-compatible"; label: string; baseUrl: string; createdAt: Date }
-  | { id: string; userId: string; kind: "anthropic"; label: string; createdAt: Date };
+  | { id: string; userId: UserId; kind: "openai-compatible"; label: string; baseUrl: string; createdAt: Date }
+  | { id: string; userId: UserId; kind: "anthropic"; label: string; createdAt: Date };
 
 // keyReadable is false when this server's secret key cannot open the saved key, so Settings can say which one to re-enter.
 export type PublicConnection =
@@ -35,8 +35,8 @@ export type ConnectionPatch = { label?: string; baseUrl?: string; apiKey?: strin
 export type ModelDefaults = { connectionId: string | null; model: string | null; effort: Effort | null };
 
 const connectionRow = z.discriminatedUnion("kind", [
-  z.object({ id: z.string(), userId: z.string(), kind: z.literal("openai-compatible"), label: z.string(), baseUrl: z.string(), createdAt: z.date() }),
-  z.object({ id: z.string(), userId: z.string(), kind: z.literal("anthropic"), label: z.string(), baseUrl: z.null(), createdAt: z.date() }).transform(({ baseUrl: _none, ...connection }) => connection),
+  z.object({ id: z.string(), userId: z.string().brand<"UserId">(), kind: z.literal("openai-compatible"), label: z.string(), baseUrl: z.string(), createdAt: z.date() }),
+  z.object({ id: z.string(), userId: z.string().brand<"UserId">(), kind: z.literal("anthropic"), label: z.string(), baseUrl: z.null(), createdAt: z.date() }).transform(({ baseUrl: _none, ...connection }) => connection),
 ]);
 
 const columns = {
@@ -48,26 +48,26 @@ const columns = {
   createdAt: providerConnections.createdAt,
 };
 
-const owned = (userId: string, id: string) => and(eq(providerConnections.userId, userId), eq(providerConnections.id, id));
+const owned = (userId: UserId, id: string) => and(eq(providerConnections.userId, userId), eq(providerConnections.id, id));
 
-export function listConnections(userId: string): ProviderConnection[] {
+export function listConnections(userId: UserId): ProviderConnection[] {
   const rows = getDb().select(columns).from(providerConnections).where(eq(providerConnections.userId, userId)).orderBy(providerConnections.createdAt).all();
   return rows.map((row) => connectionRow.parse(row));
 }
 
 const credentialColumns = { ...columns, ciphertext: providerConnections.apiKeyCiphertext };
 
-function getConnectionRecord(userId: string, id: string) {
+function getConnectionRecord(userId: UserId, id: string) {
   return getDb().select(credentialColumns).from(providerConnections).where(owned(userId, id)).get();
 }
 
-export function getConnection(userId: string, id: string): ProviderConnection | null {
+export function getConnection(userId: UserId, id: string): ProviderConnection | null {
   const row = getConnectionRecord(userId, id);
   return row ? connectionRow.parse(row) : null;
 }
 
 /** The plain key, read at call time. Throws SecretUnreadable when this server's secret key cannot open it. */
-export function connectionApiKey(userId: string, id: string): string {
+export function connectionApiKey(userId: UserId, id: string): string {
   const row = getDb().select({ ciphertext: providerConnections.apiKeyCiphertext }).from(providerConnections).where(owned(userId, id)).get();
   if (!row) throw new SecretUnreadable();
   return decryptSecret(row.ciphertext);
@@ -87,7 +87,7 @@ function keyOrEmpty(ciphertext: string) {
 }
 
 /** Every readable key and every saved base URL of this user's connections, read per request. */
-export function redactionSecrets(userId: string): ConnectionSecrets[] {
+export function redactionSecrets(userId: UserId): ConnectionSecrets[] {
   const rows = getDb().select(credentialColumns).from(providerConnections).where(eq(providerConnections.userId, userId)).all();
   return rows.map((row) => secretsOf(connectionRow.parse(row), keyOrEmpty(row.ciphertext)));
 }
@@ -122,9 +122,9 @@ export type ConnectionWrite =
   | { ok: false; reason: "invalid"; error: string };
 
 const LABEL_HOLDS_CREDENTIAL = { ok: false, reason: "invalid", error: "Remove credentials from the label." } as const;
-type RequestRedactor = (userId: string) => Redactor;
+type RequestRedactor = (userId: UserId) => Redactor;
 
-export async function addConnection(userId: string, input: NewConnection, redactFor: RequestRedactor): Promise<ConnectionWrite> {
+export async function addConnection(userId: UserId, input: NewConnection, redactFor: RequestRedactor): Promise<ConnectionWrite> {
   const base = { id: randomUUID(), userId, label: input.label.trim(), createdAt: new Date() };
   const connection: ProviderConnection = input.kind === "anthropic" ? { ...base, kind: "anthropic" } : { ...base, kind: "openai-compatible", baseUrl: normalizeBaseUrl(input.baseUrl) };
   const secrets = secretsOf(connection, input.apiKey);
@@ -145,7 +145,7 @@ export async function addConnection(userId: string, input: NewConnection, redact
 }
 
 // A new base URL needs a new key, so the saved key never goes to another host. Resending the masked URL keeps both.
-export async function updateConnection(userId: string, id: string, patch: ConnectionPatch, redactFor: RequestRedactor): Promise<ConnectionWrite> {
+export async function updateConnection(userId: UserId, id: string, patch: ConnectionPatch, redactFor: RequestRedactor): Promise<ConnectionWrite> {
   const record = getConnectionRecord(userId, id);
   if (!record) return { ok: false, reason: "not-found" };
   const current = connectionRow.parse(record);
@@ -195,7 +195,7 @@ export async function updateConnection(userId: string, id: string, patch: Connec
 }
 
 // Old replies keep their model and effort: messages.connection_id goes null by its foreign key, and the rest stays.
-export function deleteConnection(userId: string, id: string): boolean {
+export function deleteConnection(userId: UserId, id: string): boolean {
   const db = getDb();
   const deleted = db.transaction((tx) => {
     const found = tx.select({ id: providerConnections.id }).from(providerConnections).where(owned(userId, id)).get();
@@ -213,7 +213,7 @@ export function deleteConnection(userId: string, id: string): boolean {
   return deleted;
 }
 
-export function hiddenModelIds(userId: string, connectionId: string): string[] {
+export function hiddenModelIds(userId: UserId, connectionId: string): string[] {
   return getDb()
     .select({ modelId: hiddenModels.modelId })
     .from(hiddenModels)
@@ -224,7 +224,7 @@ export function hiddenModelIds(userId: string, connectionId: string): string[] {
 }
 
 /** False, with nothing written, when this user has no such connection. */
-export function setModelHidden(userId: string, connectionId: string, modelId: string, hidden: boolean): boolean {
+export function setModelHidden(userId: UserId, connectionId: string, modelId: string, hidden: boolean): boolean {
   return getDb().transaction((tx) => {
     if (!tx.select({ id: providerConnections.id }).from(providerConnections).where(owned(userId, connectionId)).get()) return false;
     if (hidden) tx.insert(hiddenModels).values({ userId, connectionId, modelId }).onConflictDoNothing().run();
@@ -233,7 +233,7 @@ export function setModelHidden(userId: string, connectionId: string, modelId: st
   });
 }
 
-export function getModelDefaults(userId: string): ModelDefaults {
+export function getModelDefaults(userId: UserId): ModelDefaults {
   const row = getDb()
     .select({ connectionId: userPreferences.defaultConnectionId, model: userPreferences.defaultModel, effort: userPreferences.defaultEffort })
     .from(userPreferences)
@@ -244,7 +244,7 @@ export function getModelDefaults(userId: string): ModelDefaults {
 
 type Writer = Pick<ReturnType<typeof getDb>, "insert">;
 
-function completeConnectionSetup(db: Pick<ReturnType<typeof getDb>, "insert" | "delete" | "select">, userId: string) {
+function completeConnectionSetup(db: Pick<ReturnType<typeof getDb>, "insert" | "delete" | "select">, userId: UserId) {
   db.insert(userPreferences)
     .values({ userId, providerSetupComplete: true, updatedAt: new Date() })
     .onConflictDoUpdate({ target: userPreferences.userId, set: { providerSetupComplete: true } })
@@ -253,12 +253,12 @@ function completeConnectionSetup(db: Pick<ReturnType<typeof getDb>, "insert" | "
   db.delete(pendingConnection).where(and(eq(pendingConnection.id, 1), exists(admin))).run();
 }
 
-function writeModelDefaults(db: Writer, userId: string, defaults: { connectionId: string; model: string | null; effort: Effort }) {
+function writeModelDefaults(db: Writer, userId: UserId, defaults: { connectionId: string; model: string | null; effort: Effort }) {
   const values = { defaultConnectionId: defaults.connectionId, defaultModel: defaults.model, defaultEffort: defaults.effort, updatedAt: new Date() };
   db.insert(userPreferences).values({ userId, ...values }).onConflictDoUpdate({ target: userPreferences.userId, set: values }).run();
 }
 
-export function saveModelDefaults(userId: string, defaults: { connectionId: string; model: string; effort: Effort }): boolean {
+export function saveModelDefaults(userId: UserId, defaults: { connectionId: string; model: string; effort: Effort }): boolean {
   if (!getConnection(userId, defaults.connectionId)) return false;
   writeModelDefaults(getDb(), userId, defaults);
   return true;

@@ -1,3 +1,4 @@
+import { parseViewer } from "@/lib/policy";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
@@ -16,7 +17,8 @@ import { connectionApiKey } from "@/lib/connections";
 
 const redact = new Redactor(null);
 
-const USER_ID = "u-limits";
+const viewer = parseViewer({ id: "u-limits", role: "admin" });
+const USER_ID = viewer.id;
 const PROVIDER_KEY = "made-up-provider-key-0001";
 const SEEDED_ENV = ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL", "ORBIT_SEARXNG_URL", "ORBIT_TAVILY_API_KEY", "ORBIT_GITHUB_TOKEN"];
 const EIGHTY_THOUSAND_LETTERS = "a".repeat(80_000);

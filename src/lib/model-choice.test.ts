@@ -11,7 +11,7 @@ import { resolveChoice, setChatChoice, type ModelChoice, type ReplyRecord } from
 import { parseViewer, type Role } from "./policy";
 import { encryptSecret } from "./secrets";
 
-const ONE = "u-choice-one";
+const ONE = parseViewer({ id: "u-choice-one", role: "member" }).id;
 const OTHER = "u-choice-other";
 const BARE = "u-choice-bare";
 const NO_MODEL = "u-choice-no-model";
@@ -56,7 +56,7 @@ function setDefaults(userId: string, connectionId: string | null, model: string 
   );
 }
 
-function chat(id: string, userId = ONE) {
+function chat(id: string, userId: string = ONE) {
   const now = new Date();
   getDb().insert(chats).values({ id, userId, title: "New chat", createdAt: now, updatedAt: now }).onConflictDoNothing().run();
   const row = getChatForUser(id, userId);
@@ -195,9 +195,9 @@ test("a user who deleted the connection made from the environment does not get i
   addConnection("conn-from-env", user, "openai-compatible");
   Object.assign(process.env, { ORBIT_BASE_URL: "http://127.0.0.1:9/v1", ORBIT_API_KEY: "made-up-env-key-0001", ORBIT_MODEL: "env-model" });
   try {
-    assert.equal(deleteConnection(user, "conn-from-env"), true);
+    assert.equal(deleteConnection(viewer.id, "conn-from-env"), true);
     assert.deepEqual(resolveChoice(viewer, chat("chat-env-deleted", user)), { ok: false, reason: "no-connection" });
-    assert.deepEqual(listConnections(user), []);
+    assert.deepEqual(listConnections(viewer.id), []);
   } finally {
     for (const name of ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL"]) delete process.env[name];
     sql("DELETE FROM user WHERE id = ?", user);
@@ -213,14 +213,14 @@ test("model choice retries environment setup after the first account's transient
     sql("CREATE TEMP TRIGGER fail_seed BEFORE INSERT ON provider_connections BEGIN SELECT RAISE(ABORT, 'fixture write failure'); END");
     try {
       assert.throws(() => seedConnection(viewer));
-      assert.deepEqual(listConnections(user), []);
+      assert.deepEqual(listConnections(viewer.id), []);
     } finally {
       sql("DROP TRIGGER fail_seed");
     }
     const choice = resolveChoice(viewer, chat("chat-env-retry", user));
     assert.ok(choice.ok);
     assert.equal(choice.choice.model, "env-model");
-    assert.equal(deleteConnection(user, choice.connection.id), true);
+    assert.equal(deleteConnection(viewer.id, choice.connection.id), true);
     assert.deepEqual(resolveChoice(viewer, chat("chat-env-retry-deleted", user)), { ok: false, reason: "no-connection" });
   } finally {
     for (const name of Object.keys(env)) delete process.env[name];
@@ -235,13 +235,13 @@ test("adding and deleting a manual connection closes any pending provider adopti
     "http://prior-provider.invalid/v1", encryptSecret(KEY), "prior-model", "low");
   t.mock.method(globalThis, "fetch", async () => Response.json({ data: [{ id: "manual-model" }] }));
   try {
-    const saved = await saveConnection(user, {
+    const saved = await saveConnection(viewer.id, {
       kind: "openai-compatible", label: "Manual", baseUrl: "http://provider.invalid/v1", apiKey: "fixture-manual-value",
     }, () => new Redactor(null));
     assert.ok(saved.ok);
-    assert.equal(deleteConnection(user, saved.connection.id), true);
+    assert.equal(deleteConnection(viewer.id, saved.connection.id), true);
     assert.deepEqual(resolveChoice(viewer, chat("chat-pending-replaced", user)), { ok: false, reason: "no-connection" });
-    assert.deepEqual(listConnections(user), []);
+    assert.deepEqual(listConnections(viewer.id), []);
   } finally {
     sql("delete from pending_connection");
     sql("DELETE FROM user WHERE id = ?", user);

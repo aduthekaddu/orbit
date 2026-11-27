@@ -15,9 +15,9 @@ import { getInstance, saveInstance, toPublicInstance } from "./instance-settings
 import { requestRedactor } from "./request-redactor";
 import { parseViewer } from "./policy";
 
-const ONE = "u-connections-one";
-const TWO = "u-connections-two";
-const admin = parseViewer({ id: ONE, role: "admin" });
+const admin = parseViewer({ id: "u-connections-one", role: "admin" });
+const ONE = admin.id;
+const TWO = parseViewer({ id: "u-connections-two", role: "member" }).id;
 const OPENAI_KEY = "made-up-openai-key-0001";
 const ANTHROPIC_KEY = "made-up-anthropic-key-0001";
 const URL_SECRET = "url-pass-secret-01";

@@ -4,7 +4,7 @@ import { connectionApiKey, getModelDefaults, pickableConnection, trySeedConnecti
 import { getDb } from "./db";
 import { chats, providerConnections } from "./db/schema";
 import { DEFAULT_EFFORT, EFFORTS, type Effort, type EffortOutcome } from "./effort";
-import type { Viewer } from "./policy";
+import type { UserId, Viewer } from "./policy";
 import { SecretUnreadable } from "./secrets";
 
 export type ModelChoice = { connectionId: string; model: string; effort: Effort };
@@ -60,7 +60,7 @@ function fromDefaults(viewer: Viewer): ResolvedChoice {
   return { ok: true, connection, choice: { connectionId: connection.id, model: defaults.model, effort: defaults.effort ?? DEFAULT_EFFORT } };
 }
 
-function readable(userId: string, resolved: ResolvedChoice): ResolvedChoice {
+function readable(userId: UserId, resolved: ResolvedChoice): ResolvedChoice {
   if (!resolved.ok) return resolved;
   try {
     connectionApiKey(userId, resolved.connection.id);

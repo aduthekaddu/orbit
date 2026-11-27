@@ -20,8 +20,8 @@ import { parseViewer } from "@/lib/policy";
 const PROVIDER_KEY = "made-up-provider-key-0001";
 const TAVILY_KEY = "made-up-tavily-key-0002";
 const GITHUB_TOKEN = mockGithubToken;
-const USER_ID = "u-stream-redact";
-const viewer = parseViewer({ id: USER_ID, role: "admin" });
+const viewer = parseViewer({ id: "u-stream-redact", role: "admin" });
+const USER_ID = viewer.id;
 const SEEDED_ENV = ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL", "ORBIT_SEARXNG_URL", "ORBIT_TAVILY_API_KEY", "ORBIT_GITHUB_TOKEN"];
 
 type ModelFactory = () => MockLanguageModelV4;

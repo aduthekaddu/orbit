@@ -1,3 +1,4 @@
+import { parseViewer } from "./policy";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateText } from "ai";
@@ -109,7 +110,7 @@ test("an Anthropic connection sends effort, summarized adaptive thinking that dr
   process.env.ORBIT_ANTHROPIC_BASE_URL = "http://127.0.0.1:9/v1";
   const seen: { url: string; headers: Headers; body: Record<string, unknown> }[] = [];
   try {
-    const connection: ProviderConnection = { id: "conn-claude", userId: "u", kind: "anthropic", label: "Claude", createdAt: new Date() };
+    const connection: ProviderConnection = { id: "conn-claude", userId: parseViewer({ id: "u", role: "admin" }).id, kind: "anthropic", label: "Claude", createdAt: new Date() };
     const model = languageModelFor({
       connection,
       apiKey: "made-up-anthropic-key-0001",
