@@ -114,21 +114,19 @@ export async function POST(request: Request) {
 
   const userId = session.user.id;
   const requested = parsed.data.modelChoice;
-  const resolveSend = () => {
+  const resolveSend = (chat: ReturnType<typeof getChatForUser>) => {
     if (requested && !getConnection(userId, requested.connectionId)) return Response.json({ error: "Not found" }, { status: 404 });
-    const resolved = resolveChoice(userId, getChatForUser(parsed.data.id, userId) ?? NO_CHAT_CHOICE, requested);
+    const resolved = resolveChoice(userId, chat ?? NO_CHAT_CHOICE, requested);
     if (!resolved.ok) return Response.json({ error: UNRESOLVED[resolved.reason] }, { status: 400 });
     return resolved;
   };
-  const early = resolveSend();
+  const early = resolveSend(getChatForUser(parsed.data.id, userId));
   if (early instanceof Response) return early;
 
-  const settings = getSettings();
-  const redact = requestRedactor(userId, settings);
-  const chat = ensureChat(parsed.data.id, userId);
-  if (!chat) return Response.json({ error: "Not found" }, { status: 404 });
+  const initialChat = ensureChat(parsed.data.id, userId);
+  if (!initialChat) return Response.json({ error: "Not found" }, { status: 404 });
 
-  const reserved = await reserveReplyRun(chat.id, userId);
+  const reserved = await reserveReplyRun(initialChat.id, userId);
   if (!reserved.ok) {
     if (reserved.reason === "busy") return Response.json({ error: "A reply is still running." }, { status: 409 });
     return Response.json({ error: "Too many replies running." }, { status: 429 });
@@ -138,6 +136,7 @@ export async function POST(request: Request) {
 
   let detached = false;
   let closeTools = async () => {};
+  let logRequestError: (message: string) => void = () => console.error("chat request error");
   const respond = (replyId: string, stream: ReadableStream<UIMessageChunk>, endReason: () => ReplyEndReason | null) => {
     after(() => run.done);
     startReplyRun(run, stream, endReason);
@@ -146,11 +145,16 @@ export async function POST(request: Request) {
   };
 
   try {
-    // The send may have waited for a stopping reply, and its connection may be gone by now.
-    const resolved = resolveSend();
+    // A stopping reply can delay this send. Read the choice, credentials, and settings after claiming the slot.
+    const chat = getChatForUser(initialChat.id, userId);
+    if (!chat) return Response.json({ error: "Not found" }, { status: 404 });
+    const resolved = resolveSend(chat);
     if (resolved instanceof Response) return resolved;
     const { choice, connection } = resolved;
     const apiKey = connectionApiKey(userId, connection.id);
+    const settings = getSettings();
+    const redact = requestRedactor(userId, settings).withCredentials({ apiKey, baseUrl: connection.kind === "openai-compatible" ? connection.baseUrl : undefined });
+    logRequestError = (message) => redact.logError("chat request error", message);
     const incoming = parsed.data.messages;
     const messagesBeforeTurn = storedMessageCount(chat.id);
     const write = planChatWrite(chat.id, incoming, redact, parsed.data.trigger, parsed.data.editMessageId);
@@ -311,7 +315,7 @@ export async function POST(request: Request) {
       return respond(run.identity.replyId, stream, () => null);
     }
     const message = error instanceof Error ? error.message : "The model request failed";
-    redact.logError("chat request error", message);
+    logRequestError(message);
     return Response.json({ error: "The model request failed" }, { status: 502 });
   } finally {
     if (!detached) releaseReplyRun(run);

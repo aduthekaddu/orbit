@@ -2,13 +2,14 @@ import { notFound } from "next/navigation";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { Figure } from "@/components/figure";
 import { FirstRun } from "@/components/settings/first-run";
-import { getModelDefaults, publicConnections } from "@/lib/connections";
+import { getModelDefaults } from "@/lib/connections";
 import { effortLevels } from "@/lib/effort";
 import { cachedCaps } from "@/lib/model-list";
 import { getChatForUser, messageRepository } from "@/lib/messages";
 import { resolveChoice } from "@/lib/model-choice";
 import { artifactHistory } from "@/lib/artifacts/history";
 import { requireUser } from "@/lib/session";
+import { publicConnections } from "@/lib/settings";
 import { focusedHead } from "@/lib/chat-tree";
 import { findActiveReplyRun } from "@/lib/reply-runs";
 

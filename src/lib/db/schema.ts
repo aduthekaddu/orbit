@@ -222,5 +222,6 @@ export const userPreferences = sqliteTable("user_preferences", {
   defaultConnectionId: text("default_connection_id").references(() => providerConnections.id, { onDelete: "set null" }),
   defaultModel: text("default_model"),
   defaultEffort: text("default_effort"),
+  providerSetupComplete: integer("provider_setup_complete", { mode: "boolean" }).notNull().default(false),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });

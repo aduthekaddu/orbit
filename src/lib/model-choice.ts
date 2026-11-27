@@ -1,6 +1,6 @@
 import { and, eq, exists } from "drizzle-orm";
 import { z } from "zod";
-import { connectionApiKey, getConnection, getModelDefaults, listConnections, seedConnection, type ProviderConnection } from "./connections";
+import { connectionApiKey, getConnection, getModelDefaults, listConnections, trySeedConnection, type ProviderConnection } from "./connections";
 import { getDb } from "./db";
 import { chats, providerConnections } from "./db/schema";
 import { DEFAULT_EFFORT, EFFORTS, type Effort, type EffortOutcome } from "./effort";
@@ -46,9 +46,9 @@ export function setChatChoice(chatId: string, choice: ModelChoice) {
   db.update(chats).set({ connectionId: choice.connectionId, model: choice.model, reasoningEffort: choice.effort }).where(and(eq(chats.id, chatId), exists(owned))).run();
 }
 
-// A user with no connection can still adopt the pending provider here, in case the signup hook failed after the user row.
+// Retry unfinished setup if the signup hook could not adopt the configured provider.
 function fromDefaults(userId: string): ResolvedChoice {
-  if (listConnections(userId).length === 0) seedConnection(userId, "pending");
+  if (listConnections(userId).length === 0) trySeedConnection(userId);
   const defaults = getModelDefaults(userId);
   const connection = defaults.connectionId ? getConnection(userId, defaults.connectionId) : (listConnections(userId)[0] ?? null);
   if (!connection) return { ok: false, reason: "no-connection" };

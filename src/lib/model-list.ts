@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { anthropicBaseUrl, normalizeBaseUrl } from "./base-url";
-import { Redactor } from "./chat-errors";
+import type { Redactor } from "./chat-errors";
 import type { ProviderConnection } from "./connections";
 import { EFFORTS, type Effort } from "./effort";
 import { OPENCODE_GO_BASE_URL, OPENCODE_GO_MODELS_URL, openCodeSessionHeader } from "./provider";
@@ -195,11 +195,15 @@ const shared = globalThis as typeof globalThis & { __orbitCapsCache?: Map<string
 const capsCache = (shared.__orbitCapsCache ??= new Map<string, CachedCaps>());
 const cacheKey = (connectionId: string, modelId: string) => `${connectionId}\0${modelId}`;
 
-function rememberCaps(connectionId: string, models: ListedModel[], now = Date.now()) {
+export function clearModelCaps(connectionId: string) {
   const prefix = cacheKey(connectionId, "");
   for (const key of capsCache.keys()) {
     if (key.startsWith(prefix)) capsCache.delete(key);
   }
+}
+
+export function rememberModelCaps(connectionId: string, models: ListedModel[], now = Date.now()) {
+  clearModelCaps(connectionId);
   for (const model of models) capsCache.set(cacheKey(connectionId, model.id), { caps: model.caps, expiresAt: now + MODEL_CAPS_TTL_MS });
 }
 
@@ -216,12 +220,11 @@ export function cachedCaps(connectionId: string, modelId: string, now = Date.now
 }
 
 // A masked id is not the provider's name for the model, so a model whose id holds a credential is left out.
-function masked(models: ListedModel[], redactors: Redactor[]): ListedModel[] {
-  const mask = (text: string) => redactors.reduce((value, redact) => redact.text(value), text);
+function masked(models: ListedModel[], redact: Redactor): ListedModel[] {
   const unique = new Map<string, ListedModel>();
   for (const model of models) {
-    if (mask(model.id) !== model.id || unique.has(model.id)) continue;
-    unique.set(model.id, { ...model, label: mask(model.label) });
+    if (redact.text(model.id) !== model.id || unique.has(model.id)) continue;
+    unique.set(model.id, { ...model, label: redact.text(model.label) });
   }
   return [...unique.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
@@ -231,10 +234,10 @@ function masked(models: ListedModel[], redactors: Redactor[]): ListedModel[] {
  * in a model id, so models whose id holds this key or a secret `redact` knows are dropped, and labels are masked,
  * before the list is cached.
  */
-export async function listModels(connection: ProviderConnection, apiKey: string, redact: Redactor): Promise<ListedModel[] | null> {
+export async function listModels(connection: ProviderConnection, apiKey: string, redact: Redactor, { cache = true } = {}): Promise<ListedModel[] | null> {
   const models = connection.kind === "anthropic" ? await listAnthropicModels(apiKey) : await listOpenAiModels(connection.baseUrl, apiKey);
   if (!models) return null;
-  const shown = masked(models, [new Redactor({ apiKey, baseUrl: connection.kind === "anthropic" ? undefined : connection.baseUrl }), redact]);
-  rememberCaps(connection.id, shown);
+  const shown = masked(models, redact.withCredentials({ apiKey, baseUrl: connection.kind === "anthropic" ? undefined : connection.baseUrl }));
+  if (cache) rememberModelCaps(connection.id, shown);
   return shown;
 }

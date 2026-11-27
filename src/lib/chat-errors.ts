@@ -839,6 +839,11 @@ export class Redactor {
     return this.#longSet.strings.length > 0;
   }
 
+  withCredentials(...sources: CredentialSource[]): Redactor {
+    const saved = Array.from(this.#everyLookup, (apiKey) => ({ apiKey }));
+    return new Redactor(null, ...saved, ...sources);
+  }
+
   get streamHoldback(): number {
     return Math.max(0, this.#maxLongLength - 1);
   }

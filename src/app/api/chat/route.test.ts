@@ -6,17 +6,19 @@ import os from "node:os";
 import path from "node:path";
 import { format } from "node:util";
 import { pathToFileURL } from "node:url";
-import test, { after, before } from "node:test";
+import test, { after, before, type TestContext } from "node:test";
 import { startMockMcp, type MockMcp } from "../../../../scripts/qa/mock-mcp.mjs";
+import { Redactor } from "@/lib/chat-errors";
 import { getDb } from "@/lib/db";
 import * as schema from "@/lib/db/schema";
 import * as messages from "@/lib/messages";
 import { seedTestConnection } from "@/lib/connection-fixture";
-import { deleteConnection } from "@/lib/connections";
+import { deleteConnection, getModelDefaults } from "@/lib/connections";
 import { eventually } from "@/lib/eventually.mjs";
+import { chatChoice, setChatChoice, type ModelChoice } from "@/lib/model-choice";
 import { releaseReplyRun, reserveReplyRun, stopReplyRun } from "@/lib/reply-runs";
 import { encryptSecret } from "@/lib/secrets";
-import { saveSettings } from "@/lib/settings";
+import { getSettings, saveSettings } from "@/lib/settings";
 
 const PROVIDER_KEY = "made-up-provider-key-0001";
 const TAVILY_KEY = "made-up-tavily-key-0002";
@@ -406,6 +408,100 @@ test("a send that waits for a stopping reply does not call a connection deleted 
   await Promise.allSettled(afterTasks);
   assert.equal(providerKeys.includes(`Bearer ${OTHER_KEY}`), false, "the deleted connection's key reached the provider");
   assert.equal(response.status, 404);
+});
+
+async function holdStoppingReply(chatId: string, t: TestContext) {
+  const stopping = await reserveReplyRun(chatId, USER_ID);
+  assert.ok(stopping.ok);
+  stopReplyRun(chatId, USER_ID);
+  const waiting = Promise.withResolvers<void>();
+  const done = stopping.run.done;
+  const subscribe = done.then.bind(done);
+  t.mock.method(done, "then", (...args: Parameters<typeof done.then>) => {
+    waiting.resolve();
+    return subscribe(...args);
+  });
+  return { waiting: waiting.promise, release: () => releaseReplyRun(stopping.run) };
+}
+
+function sendQueued(chatId: string, modelChoice: ModelChoice, text: string) {
+  return route.POST(new Request("http://127.0.0.1/api/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      id: chatId,
+      modelChoice,
+      messages: [{ id: `${chatId}-u1`, role: "user", parts: [{ type: "text", text }] }],
+    }),
+  }));
+}
+
+test("a queued send pins its choice against the latest chat row", async (t) => {
+  const chatId = "c-pinned-while-queued";
+  const { connectionId } = getModelDefaults(USER_ID);
+  assert.ok(connectionId);
+  const requested = { connectionId, model: "mock", effort: "low" } as const;
+  messages.ensureChat(chatId, USER_ID);
+  setChatChoice(chatId, requested);
+
+  const slot = await holdStoppingReply(chatId, t);
+  const sent = sendQueued(chatId, requested, "A queued message.");
+  try {
+    await Promise.race([slot.waiting, sent.then(() => assert.fail("the send did not wait for its slot"))]);
+    setChatChoice(chatId, { connectionId: ANTHROPIC_ID, model: "claude-opus-5-5", effort: "high" });
+  } finally {
+    slot.release();
+  }
+  const response = await sent;
+  assert.equal(response.status, 200);
+  await response.text();
+  await Promise.allSettled(afterTasks);
+  const chat = messages.getChatForUser(chatId, USER_ID);
+  assert.ok(chat);
+  assert.deepEqual(chatChoice(chat), requested);
+});
+
+test("a queued send masks with the provider and settings values captured after it claims the slot", async (t) => {
+  const chatId = "c-snapshot-while-queued";
+  const connectionId = "conn-snapshot-while-queued";
+  const prompt = "A normal fixture prompt.";
+  const providerValue = "fixture-provider-value-after";
+  const settingsValue = "fixture-settings-value-after";
+  const db = getDb();
+  const settingsBefore = getSettings();
+  saveSettings({ githubToken: null });
+  db.insert(schema.providerConnections).values({
+    id: connectionId, userId: USER_ID, kind: "openai-compatible", label: "Snapshot",
+    baseUrl: "https://provider.invalid/v1", apiKeyCiphertext: encryptSecret("fixture-provider-value-before"), createdAt: new Date(),
+  }).run();
+
+  const observed: boolean[] = [];
+  const mask = Redactor.prototype.text;
+  t.mock.method(Redactor.prototype, "text", function (this: Redactor, text: string) {
+    if (text === prompt) observed.push([providerValue, settingsValue].every((value) => mask.call(this, value) === "[redacted]"));
+    return mask.call(this, text);
+  });
+  t.mock.method(globalThis, "fetch", async () => new Response(null, { status: 400 }));
+
+  try {
+    const slot = await holdStoppingReply(chatId, t);
+    const sent = sendQueued(chatId, { connectionId, model: "mock", effort: "low" }, prompt);
+    try {
+      await Promise.race([slot.waiting, sent.then(() => assert.fail("the send did not wait for its slot"))]);
+      db.$client.prepare("update provider_connections set api_key_ciphertext = ? where id = ?").run(encryptSecret(providerValue), connectionId);
+      saveSettings({ tavilyApiKey: settingsValue });
+    } finally {
+      slot.release();
+    }
+    const response = await sent;
+    assert.equal(response.status, 200);
+    await response.text();
+    await Promise.allSettled(afterTasks);
+    assert.ok(observed.length > 0 && observed.every(Boolean), "the send uses both values from the current snapshot");
+  } finally {
+    saveSettings({ githubToken: settingsBefore.githubToken, tavilyApiKey: settingsBefore.tavilyApiKey });
+    deleteConnection(USER_ID, connectionId);
+  }
 });
 
 type StreamChunk = { type: string; kind?: string; messageMetadata?: { reply?: { model?: string } } };

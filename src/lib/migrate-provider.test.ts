@@ -154,6 +154,7 @@ test("a signed-up install moves its provider into one encrypted connection and k
   assert.equal(upgraded.preferences.default_connection_id, connection.id);
   assert.equal(upgraded.preferences.default_model, "mock-genui");
   assert.equal(upgraded.preferences.default_effort, "low");
+  assert.equal(upgraded.preferences.provider_setup_complete, 1);
   assert.deepEqual(
     [upgraded.preferences.theme, upgraded.preferences.text_size, upgraded.preferences.reply_font, upgraded.preferences.chat_width, upgraded.preferences.accent],
     ["light", "lg", "serif", "wide", "rose"],
@@ -245,7 +246,7 @@ test("an install nobody signed up to keeps its provider in pending_connection un
   boot(
     install,
     { ORBIT_BASE_URL: "http://127.0.0.1:7/v1", ORBIT_API_KEY: "sk-made-up-env-key-0002", ORBIT_MODEL: "env-model" },
-    "const { seedConnection } = await import(process.argv[2]); seedConnection('u-first', 'pending-or-env'); seedConnection('u-first', 'pending-or-env');",
+    "const { seedConnection } = await import(process.argv[2]); seedConnection('u-first'); seedConnection('u-first');",
   );
 
   const adopted = withDb(install, (db) => ({
@@ -310,43 +311,47 @@ test("signing up gives the first account the provider from the environment, as i
   assert.deepEqual(holdsKey(install, key), [], "the plain key is in the database files");
 });
 
-test("a seed that fails during signup still signs the account up, logs one masked line, and the next send adopts the pending provider", () => {
-  const key = "sk-made-up-failed-seed-key-0001";
-  const envKey = "sk-made-up-failed-seed-env-0002";
-  const install = preSliceInstall("failed-seed");
-  withDb(install, (db) => {
-    db.prepare("insert into settings (id, base_url, api_key, model, reasoning_effort, updated_at) values (1, 'http://127.0.0.1:9/v1', ?, 'mock-genui', 'high', 0)").run(key);
+for (const source of ["pending", "environment"] as const) {
+  test(`a ${source} seed that fails during signup still creates the account and retries on the next send`, () => {
+    const key = "sk-made-up-failed-seed-key-0001";
+    const envKey = "sk-made-up-failed-seed-env-0002";
+    const install = preSliceInstall(`failed-${source}-seed`);
+    if (source === "pending") {
+      withDb(install, (db) => {
+        db.prepare("insert into settings (id, base_url, api_key, model, reasoning_effort, updated_at) values (1, 'http://127.0.0.1:9/v1', ?, 'mock-genui', 'high', 0)").run(key);
+      });
+    }
+    upgrade(install);
+    const outcome = JSON.parse(
+      boot(
+        install,
+        { ORBIT_BASE_URL: "http://127.0.0.1:7/v1", ORBIT_API_KEY: envKey, ORBIT_MODEL: "environment-model" },
+        `const { getDb } = await import(process.argv[1]);
+         const { getAuth } = await import(new URL("../auth.ts", process.argv[1]).href);
+         const { LOCAL_AUTH_URL } = await import(new URL("../auth-origins.ts", process.argv[1]).href);
+         const { resolveChoice } = await import(new URL("../model-choice.ts", process.argv[1]).href);
+         getDb().$client.exec("CREATE TEMP TRIGGER seed_fails BEFORE INSERT ON provider_connections BEGIN SELECT RAISE(ABORT, 'seed failed near ${envKey}'); END");
+         const logged = [];
+         const consoleError = console.error;
+         console.error = (...args) => logged.push(args.join(" "));
+         let signedUp;
+         try {
+           signedUp = await getAuth().api.signUpEmail({ body: { name: "First", email: "first@orbit.local", password: "first-password-1" }, headers: new Headers({ origin: LOCAL_AUTH_URL }) });
+         } finally {
+           console.error = consoleError;
+         }
+         const connectionsAfterSignup = getDb().$client.prepare("select count(*) as n from provider_connections").get().n;
+         getDb().$client.exec("DROP TRIGGER temp.seed_fails");
+         const resolved = resolveChoice(signedUp.user.id, { connectionId: null, model: null, reasoningEffort: null });
+         console.log(JSON.stringify({ email: signedUp.user.email, logged, connectionsAfterSignup, resolved: resolved.ok ? resolved.choice : resolved.reason }));`,
+      ).split("\n").at(-1)!,
+    );
+    assert.equal(outcome.email, "first@orbit.local");
+    assert.equal(outcome.connectionsAfterSignup, 0, "the seed did not fail");
+    assert.equal(outcome.logged.length, 1, JSON.stringify(outcome.logged));
+    assert.match(outcome.logged[0], /seed/);
+    assert.equal(outcome.logged[0].includes(envKey), false, `the log line carries the key: ${outcome.logged[0]}`);
+    assert.equal(outcome.resolved.model, source === "pending" ? "mock-genui" : "environment-model");
+    assert.equal(outcome.resolved.effort, source === "pending" ? "high" : "medium");
   });
-  upgrade(install);
-  const outcome = JSON.parse(
-    boot(
-      install,
-      { ORBIT_BASE_URL: "http://127.0.0.1:7/v1", ORBIT_API_KEY: envKey },
-      `const { getDb } = await import(process.argv[1]);
-       const { getAuth } = await import(new URL("../auth.ts", process.argv[1]).href);
-       const { LOCAL_AUTH_URL } = await import(new URL("../auth-origins.ts", process.argv[1]).href);
-       const { resolveChoice } = await import(new URL("../model-choice.ts", process.argv[1]).href);
-       getDb().$client.exec("CREATE TEMP TRIGGER seed_fails BEFORE INSERT ON provider_connections BEGIN SELECT RAISE(ABORT, 'seed failed near ${envKey}'); END");
-       const logged = [];
-       const consoleError = console.error;
-       console.error = (...args) => logged.push(args.join(" "));
-       let signedUp;
-       try {
-         signedUp = await getAuth().api.signUpEmail({ body: { name: "First", email: "first@orbit.local", password: "first-password-1" }, headers: new Headers({ origin: LOCAL_AUTH_URL }) });
-       } finally {
-         console.error = consoleError;
-       }
-       const connectionsAfterSignup = getDb().$client.prepare("select count(*) as n from provider_connections").get().n;
-       getDb().$client.exec("DROP TRIGGER temp.seed_fails");
-       const resolved = resolveChoice(signedUp.user.id, { connectionId: null, model: null, reasoningEffort: null });
-       console.log(JSON.stringify({ email: signedUp.user.email, logged, connectionsAfterSignup, resolved: resolved.ok ? resolved.choice : resolved.reason }));`,
-    ).split("\n").at(-1)!,
-  );
-  assert.equal(outcome.email, "first@orbit.local");
-  assert.equal(outcome.connectionsAfterSignup, 0, "the seed did not fail");
-  assert.equal(outcome.logged.length, 1, JSON.stringify(outcome.logged));
-  assert.match(outcome.logged[0], /seed/);
-  assert.equal(outcome.logged[0].includes(envKey), false, `the log line carries the key: ${outcome.logged[0]}`);
-  assert.equal(outcome.resolved.model, "mock-genui", JSON.stringify(outcome.resolved));
-  assert.equal(outcome.resolved.effort, "high");
-});
+}
