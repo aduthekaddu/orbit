@@ -1,12 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { useAui } from "@assistant-ui/react";
 import { XIcon } from "@phosphor-icons/react";
+import { Highlight } from "prism-react-renderer";
 import type { Artifact } from "@/lib/artifacts/detect";
+import { artifactFileName, artifactTitle } from "@/lib/artifacts/title";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ScrollFade } from "@/components/ui/scroll-fade";
+import { orbitCodeTheme } from "@/components/chat/code-theme";
 import { useCopy } from "@/components/chat/use-copy";
 import { cn } from "@/lib/utils";
 import { ArtifactFrame } from "./artifact-frame";
@@ -75,7 +78,31 @@ export function ArtifactWorkspace({ children }: { children: ReactNode }) {
 
 type PreviewState = { status: "loading" } | { status: "ready"; document: string } | { status: "error"; message: string };
 
-function ArtifactPanel({ artifact, onClose, onFix }: { artifact: Artifact; onClose: () => void; onFix: (message: string) => void }) {
+/**
+ * The highlighted source. Each line is a block span that ends with the source's own line break, so the
+ * text of the <code> element is the artifact code exactly and Copy matches what the tab shows.
+ */
+function ArtifactCode({ artifact }: { artifact: Artifact }) {
+  const breaks = useMemo(() => artifact.code.match(/\r\n|\r|\n/g) ?? [], [artifact.code]);
+  return (
+    <Highlight code={artifact.code} language={artifact.language} theme={orbitCodeTheme}>
+      {({ tokens, getTokenProps }) => (
+        <pre className="w-max min-w-full p-4 font-mono text-code">
+          <code>
+            {tokens.map((line, index) => (
+              <span key={index} className="block">
+                {line.map((token, key) => (token.empty ? null : <span key={key} {...getTokenProps({ token })} />))}
+                {breaks[index] ?? ""}
+              </span>
+            ))}
+          </code>
+        </pre>
+      )}
+    </Highlight>
+  );
+}
+
+export function ArtifactPanel({ artifact, onClose, onFix }: { artifact: Artifact; onClose: () => void; onFix: (message: string) => void }) {
   const [tab, setTab] = useState<"preview" | "code">("preview");
   const previewTab = useRef<HTMLButtonElement>(null);
   const codeTab = useRef<HTMLButtonElement>(null);
@@ -84,6 +111,7 @@ function ArtifactPanel({ artifact, onClose, onFix }: { artifact: Artifact; onClo
   const [preview, setPreview] = useState<PreviewState>({ status: "loading" });
   const { copied, failed, copy } = useCopy();
   const onError = useCallback((message: string) => setError(message), []);
+  const title = useMemo(() => artifactTitle(artifact), [artifact]);
 
   useEffect(() => {
     let active = true;
@@ -111,7 +139,7 @@ function ArtifactPanel({ artifact, onClose, onFix }: { artifact: Artifact; onClo
     const url = URL.createObjectURL(new Blob([artifact.code], { type: "text/plain;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `artifact.${artifact.language}`;
+    link.download = artifactFileName(artifact);
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }
@@ -132,20 +160,21 @@ function ArtifactPanel({ artifact, onClose, onFix }: { artifact: Artifact; onClo
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-card">
-      <div className="flex shrink-0 items-center justify-between border-b p-2">
-        <div role="tablist" aria-label="Artifact view" className="flex gap-1">
+      <div className="flex shrink-0 items-center gap-2 border-b p-2">
+        <h2 className="min-w-0 flex-1 truncate pl-1 text-sm font-medium">{title}</h2>
+        <div role="tablist" aria-label="Artifact view" className="flex shrink-0 gap-1">
           {(["preview", "code"] as const).map((value) => (
-            <Button key={value} ref={value === "preview" ? previewTab : codeTab} role="tab" tabIndex={tab === value ? 0 : -1} aria-selected={tab === value} aria-controls={`artifact-${value}`} id={`artifact-tab-${value}`} variant="ghost" size="sm" onClick={() => setTab(value)} onKeyDown={(event) => tabKeyDown(event, value)} className={cn(tab === value && "bg-surface-raised")}>
+            <Button key={value} ref={value === "preview" ? previewTab : codeTab} role="tab" tabIndex={tab === value ? 0 : -1} aria-selected={tab === value} aria-controls={`artifact-${value}`} id={`artifact-tab-${value}`} variant="ghost" size="sm" onClick={() => setTab(value)} onKeyDown={(event) => tabKeyDown(event, value)} className={cn("pointer-coarse:h-11", tab === value && "bg-surface-raised")}>
               {value === "preview" ? "Preview" : "Code"}
             </Button>
           ))}
         </div>
-        <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={onClose}><XIcon /></Button>
+        <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={onClose} className="pointer-coarse:size-11"><XIcon /></Button>
       </div>
       <div className="flex shrink-0 items-center gap-1 border-b p-2">
-        <Button variant="ghost" size="sm" onClick={() => { setError(""); setRevision((current) => current + 1); }}>Reload</Button>
-        <Button variant="ghost" size="sm" onClick={() => copy(artifact.code)}>{copied ? "Copied" : failed ? "Copy failed" : "Copy"}</Button>
-        <Button variant="ghost" size="sm" onClick={download}>Download</Button>
+        <Button variant="ghost" size="sm" className="pointer-coarse:h-11" onClick={() => { setError(""); setRevision((current) => current + 1); }}>Reload</Button>
+        <Button variant="ghost" size="sm" className="pointer-coarse:h-11" onClick={() => copy(artifact.code)}>{copied ? "Copied" : failed ? "Copy failed" : "Copy"}</Button>
+        <Button variant="ghost" size="sm" className="pointer-coarse:h-11" onClick={download}>Download</Button>
       </div>
       <div role="tabpanel" id="artifact-preview" aria-labelledby="artifact-tab-preview" hidden={tab !== "preview"} className={cn("min-h-0 flex-1 flex-col", tab === "preview" && "flex")}>
         <div className="min-h-0 flex-1">
@@ -162,9 +191,9 @@ function ArtifactPanel({ artifact, onClose, onFix }: { artifact: Artifact; onClo
           </div>
         ) : null}
       </div>
-      <div role="tabpanel" id="artifact-code" aria-labelledby="artifact-tab-code" hidden={tab !== "code"} className="min-h-0 flex-1 overflow-hidden">
-        <ScrollFade axis="x" fade="var(--card)" className="h-full overflow-y-auto scrollbar-thin">
-          <pre className="w-max min-w-full p-4 font-mono text-code"><code>{artifact.code}</code></pre>
+      <div role="tabpanel" id="artifact-code" aria-labelledby="artifact-tab-code" hidden={tab !== "code"} className="min-h-0 flex-1 overflow-hidden bg-surface-sunken">
+        <ScrollFade axis="x" fade="var(--surface-sunken)" className="h-full overflow-y-auto scrollbar-thin">
+          <ArtifactCode artifact={artifact} />
         </ScrollFade>
       </div>
     </div>
