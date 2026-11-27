@@ -191,3 +191,18 @@ test("a hosting change waits for an approved signup to insert the member and spe
     sqlite.exec("DROP TRIGGER switch_mode_during_signup");
   }
 });
+
+test("a failed invite spend rolls back the invited user INSERT and preserves the claim", async (t) => {
+  const { token, id } = await createTeamInvite();
+  const email = "spend-failure@orbit.test";
+  t.mock.method(console, "error", () => {});
+  sqlite.exec("CREATE TEMP TRIGGER fail_invite_spend BEFORE UPDATE OF used_at ON invites WHEN NEW.used_at IS NOT NULL BEGIN SELECT RAISE(ABORT, 'fixture spend failure'); END");
+  try {
+    const response = await signup(email, token);
+    assert.equal(memberId(email), undefined, "a user row cannot outlive a failed spend");
+    assert.equal(response.status, 422);
+    assert.equal(sqlite.prepare("SELECT count(*) FROM invites WHERE id = ? AND claimed_at IS NOT NULL AND used_at IS NULL").pluck().get(id), 1);
+  } finally {
+    sqlite.exec("DROP TRIGGER fail_invite_spend");
+  }
+});
