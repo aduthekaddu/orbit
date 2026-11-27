@@ -10,7 +10,7 @@ import type { UserId } from "./session";
 
 const adminId = "instance-admin" as UserId;
 const memberId = "instance-member" as UserId;
-const key = "tavily-fixture-2026-3091";
+const key = randomBytes(24).toString("hex");
 const envNames = ["ORBIT_SEARXNG_URL", "ORBIT_TAVILY_API_KEY", "ORBIT_SANDBOX", "ORBIT_SECRET_KEY"];
 const originalEnv = Object.fromEntries(envNames.map((name) => [name, process.env[name]]));
 

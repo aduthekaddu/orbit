@@ -27,22 +27,20 @@ function keyFile() {
   return path.join(dataDirectory(), "secret-key");
 }
 
-function readKeyFile(file: string) {
-  fs.chmodSync(file, 0o600);
-  return parseKey(fs.readFileSync(file, "utf8").trim(), file);
+function readPrivateFile(file: string) {
+  try {
+    fs.chmodSync(file, 0o600);
+    return fs.readFileSync(file, "utf8").trim();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    return null;
+  }
 }
 
-function existingKey(): Buffer | null {
-  const fromEnv = readEnv("ORBIT_SECRET_KEY");
-  if (fromEnv) return parseKey(fromEnv, "ORBIT_SECRET_KEY");
-  const file = keyFile();
-  return fs.existsSync(file) ? readKeyFile(file) : null;
-}
-
-// Two processes can start at once on a fresh install. Each writes a whole key to its own temporary file, and a hard link
-// publishes it only if no key exists yet, so no process reads a partial key and the loser reads the winner's.
-function createdKey() {
-  const file = keyFile();
+// A hard link publishes the complete key only if no other process created it first.
+export function readOrCreateSecretFile(file: string) {
+  const existing = readPrivateFile(file);
+  if (existing !== null) return existing;
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const temporary = `${file}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
   try {
@@ -53,12 +51,27 @@ function createdKey() {
   } finally {
     fs.rmSync(temporary, { force: true });
   }
-  return readKeyFile(file);
+  return fs.readFileSync(file, "utf8").trim();
+}
+
+function existingKey(): Buffer | null {
+  const fromEnv = readEnv("ORBIT_SECRET_KEY");
+  if (fromEnv) return parseKey(fromEnv, "ORBIT_SECRET_KEY");
+  const file = keyFile();
+  const saved = readPrivateFile(file);
+  return saved === null ? null : parseKey(saved, file);
+}
+
+function encryptionKey(): Buffer {
+  const fromEnv = readEnv("ORBIT_SECRET_KEY");
+  if (fromEnv) return parseKey(fromEnv, "ORBIT_SECRET_KEY");
+  const file = keyFile();
+  return parseKey(readOrCreateSecretFile(file), file);
 }
 
 export function encryptSecret(plain: string, aad = ASSOCIATED_DATA): string {
   if (!plain) return "";
-  const key = existingKey() ?? createdKey();
+  const key = encryptionKey();
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
   cipher.setAAD(Buffer.from(aad, "utf8"));

@@ -1,5 +1,3 @@
-import crypto from "node:crypto";
-import fs from "node:fs";
 import path from "node:path";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -12,20 +10,11 @@ import { readEnv } from "./env";
 import { dataDirectory } from "./paths";
 import { getInstance } from "./instance-settings";
 import { parseViewer, policyFor } from "./policy";
+import { readOrCreateSecretFile } from "./secrets";
 import { trySeedAdminGithub } from "./user-github";
 
 function authSecret() {
-  const fromEnv = readEnv("BETTER_AUTH_SECRET");
-  if (fromEnv) return fromEnv;
-  const file = path.join(dataDirectory(), "auth-secret");
-  if (fs.existsSync(file)) {
-    fs.chmodSync(file, 0o600);
-    return fs.readFileSync(file, "utf8").trim();
-  }
-  const secret = crypto.randomBytes(32).toString("hex");
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, secret, { mode: 0o600 });
-  return secret;
+  return readEnv("BETTER_AUTH_SECRET") ?? readOrCreateSecretFile(path.join(dataDirectory(), "auth-secret"));
 }
 
 export function orbitAuthOptions() {
