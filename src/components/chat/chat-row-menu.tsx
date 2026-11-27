@@ -72,6 +72,8 @@ export function ChatRow({
 }) {
   const coarse = useCoarsePointer();
   const [menuOpen, setMenuOpen] = useState(false);
+  // A menu closed without an action hands focus back to its button, which must still be on screen by then.
+  const [returning, setReturning] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const link = useRef<HTMLAnchorElement>(null);
@@ -107,8 +109,15 @@ export function ChatRow({
     }
   }
 
+  function setMenu(open: boolean) {
+    setMenuOpen(open);
+    if (!open && chosen.current === null) setReturning(true);
+  }
+
   // Radix returns focus to the trigger. Rename keeps it in the field, and a deleted row has no trigger left.
   function closeAutoFocus(event: Event) {
+    // The button stays shown until Radix has focused it, and then focus keeps it shown.
+    setReturning(false);
     if (chosen.current === null) return;
     chosen.current = null;
     event.preventDefault();
@@ -123,7 +132,7 @@ export function ChatRow({
     setRenaming(false);
   }
 
-  const trigger = <RowTrigger aria-label={`Actions for ${label}`} className={cn(active ? "grid" : "hidden group-hover/row:grid group-focus-within/row:grid")} />;
+  const trigger = <RowTrigger aria-label={`Actions for ${label}`} className={cn(active || returning ? "grid" : "hidden group-hover/row:grid group-focus-within/row:grid")} />;
 
   return (
     <div
@@ -169,7 +178,7 @@ export function ChatRow({
         </Link>
       )}
       {renaming ? null : coarse ? (
-        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+        <Sheet open={menuOpen} onOpenChange={setMenu}>
           <SheetTrigger asChild>{trigger}</SheetTrigger>
           <SheetContent onCloseAutoFocus={closeAutoFocus}>
             <SheetTitle className="truncate px-5 pt-4 pb-1 text-muted-foreground">{label}</SheetTitle>
@@ -193,7 +202,7 @@ export function ChatRow({
           </SheetContent>
         </Sheet>
       ) : (
-        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        <DropdownMenu open={menuOpen} onOpenChange={setMenu}>
           <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
           <DropdownMenuContent align="start" onCloseAutoFocus={closeAutoFocus}>
             {CHAT_ACTIONS.map(({ action, label: actionLabel, Icon, className }) => (
