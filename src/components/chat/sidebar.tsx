@@ -1,36 +1,36 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useReducer, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { MagnifyingGlassIcon, NotePencilIcon, SidebarSimpleIcon, SignOutIcon } from "@phosphor-icons/react";
-import type { listChats } from "@/lib/messages";
+import { BrainIcon, GearSixIcon, MagnifyingGlassIcon, NotePencilIcon, SidebarSimpleIcon, SignOutIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { authClient } from "@/lib/auth-client";
+import { idleSubmit, submitTransition } from "@/lib/submit-state";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { OrbitMark } from "@/components/orbit-mark";
 import { groupChatsByRecency } from "@/components/shell/chat-groups";
 import { serverTodaySnapshot, subscribeToday, todaySnapshot } from "@/components/shell/today";
 import { ShortcutKbd } from "@/components/shell/shortcuts";
-
-export type ChatSummary = ReturnType<typeof listChats>[number];
-
-// The stored default title would repeat the New chat button label.
-export function chatLabel(title: string) {
-  return title === "New chat" ? "Untitled" : title;
-}
+import { ChatRow, focusChatRow, type ChatSummary } from "./chat-row-menu";
 
 // Null on the server: its timezone is not the reader's, so buckets are computed only in the browser.
 function useToday() {
   return useSyncExternalStore(subscribeToday, todaySnapshot, serverTodaySnapshot);
 }
 
+const footerLinkClass =
+  "flex h-8 items-center gap-2 rounded-md px-1.5 text-sm transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 pointer-coarse:h-11";
+
 export function Sidebar({
   chats,
   email,
   onNewChat,
   onSearch,
+  onRename,
+  onDelete,
   onCollapse,
   onNavigate,
 }: {
@@ -38,26 +38,23 @@ export function Sidebar({
   email: string;
   onNewChat: () => void;
   onSearch: () => void;
+  onRename: (chat: ChatSummary, title: string) => void;
+  onDelete: (chat: ChatSummary) => void;
   onCollapse?: () => void;
   /** Called when a link is followed, including the current page's, which changes no route. */
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const today = useToday();
-  const [signOutFailed, setSignOutFailed] = useState(false);
   const groups = today === null ? [{ label: null, chats }] : groupChatsByRecency(chats, today);
 
-  async function signOut() {
-    setSignOutFailed(false);
-    // A network failure rejects, and an HTTP error resolves with `error`.
-    const result = await authClient.signOut().catch(() => null);
-    if (!result || result.error) {
-      setSignOutFailed(true);
-      return;
-    }
-    router.push("/login");
-    router.refresh();
+  function remove(chat: ChatSummary, active: boolean) {
+    const order = groups.flatMap((group) => group.chats);
+    const index = order.findIndex((item) => item.id === chat.id);
+    const neighbor = order[index + 1] ?? order[index - 1];
+    onDelete(chat);
+    // Deleting the open chat opens a draft, whose composer takes focus. Otherwise the row's place does.
+    if (!active && neighbor) window.setTimeout(() => focusChatRow(neighbor.id), 0);
   }
 
   return (
@@ -106,61 +103,110 @@ export function Sidebar({
           <div key={group.label ?? "all"} className="flex flex-col gap-px">
             {group.label && <h2 className="px-2.5 pb-1 text-meta font-medium text-muted-foreground">{group.label}</h2>}
             {group.chats.map((chat) => {
-              const href = `/c/${chat.id}`;
-              const active = pathname === href;
+              const active = pathname === `/c/${chat.id}`;
               return (
-                <Link
+                <ChatRow
                   key={chat.id}
-                  href={href}
-                  onClick={onNavigate}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "relative truncate rounded-md px-2.5 py-1.5 text-sm pointer-coarse:py-3 transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                    active
-                      ? "bg-accent text-foreground before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-sun"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                  )}
-                >
-                  {chatLabel(chat.title)}
-                </Link>
+                  chat={chat}
+                  active={active}
+                  onNavigate={onNavigate}
+                  onRename={(title) => onRename(chat, title)}
+                  onDelete={() => remove(chat, active)}
+                />
               );
             })}
           </div>
         ))}
       </nav>
 
-      <div className="shrink-0 border-t p-2">
-        {signOutFailed && (
-          <p role="alert" className="px-1.5 pb-1.5 text-meta text-destructive">
-            Could not sign out
-          </p>
-        )}
-        <div className="flex items-center gap-1">
+      <div className="flex shrink-0 flex-col gap-px border-t p-2">
+        {(
+          [
+            { href: "/memory", label: "Memory", Icon: BrainIcon },
+            { href: "/settings", label: "Settings", Icon: GearSixIcon },
+          ] as const
+        ).map(({ href, label, Icon }) => (
           <Link
-            href="/settings"
+            key={href}
+            href={href}
             onClick={onNavigate}
-            aria-current={pathname === "/settings" ? "page" : undefined}
-            className={cn(
-              "flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1.5 text-sm transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-              pathname === "/settings" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
-            )}
+            aria-current={pathname === href ? "page" : undefined}
+            className={cn(footerLinkClass, pathname === href ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground")}
           >
-            <span className="sr-only">Settings</span>
-            <span aria-hidden className="grid size-6 shrink-0 place-items-center rounded-full border bg-surface-raised text-meta font-medium text-foreground uppercase">
-              {email.charAt(0)}
-            </span>
-            <span className="truncate">{email}</span>
+            <Icon weight="light" className="size-[18px] shrink-0" />
+            {label}
           </Link>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-sm" onClick={signOut} aria-label="Sign out" className="text-muted-foreground hover:text-foreground">
-                <SignOutIcon weight="light" className="size-[18px]" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Sign out</TooltipContent>
-          </Tooltip>
+        ))}
+        <div className="mt-1 flex items-center gap-2 pl-1.5">
+          <span aria-hidden className="grid size-6 shrink-0 place-items-center rounded-full border bg-surface-raised text-meta font-medium text-foreground uppercase">
+            {email.charAt(0)}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">{email}</span>
+          <SignOut />
         </div>
       </div>
     </div>
+  );
+}
+
+function SignOut() {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [state, dispatch] = useReducer(submitTransition, idleSubmit);
+  // Stays locked after success too, while the page leaves for /login.
+  const busy = state.status === "pending" || state.status === "succeeded";
+
+  async function signOut() {
+    if (busy) return;
+    dispatch({ type: "submit" });
+    // A network failure rejects, and an HTTP error resolves with `error`.
+    const result = await authClient.signOut().catch(() => null);
+    if (!result || result.error) {
+      dispatch({ type: "fail", error: "Could not sign out" });
+      return;
+    }
+    dispatch({ type: "succeed" });
+    router.push("/login");
+    router.refresh();
+  }
+
+  function setDialog(next: boolean) {
+    if (busy) return;
+    setOpen(next);
+    if (!next) dispatch({ type: "edit" });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setDialog}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label="Sign out" className="text-muted-foreground hover:text-foreground">
+              <SignOutIcon weight="light" className="size-[18px]" />
+            </Button>
+          </DialogTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="top">Sign out</TooltipContent>
+      </Tooltip>
+      <DialogContent aria-describedby={undefined} showCloseButton={false} className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Sign out?</DialogTitle>
+        </DialogHeader>
+        {state.status === "failed" ? (
+          <p role="alert" className="flex items-center gap-2 text-meta text-destructive">
+            <WarningCircleIcon weight="regular" className="size-3.5 shrink-0" />
+            {state.error}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setDialog(false)} disabled={busy}>
+            Cancel
+          </Button>
+          <Button onClick={signOut} disabled={busy}>
+            Sign out
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

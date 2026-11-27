@@ -7,7 +7,7 @@ import { Command, defaultFilter } from "cmdk";
 import { BrainIcon, ChatCircleIcon, GearSixIcon, MagnifyingGlassIcon, NotePencilIcon } from "@phosphor-icons/react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ScrollFade } from "@/components/ui/scroll-fade";
-import { chatLabel, type ChatSummary } from "@/components/chat/sidebar";
+import { chatLabel, type ChatSummary } from "@/components/chat/chat-row-menu";
 import { ShortcutKbd } from "./shortcuts";
 import { useLoaded } from "@/lib/request-json";
 import { paletteSearchNotice } from "./palette-search";
@@ -43,19 +43,22 @@ export function CommandPalette({
   open,
   onOpenChange,
   chats,
+  hiddenChatIds,
   onNewChat,
   onAction,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   chats: ChatSummary[];
+  /** Chats deleted or waiting for Undo. Their message hits stay out of the list. */
+  hiddenChatIds: ReadonlySet<string>;
   onNewChat: () => void;
   onAction: () => void;
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [messageSearch, loadSearch, , resetSearch] = useLoaded<MessageHit[]>({ status: "idle" });
-  const hits = messageSearch.status === "done" ? messageSearch.data : [];
+  const hits = messageSearch.status === "done" ? messageSearch.data.filter((hit) => !hiddenChatIds.has(hit.chatId)) : [];
   const notice = paletteSearchNotice(messageSearch.status);
 
   useEffect(() => {
