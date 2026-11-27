@@ -1,9 +1,10 @@
 import { and, eq, exists } from "drizzle-orm";
 import { z } from "zod";
-import { connectionApiKey, getConnection, getModelDefaults, listConnections, trySeedConnection, type ProviderConnection } from "./connections";
+import { connectionApiKey, getModelDefaults, pickableConnection, trySeedConnection, type ProviderConnection } from "./connections";
 import { getDb } from "./db";
 import { chats, providerConnections } from "./db/schema";
 import { DEFAULT_EFFORT, EFFORTS, type Effort, type EffortOutcome } from "./effort";
+import type { Viewer } from "./policy";
 import { SecretUnreadable } from "./secrets";
 
 export type ModelChoice = { connectionId: string; model: string; effort: Effort };
@@ -17,6 +18,7 @@ export type ResolvedChoice =
   | { ok: false; reason: "key-unreadable"; choice: ModelChoice };
 
 type ChatColumns = { connectionId: string | null; model: string | null; reasoningEffort: string | null };
+export const NOTHING_PINNED = { connectionId: null, model: null, reasoningEffort: null };
 
 // setChatChoice writes the three together. A row with one or two set, or an effort outside the enum, was written
 // some other way, so it fails here instead of sending a guess.
@@ -46,12 +48,14 @@ export function setChatChoice(chatId: string, choice: ModelChoice) {
   db.update(chats).set({ connectionId: choice.connectionId, model: choice.model, reasoningEffort: choice.effort }).where(and(eq(chats.id, chatId), exists(owned))).run();
 }
 
-// Retry unfinished setup if the signup hook could not adopt the configured provider.
-function fromDefaults(userId: string): ResolvedChoice {
-  if (listConnections(userId).length === 0) trySeedConnection(userId);
-  const defaults = getModelDefaults(userId);
-  const connection = defaults.connectionId ? getConnection(userId, defaults.connectionId) : (listConnections(userId)[0] ?? null);
+function fromDefaults(viewer: Viewer): ResolvedChoice {
+  let connection = pickableConnection(viewer, null);
+  if (!connection && viewer.role === "admin") {
+    trySeedConnection(viewer);
+    connection = pickableConnection(viewer, null);
+  }
   if (!connection) return { ok: false, reason: "no-connection" };
+  const defaults = getModelDefaults(viewer.id);
   if (!defaults.connectionId || !defaults.model) return { ok: false, reason: "no-model" };
   return { ok: true, connection, choice: { connectionId: connection.id, model: defaults.model, effort: defaults.effort ?? DEFAULT_EFFORT } };
 }
@@ -68,10 +72,10 @@ function readable(userId: string, resolved: ResolvedChoice): ResolvedChoice {
 }
 
 /** The request wins, then the chat's own choice, then the user's defaults. */
-export function resolveChoice(userId: string, chat: ChatColumns, requested?: ModelChoice): ResolvedChoice {
+export function resolveChoice(viewer: Viewer, chat: ChatColumns, requested?: ModelChoice): ResolvedChoice {
   const pick = requested ?? chatChoice(chat);
-  if (!pick) return readable(userId, fromDefaults(userId));
-  const connection = getConnection(userId, pick.connectionId);
-  if (connection) return readable(userId, { ok: true, choice: pick, connection });
-  return requested ? { ok: false, reason: "no-connection" } : readable(userId, fromDefaults(userId));
+  if (!pick) return readable(viewer.id, fromDefaults(viewer));
+  const connection = pickableConnection(viewer, { from: requested ? "request" : "stored", id: pick.connectionId });
+  if (connection?.id === pick.connectionId) return readable(viewer.id, { ok: true, choice: pick, connection });
+  return requested ? { ok: false, reason: "no-connection" } : readable(viewer.id, fromDefaults(viewer));
 }

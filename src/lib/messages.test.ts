@@ -1,3 +1,4 @@
+import { parseViewer } from "./policy";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -343,7 +344,7 @@ test("renameChat trims and masks the title, keeps updated_at, and ignores anothe
 test("deleteChat removes the chat and its messages, keeps the search index whole, and keeps linked memories without a source", () => {
   insertChat("delete-me", "u1", "Gone soon");
   reply("delete-me", [message("dm-u1", "user", "the plumquartz plan")], message("dm-a1", "assistant", "plumquartz answer"));
-  const linked = saveMemory({ text: "The plan is plumquartz", kind: "fact", source: "dream", sourceChatId: "delete-me", sourceMessageId: "dm-u1" });
+  const linked = saveMemory(parseViewer({ id: "u1", role: "member" }).id, { text: "The plan is plumquartz", kind: "fact", source: "dream", sourceChatId: "delete-me", sourceMessageId: "dm-u1" });
   assert.equal(searchMessages("u1", "plumquartz").length, 2);
 
   insertChat("delete-other", otherUser(), "Theirs");

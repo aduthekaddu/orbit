@@ -1,4 +1,4 @@
-import { getModelDefaults, saveModelDefaults } from "@/lib/connections";
+import { getModelDefaults, pickableConnection, saveModelDefaults } from "@/lib/connections";
 import { EFFORTS } from "@/lib/effort";
 import { LIMITS, r } from "@/lib/route-schema";
 import { sessionFrom, unauthorized } from "@/lib/session";
@@ -24,6 +24,6 @@ export async function PUT(request: Request) {
   if (!session) return unauthorized();
   const parsed = putSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Check the connection, model, and effort." }, { status: 400 });
-  if (!saveModelDefaults(session.user.id, parsed.data)) return Response.json({ error: "Not found" }, { status: 404 });
+  if (!pickableConnection(session.user, { from: "request", id: parsed.data.connectionId }) || !saveModelDefaults(session.user.id, parsed.data)) return Response.json({ error: "Not found" }, { status: 404 });
   return Response.json(getModelDefaults(session.user.id));
 }

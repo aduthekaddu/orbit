@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, exists, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { normalizeBaseUrl } from "./base-url";
 import { redactUrl, resolveMaskedUrl, type Redactor } from "./chat-errors";
 import { getDb, urlHostLabel } from "./db";
-import { chats, hiddenModels, pendingConnection, providerConnections, userPreferences } from "./db/schema";
+import { chats, hiddenModels, pendingConnection, providerConnections, user, userPreferences } from "./db/schema";
 import { DEFAULT_EFFORT, isEffort, type Effort } from "./effort";
 import { readEnv } from "./env";
 import { clearModelCaps, listModels, rememberModelCaps } from "./model-list";
+import { getInstance } from "./instance-settings";
+import { policyFor, type Viewer } from "./policy";
 import { decryptSecret, encryptSecret, SecretUnreadable } from "./secrets";
 
 export type ConnectionKind = "openai-compatible" | "anthropic";
@@ -90,10 +92,21 @@ export function redactionSecrets(userId: string): ConnectionSecrets[] {
   return rows.map((row) => secretsOf(connectionRow.parse(row), keyOrEmpty(row.ciphertext)));
 }
 
-/** The same for every connection of the install, for the settings row, which no single user owns. */
-export function installRedactionSecrets(): ConnectionSecrets[] {
-  const rows = getDb().select(credentialColumns).from(providerConnections).all();
-  return rows.map((row) => secretsOf(connectionRow.parse(row), keyOrEmpty(row.ciphertext)));
+export type RequestedConnection = { from: "request" | "stored"; id: string } | null;
+
+export function pickableConnectionOwner(viewer: Viewer) {
+  return policyFor(getInstance().hostingMode).connectionOwner(viewer);
+}
+
+export function pickableConnection(viewer: Viewer, requested: RequestedConnection): ProviderConnection | null {
+  const ownerId = pickableConnectionOwner(viewer);
+  if (requested) {
+    const connection = getConnection(ownerId, requested.id);
+    if (connection || requested.from === "request") return connection;
+  }
+  const defaults = getModelDefaults(viewer.id);
+  const preferred = defaults.connectionId ? getConnection(ownerId, defaults.connectionId) : null;
+  return preferred ?? listConnections(ownerId)[0] ?? null;
 }
 
 export function toPublicConnection(connection: ProviderConnection, redact: Redactor): PublicConnection {
@@ -231,12 +244,13 @@ export function getModelDefaults(userId: string): ModelDefaults {
 
 type Writer = Pick<ReturnType<typeof getDb>, "insert">;
 
-function completeConnectionSetup(db: Pick<ReturnType<typeof getDb>, "insert" | "delete">, userId: string) {
+function completeConnectionSetup(db: Pick<ReturnType<typeof getDb>, "insert" | "delete" | "select">, userId: string) {
   db.insert(userPreferences)
     .values({ userId, providerSetupComplete: true, updatedAt: new Date() })
     .onConflictDoUpdate({ target: userPreferences.userId, set: { providerSetupComplete: true } })
     .run();
-  db.delete(pendingConnection).where(eq(pendingConnection.id, 1)).run();
+  const admin = db.select({ id: user.id }).from(user).where(and(eq(user.id, userId), eq(user.role, "admin")));
+  db.delete(pendingConnection).where(and(eq(pendingConnection.id, 1), exists(admin))).run();
 }
 
 function writeModelDefaults(db: Writer, userId: string, defaults: { connectionId: string; model: string | null; effort: Effort }) {
@@ -254,7 +268,9 @@ export function saveModelDefaults(userId: string, defaults: { connectionId: stri
  * Adopt the pending provider or the environment once. A failed write leaves setup open for another attempt.
  * A manual connection also completes setup, so its later deletion cannot restore a previous provider.
  */
-export function seedConnection(userId: string) {
+export function seedConnection(viewer: Viewer) {
+  if (viewer.role !== "admin") return;
+  const userId = viewer.id;
   getDb().transaction(
     (tx) => {
       const preferences = tx.select({ complete: userPreferences.providerSetupComplete }).from(userPreferences).where(eq(userPreferences.userId, userId)).get();
@@ -284,9 +300,10 @@ export function seedConnection(userId: string) {
   );
 }
 
-export function trySeedConnection(userId: string) {
+export function trySeedConnection(viewer: Viewer) {
+  if (viewer.role !== "admin") return;
   try {
-    seedConnection(userId);
+    seedConnection(viewer);
   } catch {
     // Database errors can include provider URLs or statement parameters.
     console.error("connection seed failed");

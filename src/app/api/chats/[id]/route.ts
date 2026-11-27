@@ -2,7 +2,7 @@ import { deleteChat, getChatForUser, messageRepository, renameChat } from "@/lib
 import { deleteAfterReply } from "@/lib/reply-runs";
 import { LIMITS, r, readJsonBody } from "@/lib/route-schema";
 import { sessionFrom, unauthorized } from "@/lib/session";
-import { requestRedactor } from "@/lib/settings";
+import { requestRedactor } from "@/lib/request-redactor";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,7 +41,7 @@ export async function PATCH(request: Request, context: Context) {
   }
   const parsed = renameSchema.safeParse(body.json);
   if (!parsed.success) return Response.json({ error: "Invalid chat title" }, { status: 400 });
-  const renamed = renameChat(params.data.id, session.user.id, parsed.data.title, requestRedactor(session.user.id));
+  const renamed = renameChat(params.data.id, session.user.id, parsed.data.title, requestRedactor(session.user));
   if (!renamed) return notFound();
   return Response.json(renamed);
 }

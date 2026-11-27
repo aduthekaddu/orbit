@@ -1,4 +1,4 @@
-import { getConnection, hiddenModelIds, setModelHidden } from "@/lib/connections";
+import { pickableConnection, hiddenModelIds, setModelHidden } from "@/lib/connections";
 import { LIMITS, r } from "@/lib/route-schema";
 import { sessionFrom, unauthorized } from "@/lib/session";
 
@@ -17,7 +17,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const params = paramsSchema.safeParse(await context.params);
-  const connection = params.success ? getConnection(session.user.id, params.data.id) : null;
+  const connection = params.success ? pickableConnection(session.user, { from: "request", id: params.data.id }) : null;
   if (!connection) return Response.json({ error: "Not found" }, { status: 404 });
   const parsed = putSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Check the model." }, { status: 400 });

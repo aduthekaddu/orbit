@@ -13,12 +13,15 @@ import { getDb, type OrbitDb } from "@/lib/db";
 import * as schema from "@/lib/db/schema";
 import * as messages from "@/lib/messages";
 import { seedTestConnection } from "@/lib/connection-fixture";
-import { saveSettings } from "@/lib/settings";
+import { saveInstance } from "@/lib/instance-settings";
+import { saveGithub } from "@/lib/user-github";
+import { parseViewer } from "@/lib/policy";
 
 const PROVIDER_KEY = "made-up-provider-key-0001";
 const TAVILY_KEY = "made-up-tavily-key-0002";
 const GITHUB_TOKEN = mockGithubToken;
 const USER_ID = "u-stream-redact";
+const viewer = parseViewer({ id: USER_ID, role: "admin" });
 const SEEDED_ENV = ["ORBIT_BASE_URL", "ORBIT_API_KEY", "ORBIT_MODEL", "ORBIT_SEARXNG_URL", "ORBIT_TAVILY_API_KEY", "ORBIT_GITHUB_TOKEN"];
 
 type ModelFactory = () => MockLanguageModelV4;
@@ -32,7 +35,7 @@ let nextModel: ModelFactory = () => {
 (globalThis as Record<string, unknown>).__orbitStreamModel = () => nextModel();
 
 const stubs: Record<string, string> = {
-  "@/lib/session": `exports.sessionFrom = async () => ({ user: { id: ${JSON.stringify(USER_ID)} } });
+  "@/lib/session": `exports.sessionFrom = async () => ({ user: { id: ${JSON.stringify(USER_ID)}, role: "admin" } });
 exports.unauthorized = () => Response.json({ error: "Unauthorized" }, { status: 401 });`,
   "next/server": `exports.after = (task) => { globalThis.__orbitStreamAfter.push(Promise.resolve(typeof task === "function" ? task() : task)); };`,
   "@/lib/provider": `exports.languageModelFor = () => globalThis.__orbitStreamModel();`,
@@ -73,11 +76,11 @@ function finishChunk(unified: "stop" | "tool-calls" = "stop") {
 
 function setCredentials(keys?: { apiKey?: string; tavilyApiKey?: string; githubToken?: string }) {
   seedTestConnection(USER_ID, { apiKey: keys?.apiKey ?? PROVIDER_KEY, model: "mock" });
-  saveSettings({
-    tavilyApiKey: keys?.tavilyApiKey ?? TAVILY_KEY,
+  assert.ok(saveInstance(viewer.id, { tavilyApiKey: keys?.tavilyApiKey ?? TAVILY_KEY }).ok);
+  assert.ok(saveGithub(viewer.id, {
     githubToken: keys?.githubToken ?? GITHUB_TOKEN,
     githubMcpUrl: github.url,
-  });
+  }).ok);
 }
 
 before(async () => {

@@ -11,10 +11,13 @@ import { getDb } from "./db";
 import { cachedCaps } from "./model-list";
 import { dataDirectory } from "./paths";
 import { getPreferences, savePreferences } from "./preferences";
-import { getSettings, requestRedactor, saveSettings, toPublicSettings } from "./settings";
+import { getInstance, saveInstance, toPublicInstance } from "./instance-settings";
+import { requestRedactor } from "./request-redactor";
+import { parseViewer } from "./policy";
 
 const ONE = "u-connections-one";
 const TWO = "u-connections-two";
+const admin = parseViewer({ id: ONE, role: "admin" });
 const OPENAI_KEY = "made-up-openai-key-0001";
 const ANTHROPIC_KEY = "made-up-anthropic-key-0001";
 const URL_SECRET = "url-pass-secret-01";
@@ -31,7 +34,7 @@ const sandbox = fs.mkdtempSync(path.join(process.env.ORBIT_DATA_DIR!, "cwd-"));
 const stubFile = path.join(sandbox, "session-stub.cjs");
 fs.writeFileSync(
   stubFile,
-  `exports.sessionFrom = async () => (globalThis.orbitTestUser ? { user: { id: globalThis.orbitTestUser } } : null);
+  `exports.sessionFrom = async () => (globalThis.orbitTestUser ? { user: { id: globalThis.orbitTestUser, role: globalThis.orbitTestUser === ${JSON.stringify(ONE)} ? "admin" : "member" } } : null);
 exports.unauthorized = () => Response.json({ error: "Unauthorized" }, { status: 401 });`,
 );
 const hooks = registerHooks({
@@ -53,11 +56,11 @@ const bodies: string[] = [];
 let providerBase = "";
 let elsewhereBase = "";
 
-let collection: { GET: () => Promise<Response>; POST: (request: Request) => Promise<Response> };
+let collection: { GET: (request: Request) => Promise<Response>; POST: (request: Request) => Promise<Response> };
 let item: { PATCH: Handler; DELETE: Handler };
 let models: { GET: Handler };
 let hiddenModels: { PUT: Handler };
-let defaults: { GET: () => Promise<Response>; PUT: (request: Request) => Promise<Response> };
+let defaults: { GET: (request: Request) => Promise<Response>; PUT: (request: Request) => Promise<Response> };
 
 async function listen(log: Seen[], reply: (req: http.IncomingMessage) => object | null) {
   const server = http.createServer((req, res) => {
@@ -96,13 +99,11 @@ before(async () => {
   fs.cpSync(path.join(originalCwd, "drizzle"), path.join(sandbox, "drizzle"), { recursive: true });
   process.chdir(sandbox);
   const db = getDb();
-  // Slice 18 adds accounts. Until then the database holds one user, so this file lifts that limit to test ownership.
-  db.$client.exec("DROP TRIGGER IF EXISTS user_single_row");
   for (const id of [ONE, TWO]) {
     db.$client.prepare("insert into user (id, name, email, email_verified) values (?, ?, ?, 0)").run(id, id, `${id}@orbit.local`);
   }
   asUser(ONE);
-  saveSettings({ tavilyApiKey: TAVILY_KEY });
+  assert.ok(saveInstance(admin.id, { tavilyApiKey: TAVILY_KEY }).ok);
 
   collection = await import("../app/api/connections/route");
   item = await import("../app/api/connections/[id]/route");
@@ -277,8 +278,8 @@ test("saved URL credentials remain in the redaction set when the connection key 
   db.prepare("insert into provider_connections (id, user_id, kind, label, base_url, api_key_ciphertext, created_at) values ('conn-url-unreadable', ?, 'openai-compatible', 'Fixture', ?, 'unreadable', 0)")
     .run(ONE, `https://provider.invalid/v1?token=${value}`);
   try {
-    assert.equal(requestRedactor(ONE).text(value), "[redacted]");
-    const settings = toPublicSettings({ ...getSettings(), searxngUrl: `https://search.invalid/${value}` });
+    assert.equal(requestRedactor(admin).text(value), "[redacted]");
+    const settings = toPublicInstance(admin.id, { ...getInstance(), searxngUrl: `https://search.invalid/${value}` });
     assert.equal(settings.searxngUrl, "https://search.invalid/[redacted]");
   } finally {
     db.prepare("delete from provider_connections where id = 'conn-url-unreadable'").run();
@@ -385,7 +386,7 @@ test("deleting a connection during a pending edit leaves no saved edit or cached
 });
 
 test("deleting a connection clears the chats and defaults that use it, and old replies keep their model and effort", async () => {
-  savePreferences(ONE, { theme: "light", accent: "rose" });
+  savePreferences(admin.id, { theme: "light", accent: "rose" });
   assert.equal((await setDefaults({ connectionId: openaiId, model: "fixture-model", effort: "high" })).status, 200);
   for (const [chatId, connectionId, model] of [["chat-uses-openai", openaiId, "fixture-model"], ["chat-uses-claude", anthropicId, "claude-opus-5-5"]]) {
     getDb()
@@ -412,7 +413,7 @@ test("deleting a connection clears the chats and defaults that use it, and old r
     effort_outcome: "applied",
     content: "old reply",
   });
-  const appearance = getPreferences(ONE);
+  const appearance = getPreferences(admin.id);
   assert.equal(appearance.theme, "light");
   assert.equal(appearance.accent, "rose");
 });

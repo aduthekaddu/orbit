@@ -65,7 +65,7 @@ function scrubDroppedSecrets(sqlite: Database.Database) {
   if (checkpoint.busy === 0 && checkpoint.log === checkpoint.checkpointed) sqlite.pragma("user_version = 0");
 }
 
-function migrateAndScrub(db: ReturnType<typeof drizzle<typeof schema>>, sqlite: Database.Database, migrationsFolder: string) {
+export function migrateAndScrub(db: ReturnType<typeof drizzle<typeof schema>>, sqlite: Database.Database, migrationsFolder: string) {
   migrate(db, { migrationsFolder });
   scrubDroppedSecrets(sqlite);
 }

@@ -1,9 +1,9 @@
-import { connectionApiKey, getConnection, hiddenModelIds } from "@/lib/connections";
+import { connectionApiKey, pickableConnection, hiddenModelIds } from "@/lib/connections";
 import { listModels, rememberModelCaps } from "@/lib/model-list";
 import { LIMITS, r } from "@/lib/route-schema";
 import { SecretUnreadable } from "@/lib/secrets";
 import { sessionFrom, unauthorized } from "@/lib/session";
-import { requestRedactor } from "@/lib/settings";
+import { requestRedactor } from "@/lib/request-redactor";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,12 +14,12 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const params = paramsSchema.safeParse(await context.params);
-  const connection = params.success ? getConnection(session.user.id, params.data.id) : null;
+  const connection = params.success ? pickableConnection(session.user, { from: "request", id: params.data.id }) : null;
   if (!connection) return Response.json({ error: "Not found" }, { status: 404 });
   try {
     const apiKey = connectionApiKey(session.user.id, connection.id);
-    const models = await listModels(connection, apiKey, requestRedactor(session.user.id), { cache: false });
-    const current = getConnection(session.user.id, connection.id);
+    const models = await listModels(connection, apiKey, requestRedactor(session.user), { cache: false });
+    const current = pickableConnection(session.user, { from: "request", id: connection.id });
     if (!current) return Response.json({ error: "Not found" }, { status: 404 });
     const baseChanged = connection.kind === "openai-compatible" && current.kind === "openai-compatible" && connection.baseUrl !== current.baseUrl;
     if (baseChanged || apiKey !== connectionApiKey(session.user.id, connection.id)) {

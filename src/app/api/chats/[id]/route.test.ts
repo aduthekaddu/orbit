@@ -1,3 +1,4 @@
+import { parseViewer } from "@/lib/policy";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { registerHooks } from "node:module";
@@ -13,7 +14,7 @@ import { finishChatReply, planChatWrite } from "@/lib/messages";
 import { saveMemory } from "@/lib/memory/store";
 import { bindReplyPlan, findReplyRun, releaseReplyRun, reserveReplyRun, startReplyRun } from "@/lib/reply-runs";
 import { searchMessages } from "@/lib/search";
-import { saveSettings } from "@/lib/settings";
+import { saveInstance } from "@/lib/instance-settings";
 
 const ME = "u-chat-owner";
 const OTHER = "u-chat-other";
@@ -41,7 +42,7 @@ before(async () => {
   const db = getDb();
   db.$client.exec("DROP TRIGGER IF EXISTS user_single_row");
   for (const id of [ME, OTHER]) db.insert(schema.user).values({ id, name: id, email: `${id}@orbit.local` }).run();
-  saveSettings({ tavilyApiKey: STORED_KEY });
+  assert.ok(saveInstance(parseViewer({ id: ME, role: "admin" }).id, { tavilyApiKey: STORED_KEY }).ok);
   route = await import("./route");
 });
 
@@ -166,7 +167,7 @@ test("PATCH answers 404 for another user's or a missing chat and 401 when signed
 test("DELETE removes the chat and its messages with an empty 204, keeps the search index whole, and keeps linked memories", async () => {
   chat("delete-me", ME, "Gone");
   turn("delete-me", "the figbarrow plan", "figbarrow answer");
-  const memory = saveMemory({ text: "The plan is figbarrow", kind: "fact", source: "dream", sourceChatId: "delete-me", sourceMessageId: "delete-me-u" });
+  const memory = saveMemory(parseViewer({ id: ME, role: "member" }).id, { text: "The plan is figbarrow", kind: "fact", source: "dream", sourceChatId: "delete-me", sourceMessageId: "delete-me-u" });
   signIn(ME);
   assert.equal(searchMessages(ME, "figbarrow").length, 2);
   assert.deepEqual(await answer(await remove("delete-me")), { status: 204, body: null, text: "" });
