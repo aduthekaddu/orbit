@@ -1,7 +1,7 @@
 import { getChatForUser } from "@/lib/messages";
 import { findReplyRun, replyResponse } from "@/lib/reply-runs";
 import { LIMITS, r } from "@/lib/route-schema";
-import { getSession, unauthorized } from "@/lib/session";
+import { sessionFrom, unauthorized } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ const paramsSchema = r.object({ id: r.text(LIMITS.id).min(1) });
 const querySchema = r.object({ replyId: r.text(LIMITS.id).min(1).optional() });
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const params = paramsSchema.safeParse(await context.params);
   if (!params.success) return Response.json({ error: "Not found" }, { status: 404 });

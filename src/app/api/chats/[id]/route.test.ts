@@ -23,7 +23,7 @@ const STORED_KEY = "made-up-tavily-key-0042";
 // returns whichever user a test signs in as, or no session.
 const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-chats-route-"));
 const sessionStub = path.join(stubDir, "session.cjs");
-fs.writeFileSync(sessionStub, `exports.getSession = async () => (globalThis.__orbitSignedIn ? { user: { id: globalThis.__orbitSignedIn } } : null);
+fs.writeFileSync(sessionStub, `exports.sessionFrom = async () => (globalThis.__orbitSignedIn ? { user: { id: globalThis.__orbitSignedIn } } : null);
 exports.unauthorized = () => Response.json({ error: "Unauthorized" }, { status: 401 });`);
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {

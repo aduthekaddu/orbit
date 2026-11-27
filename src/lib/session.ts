@@ -3,9 +3,15 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getAuth } from "./auth";
 
-export const getSession = cache(async () =>
-  getAuth().api.getSession({ headers: await headers(), query: { disableRefresh: true } }),
-);
+function readSession(headers: Headers) {
+  return getAuth().api.getSession({ headers, query: { disableRefresh: true } });
+}
+
+export const getSession = cache(async () => readSession(await headers()));
+
+export function sessionFrom(request: Request) {
+  return readSession(request.headers);
+}
 
 export async function requireUser() {
   const session = await getSession();

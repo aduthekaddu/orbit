@@ -31,7 +31,7 @@ const sandbox = fs.mkdtempSync(path.join(process.env.ORBIT_DATA_DIR!, "cwd-"));
 const stubFile = path.join(sandbox, "session-stub.cjs");
 fs.writeFileSync(
   stubFile,
-  `exports.getSession = async () => (globalThis.orbitTestUser ? { user: { id: globalThis.orbitTestUser } } : null);
+  `exports.sessionFrom = async () => (globalThis.orbitTestUser ? { user: { id: globalThis.orbitTestUser } } : null);
 exports.unauthorized = () => Response.json({ error: "Unauthorized" }, { status: 401 });`,
 );
 const hooks = registerHooks({
@@ -139,7 +139,7 @@ async function read(response: Promise<Response>) {
 }
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
-const list = async () => (await read(collection.GET())).json() as Connection[];
+const list = async () => (await read(collection.GET(new Request("http://localhost")))).json() as Connection[];
 const create = (body: unknown) => read(collection.POST(jsonRequest("/api/connections", "POST", body)));
 const patch = (id: string, body: unknown) => read(item.PATCH(jsonRequest(`/api/connections/${id}`, "PATCH", body), params(id)));
 const remove = (id: string) => read(item.DELETE(jsonRequest(`/api/connections/${id}`, "DELETE"), params(id)));

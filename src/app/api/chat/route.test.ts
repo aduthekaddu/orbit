@@ -32,7 +32,7 @@ const CONSOLE_METHODS = ["error", "warn", "log", "info", "debug"] as const;
 // need a Next.js request scope. These stubs stand in for them so the test drives the real handler.
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-chat-route-"));
 const stubs: Record<string, string> = {
-  "@/lib/session": `exports.getSession = async () => ({ user: { id: ${JSON.stringify(USER_ID)} } });
+  "@/lib/session": `exports.sessionFrom = async () => ({ user: { id: ${JSON.stringify(USER_ID)} } });
 exports.unauthorized = () => Response.json({ error: "Unauthorized" }, { status: 401 });`,
   "next/server": `exports.after = (task) => { globalThis.__orbitAfter.push(Promise.resolve(typeof task === "function" ? task() : task)); };`,
 };

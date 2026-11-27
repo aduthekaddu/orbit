@@ -2,7 +2,7 @@ import { connectionApiKey, getConnection, hiddenModelIds } from "@/lib/connectio
 import { listModels, rememberModelCaps } from "@/lib/model-list";
 import { LIMITS, r } from "@/lib/route-schema";
 import { SecretUnreadable } from "@/lib/secrets";
-import { getSession, unauthorized } from "@/lib/session";
+import { sessionFrom, unauthorized } from "@/lib/session";
 import { requestRedactor } from "@/lib/settings";
 
 export const runtime = "nodejs";
@@ -10,8 +10,8 @@ export const dynamic = "force-dynamic";
 
 const paramsSchema = r.object({ id: r.text(LIMITS.id).min(1) });
 
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const params = paramsSchema.safeParse(await context.params);
   const connection = params.success ? getConnection(session.user.id, params.data.id) : null;

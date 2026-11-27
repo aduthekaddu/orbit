@@ -1,6 +1,6 @@
 import { getConnection, hiddenModelIds, setModelHidden } from "@/lib/connections";
 import { LIMITS, r } from "@/lib/route-schema";
-import { getSession, unauthorized } from "@/lib/session";
+import { sessionFrom, unauthorized } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ const putSchema = r.object({
 });
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const params = paramsSchema.safeParse(await context.params);
   const connection = params.success ? getConnection(session.user.id, params.data.id) : null;

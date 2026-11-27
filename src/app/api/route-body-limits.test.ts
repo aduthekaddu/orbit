@@ -27,7 +27,7 @@ const LONG_PROMPT_WITHIN_LIMIT = "ab ".repeat(16_000);
 // need a Next.js request scope. These stubs stand in for them so the test drives the real handlers.
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-route-limits-"));
 const stubs: Record<string, string> = {
-  "@/lib/session": `exports.getSession = async () => ({ user: { id: ${JSON.stringify(USER_ID)} } });
+  "@/lib/session": `exports.sessionFrom = async () => ({ user: { id: ${JSON.stringify(USER_ID)} } });
 exports.unauthorized = () => Response.json({ error: "Unauthorized" }, { status: 401 });`,
   "next/server": `exports.after = (task) => { globalThis.__orbitLimitsAfter.push(Promise.resolve(typeof task === "function" ? task() : task)); };`,
 };

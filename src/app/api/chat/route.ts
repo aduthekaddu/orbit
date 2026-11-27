@@ -22,7 +22,7 @@ import { bindReplyPlan, releaseReplyRun, replyResponse, reserveReplyRun, startRe
 import { startChatTitle } from "@/lib/titles";
 import { getSettings, requestRedactor } from "@/lib/settings";
 import { LIMITS, r, readJsonBody } from "@/lib/route-schema";
-import { getSession, unauthorized } from "@/lib/session";
+import { sessionFrom, unauthorized } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -90,7 +90,7 @@ const addedMessageSchema = r.discriminatedUnion("role", [
 ]);
 
 export async function POST(request: Request) {
-  const session = await getSession();
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
 
   const body = await readJsonBody(request, LIMITS.requestBytes);

@@ -32,7 +32,7 @@ let nextModel: ModelFactory = () => {
 (globalThis as Record<string, unknown>).__orbitStreamModel = () => nextModel();
 
 const stubs: Record<string, string> = {
-  "@/lib/session": `exports.getSession = async () => ({ user: { id: ${JSON.stringify(USER_ID)} } });
+  "@/lib/session": `exports.sessionFrom = async () => ({ user: { id: ${JSON.stringify(USER_ID)} } });
 exports.unauthorized = () => Response.json({ error: "Unauthorized" }, { status: 401 });`,
   "next/server": `exports.after = (task) => { globalThis.__orbitStreamAfter.push(Promise.resolve(typeof task === "function" ? task() : task)); };`,
   "@/lib/provider": `exports.languageModelFor = () => globalThis.__orbitStreamModel();`,

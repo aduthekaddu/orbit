@@ -22,7 +22,7 @@ const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "orbit-settings-route-"));
 const stubFile = path.join(sandbox, "session-stub.cjs");
 fs.writeFileSync(
   stubFile,
-  `exports.getSession = async () => ({ user: { id: ${JSON.stringify(USER_ID)} } });
+  `exports.sessionFrom = exports.getSession = async () => ({ user: { id: ${JSON.stringify(USER_ID)} } });
 exports.unauthorized = () => Response.json({ error: "Unauthorized" }, { status: 401 });`,
 );
 
@@ -98,7 +98,7 @@ test("GET and PUT /api/settings and GET /api/connections mask userinfo, query cr
   const get = await settingsRoute.GET();
   assert.equal(get.status, 200);
   const getRaw = await get.text();
-  const listed = await connectionsRoute.GET();
+  const listed = await connectionsRoute.GET(new Request("http://localhost"));
   assert.equal(listed.status, 200);
   const listedRaw = await listed.text();
   for (const raw of [putRaw, getRaw, listedRaw]) {
@@ -129,7 +129,7 @@ test("editing non-secret parts of masked URLs merges saved credentials on the sa
   const shown = (await first.json()) as { searxngUrl: string; githubMcpUrl: string };
   assert.equal(shown.searxngUrl, "http://127.0.0.1:8888/search?token=[redacted]&format=json&language=en#top");
   assert.equal(shown.githubMcpUrl, "https://api.githubcopilot.com/mcp/?token=[redacted]&mode=a");
-  const [connection] = (await (await connectionsRoute.GET()).json()) as { baseUrl: string }[];
+  const [connection] = (await (await connectionsRoute.GET(new Request("http://localhost"))).json()) as { baseUrl: string }[];
   assert.equal(connection.baseUrl, `http://[redacted]@${providerHost}/v1`);
 
   const edited = await putSettings({

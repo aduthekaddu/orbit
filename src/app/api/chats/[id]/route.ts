@@ -1,7 +1,7 @@
 import { deleteChat, getChatForUser, messageRepository, renameChat } from "@/lib/messages";
 import { deleteAfterReply } from "@/lib/reply-runs";
 import { LIMITS, r, readJsonBody } from "@/lib/route-schema";
-import { getSession, unauthorized } from "@/lib/session";
+import { sessionFrom, unauthorized } from "@/lib/session";
 import { requestRedactor } from "@/lib/settings";
 
 export const runtime = "nodejs";
@@ -15,8 +15,8 @@ type Context = { params: Promise<{ id: string }> };
 
 const notFound = () => Response.json({ error: "Not found" }, { status: 404 });
 
-export async function GET(_request: Request, context: Context) {
-  const session = await getSession();
+export async function GET(request: Request, context: Context) {
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const params = paramsSchema.safeParse(await context.params);
   if (!params.success) return notFound();
@@ -30,7 +30,7 @@ export async function GET(_request: Request, context: Context) {
 }
 
 export async function PATCH(request: Request, context: Context) {
-  const session = await getSession();
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const params = paramsSchema.safeParse(await context.params);
   if (!params.success) return notFound();
@@ -46,8 +46,8 @@ export async function PATCH(request: Request, context: Context) {
   return Response.json(renamed);
 }
 
-export async function DELETE(_request: Request, context: Context) {
-  const session = await getSession();
+export async function DELETE(request: Request, context: Context) {
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const params = paramsSchema.safeParse(await context.params);
   if (!params.success) return notFound();

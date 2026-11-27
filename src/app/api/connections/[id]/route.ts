@@ -1,7 +1,7 @@
 import { deleteConnection, toPublicConnection, updateConnection } from "@/lib/connections";
 import { LIMITS, r } from "@/lib/route-schema";
 import { requestRedactor } from "@/lib/settings";
-import { getSession, unauthorized } from "@/lib/session";
+import { sessionFrom, unauthorized } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ const patchSchema = r.object({
 type Context = { params: Promise<{ id: string }> };
 
 export async function PATCH(request: Request, context: Context) {
-  const session = await getSession();
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const params = paramsSchema.safeParse(await context.params);
   if (!params.success) return Response.json({ error: "Not found" }, { status: 404 });
@@ -32,8 +32,8 @@ export async function PATCH(request: Request, context: Context) {
   return Response.json({ error: "Could not reach the provider." }, { status: 502 });
 }
 
-export async function DELETE(_request: Request, context: Context) {
-  const session = await getSession();
+export async function DELETE(request: Request, context: Context) {
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const params = paramsSchema.safeParse(await context.params);
   if (!params.success || !deleteConnection(session.user.id, params.data.id)) return Response.json({ error: "Not found" }, { status: 404 });

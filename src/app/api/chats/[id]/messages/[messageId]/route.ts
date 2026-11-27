@@ -1,6 +1,6 @@
 import { getChatForUser, touchChat, updateMessageText } from "@/lib/messages";
 import { LIMITS, r } from "@/lib/route-schema";
-import { getSession, unauthorized } from "@/lib/session";
+import { sessionFrom, unauthorized } from "@/lib/session";
 import { requestRedactor } from "@/lib/settings";
 
 export const runtime = "nodejs";
@@ -17,7 +17,7 @@ const paramsSchema = r.object({
 });
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string; messageId: string }> }) {
-  const session = await getSession();
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const params = paramsSchema.safeParse(await context.params);
   if (!params.success) return Response.json({ error: "Not found" }, { status: 404 });

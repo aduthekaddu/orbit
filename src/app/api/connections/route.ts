@@ -1,7 +1,7 @@
 import { addConnection, toPublicConnection } from "@/lib/connections";
 import { LIMITS, r } from "@/lib/route-schema";
 import { publicConnections, requestRedactor } from "@/lib/settings";
-import { getSession, unauthorized } from "@/lib/session";
+import { sessionFrom, unauthorized } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,14 +20,14 @@ const postSchema = r.discriminatedUnion("kind", [
   }),
 ]);
 
-export async function GET() {
-  const session = await getSession();
+export async function GET(request: Request) {
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
   return Response.json(publicConnections(session.user.id));
 }
 
 export async function POST(request: Request) {
-  const session = await getSession();
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const parsed = postSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Check the label, base URL, and API key." }, { status: 400 });
