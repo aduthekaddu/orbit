@@ -1,3 +1,4 @@
+import { afterActiveSignups } from "@/lib/auth";
 import { saveInstance, SANDBOX_PREFERENCES, toPublicInstance } from "@/lib/instance-settings";
 import { HOSTING_MODES, SIGNUP_MODES } from "@/lib/policy";
 import { LIMITS, r } from "@/lib/route-schema";
@@ -26,6 +27,8 @@ export async function PUT(request: Request) {
   if (!admin.ok) return admin.response;
   const parsed = putSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid admin setting." }, { status: 400 });
-  const saved = saveInstance(admin.session.user.id, parsed.data);
+  const save = () => saveInstance(admin.session.user.id, parsed.data);
+  const changesSignup = parsed.data.hostingMode !== undefined || parsed.data.signupMode !== undefined;
+  const saved = changesSignup ? await afterActiveSignups(save) : save();
   return saved.ok ? Response.json(saved.settings) : Response.json({ error: saved.error }, { status: "status" in saved ? saved.status : 400 });
 }
