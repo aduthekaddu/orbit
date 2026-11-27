@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { Highlight } from "prism-react-renderer";
 import type { CodeHeaderProps, SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
 import { CaretDownIcon, CheckIcon, CopyIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { artifactKind, isArtifactLanguage } from "@/lib/artifacts/detect";
+import { artifactTitle } from "@/lib/artifacts/title";
 import { useArtifact } from "@/components/artifacts/use-artifact";
 import { codeBodyStart, replaceCode } from "@/lib/chat-parts";
 import { cn } from "@/lib/utils";
 import { ScrollFade } from "@/components/ui/scroll-fade";
+import { ArtifactCard } from "./artifact-card";
 import { useCodeEdit } from "./code-edit-context";
 import { orbitCodeTheme } from "./code-theme";
 import { EditorFooter } from "./editor-footer";
@@ -20,35 +22,61 @@ const COLLAPSED_LINES = 14;
 
 const headerButton = "flex h-6 pointer-coarse:h-11 items-center rounded-md px-2 text-meta text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
-function fenceOffset(node: CodeHeaderProps["node"] | SyntaxHighlighterProps["node"]) {
+type BlockNode = CodeHeaderProps["node"] | SyntaxHighlighterProps["node"];
+
+function fenceOffset(node: BlockNode) {
   const value = node?.properties?.["data-code-fence"];
   return typeof value === "number" ? value : node?.position?.start?.offset;
 }
 
-function codeIndex(node: CodeHeaderProps["node"] | SyntaxHighlighterProps["node"]) {
+function codeIndex(node: BlockNode) {
   const value = node?.properties?.["data-code-index"];
   return typeof value === "number" ? value : undefined;
 }
 
-export function CodeHeader({ language, code, node }: CodeHeaderProps) {
-  const { copied, failed, copy } = useCopy();
+/**
+ * Where a fenced block sits in its message, and whether it is an artifact. Only assistant text parts
+ * have a text ordinal, so a block inside Reasoning has no key and stays a plain code block (#137).
+ */
+function useCodeBlock(language: string | undefined, code: string, node: BlockNode) {
   const edit = useCodeEdit();
-  const start = edit ? codeBodyStart(edit.text, fenceOffset(node), code) : -1;
-  const active = edit?.active === start;
   const artifacts = useArtifact();
-  const register = artifacts?.register;
+  const start = edit ? codeBodyStart(edit.text, fenceOffset(node), code) : -1;
+  const active = Boolean(edit?.enabled) && edit?.active === start;
+  const index = codeIndex(node);
   const sourceLanguage = typeof language === "string" && isArtifactLanguage(language) ? language : undefined;
   const kind = sourceLanguage && artifactKind(sourceLanguage);
-  const blockIndex = codeIndex(node);
-  const wrapped = blockIndex !== undefined && Boolean(edit?.wrapped.has(blockIndex));
+  const key = edit && index !== undefined && edit.textOrdinal !== undefined ? `${edit.messageId}.${edit.textOrdinal}.${index}` : null;
+  const artifact = artifacts && sourceLanguage && kind && key ? { key, kind, language: sourceLanguage } : null;
+  const wrapped = index !== undefined && Boolean(edit?.wrapped.has(index));
+  return { edit, artifacts, start, active, index, artifact, wrapped };
+}
+
+export function CodeHeader({ language, code, node }: CodeHeaderProps) {
+  const { copied, failed, copy } = useCopy();
+  const { edit, artifacts, start, active, index, artifact, wrapped } = useCodeBlock(language, code, node);
+  const register = artifacts?.register;
   const messageId = edit?.messageId;
-  const key = edit && blockIndex !== undefined && edit.textOrdinal !== undefined
-    ? `${edit.messageId}.${edit.textOrdinal}.${blockIndex}`
-    : null;
+  const key = artifact?.key;
+  const kind = artifact?.kind;
+  const sourceLanguage = artifact?.language;
   useEffect(() => {
     if (!register || !kind || !key || !sourceLanguage || !messageId) return;
     return register({ key, kind, code, language: sourceLanguage });
   }, [register, kind, key, code, sourceLanguage, messageId]);
+  const title = useMemo(() => (kind ? artifactTitle({ kind, code }) : ""), [kind, code]);
+
+  if (artifacts && kind && key && !active) {
+    return (
+      <ArtifactCard
+        kind={kind}
+        title={title}
+        streaming={Boolean(edit?.streaming)}
+        onOpen={() => artifacts.open(key)}
+        onEdit={edit?.enabled ? () => edit.setActive(start) : undefined}
+      />
+    );
+  }
 
   return (
     <div
@@ -61,21 +89,11 @@ export function CodeHeader({ language, code, node }: CodeHeaderProps) {
       <span aria-live="polite" className="sr-only">{copied ? "Copied" : failed ? "Copy failed" : ""}</span>
       {active ? null : (
         <div className="flex items-center gap-0.5">
-          {kind && key && artifacts ? (
-            <button
-              type="button"
-              disabled={!edit?.enabled}
-              onClick={() => artifacts.open(key)}
-              className="flex h-6 pointer-coarse:h-11 items-center rounded-md px-2 text-meta text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
-            >
-              Preview
-            </button>
-          ) : null}
-          {edit && blockIndex !== undefined ? (
+          {edit && index !== undefined ? (
             <button
               type="button"
               aria-pressed={wrapped}
-              onClick={() => edit.toggleWrap(blockIndex)}
+              onClick={() => edit.toggleWrap(index)}
               className={cn(headerButton, "aria-pressed:bg-surface-raised aria-pressed:text-foreground")}
             >
               Wrap
@@ -143,15 +161,13 @@ function CodeEditor({ code, start, language }: { code: string; start: number; la
 }
 
 export function SyntaxHighlighter({ code, language, node }: SyntaxHighlighterProps) {
-  const edit = useCodeEdit();
   const [expanded, setExpanded] = useState(false);
-  const start = edit ? codeBodyStart(edit.text, fenceOffset(node), code) : -1;
-  const active = edit?.enabled && edit.active === start;
+  const { start, active, artifact, wrapped } = useCodeBlock(language, code, node);
 
   if (active) return <CodeEditor code={code} start={start} language={language} />;
+  // The artifact card in CodeHeader stands in for the code until someone edits it.
+  if (artifact) return null;
 
-  const index = codeIndex(node);
-  const wrapped = index !== undefined && Boolean(edit?.wrapped.has(index));
   const source = code.replace(/\n$/, "");
   const lines = source.split("\n").length;
   const collapsible = lines > COLLAPSE_AFTER;

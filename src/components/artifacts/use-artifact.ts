@@ -11,7 +11,7 @@ type ArtifactContextValue = {
   close: () => void;
 };
 
-const ArtifactContext = createContext<ArtifactContextValue | null>(null);
+export const ArtifactContext = createContext<ArtifactContextValue | null>(null);
 
 function select(key: string | null) {
   const url = new URL(window.location.href);
