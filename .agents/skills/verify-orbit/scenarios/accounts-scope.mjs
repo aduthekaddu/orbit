@@ -196,8 +196,16 @@ export default async function accountsScope({ page, origin, step, shot, useProvi
     hourSaved = hourResponse.ok();
     const savedDreamHour = hourSaved ? (await hourResponse.json()).dreamHour : null;
     await page.reload();
+    const refreshed = await page.request.get(`${origin}/api/admin/settings`);
+    assert.equal(refreshed.status(), 200, "read the saved dream hour");
+    const persisted = (await refreshed.json()).dreamHour;
+    const displayed = await eventually(() => hour.innerText(), (label) => label.trim() === hourLabel, {
+      timeoutMs: 5_000,
+      what: "the saved hour to appear after the Dreaming select hydrates",
+    });
     step("admin saves the dream hour and it persists after refresh",
-      savedDreamHour === dreamHour && (await hour.innerText()).trim() === hourLabel);
+      savedDreamHour === dreamHour && persisted === dreamHour && displayed.trim() === hourLabel,
+      `PUT ${savedDreamHour}, GET ${persisted}, displayed ${displayed.trim()}`);
     for (const width of [1280, 390, 360]) {
       await page.setViewportSize({ width, height: width === 1280 ? 800 : 844 });
       step(`admin page fits ${width} pixels`, await page.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth));
