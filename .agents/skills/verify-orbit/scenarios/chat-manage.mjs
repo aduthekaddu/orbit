@@ -480,6 +480,38 @@ function viewportRun(context, { label, touch, page }) {
     step(`${label}: DELETE on a missing id answers 404`, missing.status() === 404, `status ${missing.status()}`);
   }
 
+  // The row menu gives every sidebar chat a second Tab stop, so the first Tab stop skips the sidebar.
+  async function skipLink(id) {
+    const firstStop = async (path, ready) => {
+      await page.goto(`${origin}${path}`);
+      await ready();
+      // Start keyboard navigation from the top of the page, as after a fresh load with nothing focused.
+      await page.evaluate(() => {
+        const start = document.createElement("div");
+        start.tabIndex = -1;
+        document.body.prepend(start);
+        start.focus();
+        start.remove();
+      });
+      await page.keyboard.press("Tab");
+      return page.evaluate(() => {
+        const active = document.activeElement;
+        const box = active?.getBoundingClientRect();
+        return { text: active?.textContent?.trim() ?? "", visible: Boolean(box && box.width > 1 && box.height > 1 && box.top >= 0 && box.left >= 0) };
+      });
+    };
+    const onChat = await firstStop(`/c/${id}`, () => eventually(() => composer.isEnabled(), Boolean, { timeoutMs: 15_000, what: "the composer to accept input" }));
+    await page.keyboard.press("Enter");
+    const typing = await eventually(() => composer.evaluate((node) => node === document.activeElement), Boolean, { timeoutMs: 5_000, what: "focus in the composer" }).catch(() => false);
+    step(`${label}: the first Tab stop on a chat is a visible Skip to chat link that moves focus to the composer`, onChat.text === "Skip to chat" && onChat.visible && typing, JSON.stringify({ ...onChat, typing }));
+    const onSettings = await firstStop("/settings", () => page.getByRole("heading", { name: "Settings", exact: true }).last().waitFor({ timeout: 15_000 }));
+    await page.keyboard.press("Enter");
+    const inMain = await eventually(() => page.evaluate(() => document.activeElement?.closest("main") !== null), Boolean, { timeoutMs: 5_000, what: "focus in main" }).catch(() => false);
+    step(`${label}: on Settings the first Tab stop is Skip to content and it moves focus into the page`, onSettings.text === "Skip to content" && onSettings.visible && inMain, JSON.stringify({ ...onSettings, inMain }));
+    await page.goto(`${origin}/c/${id}`);
+    await composer.waitFor({ timeout: 15_000 });
+  }
+
   async function footer({ confirm, chat }) {
     const container = await list();
     const memory = container.getByRole("link", { name: "Memory", exact: true });
@@ -541,6 +573,7 @@ function viewportRun(context, { label, touch, page }) {
     await deleteThenReload(reloadChat, `Reload ${label}`);
     await deleteRecreated();
     await failedDelete(reloaded, `Other ${label}`);
+    if (!touch) await skipLink(reloaded);
     await footer({ confirm: last, chat: { id: reloaded, title: `Other ${label}` } });
   };
 }
