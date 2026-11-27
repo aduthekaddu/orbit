@@ -57,11 +57,15 @@ test("a model that takes no effort gets none sent", () => {
   assert.equal("effort" in anthropicOptions(anthropic), false, JSON.stringify(anthropic.options));
 });
 
-test("unknown levels send the requested effort and let the provider decide", () => {
+test("unknown levels use the SDK's model-specific reasoning options", () => {
   assert.deepEqual(effortCallOptions("openai-compatible", "xhigh", null), { sent: "xhigh", options: { reasoning: "xhigh" } });
   const anthropic = effortCallOptions("anthropic", "max", null);
   assert.equal(anthropic.sent, "max");
-  assert.equal(anthropicOptions(anthropic).effort, "max");
+  assert.equal(anthropic.options.reasoning, "max");
+  assert.equal(anthropicOptions(anthropic).effort, undefined);
+  const title = titleCallOptions("anthropic", null);
+  assert.equal(title.options.reasoning, "none");
+  assert.equal(title.options.providerOptions?.anthropic.thinking, undefined);
 });
 
 test("a level the model does not take sends the nearest one it does, and a tie goes to the lower level", () => {
@@ -75,14 +79,14 @@ test("a level the model does not take sends the nearest one it does, and a tie g
   for (const [requested, levels, nearest] of cases) {
     assert.deepEqual(effortCallOptions("openai-compatible", requested, levels), { sent: nearest, options: { reasoning: nearest } }, `${requested} in ${levels}`);
   }
-  const anthropic = effortCallOptions("anthropic", "none", OPUS_LEVELS);
+  const anthropic = effortCallOptions("anthropic", "none", OPUS_LEVELS, true);
   assert.equal(anthropic.sent, "low");
   assert.equal(anthropicOptions(anthropic).effort, "low");
   assert.deepEqual(anthropicOptions(anthropic).thinking, ADAPTIVE);
 });
 
 test("an Anthropic call at High sends the effort, adaptive summarized thinking that drops a mismatched block, and prompt caching", () => {
-  const result = effortCallOptions("anthropic", "high", OPUS_LEVELS);
+  const result = effortCallOptions("anthropic", "high", OPUS_LEVELS, true);
   assert.equal(result.sent, "high");
   const anthropic = anthropicOptions(result);
   assert.equal(anthropic.effort, "high");
@@ -101,23 +105,6 @@ test("an Anthropic call at None turns thinking off and still caches the prompt",
 
 test("an Anthropic call that sends no effort still caches the prompt", () => {
   assert.deepEqual(anthropicOptions(effortCallOptions("anthropic", "high", [])).cacheControl, { type: "ephemeral" });
-});
-
-// A turn a safety classifier declines is retried on Anthropic's recommended fallback model in the same call.
-test("every Anthropic chat and title call asks for the default fallbacks, and an OpenAI-compatible call does not", () => {
-  const calls = [
-    ...ALL.map((requested) => effortCallOptions("anthropic", requested, OPUS_LEVELS).options),
-    effortCallOptions("anthropic", "high", null).options,
-    effortCallOptions("anthropic", "high", []).options,
-    effortCallOptions("anthropic", "none", ALL).options,
-    titleCallOptions("anthropic", OPUS_LEVELS).options,
-    titleCallOptions("anthropic", null).options,
-    titleCallOptions("anthropic", []).options,
-  ];
-  for (const options of calls) assert.equal(options.providerOptions?.anthropic.fallbacks, "default", JSON.stringify(options));
-  for (const options of [effortCallOptions("openai-compatible", "high", ALL).options, titleCallOptions("openai-compatible", ALL).options]) {
-    assert.equal(JSON.stringify(options).includes("fallbacks"), false, JSON.stringify(options));
-  }
 });
 
 test("no effort sent gives no outcome", () => {

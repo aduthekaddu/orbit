@@ -747,7 +747,7 @@ function claudeStream(res, model, { thinking = null, text }) {
 
 // A mid-stream fallback, as the Messages API sends it when a safety classifier declines the turn partway through:
 // message_start names the requested model, and a fallback block hands the rest of the reply to claude-opus-5.
-function claudeFallbackStream(res, model) {
+function claudeFallbackStream(res, model, { hold = false } = {}) {
   const to = "claude-opus-5";
   res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache" });
   sendEvent(res, {
@@ -764,8 +764,12 @@ function claudeFallbackStream(res, model) {
   sendEvent(res, { type: "content_block_start", index: 2, content_block: { type: "fallback", from: { model }, to: { model: to } } });
   sendEvent(res, { type: "content_block_stop", index: 2 });
   sendEvent(res, { type: "content_block_start", index: 3, content_block: { type: "text", text: "" } });
-  sendEvent(res, { type: "content_block_delta", index: 3, delta: { type: "text_delta", text: "Answered by the fallback model." } });
+  const text = hold
+    ? "The fallback model started its answer. " + "This reply is waiting for Stop. ".repeat(10)
+    : "Answered by the fallback model.";
+  sendEvent(res, { type: "content_block_delta", index: 3, delta: { type: "text_delta", text } });
   sendEvent(res, { type: "content_block_stop", index: 3 });
+  if (hold) return;
   sendEvent(res, {
     type: "message_delta",
     delta: { stop_reason: "end_turn", stop_sequence: null },
@@ -787,6 +791,7 @@ function echoesRefusedTurn(body) {
   return (body.messages ?? []).some(({ role, content }) => {
     if (role !== "assistant" || !Array.isArray(content)) return false;
     const boundary = content.findLastIndex((block) => block?.type === "fallback");
+    if (boundary < 0) return false;
     return content.slice(0, boundary).some((block) => ["thinking", "redacted_thinking", "tool_use"].includes(block?.type));
   });
 }
@@ -824,8 +829,8 @@ function claudeReply(res, body, raw, scenario) {
     });
     return;
   }
-  if (scenario === "claude-fallback") {
-    claudeFallbackStream(res, body.model);
+  if (scenario === "claude-fallback" || scenario === "claude-fallback-stop") {
+    claudeFallbackStream(res, body.model, { hold: scenario === "claude-fallback-stop" });
     return;
   }
   claudeStream(res, body.model, { text: "pong" });
@@ -899,12 +904,14 @@ const server = http.createServer((req, res) => {
       jsonTitle(res);
       return;
     }
-    if (scenario === "effort-reject") {
+    if (scenario === "effort-reject" || scenario === "slow-effort-reject") {
       // Like a provider that does not take the parameter: each request that carries it gets one 400.
       if (Object.hasOwn(body, "reasoning_effort")) {
         json(res, 400, {
           error: { message: "Unsupported parameter: reasoning_effort is not supported with this model.", type: "invalid_request_error", param: "reasoning_effort", code: "unsupported_parameter" },
         });
+      } else if (scenario === "slow-effort-reject") {
+        slowResponse(res);
       } else {
         textResponse(res, "pong");
       }

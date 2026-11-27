@@ -1,7 +1,8 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { getModelCapabilities } from "@ai-sdk/anthropic/internal";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { wrapLanguageModel } from "ai";
-import { fallbackHistory } from "./anthropic-fallback";
+import { anthropicFallbacks } from "./anthropic-fallback";
 import { anthropicBaseUrl, normalizeBaseUrl } from "./base-url";
 import type { ProviderConnection } from "./connections";
 
@@ -15,11 +16,25 @@ export function openCodeSessionHeader(baseUrl: string, chatId: string): Record<s
   return { "x-opencode-session": chatId };
 }
 
-function withoutReasoning(body: string) {
-  const parsed = JSON.parse(body) as Record<string, unknown>;
-  delete parsed.reasoning_effort;
-  delete parsed.reasoningEffort;
-  return JSON.stringify(parsed);
+/** Preserve adaptive thinking options for models the pinned SDK knows when the Models API entry is unavailable. */
+export function knownAdaptiveThinking(modelId: string): boolean {
+  const caps = getModelCapabilities(modelId);
+  return caps.isKnownModel && caps.supportsAdaptiveThinking;
+}
+
+function withoutReasoning(body: BodyInit | null | undefined): string | null {
+  if (typeof body !== "string") return null;
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    if (!Object.hasOwn(parsed, "reasoning_effort") && !Object.hasOwn(parsed, "reasoningEffort")) return null;
+    const remaining = parsed as Record<string, unknown>;
+    delete remaining.reasoning_effort;
+    delete remaining.reasoningEffort;
+    return JSON.stringify(remaining);
+  } catch {
+    return null;
+  }
 }
 
 // A provider that rejects reasoning_effort gets the request again without it. onDropped reports that only when the
@@ -27,13 +42,10 @@ function withoutReasoning(body: string) {
 function fetchWithReasoningFallback(baseFetch: typeof fetch, onDropped: () => void): typeof fetch {
   return async (input, init) => {
     const response = await baseFetch(input, init);
-    if (response.ok) return response;
-    const body = typeof init?.body === "string" ? init.body : null;
-    if (!body || !body.includes("reasoning_effort") && !body.includes("reasoningEffort")) return response;
-    const copy = response.clone();
-    const text = await copy.text();
-    if (response.status < 400 || !/reasoning/i.test(text)) return response;
-    const retried = await baseFetch(input, { ...init, body: withoutReasoning(body) });
+    if (response.status !== 400 && response.status !== 422) return response;
+    const body = withoutReasoning(init?.body);
+    if (body === null || !/reasoning/i.test(await response.clone().text())) return response;
+    const retried = await baseFetch(input, { ...init, body });
     if (retried.ok) onDropped();
     return retried;
   };
@@ -80,7 +92,7 @@ export function languageModelFor(options: {
 }) {
   const { connection, apiKey, model, chatId } = options;
   if (connection.kind === "anthropic") {
-    return wrapLanguageModel({ model: createAnthropic({ apiKey, baseURL: anthropicBaseUrl(), fetch: options.fetch })(model), middleware: fallbackHistory });
+    return wrapLanguageModel({ model: createAnthropic({ apiKey, baseURL: anthropicBaseUrl(), fetch: options.fetch })(model), middleware: anthropicFallbacks });
   }
   return orbitModel({ baseUrl: connection.baseUrl, apiKey, model, chatId, fetch: options.fetch, onDropped: options.onDropped });
 }
