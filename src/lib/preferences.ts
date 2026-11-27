@@ -1,16 +1,24 @@
 import { cache } from "react";
 import { eq } from "drizzle-orm";
-import { DEFAULT_APPEARANCE, parseAppearance, type Appearance, type AppearancePatch } from "./appearance";
+import { DEFAULT_APPEARANCE, parseAppearance, type Appearance } from "./appearance";
 import { getDb } from "./db";
 import { userPreferences } from "./db/schema";
-import { getSession } from "./session";
+import { getSession, type UserId } from "./session";
 
-export function getPreferences(userId: string): Appearance {
-  const row = getDb().select().from(userPreferences).where(eq(userPreferences.userId, userId)).get();
-  return parseAppearance(row);
+export const MEMORY_PREFERENCES = ["on", "off"] as const;
+export type MemoryPreference = (typeof MEMORY_PREFERENCES)[number];
+export type UserPreferences = Appearance & { memory: MemoryPreference };
+
+function parseMemory(value: unknown): MemoryPreference {
+  return value === "off" ? "off" : "on";
 }
 
-export function savePreferences(userId: string, patch: AppearancePatch): Appearance {
+export function getPreferences(userId: UserId): UserPreferences {
+  const row = getDb().select().from(userPreferences).where(eq(userPreferences.userId, userId)).get();
+  return { ...parseAppearance(row), memory: parseMemory(row?.memory) };
+}
+
+export function savePreferences(userId: UserId, patch: Partial<UserPreferences>): UserPreferences {
   const updatedAt = new Date();
   const row = getDb()
     .insert(userPreferences)
@@ -18,10 +26,15 @@ export function savePreferences(userId: string, patch: AppearancePatch): Appeara
     .onConflictDoUpdate({ target: userPreferences.userId, set: { ...patch, updatedAt } })
     .returning()
     .get();
-  return parseAppearance(row);
+  return { ...parseAppearance(row), memory: parseMemory(row.memory) };
+}
+
+export function getMemoryEnabled(userId: UserId): boolean {
+  const row = getDb().select({ memory: userPreferences.memory }).from(userPreferences).where(eq(userPreferences.userId, userId)).get();
+  return parseMemory(row?.memory) === "on";
 }
 
 export const appearanceForRequest = cache(async (): Promise<Appearance> => {
   const session = await getSession();
-  return session ? getPreferences(session.user.id) : DEFAULT_APPEARANCE;
+  return session ? parseAppearance(getPreferences(session.user.id)) : DEFAULT_APPEARANCE;
 });

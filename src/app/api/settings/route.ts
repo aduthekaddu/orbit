@@ -1,34 +1,26 @@
-import { getSettings, resolveSettingsUrls, saveSettings, toPublicSettings } from "@/lib/settings";
-import { githubMcpTarget } from "@/lib/tools/github";
-import { getSession, unauthorized } from "@/lib/session";
 import { LIMITS, r } from "@/lib/route-schema";
+import { sessionFrom, unauthorized } from "@/lib/session";
+import { saveGithub, toPublicGithub } from "@/lib/user-github";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const putSchema = r.object({
-  searxngUrl: r.union([r.literal(""), r.url(LIMITS.url, { protocol: /^https?$/ })]).optional(),
-  tavilyApiKey: r.text(LIMITS.secret).nullable().optional(),
   githubToken: r.text(LIMITS.secret).nullable().optional(),
-  githubMcpUrl: r.text(LIMITS.url).optional().refine((value) => value === undefined || githubMcpTarget(value).ok),
-});
+  githubMcpUrl: r.text(LIMITS.url).optional(),
+}).strict();
 
-export async function GET() {
-  const session = await getSession();
+export async function GET(request: Request) {
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
-  return Response.json(toPublicSettings(getSettings()));
+  return Response.json(toPublicGithub(session.user.id));
 }
 
 export async function PUT(request: Request) {
-  const session = await getSession();
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const parsed = putSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) {
-    return Response.json({ error: "Check the URLs." }, { status: 400 });
-  }
-  const resolvedUrls = resolveSettingsUrls(parsed.data, getSettings());
-  if (!resolvedUrls.ok) {
-    return Response.json({ error: resolvedUrls.error }, { status: 400 });
-  }
-  return Response.json(saveSettings(parsed.data));
+  if (!parsed.success) return Response.json({ error: "Invalid GitHub setting." }, { status: 400 });
+  const saved = saveGithub(session.user.id, parsed.data);
+  return saved.ok ? Response.json(saved.settings) : Response.json({ error: saved.error }, { status: 400 });
 }

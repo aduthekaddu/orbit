@@ -1,8 +1,8 @@
-import { installRedactionSecrets } from "@/lib/connections";
-import { getSettings } from "@/lib/settings";
-import { checkGithub, githubMcpTarget } from "@/lib/tools/github";
-import { getSession, unauthorized } from "@/lib/session";
+import { redactionSecrets } from "@/lib/connections";
 import { LIMITS, r } from "@/lib/route-schema";
+import { sessionFrom, unauthorized } from "@/lib/session";
+import { checkGithub, githubMcpTarget } from "@/lib/tools/github";
+import { getGithub } from "@/lib/user-github";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,14 +13,15 @@ const checkSchema = r.object({
 });
 
 export async function POST(request: Request) {
-  const session = await getSession();
+  const session = await sessionFrom(request);
   if (!session) return unauthorized();
   const parsed = checkSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
     return Response.json({ ok: false, error: "Check the GitHub URL." }, { status: 400 });
   }
+  const userId = session.user.id;
   try {
-    return Response.json(await checkGithub(getSettings(), parsed.data, request.signal, installRedactionSecrets()));
+    return Response.json(await checkGithub(userId, getGithub(userId), parsed.data, request.signal, redactionSecrets(userId)));
   } catch (error) {
     if (request.signal.aborted) return new Response(null, { status: 499 });
     throw error;

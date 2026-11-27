@@ -3,9 +3,10 @@
 import { useReducer, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BrainIcon, GearSixIcon, MagnifyingGlassIcon, NotePencilIcon, SidebarSimpleIcon, SignOutIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import { BrainIcon, GearSixIcon, MagnifyingGlassIcon, NotePencilIcon, ShieldCheckIcon, SidebarSimpleIcon, SignOutIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { authClient } from "@/lib/auth-client";
 import { idleSubmit, submitTransition } from "@/lib/submit-state";
+import type { Role } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -27,6 +28,7 @@ const footerLinkClass =
 export function Sidebar({
   chats,
   email,
+  role,
   onNewChat,
   onSearch,
   onRename,
@@ -37,6 +39,7 @@ export function Sidebar({
 }: {
   chats: ChatSummary[];
   email: string;
+  role: Role;
   onNewChat: () => void;
   onSearch: () => void;
   onRename: (chat: ChatSummary, title: string) => void;
@@ -127,6 +130,7 @@ export function Sidebar({
           [
             { href: "/memory", label: "Memory", Icon: BrainIcon },
             { href: "/settings", label: "Settings", Icon: GearSixIcon },
+            ...(role === "admin" ? [{ href: "/admin", label: "Admin", Icon: ShieldCheckIcon }] : []),
           ] as const
         ).map(({ href, label, Icon }) => (
           <Link

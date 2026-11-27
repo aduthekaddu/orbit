@@ -13,6 +13,7 @@ import { Dialog, DialogOverlay, DialogPortal, DialogTitle } from "@/components/u
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { chatLabel, focusChatRow, type ChatSummary } from "@/components/chat/chat-row-menu";
 import { Sidebar } from "@/components/chat/sidebar";
+import type { Role } from "@/lib/session";
 import { DESKTOP_QUERY } from "@/components/use-desktop";
 import { chatDeleteReducer, hiddenChatIds, initialChatDelete, undoReopensChat, type ChatDeleteEvent } from "./chat-delete";
 import { CommandPalette } from "./command-palette";
@@ -71,14 +72,18 @@ function withTitle(chat: ChatSummary, edit: TitleEdit | undefined): ChatSummary 
   return edit && edit.base === chat.title ? { ...chat, title: edit.title } : chat;
 }
 
+const PAGE_TITLES: Readonly<Record<string, string | undefined>> = { "/settings": "Settings", "/memory": "Memory" };
+
 export function AppShell({
   chats,
   email,
+  role,
   initialCollapsed,
   children,
 }: {
   chats: ChatSummary[];
   email: string;
+  role: Role;
   initialCollapsed: boolean;
   children: React.ReactNode;
 }) {
@@ -344,7 +349,7 @@ export function AppShell({
   }
 
   const current = visibleChats.find((chat) => pathname === `/c/${chat.id}`);
-  const title = pathname === "/settings" ? "Settings" : pathname === "/memory" ? "Memory" : current && chatLabel(current.title);
+  const title = pathname === "/admin" && role === "admin" ? "Admin" : PAGE_TITLES[pathname] ?? (current && chatLabel(current.title));
 
   // An open drawer hides the rest of the page from screen readers and clicks, so the notices go inside it then.
   const notices =
@@ -367,6 +372,7 @@ export function AppShell({
   const sidebarProps = {
     chats: visibleChats,
     email,
+    role,
     onNewChat: newChat,
     onSearch: () => setPalette(true),
     onRename: renameChat,
@@ -453,6 +459,7 @@ export function AppShell({
           open={paletteOpen}
           onOpenChange={setPalette}
           chats={visibleChats}
+          role={role}
           hiddenChatIds={removedIds}
           onNewChat={newChat}
           onAction={() => setDrawerOpen(false)}

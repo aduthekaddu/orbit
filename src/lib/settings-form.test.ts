@@ -2,40 +2,21 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { appliedSave, type SettingsSnapshot } from "./settings-form";
 
-const submitted: SettingsSnapshot = {
-  searxngUrl: "http://127.0.0.1:8888",
-  tavilyApiKey: "test-tavily-key-not-real",
-  githubToken: "",
-  githubMcpUrl: "https://api.githubcopilot.com/mcp/",
-};
+const submitted: SettingsSnapshot = { url: "https://settings.example.test", secret: "test-key" };
 
-test("unchanged values clear the keys and report saved", () => {
-  assert.deepEqual(appliedSave(submitted, { ...submitted }), { clearTavilyKey: true, clearGithubToken: true, saved: true });
+test("unchanged values clear the secret and report saved", () => {
+  assert.deepEqual(appliedSave(submitted, { ...submitted }), { clearSecret: true, saved: true });
 });
 
-test("a Tavily key typed during save remains in the field", () => {
-  const applied = appliedSave(submitted, { ...submitted, tavilyApiKey: "new-test-key" });
-  assert.equal(applied.clearTavilyKey, false);
-  assert.equal(applied.saved, false);
+test("a secret typed during a save or removal stays in the field", () => {
+  for (const secret of [submitted.secret, null]) {
+    assert.deepEqual(appliedSave({ ...submitted, secret }, { ...submitted, secret: "new-test-key" }), {
+      clearSecret: false,
+      saved: false,
+    });
+  }
 });
 
-test("a search URL edited during save is not reported as saved", () => {
-  assert.equal(appliedSave(submitted, { ...submitted, searxngUrl: "http://127.0.0.1:9999" }).saved, false);
-});
-
-test("a GitHub token typed during save stays in the field", () => {
-  const applied = appliedSave(submitted, { ...submitted, githubToken: "typed-during-save" });
-  assert.equal(applied.clearGithubToken, false);
-  assert.equal(applied.saved, false);
-});
-
-test("a GitHub MCP URL edited during save is not reported as saved", () => {
-  assert.equal(appliedSave(submitted, { ...submitted, githubMcpUrl: "http://127.0.0.1:9/mcp" }).saved, false);
-});
-
-test("a key typed during a removal save stays in the field", () => {
-  const removal = { ...submitted, tavilyApiKey: null };
-  const applied = appliedSave(removal, { ...submitted, tavilyApiKey: "new-test-key" });
-  assert.equal(applied.clearTavilyKey, false);
-  assert.equal(applied.saved, false);
+test("the saved secret clears even if a newer URL awaits saving", () => {
+  assert.deepEqual(appliedSave(submitted, { ...submitted, url: "https://new.example.test" }), { clearSecret: true, saved: false });
 });

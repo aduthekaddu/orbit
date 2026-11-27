@@ -1,180 +1,20 @@
 "use client";
 
-import { useEffect, useReducer, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { CheckIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import { useRef, useState } from "react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
-import { Row } from "./row";
 import { requestJson, useLatestRequest } from "@/lib/request-json";
 import { appliedSave, type SettingsSnapshot } from "@/lib/settings-form";
-import { idleSubmit, submitTransition } from "@/lib/submit-state";
-import type { PublicSettings } from "@/lib/settings";
+import type { PublicUserGithub } from "@/lib/user-github";
+import { cn } from "@/lib/utils";
+import { Row } from "./row";
+import { SaveNotice } from "./save-notice";
+import { useSettingsSave } from "./use-settings-save";
 
-const savedBody = z.object({ tavilyKeySet: z.boolean(), githubTokenSet: z.boolean() });
+const savedBody = z.object({ githubTokenSet: z.boolean(), githubTokenReadable: z.boolean(), githubMcpUrl: z.string() });
 const githubCheckBody = z.object({ ok: z.boolean(), login: z.string().optional(), error: z.string().optional() });
 const GITHUB_UNAVAILABLE = "GitHub is unavailable.";
-
-export function SettingsForm({ initial }: { initial: PublicSettings }) {
-  const router = useRouter();
-  const [searxngUrl, setSearxngUrl] = useState(initial.searxngUrl);
-  const [tavilyApiKey, setTavilyApiKey] = useState<string | null>("");
-  const [tavilyKeySet, setTavilyKeySet] = useState(initial.tavilyKeySet);
-  const [githubToken, setGithubToken] = useState<string | null>("");
-  const [githubTokenSet, setGithubTokenSet] = useState(initial.githubTokenSet);
-  const [githubMcpUrl, setGithubMcpUrl] = useState(initial.githubMcpUrl);
-  const [githubCheck, setGithubCheck] = useState<GithubCheck>({ status: "idle" });
-  const latestGithubCheck = useLatestRequest();
-  const latestSave = useLatestRequest();
-  const [save, dispatchSave] = useReducer(submitTransition, idleSubmit);
-  const pending = save.status === "pending";
-  const formValues: SettingsSnapshot = { searxngUrl, tavilyApiKey, githubToken, githubMcpUrl };
-  const latestValues = useRef(formValues);
-  latestValues.current = formValues;
-
-  useEffect(() => {
-    if (save.status !== "succeeded") return;
-    const timer = setTimeout(() => dispatchSave({ type: "edit" }), 2000);
-    return () => clearTimeout(timer);
-  }, [save.status]);
-
-  async function onSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    if (pending) return;
-    dispatchSave({ type: "submit" });
-    await requestJson(
-      "/api/settings",
-      {
-        method: "PUT",
-        signal: latestSave(),
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          searxngUrl: formValues.searxngUrl.trim(),
-          tavilyApiKey: formValues.tavilyApiKey === null ? null : formValues.tavilyApiKey || undefined,
-          githubToken: formValues.githubToken === null ? null : formValues.githubToken || undefined,
-          githubMcpUrl: formValues.githubMcpUrl.trim(),
-        }),
-      },
-      {
-        parse: savedBody,
-        onOk: (body) => {
-          // Pages that read settings on the server stay in the router cache, so Back would show them stale.
-          router.refresh();
-          const applied = appliedSave(formValues, latestValues.current);
-          setTavilyKeySet(body.tavilyKeySet);
-          if (applied.clearTavilyKey) setTavilyApiKey("");
-          setGithubTokenSet(body.githubTokenSet);
-          if (applied.clearGithubToken) setGithubToken("");
-          dispatchSave({ type: "succeed" });
-          if (!applied.saved) dispatchSave({ type: "edit" });
-        },
-        onFailed: (failure) =>
-          dispatchSave({ type: "fail", error: (failure.kind === "http" && failure.error) || "Could not save" }),
-      },
-    );
-  }
-
-  function onCheckGithub() {
-    setGithubCheck({ status: "checking" });
-    void requestJson(
-      "/api/settings/github/check",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        signal: latestGithubCheck(),
-        body: JSON.stringify({
-          token: (githubToken ?? "").trim() || undefined,
-          mcpUrl: githubMcpUrl.trim(),
-        }),
-      },
-      {
-        parse: githubCheckBody,
-        onOk: (body) =>
-          setGithubCheck(body.ok && body.login ? { status: "connected", login: body.login } : { status: "failed", error: body.error || GITHUB_UNAVAILABLE }),
-        onFailed: (failure) => setGithubCheck({ status: "failed", error: (failure.kind === "http" && failure.error) || GITHUB_UNAVAILABLE }),
-      },
-    );
-  }
-
-  return (
-      <form onSubmit={onSubmit} className="rounded-xl border bg-card shadow-card">
-        <div className="border-b px-5 py-3.5">
-          <h2 className="text-sm font-medium">Search</h2>
-        </div>
-        <div className="divide-y">
-          <Row id="searxngUrl" label="SearXNG URL">
-            <Input id="searxngUrl" value={searxngUrl} autoComplete="off" onChange={(event) => { dispatchSave({ type: "edit" }); setSearxngUrl(event.target.value); }} />
-          </Row>
-          <Row id="tavilyApiKey" label="Tavily key">
-            <div className="flex min-w-0 items-center gap-2">
-              <Input id="tavilyApiKey" type="password" value={tavilyApiKey ?? ""} placeholder={tavilyKeySet && tavilyApiKey !== null ? "Key set" : ""} autoComplete="off" onChange={(event) => { dispatchSave({ type: "edit" }); setTavilyApiKey(event.target.value); }} />
-              {tavilyKeySet && tavilyApiKey !== null ? (
-                <Button type="button" variant="ghost" size="sm" aria-label="Remove Tavily key" disabled={pending} onClick={() => { dispatchSave({ type: "edit" }); setTavilyApiKey(null); }}>
-                  Remove
-                </Button>
-              ) : null}
-            </div>
-          </Row>
-        </div>
-        <div className="flex items-center justify-between gap-3 border-y px-5 py-3.5">
-          <h2 className="text-sm font-medium">GitHub</h2>
-          <GithubCheckStatus check={githubCheck} />
-        </div>
-        <div className="divide-y">
-          <Row id="githubToken" label="Token">
-            <div className="flex min-w-0 items-center gap-2">
-              <Input id="githubToken" type="password" value={githubToken ?? ""} placeholder={githubTokenSet && githubToken !== null ? "Key set" : ""} autoComplete="off" onChange={(event) => { dispatchSave({ type: "edit" }); setGithubToken(event.target.value); }} />
-              {githubTokenSet && githubToken !== null ? (
-                <Button type="button" variant="ghost" size="sm" aria-label="Remove GitHub token" disabled={pending} onClick={() => { dispatchSave({ type: "edit" }); setGithubToken(null); }}>
-                  Remove
-                </Button>
-              ) : null}
-              <Button type="button" variant="ghost" size="sm" disabled={githubCheck.status === "checking"} onClick={onCheckGithub}>
-                Check
-              </Button>
-            </div>
-          </Row>
-          <Row id="githubMcpUrl" label="MCP URL">
-            <Input id="githubMcpUrl" value={githubMcpUrl} autoComplete="off" onChange={(event) => { dispatchSave({ type: "edit" }); setGithubMcpUrl(event.target.value); }} />
-          </Row>
-        </div>
-        <div className="flex items-center justify-between gap-3 border-t px-5 py-3.5">
-          <h2 className="text-sm font-medium">Code sandbox</h2>
-          <span data-sandbox-status={initial.sandbox ? "on" : "off"} className="flex items-center gap-2 text-meta text-muted-foreground">
-            <span className={cn("size-1.5 rounded-full", initial.sandbox ? "bg-positive" : "bg-muted-foreground/40")} />
-            {initial.sandbox ? "On" : "Off"}
-          </span>
-        </div>
-        <div className="flex items-center justify-end gap-3 border-t px-5 py-3">
-          {save.status === "failed" ? (
-            <p role="alert" className="mr-auto flex min-w-0 items-center gap-2 text-meta text-destructive">
-              <WarningCircleIcon weight="regular" className="size-3.5 shrink-0" />
-              <span className="truncate">{save.error}</span>
-            </p>
-          ) : null}
-          <span
-            aria-live="polite"
-            className={cn(
-              "flex items-center gap-1.5 text-meta text-muted-foreground transition-opacity duration-200 ease-orbit",
-              save.status === "succeeded" ? "opacity-100" : "opacity-0",
-            )}
-          >
-            {save.status === "succeeded" ? (
-              <>
-                <CheckIcon weight="regular" className="size-3.5 text-positive" />
-                Saved
-              </>
-            ) : null}
-          </span>
-          <Button type="submit" size="sm" disabled={pending}>
-            Save
-          </Button>
-        </div>
-      </form>
-  );
-}
 
 type GithubCheck =
   | { status: "idle" }
@@ -182,15 +22,109 @@ type GithubCheck =
   | { status: "connected"; login: string }
   | { status: "failed"; error: string };
 
+export function SettingsForm({ initial }: { initial: PublicUserGithub }) {
+  const [saved, setSaved] = useState(initial);
+  const [form, setForm] = useState<SettingsSnapshot>({ url: initial.githubMcpUrl, secret: "" });
+  const [check, setCheck] = useState<GithubCheck>({ status: "idle" });
+  const current = useRef(form);
+  const latestGithubCheck = useLatestRequest();
+  const submit = useSettingsSave("/api/settings", "PUT", savedBody);
+  const tokenSet = saved.githubTokenSet && form.secret !== null;
+  const unreadable = tokenSet && !saved.githubTokenReadable;
+
+  function setFields(fields: SettingsSnapshot) {
+    current.current = fields;
+    setForm(fields);
+  }
+
+  function edit(patch: Partial<SettingsSnapshot>) {
+    if (check.status === "checking") latestGithubCheck();
+    setCheck({ status: "idle" });
+    submit.edit();
+    setFields({ ...current.current, ...patch });
+  }
+
+  function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    submit.save({
+      githubMcpUrl: form.url.trim(),
+      githubToken: form.secret === null ? null : form.secret || undefined,
+    }, (body) => {
+      const applied = appliedSave(form, current.current);
+      setSaved(body);
+      setFields({
+        url: current.current.url === form.url ? body.githubMcpUrl : current.current.url,
+        secret: applied.clearSecret ? "" : current.current.secret,
+      });
+      return applied.saved;
+    });
+  }
+
+  function onCheckGithub() {
+    setCheck({ status: "checking" });
+    void requestJson(
+      "/api/settings/github/check",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        signal: latestGithubCheck(),
+        body: JSON.stringify({ token: form.secret?.trim() || undefined, mcpUrl: form.url.trim() }),
+      },
+      {
+        parse: githubCheckBody,
+        onOk: (body) =>
+          setCheck(body.ok && body.login ? { status: "connected", login: body.login } : { status: "failed", error: body.error || GITHUB_UNAVAILABLE }),
+        onFailed: (failure) => setCheck({ status: "failed", error: (failure.kind === "http" && failure.error) || GITHUB_UNAVAILABLE }),
+      },
+    );
+  }
+
+  return (
+    <form aria-labelledby="github-heading" onSubmit={onSubmit} className="min-w-0 rounded-xl border bg-card shadow-card">
+      <div className="border-b px-5 py-3.5">
+        <h2 id="github-heading" className="text-sm font-medium">GitHub</h2>
+      </div>
+      <div className="divide-y">
+        <Row id="githubToken" label="Token">
+          <div className="min-w-0 space-y-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <Input id="githubToken" type="password" value={form.secret ?? ""} placeholder={tokenSet && !unreadable ? "Token set" : ""} autoComplete="off" onChange={(event) => edit({ secret: event.target.value })} />
+              {tokenSet ? (
+                <Button type="button" variant="ghost" size="sm" className="max-sm:min-h-touch" aria-label="Remove GitHub token" disabled={submit.pending} onClick={() => edit({ secret: null })}>
+                  Remove
+                </Button>
+              ) : null}
+            </div>
+            {unreadable ? <p className="text-meta text-destructive">Token unreadable</p> : null}
+          </div>
+        </Row>
+        <Row id="githubMcpUrl" label="MCP URL">
+          <Input id="githubMcpUrl" value={form.url} autoComplete="off" onChange={(event) => edit({ url: event.target.value })} />
+        </Row>
+      </div>
+      <div className="border-t px-5 py-3">
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="sm" className="max-sm:min-h-touch" disabled={submit.pending || form.secret === null || check.status === "checking"} onClick={onCheckGithub}>
+            Check
+          </Button>
+          <div className="ml-auto min-w-0"><SaveNotice state={submit.state} /></div>
+          <Button type="submit" size="sm" className="max-sm:min-h-touch" disabled={submit.pending}>Save</Button>
+        </div>
+        <GithubCheckStatus check={check} />
+      </div>
+    </form>
+  );
+}
+
 function GithubCheckStatus({ check }: { check: GithubCheck }) {
   if (check.status === "idle") return null;
   const dot = check.status === "connected" ? "bg-positive" : check.status === "failed" ? "bg-destructive" : "bg-warning motion-safe:animate-pulse";
   return (
-    <span data-github-status={check.status} aria-live="polite" className="flex min-w-0 items-center gap-2 text-meta text-muted-foreground">
+    <div data-github-status={check.status} role="status" className="mt-2 flex min-w-0 items-center gap-2 text-meta text-muted-foreground">
       <span className={cn("size-1.5 shrink-0 rounded-full", dot)} />
       {check.status === "checking" ? "Checking" : null}
-      {check.status === "connected" ? <span className="truncate">Connected <span className="text-foreground">{check.login}</span></span> : null}
-      {check.status === "failed" ? <span className="truncate text-destructive">{check.error}</span> : null}
-    </span>
+      {check.status === "connected" ? <span className="min-w-0 wrap-anywhere">Connected <span className="text-foreground">{check.login}</span></span> : null}
+      {check.status === "failed" ? <span className="min-w-0 wrap-anywhere text-destructive">{check.error}</span> : null}
+    </div>
   );
 }
