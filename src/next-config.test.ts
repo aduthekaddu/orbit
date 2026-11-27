@@ -54,13 +54,21 @@ test("no header rule replaces the CSP or frame header of a route handler or a sh
   }
 });
 
-test("every response outside /s/ sends nosniff and a same-origin referrer, static files included", () => {
+test("responses send nosniff and the referrer policy for their route", () => {
   for (const path of [...pages, ...handlers, "/_next/static/chunks/app.js", "/icon.svg", "/missing-page"]) {
     const headers = configHeaders(path);
     assert.equal(headers.get("x-content-type-options"), "nosniff", path);
-    assert.equal(headers.get("referrer-policy"), "same-origin", path);
+    assert.equal(headers.get("referrer-policy"), path.startsWith("/invite/") ? "no-referrer" : "same-origin", path);
   }
   for (const path of sharePaths) {
     assert.equal(configHeaders(path).get("referrer-policy"), undefined, path);
   }
+});
+
+test("invite pages refuse framing, caching, and referrers without affecting other routes", () => {
+  const headers = configHeaders("/invite/fixture-token");
+  assert.equal(headers.get("x-frame-options"), "DENY");
+  assert.equal(headers.get("cache-control"), "no-store");
+  assert.equal(headers.get("referrer-policy"), "no-referrer");
+  assert.equal(configHeaders("/api/admin/invites").get("referrer-policy"), "same-origin");
 });

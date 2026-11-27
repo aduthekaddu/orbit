@@ -12,13 +12,20 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "same-origin" },
         ],
       },
-      ...["/", "/new", "/login", "/signup", "/settings", "/admin", "/memory", "/c/:id"].map((source) => ({
+      ...["/", "/new", "/login", "/signup", "/settings", "/admin", "/memory", "/c/:id", "/invite/:token"].map((source) => ({
         source,
         headers: [
           { key: "Content-Security-Policy", value: "frame-src 'none'; frame-ancestors 'none'" },
           { key: "X-Frame-Options", value: "DENY" },
         ],
       })),
+      {
+        source: "/invite/:token",
+        headers: [
+          { key: "Cache-Control", value: "no-store" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
     ];
   },
 };
