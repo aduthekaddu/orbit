@@ -41,9 +41,9 @@ Screenshots: `menu-desktop.png`, `menu-sheet-390.png`, `rename.png`, `undo-toast
 
 At each width, in one chat made with `POST /api/chats`:
 
-- A 40-line `[qa:plain]` message folds to 12 lines with **Show more**, and **Copy** while folded copies all 40 lines. **Show more** shows every line and turns into **Show less**.
+- A 40-line `[qa:plain]` message folds to 12 lines with **Show more**, a one-line fade ends at the fold, and the 40th line sits below it. The user text is one text node, so the scenario finds a line's box with a `Range`. **Copy** while folded copies the 40 lines exactly, the first one after its `[qa:plain]` tag. **Show more** shows every line, clipped nowhere, and turns into **Show less**.
 - On a touch screen, Copy and Edit sit below the bubble at 44px or taller, and the reply's actions are 44px and neither overlap nor clip the reply label. With a mouse they sit beside the bubble.
-- During `[qa:slow-long]` the prompt pins near the top and `scrollTop` stops rising. **Jump to latest** then reaches the end.
+- During `[qa:slow-long]` the prompt pins near the top and `scrollTop` stops rising. **Jump to latest** then reaches the end. The scenario clicks it once the last paragraph shows in full, because the markdown reveal still types it out after the stream ends.
 - Scrolled up, the `[data-scroll-to-bottom]` button sits inside the opaque `[data-jump-strip]`, and `document.elementFromPoint` at its four corners, with the button hidden, hits the strip and never message text.
 - `[qa:artifact-form]` shows a `[data-artifact-card]` with `Signup form`, `HTML`, and no raw code. While it streams, **Open** is disabled and the mark spins. **Open Signup form** opens a panel with that title. The frame body uses Orbit's `--background`, a sans font, and `--radius` on its button. Download suggests `signup-form.html`. The Code tab has `span.token` spans and its text equals the saved source. With the `light` theme the frame is light with dark text. The theme is put back afterwards.
 - `[qa:wide-code]` scrolls sideways until **Wrap** turns `aria-pressed="true"` and the block fits.

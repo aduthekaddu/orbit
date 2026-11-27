@@ -16,6 +16,9 @@ const VIEWPORTS = [
   { label: "360", viewport: { width: 360, height: 740 }, touch: true },
 ];
 const FOLD_LINES = Array.from({ length: 40 }, (_, index) => `Fold line ${index + 1} of the pasted deploy log`);
+// The last paragraph of the mock's [qa:slow-long] reply, as innerText reads it.
+const LAST_SLOW_LONG_PARAGRAPH =
+  "Paragraph 80 of 80. The reader should still see the start of this answer while it streams, because the prompt stays pinned near the top and new text grows below it without moving the page.";
 const LONG_TITLE = "Deploy notes for the small server with a title long enough to need an ellipsis in the palette row";
 // A browser time zone that differs from the server's, so a server-formatted time cannot pass.
 const BROWSER_TIME_ZONE = "Asia/Kolkata";
@@ -60,23 +63,55 @@ async function threadMetrics(page) {
   });
 }
 
+// The user text is one text node inside the fold box, so no element wraps a single line. A Range over the line's
+// words gives its box. The init script defines it, so page code reads it without eval under the app's CSP.
+function defineLineBox() {
+  window.__lineBox = (container, text) => {
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const at = node.data.indexOf(text);
+      if (at === -1) continue;
+      const range = document.createRange();
+      range.setStart(node, at);
+      range.setEnd(node, at + text.length);
+      const rects = [...range.getClientRects()];
+      return { top: rects[0].top, bottom: rects.at(-1).bottom };
+    }
+    return null;
+  };
+}
+
 // Copy and Edit under the bubble, the fold, and Copy while folded.
 async function checkFold(page, { label, touch, step, shot }) {
   await sendPrompt(page, `[qa:plain] ${FOLD_LINES.join("\n")}`);
   await replyDone(page, "pong");
   const turn = page.locator("[data-turn-id]").first();
   const more = await need(turn.getByRole("button", { name: "Show more", exact: true }), "Show more button on the 40-line message");
+  // The fade is the box's aria-hidden sibling. It must cover the last shown line and end at the fold.
   const folded = await turn.evaluate((root) => {
     const box = root.querySelector('[data-folded="true"]');
     if (!box) return null;
     const lineHeight = parseFloat(getComputedStyle(box).lineHeight);
-    const last = [...root.querySelectorAll("*")].find((node) => node.childElementCount === 0 && node.textContent.includes("Fold line 40"));
     const rect = box.getBoundingClientRect();
-    return { lines: rect.height / lineHeight, lineHeight, height: rect.height, lastHidden: !last || last.getBoundingClientRect().bottom > rect.bottom + 1 };
+    const last = window.__lineBox(box, "Fold line 40 of");
+    const fade = [...box.parentElement.children].find((node) => node !== box && node.getAttribute("aria-hidden") === "true")?.getBoundingClientRect();
+    return {
+      lines: rect.height / lineHeight,
+      lineHeight,
+      height: rect.height,
+      lastHidden: Boolean(last) && last.top >= rect.bottom - 1,
+      fade: fade ? { lines: fade.height / lineHeight, gapToFold: rect.bottom - fade.bottom } : null,
+    };
   });
   step(
-    `${label}: a 40-line message folds to 12 lines`,
-    Boolean(folded) && Math.round(folded.lines) === 12 && folded.lastHidden && (await more.getAttribute("aria-expanded")) === "false",
+    `${label}: a 40-line message folds to 12 lines with a fade over the last line`,
+    Boolean(folded) &&
+      Math.round(folded.lines) === 12 &&
+      folded.lastHidden &&
+      Boolean(folded.fade) &&
+      Math.round(folded.fade.lines) === 1 &&
+      Math.abs(folded.fade.gapToFold) <= 1 &&
+      (await more.getAttribute("aria-expanded")) === "false",
     JSON.stringify(folded),
   );
   if (label === "390") await shot("folded-390");
@@ -85,15 +120,27 @@ async function checkFold(page, { label, touch, step, shot }) {
   if (!touch) await turn.hover();
   await turn.getByRole("button", { name: "Copy", exact: true }).click();
   const copied = await eventually(() => page.evaluate(() => navigator.clipboard.readText()), (text) => text.includes("Fold line 40"), { timeoutMs: 5_000, what: "the clipboard to hold the message" }).catch(() => "");
-  const copiedLines = copied.split("\n").filter((line) => line.startsWith("Fold line"));
-  step(`${label}: Copy while folded copies all 40 lines`, copiedLines.length === 40, `copied ${copiedLines.length} lines`);
+  // The first line carries the [qa:plain] tag the prompt was sent with.
+  const copiedLines = copied.split("\n").map((line) => line.replace(/^\[qa:plain\] /, ""));
+  const whole = copiedLines.length === FOLD_LINES.length && FOLD_LINES.every((line, index) => copiedLines[index] === line);
+  step(
+    `${label}: Copy while folded copies all 40 lines`,
+    whole,
+    `copied ${copiedLines.filter((line) => FOLD_LINES.includes(line)).length} of ${FOLD_LINES.length} lines, first ${JSON.stringify(copiedLines[0])}, last ${JSON.stringify(copiedLines.at(-1))}`,
+  );
 
   await more.click();
   const less = turn.getByRole("button", { name: "Show less", exact: true });
   const expanded = await visible(less, 5_000);
+  // Expanded, the text box Show less controls clips nothing and ends with the 40th line.
   const open = await turn.evaluate((root) => {
-    const last = [...root.querySelectorAll("*")].find((node) => node.childElementCount === 0 && node.textContent.includes("Fold line 40"));
-    return { folded: root.querySelector('[data-folded="true"]') !== null, lastShown: Boolean(last && last.getBoundingClientRect().height > 0) };
+    const box = document.getElementById(root.querySelector("button[aria-controls]")?.getAttribute("aria-controls") ?? "");
+    const last = box ? window.__lineBox(box, "Fold line 40 of") : null;
+    const rect = box?.getBoundingClientRect();
+    return {
+      folded: root.querySelector('[data-folded="true"]') !== null,
+      lastShown: Boolean(box && last) && box.scrollHeight <= box.clientHeight + 1 && last.bottom <= rect.bottom + 1,
+    };
   });
   step(
     `${label}: Show more reveals all 40 lines and turns into Show less`,
@@ -197,13 +244,17 @@ async function checkStreaming(page, { label, step, shot }) {
   step(`${label}: during [qa:slow-long] the prompt anchors at the top`, pinned !== -1 && last.promptTop >= -4 && last.promptTop <= 96, summary);
   step(`${label}: scrollTop stops increasing once the prompt is pinned`, after.length > 0 && rises === 0, summary);
 
+  // The markdown reveal still types out the last paragraph after the stream ends, and that adds a line under a jump
+  // made earlier. Jump once the whole reply shows.
+  await eventually(() => lastReply(page).innerText(), (text) => text.includes(LAST_SLOW_LONG_PARAGRAPH), { timeoutMs: 10_000, what: "the last paragraph to finish showing" });
   const jump = await need(page.locator("[data-scroll-to-bottom]"), "[data-scroll-to-bottom] Jump to latest button");
   await eventually(() => jump.isEnabled(), Boolean, { timeoutMs: 5_000, what: "Jump to latest to be enabled" });
   step(`${label}: Jump to latest shows its label`, (await jump.innerText()).includes("Jump to latest"), `text ${JSON.stringify(await jump.innerText())}`);
   await jump.click();
-  const end = await eventually(() => threadMetrics(page), (metrics) => metrics && metrics.scrollTop + metrics.clientHeight >= metrics.scrollHeight - 2, { timeoutMs: 5_000, what: "the thread to reach the end" }).catch(() => null);
+  const atEnd = (metrics) => Boolean(metrics) && metrics.scrollTop + metrics.clientHeight >= metrics.scrollHeight - 2;
+  const end = await eventually(() => threadMetrics(page), atEnd, { timeoutMs: 5_000, what: "the thread to reach the end" }).catch(() => threadMetrics(page));
   const lastParagraph = await lastReply(page).getByText("Paragraph 80 of 80.").boundingBox();
-  step(`${label}: Jump to latest reaches the end`, Boolean(end) && Boolean(lastParagraph) && lastParagraph.y < page.viewportSize().height, `metrics ${JSON.stringify(end)}`);
+  step(`${label}: Jump to latest reaches the end`, atEnd(end) && Boolean(lastParagraph) && lastParagraph.y < page.viewportSize().height, `metrics ${JSON.stringify(end)}, last paragraph ${JSON.stringify(lastParagraph)}`);
 }
 
 // The button sits inside an opaque strip, and nothing behind it is message text.
@@ -393,7 +444,9 @@ async function checkPalette(page, { label, step, shot }) {
       const group = [...root.querySelectorAll("[cmdk-group]")].find((node) => node.querySelector("[cmdk-group-heading]")?.textContent === "Messages");
       const hits = [...(group?.querySelectorAll("[cmdk-item]") ?? [])].map((item) => {
         const marks = [...item.querySelectorAll("mark")].map((mark) => mark.textContent);
-        const lines = [...item.querySelectorAll("span")].filter((span) => span.childElementCount === 0 || span.querySelector("mark"));
+        // The title line has no child elements and the snippet line holds <mark> children. The column around both
+        // has a <mark> below it but not as a child, so it is neither line.
+        const lines = [...item.querySelectorAll("span")].filter((span) => span.childElementCount === 0 || span.querySelector(":scope > mark"));
         const title = lines[0];
         const text = item.textContent.replace(/\[qa:[a-z-]+\]/g, "");
         return {
@@ -574,6 +627,7 @@ export default async function threadPolish(context) {
   const { page, origin, shot } = context;
   await context.useProvider();
   await page.context().addInitScript(defineViewportOf);
+  await page.context().addInitScript(defineLineBox);
   let palettePrepared = false;
   for (const { label, viewport, touch } of VIEWPORTS) {
     let target = page;
@@ -582,6 +636,7 @@ export default async function threadPolish(context) {
       phone = await page.context().browser().newContext({ viewport, hasTouch: true, isMobile: true, deviceScaleFactor: 2, acceptDownloads: true });
       await phone.addCookies(await page.context().cookies());
       await phone.addInitScript(defineViewportOf);
+      await phone.addInitScript(defineLineBox);
       target = await phone.newPage();
     } else {
       await page.setViewportSize(viewport);
