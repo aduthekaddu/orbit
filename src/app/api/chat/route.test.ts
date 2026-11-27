@@ -15,10 +15,9 @@ import type { Effort } from "@/lib/effort";
 import * as messages from "@/lib/messages";
 import { seedTestConnection } from "@/lib/connection-fixture";
 import { deleteConnection, getConnection, getModelDefaults } from "@/lib/connections";
-import { eventually } from "@/lib/eventually.mjs";
 import { chatChoice, setChatChoice, type ModelChoice } from "@/lib/model-choice";
 import { cachedCaps, listModels } from "@/lib/model-list";
-import { findReplyRun, releaseReplyRun, replyResponse, reserveReplyRun, stopReplyRun } from "@/lib/reply-runs";
+import { discardReplyRun, findReplyRun, releaseReplyRun, replyResponse, reserveReplyRun, stopReplyRun } from "@/lib/reply-runs";
 import { encryptSecret } from "@/lib/secrets";
 import { getSettings, saveSettings } from "@/lib/settings";
 
@@ -263,6 +262,8 @@ before(async () => {
 after(async () => {
   await Promise.allSettled(afterTasks);
   closeDb?.();
+  // A keep-alive socket left by the last streamed reply would hold close() open until it times out.
+  provider?.closeAllConnections();
   await new Promise<void>((resolve) => (provider ? provider.close(() => resolve()) : resolve()));
   await github?.close();
   process.chdir(originalCwd);
@@ -421,16 +422,14 @@ test("manual reply edits mask a stored credential in the saved message and searc
   }
 });
 
-test("a send that waits for a stopping reply does not call a connection deleted while it waited", async () => {
+test("a send that waits for a stopping reply does not call a connection deleted while it waited", async (t) => {
   const chatId = "c-deleted-while-queued";
   const OTHER_KEY = "made-up-provider-key-0003";
   getDb()
     .insert(schema.providerConnections)
     .values({ id: "conn-deleted-while-queued", userId: USER_ID, kind: "openai-compatible", label: "Other", baseUrl: providerBase, apiKeyCiphertext: encryptSecret(OTHER_KEY), createdAt: new Date() })
     .run();
-  const stopping = await reserveReplyRun(chatId, USER_ID);
-  assert.ok(stopping.ok);
-  stopReplyRun(chatId, USER_ID);
+  const slot = await holdStoppingReply(chatId, t);
   const sent = route.POST(new Request("http://127.0.0.1/api/chat", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -441,14 +440,18 @@ test("a send that waits for a stopping reply does not call a connection deleted 
       messages: [{ id: `${chatId}-u1`, role: "user", parts: [{ type: "text", text: "Queued." }] }],
     }),
   }));
-  await eventually(() => messages.getChatForUser(chatId, USER_ID), Boolean, { timeoutMs: 5_000, what: "the queued send to reach its reply slot" });
-  assert.equal(deleteConnection(USER_ID, "conn-deleted-while-queued"), true);
-  releaseReplyRun(stopping.run);
+  try {
+    await Promise.race([slot.waiting, sent.then(() => assert.fail("the send did not wait for its slot"))]);
+    assert.equal(deleteConnection(USER_ID, "conn-deleted-while-queued"), true);
+  } finally {
+    slot.release();
+  }
   const response = await sent;
   await response.text();
   await Promise.allSettled(afterTasks);
   assert.equal(providerKeys.includes(`Bearer ${OTHER_KEY}`), false, "the deleted connection's key reached the provider");
   assert.equal(response.status, 404);
+  assert.equal(messages.chatExists(chatId), false, "the refused send left a chat row");
 });
 
 async function holdStoppingReply(chatId: string, t: TestContext) {
@@ -482,7 +485,7 @@ test("a queued send pins its choice against the latest chat row", async (t) => {
   const { connectionId } = getModelDefaults(USER_ID);
   assert.ok(connectionId);
   const requested = { connectionId, model: "mock", effort: "low" } as const;
-  messages.ensureChat(chatId, USER_ID);
+  getDb().insert(schema.chats).values({ id: chatId, userId: USER_ID, title: "New chat", createdAt: new Date(), updatedAt: new Date() }).run();
   setChatChoice(chatId, requested);
 
   const slot = await holdStoppingReply(chatId, t);
@@ -729,4 +732,61 @@ test("an SDK warning marks effort adjusted before a stopped step can finish", { 
     assert.equal(lastReplyRecord(chunks.slice(0, fallback))?.effortOutcome, "adjusted");
   }
   assert.equal(savedReplyRecord(chatId)?.effortOutcome, "adjusted");
+});
+
+function post(body: Record<string, unknown>) {
+  return route.POST(new Request("http://127.0.0.1/api/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  }));
+}
+
+const userMessage = (id: string, text = "hello") => ({ id, role: "user", parts: [{ type: "text", text }] });
+const assistantMessage = (id: string, text: string) => ({ id, role: "assistant", parts: [{ type: "text", text }] });
+
+test("a first send that the route refuses leaves no chat row", async () => {
+  const cases: Array<[string, Record<string, unknown>, number]> = [
+    ["stale", { trigger: "submit-message", messages: [assistantMessage("rf-a1", "an answer nobody saved"), userMessage("rf-u1")] }, 409],
+    ["no-prompt", { trigger: "submit-message", messages: [assistantMessage("rf-a2", "only an answer")] }, 400],
+    ["regenerate", { trigger: "regenerate-message", messages: [userMessage("rf-u3")] }, 404],
+    ["bad-edit", { trigger: "submit-message", editMessageId: "rf-missing", messages: [userMessage("rf-u4")] }, 400],
+    ["unknown-connection", { messages: [userMessage("rf-u5")], modelChoice: { connectionId: "conn-missing", model: "mock", effort: "low" } }, 404],
+    ["too-long", { messages: [userMessage("rf-u6", "a".repeat(50_001))] }, 413],
+  ];
+  for (const [name, body, status] of cases) {
+    const chatId = `c-refused-${name}`;
+    const response = await post({ id: chatId, ...body });
+    await response.text();
+    assert.equal(response.status, status, name);
+    assert.equal(messages.getChatForUser(chatId, USER_ID), null, `${name} left a chat row`);
+  }
+});
+
+test("a reply discarded mid-stream saves nothing and keeps the prompt", { timeout: 10_000 }, async (t) => {
+  const chatId = "c-discarded";
+  const response = await openAnthropic(chatId, [], "[stopped-fallback] hello");
+  let discarded: Promise<void> | undefined;
+  const [live] = await interruptAnthropic(chatId, response, () => {
+    discarded = discardReplyRun(chatId);
+  }, t.signal);
+  await discarded;
+  await Promise.allSettled(afterTasks);
+  assert.equal(live.at(-1)?.type, "abort");
+  assert.equal(savedReply(chatId), undefined, "the discarded reply was saved");
+  assert.deepEqual(messages.listMessages(chatId).map(({ role }) => role), ["user"]);
+});
+
+test("a send to another user's chat answers 404 and writes nothing", async () => {
+  const db = getDb();
+  const other = "u-route-other";
+  db.$client.exec("DROP TRIGGER IF EXISTS user_single_row");
+  db.insert(schema.user).values({ id: other, name: "Other", email: "other@orbit.local", emailVerified: false, createdAt: new Date(), updatedAt: new Date() }).run();
+  db.insert(schema.chats).values({ id: "c-theirs", userId: other, title: "Theirs", createdAt: new Date(3_000), updatedAt: new Date(3_000) }).run();
+  const response = await post({ id: "c-theirs", trigger: "submit-message", messages: [userMessage("theirs-u1")] });
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "Not found" });
+  assert.deepEqual(messages.listMessages("c-theirs"), []);
+  assert.equal(findReplyRun("c-theirs", other), null);
+  assert.deepEqual(db.$client.prepare("select user_id as userId, title, updated_at as updatedAt from chats where id = 'c-theirs'").get(), { userId: other, title: "Theirs", updatedAt: 3_000 });
 });

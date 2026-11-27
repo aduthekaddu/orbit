@@ -4,6 +4,7 @@ import { Redactor } from "../chat-errors";
 import { connectionApiKey } from "../connections";
 import { getDb } from "../db";
 import { user } from "../db/schema";
+import { chatExists } from "../messages";
 import { resolveChoice } from "../model-choice";
 import { languageModelFor } from "../provider";
 import { requestRedactor } from "../settings";
@@ -74,12 +75,34 @@ export function latestRun(): MemoryRun | null {
   return row ? parseRun(row) : null;
 }
 
-export function formatDreamStatus(run: MemoryRun): string {
-  const [year, month, day] = run.date.split("-").map(Number);
-  const when = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
-  if (run.state === "failed") return `${when}. ${run.error}`;
-  if (run.state === "running") return `${when}. Dreaming`;
-  return `${when}. ${run.chatIds.length} chats, ${run.added} added, ${run.merged} merged`;
+export function lastDoneRun(): MemoryRun | null {
+  const row = getDb().$client.prepare(`SELECT ${RUN_COLUMNS} FROM memory_runs WHERE state = 'done' ORDER BY date DESC LIMIT 1`).get();
+  return row ? parseRun(row) : null;
+}
+
+/** What the Memory page says about dreaming. Times are ISO strings, so the browser formats them in its own zone. */
+export type DreamStatus =
+  | { state: "never" }
+  | { state: "running"; startedAt: string }
+  | { state: "done"; finishedAt: string; chats: number; added: number; merged: number }
+  | { state: "failed"; finishedAt: string; error: string };
+
+const NO_PROVIDER = "No provider is saved";
+
+function doneStatus(run: Extract<MemoryRun, { state: "done" }>): DreamStatus {
+  return { state: "done", finishedAt: run.finishedAt.toISOString(), chats: run.chatIds.length, added: run.added, merged: run.merged };
+}
+
+/**
+ * The status of the latest night. A night that failed for want of a provider stops being news once one is saved,
+ * so it gives way to the last done night, or to never.
+ */
+export function dreamStatus(latest: MemoryRun | null, lastDone: MemoryRun | null, providerReady: boolean): DreamStatus {
+  if (!latest) return { state: "never" };
+  if (latest.state === "running") return { state: "running", startedAt: latest.startedAt.toISOString() };
+  if (latest.state === "done") return doneStatus(latest);
+  if (latest.error === NO_PROVIDER && providerReady) return lastDone?.state === "done" ? doneStatus(lastDone) : { state: "never" };
+  return { state: "failed", finishedAt: latest.finishedAt.toISOString(), error: latest.error };
 }
 
 export function tryClaim(input: { date: string; owner: string; now: Date; chatIds: string[] }): boolean {
@@ -120,7 +143,7 @@ function changedChatIds(date: string, end: number): string[] {
   const rows = getDb().$client
     .prepare("SELECT DISTINCT chat_id AS id FROM messages WHERE created_at > ? AND created_at <= ?")
     .all(start, end) as { id: string }[];
-  const retry = previousRun(date)?.retryChatIds ?? [];
+  const retry = previousRun(date)?.retryChatIds.filter(chatExists) ?? [];
   return [...new Set([...rows.map((row) => row.id), ...retry])].sort();
 }
 
@@ -129,7 +152,7 @@ function renew(date: string, owner: string): boolean {
 }
 
 function safeError(error: unknown): string {
-  if (error instanceof Error && (error.message === "No provider is saved" || error.message.startsWith("Ollama "))) return error.message;
+  if (error instanceof Error && (error.message === NO_PROVIDER || error.message.startsWith("Ollama "))) return error.message;
   return "Dream failed";
 }
 
@@ -223,6 +246,8 @@ function applyCandidatesWithSource(chatId: string, prepared: Prepared[]): { adde
   let merged = 0;
   const client = getDb().$client;
   for (const candidate of prepared) {
+    // The chat or the message was deleted while the model read it, so the fact has no chat to come from.
+    if (sourceChat(candidate.sourceMessageId) !== chatId) continue;
     let text: string;
     try {
       text = cleanMemoryText(candidate.text);
@@ -245,13 +270,7 @@ function applyCandidatesWithSource(chatId: string, prepared: Prepared[]): { adde
       continue;
     }
     const prior = client.prepare("SELECT id FROM memories WHERE text_norm = ?").get(text.toLowerCase()) as { id: string } | undefined;
-    const saved = saveMemory({
-      text,
-      kind: candidate.kind,
-      source: "dream",
-      sourceChatId: sourceChat(candidate.sourceMessageId) === chatId ? chatId : null,
-      sourceMessageId: sourceChat(candidate.sourceMessageId) === chatId ? candidate.sourceMessageId : null,
-    });
+    const saved = saveMemory({ text, kind: candidate.kind, source: "dream", sourceChatId: chatId, sourceMessageId: candidate.sourceMessageId });
     if (prior) {
       merged += 1;
       continue;
@@ -294,6 +313,8 @@ export async function dreamChat(chatId: string, input: { date: string; owner: st
   if (run.doneChatIds.includes(chatId)) return "done";
   if (run.retryChatIds.includes(chatId)) return "retry";
   if (!renew(input.date, input.owner)) return "lost";
+  // A chat deleted since the night began has nothing left to read.
+  if (!chatExists(chatId)) return finishChat(input.date, input.owner, chatId, "done", () => ({ added: 0, merged: 0 }));
   const start = retryWindowStart(input.date, chatId) ?? windowStart(input.date);
   const messages = loadWindow(chatId, start, run.startedAt.getTime());
   const known = new Set(messages.filter((message) => message.role === "user").map((message) => message.id));
@@ -302,7 +323,7 @@ export async function dreamChat(chatId: string, input: { date: string; owner: st
   let redact: Redactor;
   try {
     const account = dreamAccount();
-    if (!account) throw new Error("No provider is saved");
+    if (!account) throw new Error(NO_PROVIDER);
     redact = requestRedactor(account.userId);
     const apiKey = connectionApiKey(account.userId, account.connection.id);
     for (let offset = 0; offset < messages.length; offset += PAGE) {
@@ -317,7 +338,7 @@ export async function dreamChat(chatId: string, input: { date: string; owner: st
       candidates.push(...generated.object.candidates);
     }
   } catch (error) {
-    if (error instanceof Error && error.message === "No provider is saved") throw error;
+    if (error instanceof Error && error.message === NO_PROVIDER) throw error;
     return finishChat(input.date, input.owner, chatId, "retry", () => ({ added: 0, merged: 0 }));
   }
   // Mask before embedding so credentials never reach Ollama and the stored text matches the embedded text.
@@ -357,7 +378,7 @@ export async function runDream(input: { now?: Date; date?: string; manual?: bool
   if (!owned) return readRun(date);
   try {
     if (!dreamAccount()) {
-      failOwned(date, owner, "No provider is saved");
+      failOwned(date, owner, NO_PROVIDER);
       return readRun(date);
     }
     const claimed = readRun(date);

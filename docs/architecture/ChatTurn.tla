@@ -24,14 +24,17 @@ vars == <<phase, kind, visible, stored, before, replies, replyId, beforeReplies,
 
 Init == phase = "idle" /\ kind = "send" /\ visible = FALSE /\ stored = "none" /\ before = "none" /\ replies = {} /\ replyId = 1 /\ beforeReplies = {} /\ attached = TRUE
 
+\* code: src/lib/messages.ts beginTurn
 \* code: src/lib/messages.ts planChatWrite
-\* Trigger submit-message stores the new prompt and moves head_id to it.
+\* Trigger submit-message stores the new prompt and moves head_id to it. beginTurn creates the chat row in the
+\* same transaction when this is its first prompt, and rolls it back when planChatWrite refuses the write.
 YouSend ==
   /\ attached /\ phase \in {"idle", "failed"}
   /\ UNCHANGED attached
   /\ phase' = "streaming" /\ kind' = "send" /\ visible' = FALSE
   /\ stored' = "none" /\ before' = "none" /\ replies' = {} /\ replyId' = 1 /\ beforeReplies' = {}
 
+\* code: src/lib/messages.ts beginTurn
 \* code: src/lib/messages.ts planChatWrite
 \* Trigger regenerate-message gives the reply a new id, so it is a sibling of the earlier replies.
 Regenerate ==
@@ -67,6 +70,8 @@ Finishes ==
 \* onEnd after an explicit Stop or a provider failure applies the same rule as a finish.
 \* settleInterruptedParts marks unfinished tool parts Stopped, and they stay visible.
 \* Before fa399a2 it returned early for a regenerate, so a stopped Retry saved nothing.
+\* DELETE /api/chats/[id] also aborts the run, with reason "discarded": onEnd saves nothing and the chat's rows
+\* are deleted once the run ends. The model leaves out deleting a chat.
 Interrupt(to) ==
   /\ phase = "streaming" /\ phase' = to
   /\ LET saved == visible /\ (SaveStoppedRegenerate \/ kind = "send")

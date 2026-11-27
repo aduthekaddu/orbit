@@ -8,7 +8,6 @@ import { pathToFileURL } from "node:url";
 import test, { after, before } from "node:test";
 import { setModelHidden } from "./connections";
 import { getDb } from "./db";
-import { ensureChat } from "./messages";
 import { cachedCaps } from "./model-list";
 import { dataDirectory } from "./paths";
 import { getPreferences, savePreferences } from "./preferences";
@@ -389,8 +388,9 @@ test("deleting a connection clears the chats and defaults that use it, and old r
   savePreferences(ONE, { theme: "light", accent: "rose" });
   assert.equal((await setDefaults({ connectionId: openaiId, model: "fixture-model", effort: "high" })).status, 200);
   for (const [chatId, connectionId, model] of [["chat-uses-openai", openaiId, "fixture-model"], ["chat-uses-claude", anthropicId, "claude-opus-5-5"]]) {
-    ensureChat(chatId, ONE);
-    getDb().$client.prepare("update chats set connection_id = ?, model = ?, reasoning_effort = 'high' where id = ?").run(connectionId, model, chatId);
+    getDb()
+      .$client.prepare("insert into chats (id, user_id, title, created_at, updated_at, connection_id, model, reasoning_effort) values (?, ?, 'New chat', 0, 0, ?, ?, 'high')")
+      .run(chatId, ONE, connectionId, model);
   }
   getDb()
     .$client.prepare(

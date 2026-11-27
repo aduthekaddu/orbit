@@ -208,7 +208,7 @@ test("a stored multi-part message over the limit does not block the next short t
     { type: "text", text: "a".repeat(40_000) },
     { type: "text", text: "a".repeat(40_000) },
   ];
-  assert.ok(chatStore.ensureChat("c-stored-split", USER_ID));
+  insertChat("c-stored-split");
   const storedUser = { id: "sp-u1", role: "user" as const, parts };
   const plannedUser = chatStore.planChatWrite("c-stored-split", [storedUser], redact);
   assert.ok(!("error" in plannedUser), "error" in plannedUser ? plannedUser.error : "");
@@ -236,9 +236,14 @@ test("a chat message inside the limit is accepted", async () => {
 
 type SeedMessage = { id: string; role: "user" | "assistant"; text: string };
 
+function insertChat(chatId: string) {
+  const now = new Date();
+  getDb().insert(schema.chats).values({ id: chatId, userId: USER_ID, title: "New chat", createdAt: now, updatedAt: now }).run();
+}
+
 // A chat as an older Orbit stored it: no limit applied when these were written.
 function seedChat(chatId: string, history: SeedMessage[]) {
-  assert.ok(chatStore.ensureChat(chatId, USER_ID));
+  insertChat(chatId);
   const incoming: { id: string; role: "user" | "assistant"; parts: unknown }[] = [];
   for (const message of history) {
     const parts = [{ type: "text", text: message.text }];

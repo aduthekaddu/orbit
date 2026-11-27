@@ -120,6 +120,13 @@
       "when": 1795757497595,
       "tag": "0016_provider_setup_complete",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1795766979728,
+      "tag": "0017_drop_empty_chats",
+      "breakpoints": true
     }
   ]
 }

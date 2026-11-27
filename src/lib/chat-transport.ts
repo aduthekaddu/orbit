@@ -40,6 +40,8 @@ export function orbitChatTransport(
     headers?: Record<string, string>;
     fetch?: typeof fetch;
     onReplyId?: (replyId: string) => void;
+    // A send can commit its rows on the server long before its headers come back.
+    onSend?: () => void;
     onReconnectResponse?: (status: number) => void;
     onServerTime?: (serverTime: number) => void;
   },
@@ -48,6 +50,7 @@ export function orbitChatTransport(
     api: options?.api ?? "/api/chat",
     headers: options?.headers,
     fetch: plainRefusals(async (input, init) => {
+      if (init?.method !== "GET") options?.onSend?.();
       const response = await (options?.fetch ?? fetch)(input, init);
       if (!init?.signal?.aborted) {
         if (response.ok) {

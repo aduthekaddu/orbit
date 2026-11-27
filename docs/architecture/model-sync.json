@@ -1,9 +1,10 @@
 {
-  "src/app/api/chat/route.ts POST": "65152596527c2e3056a0ca361a798424efadd4587429a2da5f223063283c7052",
+  "src/app/api/chat/route.ts POST": "0758dc4315ad93c8c17bec6cc09848d877b798480c7be5a89d7d05eed3745331",
   "src/lib/chat-parts.ts replaceTextParts": "065af95baa15a5abefb0ef7912537991ec768de615b08102da21958ca443b309",
   "src/lib/chat-tree.ts isPath": "6079fdb2e7244ec44b62f930b2a810625f0f50ca50d255b313e6765874b30ca8",
   "src/lib/genui/spec.ts assistantHasVisiblePart": "07c8c236dc87ea744a4843a514fa938da0a6cb55f32e77e8ddd4378324c33dc4",
   "src/lib/genui/spec.ts settleInterruptedParts": "621627203d26c0dc23e1601106f8c15d93489c9e6e70a1b89fa615cf0f597284",
+  "src/lib/messages.ts beginTurn": "9bb4a550846e5ba745957a5d4ca0318aaf09f4fb04e3e360cd1f3f038bdc7d68",
   "src/lib/messages.ts finishChatReply": "7d1641f6beaa2be360184bbbbd6484538469fdc68b494a3bba3c7b40264592d4",
   "src/lib/messages.ts insertMessage": "7a31965d210c552f2349b0edde2cd0df468c5028365b1f49cc82ba59cdab4856",
   "src/lib/messages.ts matchesIncomingBody": "c97e93082e7ecc92fd4570379b01f18e539c86a9eea483941a6e157d05a150fd",

@@ -26,6 +26,7 @@ export function Composer({ ready, inputRef }: { ready: boolean; inputRef?: Ref<H
     >
       <ComposerPrimitive.Input
         ref={inputRef}
+        data-chat-composer=""
         placeholder="Ask anything"
         rows={1}
         disabled={!canCompose}

@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useState, type KeyboardEvent } from "react";
-import { Highlight, type PrismTheme } from "prism-react-renderer";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { Highlight } from "prism-react-renderer";
 import type { CodeHeaderProps, SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
 import { CaretDownIcon, CheckIcon, CopyIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { artifactKind, isArtifactLanguage } from "@/lib/artifacts/detect";
+import { artifactTitle } from "@/lib/artifacts/title";
 import { useArtifact } from "@/components/artifacts/use-artifact";
 import { codeBodyStart, replaceCode } from "@/lib/chat-parts";
 import { cn } from "@/lib/utils";
 import { ScrollFade } from "@/components/ui/scroll-fade";
+import { ArtifactCard } from "./artifact-card";
 import { useCodeEdit } from "./code-edit-context";
+import { orbitCodeTheme } from "./code-theme";
 import { EditorFooter } from "./editor-footer";
 import { useCopy } from "./use-copy";
 
@@ -17,48 +20,63 @@ import { useCopy } from "./use-copy";
 const COLLAPSE_AFTER = 20;
 const COLLAPSED_LINES = 14;
 
-const orbitCodeTheme: PrismTheme = {
-  plain: { color: "var(--foreground)", backgroundColor: "transparent" },
-  styles: [
-    { types: ["comment", "prolog", "doctype", "cdata"], style: { color: "var(--syntax-comment)", fontStyle: "italic" } },
-    { types: ["keyword", "boolean", "important", "atrule", "null"], style: { color: "var(--syntax-keyword)" } },
-    {
-      types: ["string", "char", "attr-value", "template-string", "triple-quoted-string"],
-      style: { color: "var(--syntax-string)" },
-    },
-    { types: ["number", "constant", "symbol"], style: { color: "var(--syntax-number)" } },
-    { types: ["function", "function-variable", "method"], style: { color: "var(--syntax-function)" } },
-    { types: ["builtin", "class-name"], style: { color: "var(--syntax-class)" } },
-    { types: ["property", "property-access"], style: { color: "var(--syntax-function)" } },
-    { types: ["operator", "entity", "url"], style: { color: "var(--syntax-operator)" } },
-    { types: ["punctuation"], style: { color: "var(--syntax-punctuation)" } },
-    { types: ["decorator", "interpolation-punctuation", "format-spec"], style: { color: "var(--syntax-builtin)" } },
-  ],
-};
+const headerButton = "flex h-6 pointer-coarse:h-11 items-center rounded-md px-2 text-meta text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
-function fenceOffset(node: CodeHeaderProps["node"] | SyntaxHighlighterProps["node"]) {
+type BlockNode = CodeHeaderProps["node"] | SyntaxHighlighterProps["node"];
+
+function fenceOffset(node: BlockNode) {
   const value = node?.properties?.["data-code-fence"];
   return typeof value === "number" ? value : node?.position?.start?.offset;
 }
 
-export function CodeHeader({ language, code, node }: CodeHeaderProps) {
-  const { copied, failed, copy } = useCopy();
+function codeIndex(node: BlockNode) {
+  const value = node?.properties?.["data-code-index"];
+  return typeof value === "number" ? value : undefined;
+}
+
+/**
+ * Where a fenced block sits in its message, and whether it is an artifact. Only assistant text parts
+ * have a text ordinal, so a block inside Reasoning has no key and stays a plain code block (#137).
+ */
+function useCodeBlock(language: string | undefined, code: string, node: BlockNode) {
   const edit = useCodeEdit();
-  const start = edit ? codeBodyStart(edit.text, fenceOffset(node), code) : -1;
-  const active = edit?.active === start;
   const artifacts = useArtifact();
-  const register = artifacts?.register;
+  const start = edit ? codeBodyStart(edit.text, fenceOffset(node), code) : -1;
+  const active = Boolean(edit?.enabled) && edit?.active === start;
+  const index = codeIndex(node);
   const sourceLanguage = typeof language === "string" && isArtifactLanguage(language) ? language : undefined;
   const kind = sourceLanguage && artifactKind(sourceLanguage);
-  const blockIndex = node?.properties?.["data-code-index"];
+  const key = edit && index !== undefined && edit.textOrdinal !== undefined ? `${edit.messageId}.${edit.textOrdinal}.${index}` : null;
+  const artifact = artifacts && sourceLanguage && kind && key ? { key, kind, language: sourceLanguage } : null;
+  const wrapped = index !== undefined && Boolean(edit?.wrapped.has(index));
+  return { edit, artifacts, start, active, index, artifact, wrapped };
+}
+
+export function CodeHeader({ language, code, node }: CodeHeaderProps) {
+  const { copied, failed, copy } = useCopy();
+  const { edit, artifacts, start, active, index, artifact, wrapped } = useCodeBlock(language, code, node);
+  const register = artifacts?.register;
   const messageId = edit?.messageId;
-  const key = edit && typeof blockIndex === "number" && edit.textOrdinal !== undefined
-    ? `${edit.messageId}.${edit.textOrdinal}.${blockIndex}`
-    : null;
+  const key = artifact?.key;
+  const kind = artifact?.kind;
+  const sourceLanguage = artifact?.language;
   useEffect(() => {
     if (!register || !kind || !key || !sourceLanguage || !messageId) return;
     return register({ key, kind, code, language: sourceLanguage });
   }, [register, kind, key, code, sourceLanguage, messageId]);
+  const title = useMemo(() => (kind ? artifactTitle({ kind, code }) : ""), [kind, code]);
+
+  if (artifacts && kind && key && !active) {
+    return (
+      <ArtifactCard
+        kind={kind}
+        title={title}
+        streaming={Boolean(edit?.streaming)}
+        onOpen={() => artifacts.open(key)}
+        onEdit={edit?.enabled ? () => edit.setActive(start) : undefined}
+      />
+    );
+  }
 
   return (
     <div
@@ -71,23 +89,18 @@ export function CodeHeader({ language, code, node }: CodeHeaderProps) {
       <span aria-live="polite" className="sr-only">{copied ? "Copied" : failed ? "Copy failed" : ""}</span>
       {active ? null : (
         <div className="flex items-center gap-0.5">
-          {kind && key && artifacts ? (
+          {edit && index !== undefined ? (
             <button
               type="button"
-              disabled={!edit?.enabled}
-              onClick={() => artifacts.open(key)}
-              className="flex h-6 pointer-coarse:h-11 items-center rounded-md px-2 text-meta text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+              aria-pressed={wrapped}
+              onClick={() => edit.toggleWrap(index)}
+              className={cn(headerButton, "aria-pressed:bg-surface-raised aria-pressed:text-foreground")}
             >
-              Preview
+              Wrap
             </button>
           ) : null}
           {edit?.enabled ? (
-            <button
-              type="button"
-              onClick={() => edit.setActive(start)}
-              aria-label="Edit code"
-              className="flex h-6 pointer-coarse:h-11 items-center rounded-md px-2 text-meta text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            >
+            <button type="button" onClick={() => edit.setActive(start)} aria-label="Edit code" className={headerButton}>
               Edit
             </button>
           ) : null}
@@ -148,12 +161,12 @@ function CodeEditor({ code, start, language }: { code: string; start: number; la
 }
 
 export function SyntaxHighlighter({ code, language, node }: SyntaxHighlighterProps) {
-  const edit = useCodeEdit();
   const [expanded, setExpanded] = useState(false);
-  const start = edit ? codeBodyStart(edit.text, fenceOffset(node), code) : -1;
-  const active = edit?.enabled && edit.active === start;
+  const { start, active, artifact, wrapped } = useCodeBlock(language, code, node);
 
   if (active) return <CodeEditor code={code} start={start} language={language} />;
+  // The artifact card in CodeHeader stands in for the code until someone edits it.
+  if (artifact) return null;
 
   const source = code.replace(/\n$/, "");
   const lines = source.split("\n").length;
@@ -170,7 +183,7 @@ export function SyntaxHighlighter({ code, language, node }: SyntaxHighlighterPro
         >
           <Highlight code={source} language={language} theme={orbitCodeTheme}>
             {({ tokens, getLineProps, getTokenProps }) => (
-              <pre className="w-max min-w-full px-3 py-3 font-mono text-code">
+              <pre className={cn("px-3 py-3 font-mono text-code", wrapped ? "w-full whitespace-pre-wrap break-words" : "w-max min-w-full")}>
                 <code>
                   {tokens.map((line, i) => (
                     <div key={i} {...getLineProps({ line })}>

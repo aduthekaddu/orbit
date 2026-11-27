@@ -30,6 +30,7 @@ export const LIMITS = {
   secret: 4096,
   modelName: 200,
   label: 100,
+  chatTitle: 120,
   memoryText: 2000,
   query: 500,
   userMessageText: 50_000,

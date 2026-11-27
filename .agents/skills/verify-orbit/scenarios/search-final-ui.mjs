@@ -27,7 +27,7 @@ export default async function searchFinalUi({ page, origin, useProvider, step, s
       await page.reload();
       await page.locator('[data-message-role="assistant"]').last().getByRole("button", { name: "Regenerate", exact: true }).waitFor();
       if (kind === "card") step("the researched card survives reload", await page.getByText("Researched orbit", { exact: true }).count() > 0);
-      else step("the researched artifact survives reload", await page.getByRole("button", { name: "Preview", exact: true }).count() > 0);
+      else step("the researched artifact survives reload", await page.getByRole("button", { name: /^Open / }).count() > 0);
       await shot(`${kind}-reloaded`);
     }
   } finally {

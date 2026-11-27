@@ -43,20 +43,31 @@ export default async function searchFocus({ page, origin, step, shot }) {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("textbox").fill(`[qa:slow] ${longPrompt}`);
   await page.getByRole("textbox").press("Enter");
-  await page.waitForFunction(() => [...document.querySelectorAll('[data-message-role="assistant"]')].at(-1)?.textContent.includes("word40"), null, { timeout: 15_000 });
-  const following = await page.waitForFunction(() => {
-    const el = [...document.querySelectorAll('[data-message-role="assistant"]')].at(-1);
-    const viewport = el.closest(".overflow-y-auto");
-    const rect = el.getBoundingClientRect();
+  const replyHas = (word) => page.waitForFunction((word) => [...document.querySelectorAll('[data-message-role="assistant"]')].at(-1)?.textContent.includes(word), word, { timeout: 15_000 });
+  const scrollTop = () => page.locator('[data-message-role="assistant"]').last().evaluate((el) => el.closest(".overflow-y-auto").scrollTop);
+  await replyHas("word10");
+  const earlyTop = await scrollTop();
+  await replyHas("word40");
+  // turnAnchor="top" scrolls the new prompt up once and then leaves scrollTop alone. A prompt taller than 10em
+  // keeps 6em in view, so its end sits within 12em of the top, and the reply starts in view below it.
+  const anchored = await page.waitForFunction((earlyTop) => {
+    const reply = [...document.querySelectorAll('[data-message-role="assistant"]')].at(-1);
+    const prompt = [...document.querySelectorAll("[data-turn-id]")].at(-1);
+    const viewport = reply.closest(".overflow-y-auto");
     const bounds = viewport.getBoundingClientRect();
-    return rect.top < bounds.bottom && rect.bottom > bounds.top && viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= 12;
-  }, null, { timeout: 1_000 }).then(() => true, () => false);
-  const position = await page.locator('[data-message-role="assistant"]').last().evaluate((el) => {
+    const replyBox = reply.getBoundingClientRect();
+    const promptBox = prompt.getBoundingClientRect();
+    const em = parseFloat(getComputedStyle(prompt).fontSize);
+    return viewport.scrollTop - earlyTop <= 2 && replyBox.top >= bounds.top && replyBox.top < bounds.bottom && promptBox.bottom > bounds.top && promptBox.bottom - bounds.top <= 12 * em;
+  }, earlyTop, { timeout: 1_000 }).then(() => true, () => false);
+  const position = await page.locator('[data-message-role="assistant"]').last().evaluate((el, earlyTop) => {
     const viewport = el.closest(".overflow-y-auto");
-    return { gap: viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight, replyTop: el.getBoundingClientRect().top, viewportBottom: viewport.getBoundingClientRect().bottom };
-  });
+    const bounds = viewport.getBoundingClientRect();
+    const prompt = [...document.querySelectorAll("[data-turn-id]")].at(-1);
+    return { scrollTopAtWord10: earlyTop, scrollTopAtWord40: viewport.scrollTop, promptBottomFromTop: prompt.getBoundingClientRect().bottom - bounds.top, em: parseFloat(getComputedStyle(prompt).fontSize), replyTopFromTop: el.getBoundingClientRect().top - bounds.top, viewportHeight: bounds.height };
+  }, earlyTop);
   await shot("follow-up-stream");
-  step("follow-up reply stays in view while streaming", following, JSON.stringify(position));
+  step("follow-up prompt stays anchored near the top and its reply starts in view while streaming", anchored, JSON.stringify(position));
   await page.getByRole("button", { name: "Stop", exact: true }).waitFor({ state: "hidden", timeout: 20_000 });
 
   // Two branches. The hit is the edited question in the middle of the second one,

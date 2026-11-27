@@ -1,4 +1,3 @@
-import { replyText } from "../../../../scripts/qa/reply-text.mjs";
 export default async function artifactReview({ page, origin, step, shot }) {
   await page.setViewportSize({ width: 1440, height: 900 });
   const reply = page.locator('[data-message-role="assistant"]').last();
@@ -16,7 +15,7 @@ export default async function artifactReview({ page, origin, step, shot }) {
   }
 
   async function open(index = 0) {
-    await reply.getByRole('button', { name: 'Preview', exact: true }).nth(index).click();
+    await reply.getByRole('button', { name: /^Open / }).nth(index).click();
     await page.locator('iframe').waitFor();
   }
 
@@ -84,7 +83,7 @@ export default async function artifactReview({ page, origin, step, shot }) {
       await page.getByRole('button', { name: 'Save', exact: true }).click();
       await later.waitFor({ state: 'hidden' });
       await page.frameLocator('iframe').getByRole('heading', { name: 'Second edited', exact: true }).waitFor({ timeout: 5000 });
-      step('the earlier block keeps its shortened code', (await replyText(reply)).includes('<h1>F</h1>'));
+      step('the earlier block keeps its shortened code', (await reply.getByRole('button', { name: 'Open F', exact: true }).count()) === 1);
       await page.reload();
       await page.frameLocator('iframe').getByRole('heading', { name: 'Second edited', exact: true }).waitFor({ timeout: 5000 });
       step('the shortened preview survives reload', true);
@@ -99,7 +98,7 @@ export default async function artifactReview({ page, origin, step, shot }) {
     await composer.press('Enter');
     await page.locator('[data-message-role="assistant"]').nth(1).waitFor();
     await reply.getByRole('button', { name: 'Regenerate', exact: true }).waitFor();
-    await page.locator('[data-message-role="assistant"]').first().getByRole('button', { name: 'Preview', exact: true }).click();
+    await page.locator('[data-message-role="assistant"]').first().getByRole('button', { name: /^Open / }).click();
     await page.frameLocator('iframe').getByRole('heading', { name: 'Artifact HTML', exact: true }).waitFor();
     await page.reload();
     await page.frameLocator('iframe').getByRole('heading', { name: 'Artifact HTML', exact: true }).waitFor({ timeout: 5000 });
@@ -116,7 +115,7 @@ export default async function artifactReview({ page, origin, step, shot }) {
     const stream = await download.createReadStream();
     let source = '';
     for await (const chunk of stream) source += chunk.toString();
-    step('TSX downloads preserve their extension and source', download.suggestedFilename().endsWith('.tsx') && source.includes('type Label'), download.suggestedFilename());
+    step('TSX downloads preserve their extension and source', download.suggestedFilename() === 'typed.tsx' && source.includes('type Label'), download.suggestedFilename());
     await shot('tsx-download');
   });
 

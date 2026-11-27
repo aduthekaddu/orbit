@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ThreadPrimitive, useAui, useAuiEvent, useAuiState } from "@assistant-ui/react";
+import { ThreadPrimitive, useAui, useAuiState } from "@assistant-ui/react";
 import { ArrowDownIcon } from "@phosphor-icons/react";
 import { Figure } from "@/components/figure";
 import { Button } from "@/components/ui/button";
@@ -18,15 +18,33 @@ const STARTERS = [
   { label: "Brainstorm", prompt: "Give me ten ideas for " },
 ];
 
+// turnAnchor="top" scrolls a prompt taller than `tallerThan` so only its last `visibleHeight` stays in view, and it
+// measures the whole user message. On touch that holds the 44px Copy and Edit row and its 6px gap under the bubble,
+// about 3.125em, so the touch clamp adds that to both defaults (10em and 6em): the same prompts clamp as with a mouse,
+// and the same part of the bubble stays in view instead of one cut line above the actions.
+const TOUCH_ANCHOR_CLAMP = { tallerThan: "13.125em", visibleHeight: "9.125em" };
+
+// assistant-ui reads the clamp once, when the viewport mounts. It writes no markup, so reading the pointer in a state
+// initializer keeps the server render and hydration the same.
+function anchorClamp() {
+  return typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches ? TOUCH_ANCHOR_CLAMP : undefined;
+}
+
 // The runtime loads saved messages in an effect after hydration, and its isLoading turns false once before that load
 // starts, so until the first message arrives the layout follows what the server saw: saved messages or none.
 type ThreadView = "empty" | "loading" | "messages";
 
 export function Thread({ ready, focusMessageId, hasHistory }: { ready: boolean; focusMessageId?: string | null; hasHistory: boolean }) {
   const view = useAuiState((state): ThreadView => (state.thread.messages.length > 0 ? "messages" : hasHistory ? "loading" : "empty"));
-  const [autoScroll, setAutoScroll] = useState(!focusMessageId);
-  useAuiEvent("thread.runStart", () => setAutoScroll(true));
+  // Saved messages open at the bottom, except a ?m= search hit, which centers. A chat that started empty skips that
+  // first scroll: its first prompt is already at the top, and assistant-ui never anchors the first message, so the
+  // scroll would follow the first reply down. Fixed at mount: hasHistory turns true when the finished reply
+  // refreshes the page, and assistant-ui would run the first-load scroll then. ChatPanel remounts per chat and ?m=.
+  const [scrollToBottomOnLoad] = useState(hasHistory && !focusMessageId);
   const viewport = useRef<HTMLDivElement>(null);
+  const [clamp] = useState(anchorClamp);
+  // The thread map puts its Prompts button here when the rail does not fit and the header is hidden.
+  const [promptsSlot, setPromptsSlot] = useState<HTMLElement | null>(null);
   useEffect(() => {
     const root = viewport.current;
     if (!focusMessageId || view !== "messages" || !root) return;
@@ -52,10 +70,13 @@ export function Thread({ ready, focusMessageId, hasHistory }: { ready: boolean; 
   return (
     <TooltipProvider>
       <ThreadPrimitive.Root className="@container/thread relative flex h-full min-h-0 flex-col">
+        {/* turnAnchor="top" scrolls each new prompt to the top once and never follows the reply down, so the reader
+            starts at the beginning of the answer. */}
         <ThreadPrimitive.Viewport
           ref={viewport}
-          scrollToBottomOnInitialize={!focusMessageId}
-          autoScroll={autoScroll}
+          turnAnchor="top"
+          topAnchorMessageClamp={clamp}
+          scrollToBottomOnInitialize={scrollToBottomOnLoad}
           className="@container flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-8 scrollbar-thin"
         >
           {view === "empty" ? (
@@ -74,23 +95,32 @@ export function Thread({ ready, focusMessageId, hasHistory }: { ready: boolean; 
                   </ThreadPrimitive.Messages>
                 )}
               </div>
-              <ThreadPrimitive.ViewportFooter className="pointer-events-none sticky bottom-0 mt-auto bg-gradient-to-t from-background from-60% pt-8 pb-4">
-                <div className="pointer-events-auto relative mx-auto w-full max-w-chat">
-                  {view === "messages" && (
-                    <ThreadPrimitive.ScrollToBottom
-                      aria-label="Scroll to bottom"
-                      className="absolute -top-12 left-1/2 flex size-8 -translate-x-1/2 items-center justify-center rounded-full border bg-popover text-muted-foreground shadow-float transition-opacity duration-200 ease-orbit hover:text-foreground disabled:pointer-events-none disabled:opacity-0"
-                    >
-                      <ArrowDownIcon weight="regular" className="size-4" />
-                    </ThreadPrimitive.ScrollToBottom>
-                  )}
-                  <Composer ready={ready} />
+              {/* Below the fade everything is opaque, and the strip holds its height while messages load and while the
+                  button is hidden, so text never shows behind the button and the composer never moves. */}
+              <ThreadPrimitive.ViewportFooter className="pointer-events-none sticky bottom-0 mt-auto">
+                <div aria-hidden className="h-4 bg-gradient-to-t from-background to-transparent" />
+                <div className="pointer-events-auto bg-background pb-[max(1rem,env(safe-area-inset-bottom))]">
+                  <div data-jump-strip className="relative flex h-11 items-center justify-center bg-background">
+                    {view === "messages" && (
+                      <ThreadPrimitive.ScrollToBottom
+                        data-scroll-to-bottom
+                        className="flex items-center gap-1.5 rounded-full border bg-popover px-3 py-1.5 text-meta text-muted-foreground shadow-card transition-opacity duration-200 ease-orbit outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-0"
+                      >
+                        <ArrowDownIcon weight="regular" className="size-3.5" />
+                        Jump to latest
+                      </ThreadPrimitive.ScrollToBottom>
+                    )}
+                    <div ref={setPromptsSlot} className="absolute inset-y-0 right-0 flex items-center" />
+                  </div>
+                  <div className="mx-auto w-full max-w-chat">
+                    <Composer ready={ready} />
+                  </div>
                 </div>
               </ThreadPrimitive.ViewportFooter>
             </>
           )}
         </ThreadPrimitive.Viewport>
-        {view === "messages" ? <ThreadMap viewport={viewport} /> : null}
+        {view === "messages" ? <ThreadMap viewport={viewport} stripSlot={promptsSlot} /> : null}
       </ThreadPrimitive.Root>
     </TooltipProvider>
   );

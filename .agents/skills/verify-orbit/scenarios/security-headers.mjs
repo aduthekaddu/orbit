@@ -40,7 +40,7 @@ export default async function securityHeaders({ page, origin, step, shot }) {
     await page.locator('[data-message-role="assistant"]').nth(previousReplies).waitFor({ timeout: 30_000 });
     await reply.getByRole("button", { name: "Regenerate", exact: true }).waitFor({ timeout: 30_000 });
     await reply.locator('[data-status="complete"]').waitFor({ timeout: 30_000 });
-    await reply.getByRole("button", { name: "Preview", exact: true }).click();
+    await reply.getByRole("button", { name: /^Open / }).click();
     await iframe.waitFor({ timeout: 10_000 });
   }
   async function close() {

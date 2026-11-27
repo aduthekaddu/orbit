@@ -707,13 +707,17 @@ async function driveSignup() {
     writeEvidence("signup", lines);
     fail(`signup status ${created.status}`);
   }
+  // With no chats, / redirects to a draft at /c/<id>?new. The chats row appears with the first message.
   const home = await request("/", { cookies });
   lines.push(`home status ${home.status}`);
   lines.push(`home location ${home.location ?? "none"}`);
-  const chatPath = home.location?.startsWith("http") ? new URL(home.location).pathname : home.location;
-  if ((home.status !== 307 && home.status !== 302) || !chatPath?.startsWith("/c/")) {
+  const target = new URL(home.location ?? "/", ORIGIN);
+  const chatPath = `${target.pathname}${target.search}`;
+  const draft = /^\/c\/[0-9a-f-]{36}$/.test(target.pathname) && target.searchParams.has("new");
+  lines.push(`home opens a draft ${draft ? "yes" : "no"}`);
+  if ((home.status !== 307 && home.status !== 302) || !draft) {
     writeEvidence("signup", lines);
-    fail("home did not redirect to a chat");
+    fail("home did not redirect to a draft chat at /c/<id>?new");
   }
   const chatPage = await request(chatPath, { cookies });
   lines.push(`chat page status ${chatPage.status}`);
@@ -742,10 +746,10 @@ async function driveSignup() {
   });
   lines.push(`second signup status ${again.status}`);
   writeEvidence("signup", lines);
-  if (chatPage.status !== 200 || !chatPage.text.includes("Connect a provider")) fail("chat page does not show the provider form");
-  if (listed.status !== 200 || count < 1) fail("chat list empty");
+  if (chatPage.status !== 200 || !chatPage.text.includes("Connect a provider")) fail("draft page does not show the provider form");
+  if (listed.status !== 200 || count !== 0) fail(`chat list has ${count} chats before the first message`);
   if (loggedOut.status !== 401) fail(`logged out chats status ${loggedOut.status}`);
-  if (users !== 1 || chats < 1) fail(`db users ${users} chats ${chats}`);
+  if (users !== 1 || chats !== 0) fail(`db users ${users} chats ${chats}, expected 1 and 0`);
   if (again.status !== 403) fail(`second signup status ${again.status}`);
   console.log("drive signup passed");
 }

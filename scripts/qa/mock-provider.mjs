@@ -312,6 +312,65 @@ export default () => {
   "artifact-error": ["html", `<h1>Artifact error</h1><script>throw new Error('Artifact exploded');</script>`],
 };
 
+// A form artifact for card, title, download name, and themed preview checks. It streams line by line
+// over about three seconds, so a check can see the card while the reply is still streaming.
+const artifactFormCode = `<title>Signup form</title>
+<h1>Join the beta</h1>
+<form>
+  <label for="email">Email</label>
+  <input id="email" type="email" placeholder="you@example.com">
+  <label for="plan">Plan</label>
+  <select id="plan">
+    <option>Free</option>
+    <option>Team</option>
+  </select>
+  <button type="submit">Join</button>
+</form>
+<table>
+  <thead>
+    <tr><th>Plan</th><th>Seats</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Free</td><td>1</td></tr>
+    <tr><td>Team</td><td>10</td></tr>
+  </tbody>
+</table>`;
+
+// A 30-line Python block whose line 15 is 200 characters long, for code wrap checks.
+const wideCodeLines = Array.from({ length: 30 }, (_, index) => {
+  const line = index + 1;
+  if (line === 15) {
+    const head = `wide = "`;
+    return `${head}${"w".repeat(200 - head.length - 1)}"`;
+  }
+  return `value_${line} = ${line} * 2  # line ${line}`;
+});
+const wideCodeReply = `Here is the script.\n\n\`\`\`python\n${wideCodeLines.join("\n")}\n\`\`\`\n\nLine 15 is the wide one.`;
+
+// 80 markdown paragraphs, sent one every 100ms, so a long reply streams for about 8 seconds.
+const slowLongParagraphs = Array.from(
+  { length: 80 },
+  (_, index) =>
+    `**Paragraph ${index + 1} of 80.** The reader should still see the start of this answer while it streams, because the prompt stays pinned near the top and new text grows below it without moving the page.\n\n`,
+);
+
+function pacedResponse(res, parts, intervalMs) {
+  start(res);
+  let index = 0;
+  const timer = setInterval(() => {
+    if (index >= parts.length) {
+      clearInterval(timer);
+      send(res, chunk([{ index: 0, delta: {}, finish_reason: "stop" }]));
+      res.write("data: [DONE]\n\n");
+      res.end();
+      return;
+    }
+    send(res, chunk([{ index: 0, delta: { content: parts[index] }, finish_reason: null }]));
+    index += 1;
+  }, intervalMs);
+  res.on("close", () => clearInterval(timer));
+}
+
 // A long deploy guide for reading checks: every heading level, paragraphs that wrap several lines in a
 // 36rem column, inline code in prose and in a table cell, a nested list, a quote, a table, two code
 // blocks (the second longer than 20 lines, so it collapses), and one unbroken URL.
@@ -1079,6 +1138,19 @@ const server = http.createServer((req, res) => {
     }
     if (scenario === "artifact-multiple") {
       textResponse(res, "```html\n<h1>First artifact</h1>\n```\n\n```html\n<h1>Second artifact</h1>\n```\n\n```html\n<h1>Third artifact</h1>\n```");
+      return;
+    }
+    if (scenario === "artifact-form") {
+      const lines = artifactFormCode.split("\n").map((line) => `${line}\n`);
+      pacedResponse(res, ["```html\n", ...lines, "```"], 3_000 / (lines.length + 2));
+      return;
+    }
+    if (scenario === "wide-code") {
+      textResponse(res, wideCodeReply);
+      return;
+    }
+    if (scenario === "slow-long") {
+      pacedResponse(res, slowLongParagraphs, 100);
       return;
     }
     if (Object.hasOwn(artifactReplies, scenario)) {

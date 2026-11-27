@@ -5,40 +5,46 @@ import { FirstRun } from "@/components/settings/first-run";
 import { getModelDefaults } from "@/lib/connections";
 import { effortLevels } from "@/lib/effort";
 import { cachedCaps } from "@/lib/model-list";
-import { getChatForUser, messageRepository } from "@/lib/messages";
+import { chatExists, getChatForUser, messageRepository } from "@/lib/messages";
 import { resolveChoice } from "@/lib/model-choice";
 import { artifactHistory } from "@/lib/artifacts/history";
+import { LIMITS } from "@/lib/route-schema";
 import { requireUser } from "@/lib/session";
 import { publicConnections } from "@/lib/settings";
-import { focusedHead } from "@/lib/chat-tree";
+import { focusedHead, toRepository } from "@/lib/chat-tree";
 import { findActiveReplyRun } from "@/lib/reply-runs";
 
 export const dynamic = "force-dynamic";
+
+// A draft has no row yet, so it resolves the user's defaults like a chat with nothing pinned.
+const NOTHING_PINNED = { connectionId: null, model: null, reasoningEffort: null };
 
 export default async function ChatPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ m?: string | string[]; artifact?: string | string[] }>;
+  searchParams: Promise<{ m?: string | string[]; artifact?: string | string[]; new?: string | string[] }>;
 }) {
   const session = await requireUser();
   const { id } = await params;
   const query = await searchParams;
   const focusMessageId = typeof query.m === "string" ? query.m : null;
   const chat = getChatForUser(id, session.user.id);
-  if (!chat) notFound();
-  const saved = messageRepository(id);
+  // `?new` opens a draft only for an id no one has used. Another user's chat, or a deleted one without `?new`, is a 404.
+  const isDraft = chat === null;
+  if (isDraft && (query.new === undefined || id.length > LIMITS.id || chatExists(id))) notFound();
+  const saved = isDraft ? toRepository([], null) : messageRepository(id);
   const repository = artifactHistory(saved, typeof query.artifact === "string" ? query.artifact : undefined);
   const selectedHead = focusedHead(
     repository.messages.map(({ message, parentId }) => ({ id: message.id, parentId })),
     repository.headId,
     focusMessageId,
   );
-  const active = findActiveReplyRun(id, session.user.id);
+  const active = isDraft ? null : findActiveReplyRun(id, session.user.id);
   const liveReplyId = active && selectedHead === active.promptId ? active.replyId : null;
-  const restorePending = active ? liveReplyId !== null : selectedHead === saved.headId;
-  const resolved = resolveChoice(session.user.id, chat);
+  const restorePending = isDraft ? false : active ? liveReplyId !== null : selectedHead === saved.headId;
+  const resolved = resolveChoice(session.user.id, chat ?? NOTHING_PINNED);
   if (!resolved.ok && repository.messages.length === 0) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto pt-[8vh] scrollbar-thin">
@@ -54,7 +60,7 @@ export default async function ChatPage({
   }
   return (
     <div className="min-h-0 flex-1">
-      <ChatPanel key={`${id}:${focusMessageId ?? ""}`} chatId={id} focusMessageId={focusMessageId} initialHistory={repository} choice={resolved.ok || resolved.reason === "key-unreadable" ? resolved.choice : null} choiceLevels={resolved.ok ? effortLevels(resolved.connection.kind, cachedCaps(resolved.connection.id, resolved.choice.model)) : null} connections={publicConnections(session.user.id)} liveReplyId={liveReplyId} restorePending={restorePending} />
+      <ChatPanel key={`${id}:${focusMessageId ?? ""}`} chatId={id} isDraft={isDraft} focusMessageId={focusMessageId} initialHistory={repository} choice={resolved.ok || resolved.reason === "key-unreadable" ? resolved.choice : null} choiceLevels={resolved.ok ? effortLevels(resolved.connection.kind, cachedCaps(resolved.connection.id, resolved.choice.model)) : null} connections={publicConnections(session.user.id)} liveReplyId={liveReplyId} restorePending={restorePending} />
     </div>
   );
 }

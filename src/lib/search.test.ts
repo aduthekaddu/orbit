@@ -8,6 +8,7 @@ import * as messages from "./messages";
 import * as search from "./search";
 
 const redact = new Redactor(null);
+const fixtureMarkers = { start: "\uE000", end: "\uE001" };
 
 let db: OrbitDb;
 
@@ -24,6 +25,15 @@ after(() => {
 
 function part(id: string, role: "user" | "assistant", text: string) {
   return { id, role, parts: [{ type: "text", text }] };
+}
+
+// The words a snippet flags as matches, and its text as the palette shows it.
+function matched(snippet: search.SnippetPart[] | undefined) {
+  return (snippet ?? []).filter((part) => part.match).map((part) => part.text);
+}
+
+function joined(snippet: search.SnippetPart[] | undefined) {
+  return (snippet ?? []).map((part) => part.text).join("");
 }
 
 // The prompt a test reply with this id answers.
@@ -93,7 +103,11 @@ test("a stored word matches and the snippet marks it", () => {
   assert.equal(hits[0]?.messageId, "m-zebra");
   assert.equal(hits[0]?.chatTitle, "Notes");
   assert.equal(hits[0]?.role, "assistant");
-  assert.match(hits[0]?.snippet ?? "", /\[zebracorn\]/);
+  assert.deepEqual(hits[0]?.snippet, [
+    { text: "A ", match: false },
+    { text: "zebracorn", match: true },
+    { text: " stood in the road.", match: false },
+  ]);
 });
 
 test("a prefix of the last token matches", () => {
@@ -210,7 +224,7 @@ test("text that only a code run printed is found, and the hit opens that message
   assert.equal(hits.length, 1);
   assert.equal(hits[0]?.messageId, "m-out");
   assert.equal(hits[0]?.chatTitle, "Notes");
-  assert.match(hits[0]?.snippet ?? "", /\[rainbow-gizmo7\]/);
+  assert.deepEqual(matched(hits[0]?.snippet), ["rainbow-gizmo7"]);
 });
 
 test("standard error is found too", () => {
@@ -231,7 +245,7 @@ test("the source of a code run is found, and the hit opens that message", () => 
   const hits = search.searchMessages("u1", "sourceonlytoken5");
   assert.deepEqual(hits.map((hit) => hit.messageId), ["m-src"]);
   assert.equal(hits[0]?.role, "assistant");
-  assert.match(hits[0]?.snippet ?? "", /\[sourceonlytoken5\]/);
+  assert.deepEqual(matched(hits[0]?.snippet), ["sourceonlytoken5"]);
 });
 
 test("the source of a run that was stopped is found", () => {
@@ -271,7 +285,7 @@ test("colored output is found by its words and the snippet has no escape bytes",
   assert.equal(reply("c1", [prompt("m-ansi")], toolMessage("m-ansi", { stdout: "\u001b[31mcrimsonword8\u001b[0m\n" })), true);
   const hits = search.searchMessages("u1", "crimsonword8");
   assert.equal(hits.length, 1);
-  assert.doesNotMatch(hits[0]?.snippet ?? "", /\u001b|\[31m/);
+  assert.doesNotMatch(joined(hits[0]?.snippet), /\u001b|\[31m/);
 });
 
 test("a reopened chat still finds output-only text after the message is saved again", () => {
@@ -280,4 +294,65 @@ test("a reopened chat still finds output-only text after the message is saved ag
   if ("error" in plan) assert.fail(`write refused: ${plan.error}`);
   assert.equal(messages.finishChatReply(plan, again.parts, redact), true);
   assert.deepEqual(search.searchMessages("u1", "rainbow-gizmo7").map((hit) => hit.messageId), ["m-out"]);
+});
+
+test("a snippet drops markdown markers, also where a heading follows the leading ellipsis", () => {
+  const filler = "one two three four five six seven eight nine ten eleven twelve thirteen fourteen";
+  const text = `${filler}\n\n## Kettlewing notes\n- **bold** \`code\``;
+  assert.equal(reply("c1", [prompt("m-md")], part("m-md", "assistant", text)), true);
+  const [hit] = search.searchMessages("u1", "kettlewing");
+  assert.equal(hit?.messageId, "m-md");
+  assert.deepEqual(matched(hit?.snippet), ["Kettlewing"]);
+  assert.match(joined(hit?.snippet), /^…/);
+  assert.doesNotMatch(joined(hit?.snippet), /#|\*|`|\]\(|[\uE000\uE001]/);
+  assert.match(joined(hit?.snippet), / Kettlewing notes bold code$/);
+
+  // FTS5 starts a snippet at a token, so this is the shape plainText sees when a cut lands on a marker.
+  assert.deepEqual(search.snippetParts("…## \uE000Deploy\uE001 steps\n- **run** [it](https://example.com/\uE000deploy\uE001)", fixtureMarkers), [
+    { text: "…", match: false },
+    { text: "Deploy", match: true },
+    { text: " steps run it", match: false },
+  ]);
+});
+
+test("a snippet preserves literal identifiers and terminal glyphs", () => {
+  const text = "Status \uE000 row_id and 2 * 3 \uE001 are columns.";
+  assert.equal(reply("c1", [prompt("m-literal")], part("m-literal", "assistant", text)), true);
+  const hit = search.searchMessages("u1", "columns").find((row) => row.messageId === "m-literal");
+  assert.equal(joined(hit?.snippet), text);
+  assert.deepEqual(matched(hit?.snippet), ["columns"]);
+});
+
+test("a phrase spanning a markdown link highlights only the displayed link label", () => {
+  const text = "See [orbitguide](https://example.com/notes) and read the next line.";
+  assert.equal(reply("c1", [prompt("m-link")], part("m-link", "assistant", text)), true);
+  const hit = search.searchMessages("u1", "orbitguide](https").find((row) => row.messageId === "m-link");
+  assert.equal(joined(hit?.snippet), "See orbitguide and read the next line.");
+  assert.deepEqual(matched(hit?.snippet), ["orbitguide"]);
+});
+
+test("literal brackets in a message stay plain text in its snippet", () => {
+  assert.equal(reply("c1", [prompt("m-tag")], part("m-tag", "assistant", "Please [qa:remember] the quokkafern")), true);
+  const [byWord] = search.searchMessages("u1", "quokkafern");
+  assert.deepEqual(byWord?.snippet, [{ text: "Please [qa:remember] the ", match: false }, { text: "quokkafern", match: true }]);
+  const [byTag] = search.searchMessages("u1", "remember");
+  assert.deepEqual(byTag?.snippet, [
+    { text: "Please [qa:", match: false },
+    { text: "remember", match: true },
+    { text: "] the quokkafern", match: false },
+  ]);
+});
+
+test("a snippet of one 50,000-letter run is built within a second and carries no marker characters", () => {
+  assert.equal(reply("c1", [prompt("m-run")], part("m-run", "assistant", `yakfrost ${"a".repeat(50_000)}`)), true);
+  const started = performance.now();
+  const [hit] = search.searchMessages("u1", "yakfrost");
+  const elapsed = performance.now() - started;
+  assert.ok(elapsed < 1_000, `search took ${elapsed.toFixed(0)} ms`);
+  assert.deepEqual(matched(hit?.snippet), ["yakfrost"]);
+  assert.doesNotMatch(joined(hit?.snippet), /[\uE000\uE001]/);
+  const parts = "\uE000a\uE001 ".repeat(25_000);
+  const scanned = performance.now();
+  assert.equal(search.snippetParts(parts, fixtureMarkers).filter((part) => part.match).length, 25_000);
+  assert.ok(performance.now() - scanned < 1_000, "scanning 25,000 matches took over a second");
 });

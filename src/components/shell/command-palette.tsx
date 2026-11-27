@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { Command, defaultFilter } from "cmdk";
 import { BrainIcon, ChatCircleIcon, GearSixIcon, MagnifyingGlassIcon, NotePencilIcon } from "@phosphor-icons/react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ScrollFade } from "@/components/ui/scroll-fade";
-import { chatLabel, type ChatSummary } from "@/components/chat/sidebar";
+import { chatLabel, type ChatSummary } from "@/components/chat/chat-row-menu";
 import { ShortcutKbd } from "./shortcuts";
 import { useLoaded } from "@/lib/request-json";
 import { paletteSearchNotice } from "./palette-search";
@@ -21,41 +21,47 @@ function filter(value: string, search: string, keywords?: string[]) {
   return defaultFilter(keywords?.length ? keywords.join(" ") : value, search);
 }
 
-type MessageHit = { chatId: string; chatTitle: string; messageId: string; snippet: string };
+// A snippet arrives as plain text split into parts; `match` marks the words the query found.
+const messageHit = z.object({
+  chatId: z.string(),
+  chatTitle: z.string(),
+  messageId: z.string(),
+  snippet: z.array(z.object({ text: z.string(), match: z.boolean() })),
+});
+type MessageHit = z.infer<typeof messageHit>;
 
+// A hit that does not parse is left out instead of failing the whole search.
 const searchHits = z.object({ hits: z.array(z.unknown()) }).transform(({ hits }) =>
   hits.flatMap((hit) => {
-    if (!hit || typeof hit !== "object") return [];
-    const row = hit as Record<string, unknown>;
-    if (
-      typeof row.chatId !== "string" ||
-      typeof row.chatTitle !== "string" ||
-      typeof row.messageId !== "string" ||
-      typeof row.snippet !== "string"
-    ) {
-      return [];
-    }
-    return [{ chatId: row.chatId, chatTitle: row.chatTitle, messageId: row.messageId, snippet: row.snippet } satisfies MessageHit];
+    const parsed = messageHit.safeParse(hit);
+    return parsed.success ? [parsed.data] : [];
   }),
 );
+
+function snippetText(snippet: MessageHit["snippet"]) {
+  return snippet.map((part) => part.text).join("");
+}
 
 export function CommandPalette({
   open,
   onOpenChange,
   chats,
+  hiddenChatIds,
   onNewChat,
   onAction,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   chats: ChatSummary[];
+  /** Chats deleted or waiting for Undo. Their message hits stay out of the list. */
+  hiddenChatIds: ReadonlySet<string>;
   onNewChat: () => void;
   onAction: () => void;
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [messageSearch, loadSearch, , resetSearch] = useLoaded<MessageHit[]>({ status: "idle" });
-  const hits = messageSearch.status === "done" ? messageSearch.data : [];
+  const hits = messageSearch.status === "done" ? messageSearch.data.filter((hit) => !hiddenChatIds.has(hit.chatId)) : [];
   const notice = paletteSearchNotice(messageSearch.status);
 
   useEffect(() => {
@@ -90,7 +96,7 @@ export function CommandPalette({
         className="top-[15vh] translate-y-0 gap-0 overflow-hidden bg-popover p-0 sm:max-w-xl"
       >
         <DialogTitle className="sr-only">Command palette</DialogTitle>
-        <Command filter={filter} loop>
+        <Command filter={filter} loop className="min-w-0">
           <div className="flex items-center gap-2.5 border-b px-3.5">
             <MagnifyingGlassIcon weight="light" className="size-4 shrink-0 text-muted-foreground" />
             <Command.Input value={search} onValueChange={setSearch} placeholder="Search" className="h-12 flex-1 bg-transparent text-field outline-none placeholder:text-muted-foreground" />
@@ -126,7 +132,7 @@ export function CommandPalette({
                       className={itemClass}
                     >
                       <ChatCircleIcon weight="light" className="size-4 shrink-0" />
-                      <span className="truncate">{chatLabel(chat.title)}</span>
+                      <span className="min-w-0 truncate">{chatLabel(chat.title)}</span>
                     </Command.Item>
                   ))}
                 </Command.Group>
@@ -137,14 +143,24 @@ export function CommandPalette({
                     <Command.Item
                       key={hit.messageId}
                       value={hit.messageId}
-                      keywords={[chatLabel(hit.chatTitle), hit.snippet, search]}
+                      keywords={[chatLabel(hit.chatTitle), snippetText(hit.snippet), search]}
                       onSelect={() => run(() => router.push(`/c/${hit.chatId}?m=${encodeURIComponent(hit.messageId)}`))}
                       className="flex cursor-pointer items-start gap-2.5 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground select-none data-[selected=true]:bg-accent data-[selected=true]:text-foreground"
                     >
                       <ChatCircleIcon weight="light" className="mt-0.5 size-4 shrink-0" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{chatLabel(hit.chatTitle)}</span>
-                        <span className="block truncate">{hit.snippet}</span>
+                        <span className="block truncate">
+                          {hit.snippet.map((part, index) =>
+                            part.match ? (
+                              <mark key={index} className="bg-transparent font-medium text-foreground">
+                                {part.text}
+                              </mark>
+                            ) : (
+                              <Fragment key={index}>{part.text}</Fragment>
+                            ),
+                          )}
+                        </span>
                       </span>
                     </Command.Item>
                   ))}

@@ -35,10 +35,10 @@ type ReserveResult =
   | { ok: false; reason: "busy" | "user-limit" };
 
 const globalRuns = globalThis as typeof globalThis & {
-  __orbitReplyRuns?: { runs: Map<string, ReplyRun>; ended: Set<ReplyRun>; endedBytes: number };
+  __orbitReplyRuns?: { runs: Map<string, ReplyRun>; ended: Set<ReplyRun>; endedBytes: number; deleting: Map<string, Promise<boolean>> };
 };
-const registry = globalRuns.__orbitReplyRuns ??= { runs: new Map(), ended: new Set(), endedBytes: 0 };
-const { runs, ended } = registry;
+const registry = globalRuns.__orbitReplyRuns ??= { runs: new Map(), ended: new Set(), endedBytes: 0, deleting: new Map() };
+const { runs, ended, deleting } = registry;
 
 function evictEnded(run: ReplyRun) {
   if (run.state.kind !== "ended" || !ended.delete(run)) return;
@@ -52,6 +52,7 @@ export async function reserveReplyRun(
   userId: string,
   { stopWaitMs = STOP_WAIT_MS }: { stopWaitMs?: number } = {},
 ): Promise<ReserveResult> {
+  if (deleting.has(chatId)) return { ok: false, reason: "busy" };
   const current = runs.get(chatId);
   if (current?.state.kind === "stopping") {
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -63,6 +64,7 @@ export async function reserveReplyRun(
   }
 
   // Re-read after waiting so only one retry can claim the chat.
+  if (deleting.has(chatId)) return { ok: false, reason: "busy" };
   const previous = runs.get(chatId);
   if (previous && previous.state.kind !== "ended") return { ok: false, reason: "busy" };
   let active = 0;
@@ -217,6 +219,26 @@ export async function discardReplyRun(chatId: string) {
   abortRun(run, "discarded");
   await run.done;
   evictEnded(run);
+}
+
+/** Hold the reply slot from the start of discard through the synchronous removal of the chat. */
+export function deleteAfterReply(chatId: string, remove: () => boolean): Promise<boolean> {
+  const existing = deleting.get(chatId);
+  if (existing) return existing;
+
+  const { promise, resolve, reject } = Promise.withResolvers<boolean>();
+  deleting.set(chatId, promise);
+  void discardReplyRun(chatId).then(remove).then(
+    (removed) => {
+      deleting.delete(chatId);
+      resolve(removed);
+    },
+    (error: unknown) => {
+      deleting.delete(chatId);
+      reject(error);
+    },
+  );
+  return promise;
 }
 
 export async function resetReplyRunsForTest() {

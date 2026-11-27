@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test, { afterEach } from "node:test";
 import type { UIMessageChunk } from "ai";
 import {
-  bindReplyPlan, discardReplyRun, findReplyRun, MAX_RUNNING_PER_USER, releaseReplyRun,
+  bindReplyPlan, deleteAfterReply, discardReplyRun, findReplyRun, MAX_RUNNING_PER_USER, releaseReplyRun,
   replyResponse, reserveReplyRun, resetReplyRunsForTest, startReplyRun, stopReplyRun, watchReply,
 } from "./reply-runs";
 
@@ -229,4 +229,34 @@ test("reply responses include the server clock timestamp header", async () => {
   assert.ok(raw !== null && /^\d+$/.test(raw), `expected server time header, got ${String(raw)}`);
   const serverTime = Number(raw);
   assert.ok(serverTime >= before && serverTime <= after, `expected ${serverTime} within [${before}, ${after}]`);
+});
+
+test("a chat deletion holds the reply slot until removal and joins duplicate deletes", async () => {
+  const run = await reserve();
+  let removed = 0;
+  const deletion = deleteAfterReply("chat", () => {
+    removed++;
+    return true;
+  });
+  assert.equal(run.controller.signal.reason, "discarded");
+  assert.equal(deleteAfterReply("chat", () => assert.fail("second deletion ran")), deletion);
+  const reserved = await reserveReplyRun("chat", "user");
+  releaseReplyRun(run);
+  if (reserved.ok) releaseReplyRun(reserved.run);
+  assert.deepEqual(reserved, { ok: false, reason: "busy" });
+  assert.equal(await deletion, true);
+  assert.equal(removed, 1);
+  releaseReplyRun(await reserve());
+});
+
+test("removing a chat also holds the slot for a finished reply", async () => {
+  const run = await reserve();
+  startReplyRun(run, new ReadableStream({ start(controller) { controller.close(); } }), () => null);
+  await run.done;
+  const deletion = deleteAfterReply("chat", () => true);
+  const reserved = await reserveReplyRun("chat", "user");
+  if (reserved.ok) releaseReplyRun(reserved.run);
+  assert.deepEqual(reserved, { ok: false, reason: "busy" });
+  assert.equal(await deletion, true);
+  assert.equal(findReplyRun("chat", "user", "reply-chat"), null);
 });

@@ -5,7 +5,8 @@ import test, { after, before } from "node:test";
 import { Redactor } from "./chat-errors";
 import { addConnection as saveConnection, deleteConnection, listConnections, seedConnection } from "./connections";
 import { getDb } from "./db";
-import { ensureChat, finishChatReply, listMessages, planChatWrite } from "./messages";
+import { chats } from "./db/schema";
+import { finishChatReply, getChatForUser, listMessages, planChatWrite } from "./messages";
 import { resolveChoice, setChatChoice, type ModelChoice, type ReplyRecord } from "./model-choice";
 import { encryptSecret } from "./secrets";
 
@@ -54,7 +55,9 @@ function setDefaults(userId: string, connectionId: string | null, model: string 
 }
 
 function chat(id: string, userId = ONE) {
-  const row = ensureChat(id, userId);
+  const now = new Date();
+  getDb().insert(chats).values({ id, userId, title: "New chat", createdAt: now, updatedAt: now }).onConflictDoNothing().run();
+  const row = getChatForUser(id, userId);
   assert.ok(row, `chat ${id}`);
   return row;
 }
