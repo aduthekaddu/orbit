@@ -42,6 +42,7 @@ test("a <title> inside an inline SVG does not name an HTML page", () => {
 test("tag names match whole words and any letter case", () => {
   assert.equal(title("html", "<TITLE>Upper case</TITLE>"), "Upper case");
   assert.equal(title("html", "<titles>Not a title</titles><header>Top</header><h1>Real</h1>"), "Real");
+  assert.equal(title("html", "<p>İİİİ</p><title>İstanbul guide</title>"), "İstanbul guide");
 });
 
 test("an SVG title comes from its <title>", () => {
@@ -89,6 +90,8 @@ test("titles stop at 80 characters", () => {
   const result = title("html", `<title>${long}</title>`);
   assert.equal(result, long.slice(0, 80).trimEnd());
   assert.ok(result.length <= 80);
+  const astral = "𝒜".repeat(100);
+  assert.equal(title("html", `<title>${astral}</title>`), "𝒜".repeat(80));
 });
 
 test("an empty or tag-only title falls back to the kind name", () => {
