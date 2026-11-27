@@ -31,7 +31,7 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 
 ## Features
 
-- [Sign up](./signup.md) creates the only account, opens a chat, and closes signup.
+- [Sign up](./signup.md) creates the only account, opens a draft chat with no chat row, and closes signup.
 - [Sign in](./signin.md) returns that account to a chat.
 - [Settings](./settings.md) stores a provider without returning the key.
 - [Chat](./chat.md) streams one turn and reads it back from SQLite.

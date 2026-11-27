@@ -1,11 +1,11 @@
 # Sign up
 
-Sign up creates the only account from `/signup`, opens a new chat, and rejects a second account.
+Sign up creates the only account from `/signup`, opens a draft chat, and rejects a second account.
 
 ## Sub-features
 
 - `signup-page` shows the create-account form while the user table is empty.
-- `signup-create` stores that account and opens a chat.
+- `signup-create` stores that account and opens a draft chat with no `chats` row.
 - `signup-closed` rejects another account.
 - `signup-gate` hides chats from a logged-out request.
 
@@ -23,9 +23,9 @@ Preconditions:
 
 - **Open the form.** Visit `/signup`. The drive checks HTTP 200 and the text `Create account`.
 - **Create the account.** The drive posts name `Verify`, email `verify@orbit.local`, and the fixture password to `/api/auth/sign-up/email` with `Origin: http://127.0.0.1:<port>`. Status 200.
-- **Land in a chat.** `GET /` with the session cookie returns 302 or 307 to `/c/<id>`. `GET` that path returns 200 and the text `Connect a provider`. Launch gives the server no provider settings, so the first chat shows the provider form and not the composer.
-- **See the chat in the list.** `GET /api/chats` returns 200 and at least one chat. The same request without a cookie returns 401.
-- **Read the database.** `.verify/sandbox/data/orbit.db` has 1 row in `user` and at least 1 row in `chats`.
+- **Land in a draft.** `GET /` with the session cookie returns 302 or 307 to `/c/<id>?new`. `GET` that path returns 200 and the text `Connect a provider`. Launch gives the server no provider settings, so the draft shows the provider form and not the composer.
+- **No empty chat.** `GET /api/chats` returns 200 and no chats, because a chat row appears only with its first message. The same request without a cookie returns 401.
+- **Read the database.** `.verify/sandbox/data/orbit.db` has 1 row in `user` and 0 rows in `chats`.
 - **Second account.** A signup for `other@orbit.local` returns 403.
 - **Command.** Run `node .agents/skills/verify-orbit/verify.mjs drive signup`.
 - **Proof.** `.verify/evidence/signup/summary.txt` contains each status, the redirect, and the row counts.
@@ -33,5 +33,5 @@ Preconditions:
 ## Gotchas
 
 - Signup closes after the first user. A sandbox that already has a user fails this drive. Do not delete that user to force a pass.
-- The home page creates a chat and redirects. A 200 on `/` with no redirect means the session was missing or the page did not run.
+- The home page redirects to the newest chat, or to a new draft when there is none. It creates no row. A 200 on `/` with no redirect means the session was missing or the page did not run.
 - The fixture password is not a provider key. Keep it out of the evidence file. The helper redacts it.

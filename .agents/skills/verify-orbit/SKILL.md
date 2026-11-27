@@ -60,7 +60,7 @@ Feature recipes live in `features/`. Read `features/README.md` first. Drive one 
 
 Each drive writes `.verify/evidence/<feature>/summary.txt`. Each browse run writes `.verify/evidence/<scenario>/summary.txt` with its `PASS` and `FAIL` lines, plus one PNG per screenshot. Signup records the statuses, the redirect, the chat list count, and the `user` and `chats` row counts. Signin records the statuses and the redirect location. Settings records each connection request's status and the key-leak checks. Chat records the smoke exit code and the redacted log. No file records cookies or key values.
 
-A proof shows the request and the state after it. For signup, that is the page text, the signup status, the redirect to `/c/<id>`, the composer page, `GET /api/chats`, a logged-out 401, the `user` and `chats` row counts, and a second signup status 403. A final screen with no prior action is not proof.
+A proof shows the request and the state after it. For signup, that is the page text, the signup status, the redirect to a draft at `/c/<id>?new`, the provider form on that draft, `GET /api/chats` with no chats, a logged-out 401, 1 `user` row and 0 `chats` rows, and a second signup status 403. A final screen with no prior action is not proof.
 
 The settings drive uses the fake key `test-key-not-real` against the mock provider, because adding a connection lists its models first. It starts the mock when none runs. It checks that no response has an `apiKey` field or that key, and that `orbit.db` and its WAL file do not hold it.
 

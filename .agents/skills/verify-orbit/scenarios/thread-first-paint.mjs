@@ -5,7 +5,7 @@ function recordPaints() {
   const read = () => {
     const composer = document.querySelector('textarea[placeholder="Ask anything"]');
     const state = {
-      scrollToBottom: Boolean(document.querySelector('[aria-label="Scroll to bottom"]')),
+      scrollToBottom: Boolean(document.querySelector("[data-scroll-to-bottom]")),
       starters: [...document.querySelectorAll("button")].some((node) => node.textContent === "Make a table"),
       messages: document.querySelectorAll("[data-message-id]").length,
       composerTop: composer ? Math.round(composer.getBoundingClientRect().top) : null,
@@ -57,7 +57,7 @@ async function heldLoad({ page, origin, step, shot }, { url, label, saved }) {
 
   const painted = states.filter((state) => state.composerTop !== null);
   const timeline = JSON.stringify(painted);
-  step(`${label}: no Scroll to bottom button before hydration`, !held.scrollToBottom, `held ${JSON.stringify(held)}`);
+  step(`${label}: no Jump to latest button before hydration`, !held.scrollToBottom, `held ${JSON.stringify(held)}`);
   step(
     `${label}: the composer does not move at hydration`,
     held.composerTop !== null && held.composerTop === hydrated.state.composerTop,
@@ -65,7 +65,7 @@ async function heldLoad({ page, origin, step, shot }, { url, label, saved }) {
   );
   if (saved) {
     step(`${label}: no empty-chat layout at any point`, painted.every((state) => !state.starters), timeline);
-    step(`${label}: no Scroll to bottom button over an empty thread`, painted.every((state) => state.messages > 0 || !state.scrollToBottom), timeline);
+    step(`${label}: no Jump to latest button over an empty thread`, painted.every((state) => state.messages > 0 || !state.scrollToBottom), timeline);
   } else {
     step(`${label}: the starters show before hydration`, held.starters, `held ${JSON.stringify(held)}`);
     step(`${label}: the empty layout stays at every point`, painted.every((state) => state.starters && !state.scrollToBottom), timeline);

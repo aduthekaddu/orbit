@@ -42,7 +42,7 @@ export default async function artifactNavigation({ page, origin, step, shot }) {
     await composer.press("Enter");
     await reply.getByRole("button", { name: "Regenerate", exact: true }).waitFor({ timeout: 30_000 });
     await reply.locator('[data-status="complete"]').waitFor({ timeout: 30_000 });
-    await reply.getByRole("button", { name: "Preview", exact: true }).click();
+    await reply.getByRole("button", { name: /^Open / }).click();
     await page.locator('iframe[title="Artifact preview"]').waitFor({ timeout: 10_000 });
 
     // The thrown error reaches the panel through the frame's error report, so it proves the

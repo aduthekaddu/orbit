@@ -14,7 +14,7 @@ export default async function artifactsReal({ page, origin, useProvider, step, s
   await composer.press('Enter');
   const reply = page.locator('[data-message-role="assistant"]').last();
   await reply.getByRole('button', { name: 'Regenerate', exact: true }).waitFor({ timeout: 180_000 });
-  await reply.getByRole('button', { name: 'Preview', exact: true }).first().click();
+  await reply.getByRole('button', { name: /^Open / }).first().click();
   const frame = page.frameLocator('iframe').last();
   const button = frame.getByRole('button').first();
   await button.waitFor({ timeout: 15_000 });

@@ -27,6 +27,6 @@ export default async function composerReadiness({ page, origin, step, shot }) {
   ]);
   step("the first Enter sends the prompt", response.ok(), `POST /api/chat returned ${response.status()}`);
   const reply = page.locator('[data-message-role="assistant"]').last();
-  await reply.getByRole("button", { name: "Preview", exact: true }).waitFor();
+  await reply.getByRole("button", { name: /^Open / }).waitFor();
   step("the first reply appears", true);
 }

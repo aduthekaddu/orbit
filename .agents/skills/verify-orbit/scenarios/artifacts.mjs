@@ -25,7 +25,7 @@ export default async function artifacts({ page, origin, step, shot }) {
   await page.goto(chatUrl);
   const composer = page.getByPlaceholder("Ask anything");
   const reply = page.locator('[data-message-role="assistant"]').last();
-  const previews = reply.getByRole("button", { name: "Preview", exact: true });
+  const previews = reply.getByRole("button", { name: /^Open / });
   const panel = page.getByRole("complementary", { name: "Artifact", exact: true });
   const iframe = page.locator('iframe[title="Artifact preview"]');
   const frame = iframe.contentFrame();
@@ -78,7 +78,7 @@ export default async function artifacts({ page, origin, step, shot }) {
   const hasPreview = await previews.count() === 1;
   if (!hasPreview) {
     await shot("before");
-    step("HTML code block has a Preview button", false, "no Preview button");
+    step("HTML reply has an artifact card with Open", false, "no Open button");
     return;
   }
   step("HTML code block has a Preview button", true);
@@ -234,12 +234,12 @@ export default async function artifacts({ page, origin, step, shot }) {
   }
   await thought.click();
   await draft.waitFor();
-  step("open Thought shows no Preview button for its HTML block", await previews.count() === 1, `${await previews.count()} Preview buttons`);
+  step("open Thought shows no artifact card for its HTML block", await previews.count() === 1, `${await previews.count()} Open buttons`);
   await shot("reasoning-open");
   const whileOpen = await previewShows();
-  step("reply Preview shows the reply's artifact while Thought is open", whileOpen === "Reply artifact", `shows ${whileOpen}`);
+  step("reply Open shows the reply's artifact while Thought is open", whileOpen === "Reply artifact", `shows ${whileOpen}`);
   await thought.click();
   await draft.waitFor({ state: "hidden" });
   const afterClose = await previewShows();
-  step("reply Preview shows the reply's artifact after Thought opens and closes", afterClose === "Reply artifact", `shows ${afterClose}`);
+  step("reply Open shows the reply's artifact after Thought opens and closes", afterClose === "Reply artifact", `shows ${afterClose}`);
 }

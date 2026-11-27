@@ -82,17 +82,11 @@ Screenshot: `save-visible.png`.
 
 ### request-failures
 
-Fails each browser request with `page.route`: New chat (HTTP 500, network, a body with no id, an HTTP 500 from the open drawer at 390 pixels, a held answer with a double click and the shortcut, then a held answer after opening Settings), a connection's model list in Settings, `GET /api/connections/<id>/models` (not JSON, a JSON 400, an HTML 400, network, then real), a second Settings Save while one is held, settings Save and the GitHub check on the network, a GitHub check 400, and a reply edit on the network.
+Fails each browser request with `page.route`: a connection's model list in Settings, `GET /api/connections/<id>/models` (not JSON, a JSON 400, an HTML 400, network, then real), a second Settings Save while one is held, settings Save and the GitHub check on the network, a GitHub check 400, and a reply edit on the network.
 
 Pass lines:
 
 ```
-PASS New chat that gets a 500 shows Could not create chat
-PASS New chat that fails on the network shows Could not create chat
-PASS New chat that gets a body with no id shows Could not create chat and stays put
-PASS New chat that fails from the open mobile drawer shows Could not create chat to screen readers
-PASS a double click and the shortcut during one pending New chat send one request, then open the chat
-PASS a New chat answer that arrives after opening Settings leaves Settings open
 PASS a model list that is not JSON shows Failed, not 0 models
 PASS a model list 400 from a bad request shows Failed, not Not checked
 PASS a model list 400 from a proxy shows Failed, not Not checked
@@ -108,7 +102,9 @@ PASS a reply edit that fails on the network shows Could not save and keeps the e
 PASS no failed request raised a page error
 ```
 
-Screenshots: `new-chat-500.png`, `new-chat-drawer-500.png`, `new-chat-recovered.png`, `new-chat-after-leave.png`, `models-unreadable.png`, `settings-save-held.png`, `settings-save-offline.png`, `github-check-400.png`, `reply-edit-offline.png`.
+New chat opens a draft and sends no request, so it has no failure here. [Thread polish](thread-polish.md) checks drafts.
+
+Screenshots: `models-unreadable.png`, `settings-save-held.png`, `settings-save-offline.png`, `github-check-400.png`, `reply-edit-offline.png`.
 
 ### empty-chat
 
@@ -133,21 +129,22 @@ Screenshots: `starters.png`, `filled.png`, `phone-390x844.png`.
 
 ### sign-out
 
-Opens the older of two new chats, because a signed-in visit to `/login` redirects to the newest chat. Presses **Sign out** three times: with the browser dropping the sign-out request, with the request answered by HTTP 500, and with no route.
+Opens the older of two new chats, because a signed-in visit to `/login` redirects to the newest chat. Presses **Sign out** and checks that it asks `Sign out?` and that **Cancel** keeps the session. Then it confirms three times: with the browser dropping the sign-out request, with the request answered by HTTP 500, and with no route. The failure line shows inside the dialog.
 
 Pass lines:
 
 ```
+PASS Sign out asks Sign out? and Cancel keeps the session
 PASS network error keeps the chat open
-PASS network error shows Could not sign out
+PASS network error shows Could not sign out in the dialog
 PASS network error raises no page error
 PASS HTTP 500 keeps the chat open
-PASS HTTP 500 shows Could not sign out
+PASS HTTP 500 shows Could not sign out in the dialog
 PASS Sign out opens /login
 PASS session ends after Sign out
 ```
 
-Screenshots: `network-error.png`, `http-error.png`, `signed-out.png`.
+Screenshots: `confirm.png`, `network-error.png`, `http-error.png`, `signed-out.png`.
 
 ### auth-submit
 
@@ -185,14 +182,14 @@ Sends one `[qa:plain]` prompt, then opens that chat and a new empty chat with th
 Pass lines, per label `empty chat` and `saved chat`:
 
 ```
-PASS empty chat: no Scroll to bottom button before hydration
+PASS empty chat: no Jump to latest button before hydration
 PASS empty chat: the composer does not move at hydration
 PASS empty chat: the starters show before hydration
 PASS empty chat: the empty layout stays at every point
-PASS saved chat: no Scroll to bottom button before hydration
+PASS saved chat: no Jump to latest button before hydration
 PASS saved chat: the composer does not move at hydration
 PASS saved chat: no empty-chat layout at any point
-PASS saved chat: no Scroll to bottom button over an empty thread
+PASS saved chat: no Jump to latest button over an empty thread
 ```
 
 Screenshots: `<label>-held.png` and `<label>-hydrated.png`, with spaces as dashes.
