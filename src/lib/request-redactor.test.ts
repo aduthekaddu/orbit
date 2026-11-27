@@ -38,7 +38,7 @@ test("viewer-facing redaction separates member and instance credential sources",
 test("trusted output redaction includes the exact call credentials and instance search settings", () => {
   const urlCredential = "fixture-model-url-value";
   const snapshot = { apiKey: "fixture-model-call-key", baseUrl: `https://fixture:${urlCredential}@fixture.invalid/v1` };
-  const { input, output } = modelRedactors(member, snapshot, instance);
+  const { input, output } = modelRedactors(member, snapshot, { ownProvider: true, instance });
   assert.equal(input.isStoredSecret(snapshot.apiKey), true);
   assert.equal(output.isStoredSecret(snapshot.apiKey), true);
   assert.equal(output.isStoredSecret(urlCredential), true);

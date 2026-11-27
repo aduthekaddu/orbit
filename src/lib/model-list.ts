@@ -141,9 +141,9 @@ function parseOpenAiList(payload: unknown): ListedModel[] | null {
   return models;
 }
 
-async function getJson(url: string, headers: Record<string, string>): Promise<unknown> {
+async function getJson(url: string, headers: Record<string, string>, fetchImpl = globalThis.fetch): Promise<unknown> {
   try {
-    const response = await fetch(url, { headers: { accept: "application/json", "user-agent": "orbit/0.1", ...headers }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    const response = await fetchImpl(url, { headers: { accept: "application/json", "user-agent": "orbit/0.1", ...headers }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
     if (!response.ok) return null;
     return await response.json();
   } catch {
@@ -159,31 +159,31 @@ function openAiModelsUrl(baseUrl: string) {
   return url.toString();
 }
 
-async function listOpenAiModels(baseUrl: string, apiKey: string): Promise<ListedModel[] | null> {
+async function listOpenAiModels(baseUrl: string, apiKey: string, fetchImpl?: typeof fetch): Promise<ListedModel[] | null> {
   const base = normalizeBaseUrl(baseUrl);
   const auth = { authorization: `Bearer ${apiKey}` };
   let primary: ListedModel[] | null = null;
   try {
-    primary = parseOpenAiList(await getJson(openAiModelsUrl(base), { ...auth, ...openCodeSessionHeader(base, "models") }));
+    primary = parseOpenAiList(await getJson(openAiModelsUrl(base), { ...auth, ...openCodeSessionHeader(base, "models") }, fetchImpl));
   } catch {
     primary = null;
   }
   if (primary && primary.length > 0) return primary;
   if (base === OPENCODE_GO_BASE_URL) {
-    const fallback = parseOpenAiList(await getJson(OPENCODE_GO_MODELS_URL, { ...auth, "x-opencode-session": "models" }));
+    const fallback = parseOpenAiList(await getJson(OPENCODE_GO_MODELS_URL, { ...auth, "x-opencode-session": "models" }, fetchImpl));
     if (fallback) return fallback;
   }
   return primary;
 }
 
-async function listAnthropicModels(apiKey: string): Promise<ListedModel[] | null> {
+async function listAnthropicModels(apiKey: string, fetchImpl?: typeof fetch): Promise<ListedModel[] | null> {
   const models: ListedModel[] = [];
   let afterId: string | null = null;
   for (let page = 0; page < MAX_ANTHROPIC_PAGES; page++) {
     const url = new URL(`${anthropicBaseUrl()}/models`);
     url.searchParams.set("limit", "1000");
     if (afterId) url.searchParams.set("after_id", afterId);
-    const parsed = anthropicPage.safeParse(await getJson(url.toString(), { "x-api-key": apiKey, "anthropic-version": ANTHROPIC_VERSION }));
+    const parsed = anthropicPage.safeParse(await getJson(url.toString(), { "x-api-key": apiKey, "anthropic-version": ANTHROPIC_VERSION }, fetchImpl));
     if (!parsed.success) return null;
     models.push(...parsed.data.data.map(anthropicModel));
     afterId = parsed.data.has_more ? (parsed.data.last_id ?? parsed.data.data.at(-1)?.id ?? null) : null;
@@ -238,8 +238,8 @@ function masked(models: ListedModel[], redact: Redactor): ListedModel[] {
  * in a model id, so models whose id holds this key or a secret `redact` knows are dropped, and labels are masked,
  * before the list is cached.
  */
-export async function listModels(connection: ProviderConnection, apiKey: string, redact: Redactor, { cache = true } = {}): Promise<ListedModel[] | null> {
-  const models = connection.kind === "anthropic" ? await listAnthropicModels(apiKey) : await listOpenAiModels(connection.baseUrl, apiKey);
+export async function listModels(connection: ProviderConnection, apiKey: string, redact: Redactor, { cache = true, fetch: fetchImpl }: { cache?: boolean; fetch?: typeof fetch } = {}): Promise<ListedModel[] | null> {
+  const models = connection.kind === "anthropic" ? await listAnthropicModels(apiKey, fetchImpl) : await listOpenAiModels(connection.baseUrl, apiKey, fetchImpl);
   if (!models) return null;
   const shown = masked(models, redact.withCredentials({ apiKey, baseUrl: connection.kind === "anthropic" ? undefined : connection.baseUrl }));
   if (cache) rememberModelCaps(connection.id, shown);

@@ -1,5 +1,6 @@
 import { convertToModelMessages, stepCountIs, streamText, toUIMessageStream, type UIMessage, type UIMessageChunk } from "ai";
 import { after } from "next/server";
+import { accountExists } from "@/lib/admin-users";
 import { fallbackModel } from "@/lib/anthropic-fallback";
 import { ARTIFACT_INSTRUCTIONS } from "@/lib/artifacts/detect";
 import { logProviderError, streamErrorMessage } from "@/lib/chat-errors";
@@ -11,14 +12,15 @@ import { attachMemoryNotes, quotedMemoryNotes, recall, REMEMBER_INSTRUCTIONS } f
 import { toolsForTurn } from "@/lib/tools";
 import { answerStepFor, CHAT_STEP_LIMIT } from "@/lib/tools/answer-step";
 import { createStoppedRuns } from "@/lib/tools/stopped-runs";
-import { connectionApiKey, pickableConnection } from "@/lib/connections";
+import { connectionApiKey, mayManageConnections, pickableConnection } from "@/lib/connections";
 import { EFFORTS, effortCallOptions, effortLevels, effortOutcome, titleCallOptions } from "@/lib/effort";
 import { beginTurn, chatExists, finishChatReply, getChatForUser, redactChatTitle, storedAssistantParts, storedMessageIds, textFromParts, touchChat } from "@/lib/messages";
 import { chatChoice, NOTHING_PINNED, resolveChoice, sameChoice, setChatChoice, type ReplyRecord } from "@/lib/model-choice";
 import { cachedCaps } from "@/lib/model-list";
+import { providerFetch } from "@/lib/net-guard";
 import { knownAdaptiveThinking, languageModelFor } from "@/lib/provider";
 import { settleReasoningTimes, stampReasoningTimes, stripOrbitTiming } from "@/lib/reasoning-time";
-import { bindReplyPlan, releaseReplyRun, replyResponse, reserveReplyRun, startReplyRun, type ReplyEndPart, type ReplyEndReason } from "@/lib/reply-runs";
+import { bindReplyPlan, releaseReplyRun, replyResponse, replyWasDiscarded, reserveReplyRun, startReplyRun, type ReplyEndPart, type ReplyEndReason } from "@/lib/reply-runs";
 import { startChatTitle } from "@/lib/titles";
 import { getInstance } from "@/lib/instance-settings";
 import { getMemoryEnabled } from "@/lib/preferences";
@@ -125,7 +127,13 @@ export async function POST(request: Request) {
   const resolveSend = (chat: ReturnType<typeof getChatForUser>) => {
     if (requested && !pickableConnection(session.user, { from: "request", id: requested.connectionId })) return Response.json({ error: "Not found" }, { status: 404 });
     const resolved = resolveChoice(session.user, chat ?? NOTHING_PINNED, requested);
-    if (!resolved.ok) return Response.json({ error: UNRESOLVED[resolved.reason] }, { status: 400 });
+    if (!resolved.ok) {
+      const shared = !mayManageConnections(session.user);
+      const error = shared && resolved.reason === "key-unreadable" ? "The shared provider is unavailable."
+        : shared && resolved.reason === "no-connection" ? "No provider connection is available."
+        : UNRESOLVED[resolved.reason];
+      return Response.json({ error }, { status: 400 });
+    }
     return resolved;
   };
   const early = resolveSend(existingChat);
@@ -151,7 +159,7 @@ export async function POST(request: Request) {
 
   try {
     // Deletion can discard a reservation before this request resumes to write its prompt.
-    if (signal.reason === "discarded") return Response.json({ error: "Not found" }, { status: 404 });
+    if (replyWasDiscarded(run) || !accountExists(userId)) return Response.json({ error: "Not found" }, { status: 404 });
     // A stopping reply can delay this send. Read the choice, credentials, and settings after claiming the slot.
     // A chat deleted while the send waited stays deleted.
     const latestChat = getChatForUser(chatId, userId);
@@ -159,12 +167,14 @@ export async function POST(request: Request) {
     const resolved = resolveSend(latestChat);
     if (resolved instanceof Response) return resolved;
     const { choice, connection } = resolved;
-    const apiKey = connectionApiKey(userId, connection.id);
+    const apiKey = connectionApiKey(connection.userId, connection.id);
     const instance = getInstance();
+    const fetch = providerFetch(instance.hostingMode);
     const github = getGithub(userId);
     const memory = getMemoryEnabled(userId);
     const { input: inputRedact, output: redact } = modelRedactors(
-      session.user, { apiKey, baseUrl: connection.kind === "openai-compatible" ? connection.baseUrl : undefined }, instance, github,
+      session.user, { apiKey, baseUrl: connection.kind === "openai-compatible" ? connection.baseUrl : undefined },
+      { ownProvider: connection.userId === userId, instance, github },
     );
     logRequestError = (message) => redact.logError("chat request error", message);
     const incoming = parsed.data.messages;
@@ -188,7 +198,7 @@ export async function POST(request: Request) {
     const { chat, write, messagesBeforeTurn } = turn;
     bindReplyPlan(run, write.id, write.prompt.id);
     // A chat pins its model on its first send, so a later change of the defaults does not move it.
-    if (!sameChoice(chatChoice(chat), choice)) setChatChoice(chat.id, choice);
+    if (!sameChoice(chatChoice(chat), choice)) setChatChoice(session.user, chat.id, choice);
     const caps = cachedCaps(connection.id, choice.model);
     const levels = connection.kind === "anthropic" ? (caps?.efforts ?? null) : effortLevels(connection.kind, caps);
     const adaptiveThinking = connection.kind === "anthropic"
@@ -205,7 +215,7 @@ export async function POST(request: Request) {
         chatId: chat.id,
         firstMessage: title,
         fallbackTitle: redactChatTitle(title, inputRedact),
-        model: languageModelFor({ connection, apiKey, model: choice.model, chatId: chat.id }),
+        model: languageModelFor({ connection, apiKey, model: choice.model, chatId: chat.id, fetch }),
         call: titleCallOptions(connection.kind, levels, adaptiveThinking),
         inputRedact,
         redact,
@@ -264,7 +274,7 @@ export async function POST(request: Request) {
     const modelMessages = await convertToModelMessages(stripOrbitTiming(uiMessages), { tools });
     signal.throwIfAborted();
     const result = streamText({
-      model: languageModelFor({ connection, apiKey, model: choice.model, chatId: chat.id, onDropped: () => { dropped = true; } }),
+      model: languageModelFor({ connection, apiKey, model: choice.model, chatId: chat.id, fetch, onDropped: () => { dropped = true; } }),
       instructions,
       messages: attachMemoryNotes(modelMessages, notes),
       tools,
@@ -303,11 +313,11 @@ export async function POST(request: Request) {
       },
       onEnd: async ({ responseMessage, isAborted, outcome, finishReason }) => {
         try {
-          // DELETE /api/chats/[id] discards the run before it removes the chat, so nothing is saved for it.
-          if (signal.reason === "discarded") return;
-          if (memory) void embedPending(userId);
+          if (replyWasDiscarded(run)) return;
           const interrupted = isAborted || outcome.status !== "completed" || finishReason === "error";
           const toolParts = settleInterruptedParts(interrupted ? await stopped.apply(responseMessage.parts) : responseMessage.parts, interrupted);
+          if (replyWasDiscarded(run)) return;
+          if (memory) void embedPending(userId);
           const parts = interrupted ? settleReasoningTimes(toolParts) : toolParts;
           if (!assistantHasVisiblePart(parts)) {
             const types = Array.isArray(responseMessage.parts)

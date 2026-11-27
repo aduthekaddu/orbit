@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, exists, isNull } from "drizzle-orm";
 import { z } from "zod";
-import { normalizeBaseUrl } from "./base-url";
+import { accountExists, getAdminId } from "./admin-users";
+import { anthropicBaseUrl, normalizeBaseUrl } from "./base-url";
 import { redactUrl, resolveMaskedUrl, type Redactor } from "./chat-errors";
 import { getDb, urlHostLabel } from "./db";
 import { chats, hiddenModels, pendingConnection, providerConnections, user, userPreferences } from "./db/schema";
@@ -9,6 +10,7 @@ import { DEFAULT_EFFORT, isEffort, type Effort } from "./effort";
 import { readEnv } from "./env";
 import { clearModelCaps, listModels, rememberModelCaps } from "./model-list";
 import { getInstance } from "./instance-settings";
+import { checkProviderUrl, providerFetch } from "./net-guard";
 import { policyFor, type UserId, type Viewer } from "./policy";
 import { decryptSecret, encryptSecret, SecretUnreadable } from "./secrets";
 
@@ -22,6 +24,9 @@ export type ProviderConnection =
 export type PublicConnection =
   | { id: string; kind: "openai-compatible"; label: string; baseUrl: string; createdAt: Date; keySet: true; keyReadable: boolean }
   | { id: string; kind: "anthropic"; label: string; createdAt: Date; keySet: true; keyReadable: boolean };
+
+export type SharedConnection = Pick<PublicConnection, "id" | "kind" | "label">;
+export type PickableConnection = PublicConnection | SharedConnection;
 
 /** The decrypted secrets of one connection. The Redactor masks them in everything Orbit stores, streams, or logs. */
 export type ConnectionSecrets = { apiKey: string; baseUrl?: string };
@@ -94,8 +99,13 @@ export function redactionSecrets(userId: UserId): ConnectionSecrets[] {
 
 export type RequestedConnection = { from: "request" | "stored"; id: string } | null;
 
-export function pickableConnectionOwner(viewer: Viewer) {
-  return policyFor(getInstance().hostingMode).connectionOwner(viewer);
+export function pickableConnectionOwner(viewer: Viewer): UserId {
+  const adminId = viewer.role === "admin" ? viewer.id : getAdminId() ?? undefined;
+  return policyFor(getInstance().hostingMode).connectionOwner(viewer, adminId);
+}
+
+export function mayManageConnections(viewer: Viewer): boolean {
+  return policyFor(getInstance().hostingMode).mayCreateConnection(viewer);
 }
 
 export function pickableConnection(viewer: Viewer, requested: RequestedConnection): ProviderConnection | null {
@@ -118,20 +128,49 @@ export function toPublicConnection(connection: ProviderConnection, redact: Redac
 
 export type ConnectionWrite =
   | { ok: true; connection: ProviderConnection }
-  | { ok: false; reason: "not-found" | "unreachable" | "key-required" | "conflict" }
+  | { ok: false; reason: "not-found" | "unreachable" | "key-required" | "conflict" | "forbidden" }
   | { ok: false; reason: "invalid"; error: string };
 
 const LABEL_HOLDS_CREDENTIAL = { ok: false, reason: "invalid", error: "Remove credentials from the label." } as const;
+const REQUIRE_PUBLIC_URL = { ok: false, reason: "invalid", error: "Use a public URL." } as const;
+const FORBIDDEN = { ok: false, reason: "forbidden" } as const;
 type RequestRedactor = (userId: UserId) => Redactor;
 
-export async function addConnection(userId: UserId, input: NewConnection, redactFor: RequestRedactor): Promise<ConnectionWrite> {
+function providerUrl(connection: ProviderConnection) {
+  return connection.kind === "openai-compatible" ? connection.baseUrl : anthropicBaseUrl();
+}
+
+function connectionWriteRefusal(viewer: Viewer, guarded: boolean) {
+  const policy = policyFor(getInstance().hostingMode);
+  if (!policy.mayCreateConnection(viewer)) return FORBIDDEN;
+  if (!accountExists(viewer.id)) return { ok: false, reason: "not-found" } as const;
+  return policy.guardsPrivateHosts && !guarded ? { ok: false, reason: "conflict" } as const : null;
+}
+
+async function checkModelsForSave(viewer: Viewer, connection: ProviderConnection, apiKey: string | undefined, redact: Redactor) {
+  const fetch = providerFetch(getInstance().hostingMode);
+  if (fetch && !await checkProviderUrl(providerUrl(connection))) return REQUIRE_PUBLIC_URL;
+  const guarded = fetch !== undefined;
+  const refusal = connectionWriteRefusal(viewer, guarded);
+  if (refusal) return refusal;
+  const models = apiKey ? await listModels(connection, apiKey, redact, { cache: false, fetch }) : null;
+  return { ok: true, models, guarded } as const;
+}
+
+export async function addConnection(viewer: Viewer, input: NewConnection, redactFor: RequestRedactor): Promise<ConnectionWrite> {
+  if (!mayManageConnections(viewer)) return FORBIDDEN;
+  const userId = viewer.id;
   const base = { id: randomUUID(), userId, label: input.label.trim(), createdAt: new Date() };
   const connection: ProviderConnection = input.kind === "anthropic" ? { ...base, kind: "anthropic" } : { ...base, kind: "openai-compatible", baseUrl: normalizeBaseUrl(input.baseUrl) };
   const secrets = secretsOf(connection, input.apiKey);
   const redact = redactFor(userId);
   // Labels are stored in plain text. Check again after listing models, when settings or other connections may have changed.
   if (redact.withCredentials(secrets).text(connection.label) !== connection.label) return LABEL_HOLDS_CREDENTIAL;
-  const models = await listModels(connection, input.apiKey, redact, { cache: false });
+  const checked = await checkModelsForSave(viewer, connection, input.apiKey, redact);
+  if (!checked.ok) return checked;
+  const refusal = connectionWriteRefusal(viewer, checked.guarded);
+  if (refusal) return refusal;
+  const { models } = checked;
   if (!models) return { ok: false, reason: "unreachable" };
   if (redactFor(userId).withCredentials(secrets).text(connection.label) !== connection.label) return LABEL_HOLDS_CREDENTIAL;
   getDb().transaction((tx) => {
@@ -145,7 +184,9 @@ export async function addConnection(userId: UserId, input: NewConnection, redact
 }
 
 // A new base URL needs a new key, so the saved key never goes to another host. Resending the masked URL keeps both.
-export async function updateConnection(userId: UserId, id: string, patch: ConnectionPatch, redactFor: RequestRedactor): Promise<ConnectionWrite> {
+export async function updateConnection(viewer: Viewer, id: string, patch: ConnectionPatch, redactFor: RequestRedactor): Promise<ConnectionWrite> {
+  if (!mayManageConnections(viewer)) return FORBIDDEN;
+  const userId = viewer.id;
   const record = getConnectionRecord(userId, id);
   if (!record) return { ok: false, reason: "not-found" };
   const current = connectionRow.parse(record);
@@ -169,7 +210,11 @@ export async function updateConnection(userId: UserId, id: string, patch: Connec
   }
   const nextSecrets = secretsOf(next, apiKey ?? "");
   if (redact.withCredentials(nextSecrets).text(next.label) !== next.label) return LABEL_HOLDS_CREDENTIAL;
-  const models = apiKey ? await listModels(next, apiKey, redact, { cache: false }) : null;
+  const checked = await checkModelsForSave(viewer, next, apiKey, redact);
+  if (!checked.ok) return checked;
+  const refusal = connectionWriteRefusal(viewer, checked.guarded);
+  if (refusal) return refusal;
+  const { models } = checked;
   if (apiKey) {
     if (!getConnection(userId, id)) return { ok: false, reason: "not-found" };
     if (!models) return { ok: false, reason: "unreachable" };
@@ -200,10 +245,10 @@ export function deleteConnection(userId: UserId, id: string): boolean {
   const deleted = db.transaction((tx) => {
     const found = tx.select({ id: providerConnections.id }).from(providerConnections).where(owned(userId, id)).get();
     if (!found) return false;
-    tx.update(chats).set({ connectionId: null, model: null, reasoningEffort: null }).where(and(eq(chats.userId, userId), eq(chats.connectionId, id))).run();
+    tx.update(chats).set({ connectionId: null, model: null, reasoningEffort: null }).where(eq(chats.connectionId, id)).run();
     tx.update(userPreferences)
       .set({ defaultConnectionId: null, defaultModel: null, updatedAt: new Date() })
-      .where(and(eq(userPreferences.userId, userId), eq(userPreferences.defaultConnectionId, id)))
+      .where(eq(userPreferences.defaultConnectionId, id))
       .run();
     tx.delete(providerConnections).where(owned(userId, id)).run();
     completeConnectionSetup(tx, userId);
@@ -224,9 +269,10 @@ export function hiddenModelIds(userId: UserId, connectionId: string): string[] {
 }
 
 /** False, with nothing written, when this user has no such connection. */
-export function setModelHidden(userId: UserId, connectionId: string, modelId: string, hidden: boolean): boolean {
+export function setModelHidden(viewer: Viewer, connectionId: string, modelId: string, hidden: boolean): boolean {
+  const userId = viewer.id;
   return getDb().transaction((tx) => {
-    if (!tx.select({ id: providerConnections.id }).from(providerConnections).where(owned(userId, connectionId)).get()) return false;
+    if (!accountExists(userId) || !pickableConnection(viewer, { from: "request", id: connectionId })) return false;
     if (hidden) tx.insert(hiddenModels).values({ userId, connectionId, modelId }).onConflictDoNothing().run();
     else tx.delete(hiddenModels).where(and(eq(hiddenModels.userId, userId), eq(hiddenModels.connectionId, connectionId), eq(hiddenModels.modelId, modelId))).run();
     return true;
@@ -258,9 +304,9 @@ function writeModelDefaults(db: Writer, userId: UserId, defaults: { connectionId
   db.insert(userPreferences).values({ userId, ...values }).onConflictDoUpdate({ target: userPreferences.userId, set: values }).run();
 }
 
-export function saveModelDefaults(userId: UserId, defaults: { connectionId: string; model: string; effort: Effort }): boolean {
-  if (!getConnection(userId, defaults.connectionId)) return false;
-  writeModelDefaults(getDb(), userId, defaults);
+export function saveModelDefaults(viewer: Viewer, defaults: { connectionId: string; model: string; effort: Effort }): boolean {
+  if (!accountExists(viewer.id) || !pickableConnection(viewer, { from: "request", id: defaults.connectionId })) return false;
+  writeModelDefaults(getDb(), viewer.id, defaults);
   return true;
 }
 

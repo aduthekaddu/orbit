@@ -489,13 +489,13 @@ test("a queued send pins its choice against the latest chat row", async (t) => {
   assert.ok(connectionId);
   const requested = { connectionId, model: "mock", effort: "low" } as const;
   getDb().insert(schema.chats).values({ id: chatId, userId: USER_ID, title: "New chat", createdAt: new Date(), updatedAt: new Date() }).run();
-  setChatChoice(chatId, requested);
+  setChatChoice(viewer, chatId, requested);
 
   const slot = await holdStoppingReply(chatId, t);
   const sent = sendQueued(chatId, requested, "A queued message.");
   try {
     await Promise.race([slot.waiting, sent.then(() => assert.fail("the send did not wait for its slot"))]);
-    setChatChoice(chatId, { connectionId: ANTHROPIC_ID, model: "claude-opus-5-5", effort: "high" });
+    setChatChoice(viewer, chatId, { connectionId: ANTHROPIC_ID, model: "claude-opus-5-5", effort: "high" });
   } finally {
     slot.release();
   }

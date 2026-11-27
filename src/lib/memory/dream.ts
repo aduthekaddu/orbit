@@ -7,6 +7,8 @@ import { getChatForUser } from "../messages";
 import { NOTHING_PINNED, resolveChoice } from "../model-choice";
 import type { UserId, Viewer } from "../policy";
 import { getMemoryEnabled } from "../preferences";
+import { getInstance } from "../instance-settings";
+import { providerFetch } from "../net-guard";
 import { languageModelFor } from "../provider";
 import { modelRedactors } from "../request-redactor";
 import { embed, embedPending } from "./embed";
@@ -330,12 +332,16 @@ export async function dreamChat(viewer: Viewer, chatId: string, input: { date: s
     const resolved = resolveChoice(viewer, NOTHING_PINNED);
     if (!resolved.ok) throw new Error(NO_PROVIDER);
     const { connection } = resolved;
-    const apiKey = connectionApiKey(userId, connection.id);
-    redact = modelRedactors(viewer, { apiKey, baseUrl: connection.kind === "openai-compatible" ? connection.baseUrl : undefined }).output;
+    const apiKey = connectionApiKey(connection.userId, connection.id);
+    const instance = getInstance();
+    const fetch = providerFetch(instance.hostingMode);
+    redact = modelRedactors(viewer, { apiKey, baseUrl: connection.kind === "openai-compatible" ? connection.baseUrl : undefined }, {
+      ownProvider: connection.userId === userId, instance,
+    }).output;
     for (let offset = 0; offset < messages.length; offset += PAGE) {
       if (!renew(userId, input.date, input.owner)) return "lost";
       const generated = await generateObject({
-        model: languageModelFor({ connection, apiKey, model: resolved.choice.model, chatId }),
+        model: languageModelFor({ connection, apiKey, model: resolved.choice.model, chatId, fetch }),
         schema: candidateList,
         prompt: promptFor(messages.slice(offset, offset + PAGE)),
         maxRetries: 0,
