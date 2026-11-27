@@ -167,3 +167,27 @@ test("a chat with no choice yet sends none and lets the server resolve it", asyn
   await stream.cancel();
   assert.equal("modelChoice" in body, false);
 });
+
+test("a chat send reports that it started before its answer arrives", async () => {
+  const events: string[] = [];
+  let answer: (response: Response) => void = () => {};
+  const transport = orbitChatTransport("c1", {
+    api: "http://orbit.test/api/chat",
+    fetch: () => {
+      events.push("fetch");
+      return new Promise<Response>((resolve) => { answer = resolve; });
+    },
+    onSend: () => events.push("send"),
+  });
+  transport.setRuntime({
+    thread: { getModelContext: () => undefined },
+    threads: { mainItem: { initialize: async () => ({ remoteId: "local" }) } },
+  } as never);
+  const messages: UIMessage[] = [{ id: "u1", role: "user", parts: [{ type: "text", text: "hi" }] }];
+  const sent = transport.sendMessages({ chatId: "c1", messageId: undefined, trigger: "submit-message", messages, abortSignal: undefined });
+  const { eventually } = await import("./eventually.mjs");
+  await eventually(() => events.length, (count) => count === 2, { timeoutMs: 2_000, what: "the send to start" });
+  assert.deepEqual(events, ["send", "fetch"]);
+  answer(Response.json({ error: "Message is too long." }, { status: 413 }));
+  await assert.rejects(sent, { message: "Message is too long." });
+});

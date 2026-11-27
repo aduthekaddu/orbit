@@ -480,6 +480,35 @@ function viewportRun(context, { label, touch, page }) {
     step(`${label}: DELETE on a missing id answers 404`, missing.status() === 404, `status ${missing.status()}`);
   }
 
+  // Headers can arrive seconds after the server saves a draft's first message. Leaving the draft in that gap must
+  // still add the new chat to the sidebar, so the POST answer is held until the reader has moved to another chat.
+  async function leaveDraftEarly(otherId) {
+    const id = await newDraft();
+    let release = () => {};
+    const held = new Promise((resolve) => { release = resolve; });
+    let saved = () => {};
+    const committed = new Promise((resolve) => { saved = resolve; });
+    const hold = async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      const response = await route.fetch();
+      saved();
+      await held;
+      await route.fulfill({ response }).catch(() => {});
+    };
+    await page.route("**/api/chat", hold);
+    try {
+      await send(`[qa:plain] leave early ${label}`);
+      await committed;
+      await rowLink(await list(), otherId).click();
+      await eventually(() => chatId(page.url()), (value) => value === otherId, { timeoutMs: 10_000, what: "the other chat to open" });
+      const listed = await eventually(async () => (await rowLink(await list(), id).count()) > 0, Boolean, { timeoutMs: 10_000, what: "the new chat in the sidebar" }).catch(() => false);
+      step(`${label}: leaving a draft before its first answer arrives still adds the chat to the sidebar`, listed && chatRow(id) !== null, `listed ${listed}, row ${JSON.stringify(chatRow(id))}`);
+    } finally {
+      release();
+      await page.unroute("**/api/chat", hold);
+    }
+  }
+
   // The row menu gives every sidebar chat a second Tab stop, so the first Tab stop skips the sidebar.
   async function skipLink(id) {
     const firstStop = async (path, ready) => {
@@ -574,6 +603,7 @@ function viewportRun(context, { label, touch, page }) {
     await deleteRecreated();
     await failedDelete(reloaded, `Other ${label}`);
     if (!touch) await skipLink(reloaded);
+    if (!touch) await leaveDraftEarly(reloaded);
     await footer({ confirm: last, chat: { id: reloaded, title: `Other ${label}` } });
   };
 }
