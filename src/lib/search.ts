@@ -189,7 +189,9 @@ export function searchMessages(userId: string, q: string): SearchHit[] {
          LIMIT 20`,
       )
       .all({ match, userId, prefix, ...markers }) as SearchRow[];
-    return rows.map(({ marked, snippet, ...row }) => ({ ...row, snippet: snippetParts(snippet, marked ? markers : undefined) }));
+    return rows.flatMap(({ marked, snippet, role, ...row }) => role === "user" || role === "assistant"
+      ? [{ ...row, role, snippet: snippetParts(snippet, marked ? markers : undefined) }]
+      : []);
   } catch (error) {
     console.error("[search] query failed", {
       code: error instanceof Database.SqliteError ? error.code : "UNKNOWN",
