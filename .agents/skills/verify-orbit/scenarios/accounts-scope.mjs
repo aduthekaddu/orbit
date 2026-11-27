@@ -186,9 +186,10 @@ export default async function accountsScope({ page, origin, step, shot, useProvi
     await page.getByRole("option", { name: hourLabel, exact: true }).click();
     const hourResponse = await savedHour;
     hourSaved = hourResponse.ok();
+    const savedDreamHour = hourSaved ? (await hourResponse.json()).dreamHour : null;
     await page.reload();
     step("admin saves the dream hour and it persists after refresh",
-      hourSaved && (await hourResponse.json()).dreamHour === dreamHour && (await hour.innerText()).trim() === hourLabel);
+      savedDreamHour === dreamHour && (await hour.innerText()).trim() === hourLabel);
     for (const width of [1280, 390, 360]) {
       await page.setViewportSize({ width, height: width === 1280 ? 800 : 844 });
       step(`admin page fits ${width} pixels`, await page.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth));
