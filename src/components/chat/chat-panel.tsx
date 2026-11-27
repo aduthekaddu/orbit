@@ -76,8 +76,8 @@ export function ChatPanel({
   useEffect(() => {
     draft.current = isDraft;
     // A send that dropped before its headers lands here once a refresh finds the committed row.
-    if (!isDraft) dropNewParam();
-  }, [isDraft]);
+    if (!isDraft) dropNewParam(chatId);
+  }, [chatId, isDraft]);
   useEffect(() => () => {
     // Leaving mid-stream skips the refresh at the reply's end, and the sidebar would miss the new chat.
     if (draft.current && committedDraft.current) router.refresh();
@@ -96,7 +96,7 @@ export function ChatPanel({
     onReplyId: (replyId) => {
       if (draft.current) {
         committedDraft.current = true;
-        dropNewParam();
+        dropNewParam(chatId);
       }
       link.accept(replyId);
     },
