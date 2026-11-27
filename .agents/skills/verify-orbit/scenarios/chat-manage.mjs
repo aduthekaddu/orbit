@@ -136,6 +136,11 @@ function viewportRun(context, { label, touch, page }) {
     const name = label === undefined ? /^Actions for / : `Actions for ${label}`;
     await (await need(row.getByRole("button", { name }), `Actions for ${label ?? id} row button`)).click();
     const rename = await need(page.getByRole("menuitem", { name: "Rename" }), "Rename menu item", 5_000);
+    // The sheet slides in from the bottom; a screenshot taken before it settles cuts off Delete.
+    await page
+      .locator('[data-slot="sheet-content"], [role="menu"]')
+      .first()
+      .evaluate((element) => Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => null))));
     return { container, row, rename, remove: page.getByRole("menuitem", { name: "Delete" }) };
   }
   const toast = (scope = page) => scope.getByRole("status").filter({ hasText: "Chat deleted" });
