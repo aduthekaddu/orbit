@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useState, useSyncExternalStore } from "react";
+import { useReducer, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { BrainIcon, GearSixIcon, MagnifyingGlassIcon, NotePencilIcon, SidebarSimpleIcon, SignOutIcon, WarningCircleIcon } from "@phosphor-icons/react";
@@ -152,6 +152,10 @@ export function Sidebar({
 function SignOut() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [tip, setTip] = useState(false);
+  // Closing the dialog hands focus back to Sign out. A tooltip opened by that focus would cover the drawer and take
+  // the next Escape, so it stays shut until the button is left or pointed at again.
+  const quietTip = useRef(false);
   const [state, dispatch] = useReducer(submitTransition, idleSubmit);
   // Stays locked after success too, while the page leaves for /login.
   const busy = state.status === "pending" || state.status === "succeeded";
@@ -178,17 +182,41 @@ function SignOut() {
 
   return (
     <Dialog open={open} onOpenChange={setDialog}>
-      <Tooltip>
+      <Tooltip
+        open={tip}
+        onOpenChange={(next) => {
+          if (next && quietTip.current) return;
+          setTip(next);
+        }}
+      >
         <TooltipTrigger asChild>
           <DialogTrigger asChild>
-            <Button variant="ghost" size="icon-sm" aria-label="Sign out" className="text-muted-foreground hover:text-foreground">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Sign out"
+              onBlur={() => {
+                quietTip.current = false;
+              }}
+              onPointerEnter={() => {
+                quietTip.current = false;
+              }}
+              className="text-muted-foreground hover:text-foreground"
+            >
               <SignOutIcon weight="light" className="size-[18px]" />
             </Button>
           </DialogTrigger>
         </TooltipTrigger>
         <TooltipContent side="top">Sign out</TooltipContent>
       </Tooltip>
-      <DialogContent aria-describedby={undefined} showCloseButton={false} className="sm:max-w-sm">
+      <DialogContent
+        aria-describedby={undefined}
+        showCloseButton={false}
+        onCloseAutoFocus={() => {
+          quietTip.current = true;
+        }}
+        className="sm:max-w-sm"
+      >
         <DialogHeader>
           <DialogTitle>Sign out?</DialogTitle>
         </DialogHeader>
