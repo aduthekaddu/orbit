@@ -48,20 +48,6 @@ export function searchTextFromParts(parts: unknown): string {
   return pieces.length === 0 ? text : [text, ...pieces].filter((piece) => piece !== "").join("\n");
 }
 
-export function ensureChat(id: string, userId: string) {
-  const db = getDb();
-  const existing = db.select().from(chats).where(eq(chats.id, id)).get();
-  if (existing) {
-    if (existing.userId !== userId) return null;
-    return existing;
-  }
-  const now = new Date();
-  db.insert(chats)
-    .values({ id, userId, title: "New chat", createdAt: now, updatedAt: now })
-    .run();
-  return db.select().from(chats).where(eq(chats.id, id)).get() ?? null;
-}
-
 /**
  * Markdown as one line of plain text: code fences, link targets, heading and list markers, emphasis, and line breaks
  * dropped, every word kept. No pattern can rescan a long run: link text and targets stop at the next bracket or paren.

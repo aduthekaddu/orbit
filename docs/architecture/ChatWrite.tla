@@ -83,6 +83,7 @@ Send(t) ==
   /\ UNCHANGED <<prompt, newest, answered, seen, turn, base, guard, saving>>
 
 \* code: src/app/api/chat/route.ts POST
+\* code: src/lib/messages.ts beginTurn
 \* code: src/lib/messages.ts planChatWrite
 \* code: src/lib/messages.ts savedText
 \* POST /api/chat regenerates R's turn, retries P when no R was saved, or ends in the tab's copy of R.
@@ -94,7 +95,8 @@ Send(t) ==
 \* with no user message has no P, and planChatWrite refuses it before it writes a row.
 \* Before f075e72 a regenerate reused R's id and compared R's row, and a retry with no R compared nothing.
 \* The per-chat reservation admits only one Plan at a time, even when the listener disconnects.
-\* No await separates planChatWrite and storedAssistantParts, so both read the same R,
+\* beginTurn runs planChatWrite inside its own transaction, which also creates the chat row for a first prompt.
+\* No await separates beginTurn and storedAssistantParts, so both read the same R,
 \* and Plan is one step. Two server processes on one SQLite file could edit R between them.
 Plan(t) ==
   /\ \A tab \in Tabs : turn[tab] = 0

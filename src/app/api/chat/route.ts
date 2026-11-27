@@ -13,7 +13,7 @@ import { answerStepFor, CHAT_STEP_LIMIT } from "@/lib/tools/answer-step";
 import { createStoppedRuns } from "@/lib/tools/stopped-runs";
 import { connectionApiKey, getConnection } from "@/lib/connections";
 import { EFFORTS, effortCallOptions, effortLevels, effortOutcome, titleCallOptions } from "@/lib/effort";
-import { ensureChat, finishChatReply, getChatForUser, planChatWrite, redactChatTitle, storedAssistantParts, storedMessageCount, storedMessageIds, textFromParts, touchChat } from "@/lib/messages";
+import { beginTurn, chatExists, finishChatReply, getChatForUser, redactChatTitle, storedAssistantParts, storedMessageIds, textFromParts, touchChat } from "@/lib/messages";
 import { chatChoice, resolveChoice, sameChoice, setChatChoice, type ReplyRecord } from "@/lib/model-choice";
 import { cachedCaps } from "@/lib/model-list";
 import { knownAdaptiveThinking, languageModelFor } from "@/lib/provider";
@@ -101,7 +101,14 @@ export async function POST(request: Request) {
   const parsed = bodySchema.safeParse(body.json);
   if (!parsed.success) return Response.json({ error: "Invalid chat request" }, { status: 400 });
 
-  const storedIds = storedMessageIds(parsed.data.id);
+  const userId = session.user.id;
+  const chatId = parsed.data.id;
+  // Another user's chat answers 404 before anything reads its messages. A missing chat is a draft:
+  // beginTurn creates it with the first prompt.
+  const existingChat = getChatForUser(chatId, userId);
+  if (!existingChat && chatExists(chatId)) return Response.json({ error: "Not found" }, { status: 404 });
+
+  const storedIds = storedMessageIds(chatId);
   for (const message of parsed.data.messages) {
     if (storedIds.has(message.id)) continue;
     const added = addedMessageSchema.safeParse(message);
@@ -112,7 +119,6 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid chat request" }, { status: 400 });
   }
 
-  const userId = session.user.id;
   const requested = parsed.data.modelChoice;
   const resolveSend = (chat: ReturnType<typeof getChatForUser>) => {
     if (requested && !getConnection(userId, requested.connectionId)) return Response.json({ error: "Not found" }, { status: 404 });
@@ -120,13 +126,10 @@ export async function POST(request: Request) {
     if (!resolved.ok) return Response.json({ error: UNRESOLVED[resolved.reason] }, { status: 400 });
     return resolved;
   };
-  const early = resolveSend(getChatForUser(parsed.data.id, userId));
+  const early = resolveSend(existingChat);
   if (early instanceof Response) return early;
 
-  const initialChat = ensureChat(parsed.data.id, userId);
-  if (!initialChat) return Response.json({ error: "Not found" }, { status: 404 });
-
-  const reserved = await reserveReplyRun(initialChat.id, userId);
+  const reserved = await reserveReplyRun(chatId, userId);
   if (!reserved.ok) {
     if (reserved.reason === "busy") return Response.json({ error: "A reply is still running." }, { status: 409 });
     return Response.json({ error: "Too many replies running." }, { status: 429 });
@@ -146,9 +149,10 @@ export async function POST(request: Request) {
 
   try {
     // A stopping reply can delay this send. Read the choice, credentials, and settings after claiming the slot.
-    const chat = getChatForUser(initialChat.id, userId);
-    if (!chat) return Response.json({ error: "Not found" }, { status: 404 });
-    const resolved = resolveSend(chat);
+    // A chat deleted while the send waited stays deleted.
+    const latestChat = getChatForUser(chatId, userId);
+    if (existingChat && !latestChat) return Response.json({ error: "Not found" }, { status: 404 });
+    const resolved = resolveSend(latestChat);
     if (resolved instanceof Response) return resolved;
     const { choice, connection } = resolved;
     const apiKey = connectionApiKey(userId, connection.id);
@@ -156,20 +160,24 @@ export async function POST(request: Request) {
     const redact = requestRedactor(userId, settings).withCredentials({ apiKey, baseUrl: connection.kind === "openai-compatible" ? connection.baseUrl : undefined });
     logRequestError = (message) => redact.logError("chat request error", message);
     const incoming = parsed.data.messages;
-    const messagesBeforeTurn = storedMessageCount(chat.id);
-    const write = planChatWrite(chat.id, incoming, redact, parsed.data.trigger, parsed.data.editMessageId);
-    if ("error" in write) {
-      if (write.error === "invalid-edit") {
+    // No await from here to storedAssistantParts, so the turn's rows and the saved reply it continues are one read.
+    const turn = beginTurn(chatId, userId, incoming, redact, parsed.data.trigger, parsed.data.editMessageId);
+    if (!turn.ok) {
+      if (turn.error === "not-found") {
+        return Response.json({ error: "Not found" }, { status: 404 });
+      }
+      if (turn.error === "invalid-edit") {
         return Response.json({ error: "Invalid edit request" }, { status: 400 });
       }
-      if (write.error === "no-prompt") {
+      if (turn.error === "no-prompt") {
         return Response.json({ error: "A chat request needs a user message." }, { status: 400 });
       }
-      if (write.error === "cross-chat") {
+      if (turn.error === "cross-chat") {
         return Response.json({ error: "A message id belongs to a different chat." }, { status: 409 });
       }
       return Response.json({ error: "The chat changed. Reload and try again." }, { status: 409 });
     }
+    const { chat, write, messagesBeforeTurn } = turn;
     bindReplyPlan(run, write.id, write.prompt.id);
     // A chat pins its model on its first send, so a later change of the defaults does not move it.
     if (!sameChoice(chatChoice(chat), choice)) setChatChoice(chat.id, choice);
@@ -285,8 +293,10 @@ export async function POST(request: Request) {
         return undefined;
       },
       onEnd: async ({ responseMessage, isAborted, outcome, finishReason }) => {
-        void embedPending();
         try {
+          // DELETE /api/chats/[id] discards the run before it removes the chat, so nothing is saved for it.
+          if (signal.reason === "discarded") return;
+          void embedPending();
           const interrupted = isAborted || outcome.status !== "completed" || finishReason === "error";
           const toolParts = settleInterruptedParts(interrupted ? await stopped.apply(responseMessage.parts) : responseMessage.parts, interrupted);
           const parts = interrupted ? settleReasoningTimes(toolParts) : toolParts;

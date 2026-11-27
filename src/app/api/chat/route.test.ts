@@ -15,7 +15,6 @@ import type { Effort } from "@/lib/effort";
 import * as messages from "@/lib/messages";
 import { seedTestConnection } from "@/lib/connection-fixture";
 import { deleteConnection, getConnection, getModelDefaults } from "@/lib/connections";
-import { eventually } from "@/lib/eventually.mjs";
 import { chatChoice, setChatChoice, type ModelChoice } from "@/lib/model-choice";
 import { cachedCaps, listModels } from "@/lib/model-list";
 import { discardReplyRun, findReplyRun, releaseReplyRun, replyResponse, reserveReplyRun, stopReplyRun } from "@/lib/reply-runs";
@@ -421,16 +420,14 @@ test("manual reply edits mask a stored credential in the saved message and searc
   }
 });
 
-test("a send that waits for a stopping reply does not call a connection deleted while it waited", async () => {
+test("a send that waits for a stopping reply does not call a connection deleted while it waited", async (t) => {
   const chatId = "c-deleted-while-queued";
   const OTHER_KEY = "made-up-provider-key-0003";
   getDb()
     .insert(schema.providerConnections)
     .values({ id: "conn-deleted-while-queued", userId: USER_ID, kind: "openai-compatible", label: "Other", baseUrl: providerBase, apiKeyCiphertext: encryptSecret(OTHER_KEY), createdAt: new Date() })
     .run();
-  const stopping = await reserveReplyRun(chatId, USER_ID);
-  assert.ok(stopping.ok);
-  stopReplyRun(chatId, USER_ID);
+  const slot = await holdStoppingReply(chatId, t);
   const sent = route.POST(new Request("http://127.0.0.1/api/chat", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -441,14 +438,18 @@ test("a send that waits for a stopping reply does not call a connection deleted 
       messages: [{ id: `${chatId}-u1`, role: "user", parts: [{ type: "text", text: "Queued." }] }],
     }),
   }));
-  await eventually(() => messages.getChatForUser(chatId, USER_ID), Boolean, { timeoutMs: 5_000, what: "the queued send to reach its reply slot" });
-  assert.equal(deleteConnection(USER_ID, "conn-deleted-while-queued"), true);
-  releaseReplyRun(stopping.run);
+  try {
+    await Promise.race([slot.waiting, sent.then(() => assert.fail("the send did not wait for its slot"))]);
+    assert.equal(deleteConnection(USER_ID, "conn-deleted-while-queued"), true);
+  } finally {
+    slot.release();
+  }
   const response = await sent;
   await response.text();
   await Promise.allSettled(afterTasks);
   assert.equal(providerKeys.includes(`Bearer ${OTHER_KEY}`), false, "the deleted connection's key reached the provider");
   assert.equal(response.status, 404);
+  assert.equal(messages.chatExists(chatId), false, "the refused send left a chat row");
 });
 
 async function holdStoppingReply(chatId: string, t: TestContext) {
@@ -482,7 +483,7 @@ test("a queued send pins its choice against the latest chat row", async (t) => {
   const { connectionId } = getModelDefaults(USER_ID);
   assert.ok(connectionId);
   const requested = { connectionId, model: "mock", effort: "low" } as const;
-  messages.ensureChat(chatId, USER_ID);
+  getDb().insert(schema.chats).values({ id: chatId, userId: USER_ID, title: "New chat", createdAt: new Date(), updatedAt: new Date() }).run();
   setChatChoice(chatId, requested);
 
   const slot = await holdStoppingReply(chatId, t);
