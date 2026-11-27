@@ -1015,6 +1015,10 @@ const server = http.createServer((req, res) => {
       toolResponse(res, scenario, { text, kind: "fact" }, "remember");
       return;
     }
+    if (raw.includes("Write a title of at most six words.") && body.stream !== true) {
+      jsonTitle(res);
+      return;
+    }
     if (scenario === "forget") {
       const messages = body.messages ?? [];
       const latestUser = messages.findLastIndex((message) => message.role === "user");
@@ -1028,10 +1032,6 @@ const server = http.createServer((req, res) => {
       } else {
         textResponse(res, "Memory is off.");
       }
-      return;
-    }
-    if (raw.includes("Write a title of at most six words.") && body.stream !== true) {
-      jsonTitle(res);
       return;
     }
     if (scenario === "effort-reject" || scenario === "slow-effort-reject") {

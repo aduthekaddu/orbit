@@ -78,7 +78,7 @@ export default async function accountsScope({ page, origin, step, shot, useProvi
     const composer = actor.getByPlaceholder("Ask anything");
     await composer.fill(prompt);
     await composer.press("Enter");
-    await actor.locator('[data-message-role="assistant"]').getByText(reply, { exact: true }).waitFor({ timeout: 30_000 });
+    await actor.locator('[data-message-role="assistant"]').getByText(reply, { exact: true }).last().waitFor({ timeout: 30_000 });
     await actor.getByRole("button", { name: "Send", exact: true }).waitFor();
     return id;
   }
