@@ -68,6 +68,7 @@ export default async function accountsScope({ page, origin, step, shot, useProvi
   let memberPreferences;
   let githubSaved = false;
   let searchSaved = false;
+  let hourSaved = false;
   async function chat(actor, prompt, reply) {
     const created = await actor.request.post(`${origin}/api/chats`);
     assert.equal(created.status(), 201, "create an owned chat");
@@ -176,6 +177,18 @@ export default async function accountsScope({ page, origin, step, shot, useProvi
     step("admin saves the search URL", saved.ok() && (await saved.json()).searxngUrl === "https://example.test");
     await page.reload();
     await eventually(() => search.inputValue(), (url) => url === "https://example.test", { timeoutMs: 5_000, what: "admin's saved search URL after reload" });
+    const hour = page.getByRole("combobox", { name: "Hour", exact: true });
+    const dreamHour = adminSettings.dreamHour === 23 ? 0 : 23;
+    const hourLabel = `${String(dreamHour).padStart(2, "0")}:00`;
+    await hour.click();
+    step("Dreaming offers all 24 hours", await page.getByRole("option").count() === 24);
+    const savedHour = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/admin/settings" && response.request().method() === "PUT");
+    await page.getByRole("option", { name: hourLabel, exact: true }).click();
+    const hourResponse = await savedHour;
+    hourSaved = hourResponse.ok();
+    await page.reload();
+    step("admin saves the dream hour and it persists after refresh",
+      hourSaved && (await hourResponse.json()).dreamHour === dreamHour && (await hour.innerText()).trim() === hourLabel);
     for (const width of [1280, 390, 360]) {
       await page.setViewportSize({ width, height: width === 1280 ? 800 : 844 });
       step(`admin page fits ${width} pixels`, await page.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth));
@@ -196,7 +209,9 @@ export default async function accountsScope({ page, origin, step, shot, useProvi
       };
       pending.push(removeNotes(page, adminNote), removeNotes(member, memberNote));
       if (githubSaved) pending.push(page.request.put(`${origin}/api/settings`, { data: { githubToken: null, githubMcpUrl: adminGithub.githubMcpUrl } }));
-      if (searchSaved) pending.push(page.request.put(`${origin}/api/admin/settings`, { data: { searxngUrl: adminSettings.searxngUrl } }));
+      if (searchSaved || hourSaved) pending.push(page.request.put(`${origin}/api/admin/settings`, {
+        data: { searxngUrl: adminSettings.searxngUrl, dreamHour: adminSettings.dreamHour },
+      }));
       if (memberPreferences?.memory) pending.push(member.request.patch(`${origin}/api/preferences`, { data: { memory: memberPreferences.memory } }));
       for (const { actor, id } of chats) pending.push(actor.request.delete(`${origin}/api/chats/${id}`));
       const results = await Promise.allSettled(pending);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-const origin = `http://127.0.0.1:${process.env.ORBIT_VERIFY_PORT ?? 3210}`;
+const origin = `http://127.0.0.1:${process.env.ORBIT_VERIFY_PORT}`;
 const signIn = await fetch(`${origin}/api/auth/sign-in/email`, {
   method: "POST",
   headers: { origin, "content-type": "application/json" },
