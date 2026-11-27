@@ -43,10 +43,18 @@ const Pending: EmptyMessagePartComponent = ({ status }) => {
   );
 };
 
+// The markdown reveal shows no words in a text part's first frame. While the part streams it keeps the Thinking
+// row's 24px, so the reply never shrinks for a frame: that would pull a prompt pinned by turnAnchor="top" down.
+const AssistantText: TextMessagePartComponent = ({ status }) => (
+  <div className={cn(status.type === "running" && "min-h-6")}>
+    <MarkdownText editable />
+  </div>
+);
+
 const PlainText: TextMessagePartComponent = ({ text }) => <>{text}</>;
 
 const assistantParts: PartComponents = {
-  Text: () => <MarkdownText editable />,
+  Text: AssistantText,
   Reasoning,
   Empty: Pending,
   tools: { Override: RunCard },
@@ -173,7 +181,9 @@ function UserMessage() {
   // bubble takes the first line, and the branch picker and the 44px actions share the line under it, so the actions
   // take no width from the text.
   return (
-    <MessagePrimitive.Root data-turn-id={id} data-message-id={id} tabIndex={-1} className="group/message mx-auto flex w-full scroll-mt-6 outline-none max-w-chat animate-rise flex-col items-end gap-1.5">
+    // -mt-4 pt-4 leaves the gap above the bubble as it was, but turnAnchor="top" pins this root's top edge, so the
+    // pinned bubble sits 16px under the header instead of against it. scroll-mt-2 keeps prompt jumps at 24px.
+    <MessagePrimitive.Root data-turn-id={id} data-message-id={id} tabIndex={-1} className="group/message mx-auto -mt-4 flex w-full scroll-mt-2 pt-4 outline-none max-w-chat animate-rise flex-col items-end gap-1.5">
       <div className="flex w-full flex-wrap items-end justify-end gap-1.5">
         <ActionBarPrimitive.Root className={cn("flex pointer-coarse:order-last", hoverActionsClass)}>
           <CopyAction />

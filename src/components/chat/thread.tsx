@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ThreadPrimitive, useAui, useAuiState } from "@assistant-ui/react";
 import { ArrowDownIcon } from "@phosphor-icons/react";
 import { Figure } from "@/components/figure";
@@ -24,6 +24,11 @@ type ThreadView = "empty" | "loading" | "messages";
 
 export function Thread({ ready, focusMessageId, hasHistory }: { ready: boolean; focusMessageId?: string | null; hasHistory: boolean }) {
   const view = useAuiState((state): ThreadView => (state.thread.messages.length > 0 ? "messages" : hasHistory ? "loading" : "empty"));
+  // Saved messages open at the bottom, except a ?m= search hit, which centers. A chat that started empty skips that
+  // first scroll: its first prompt is already at the top, and assistant-ui never anchors the first message, so the
+  // scroll would follow the first reply down. Fixed at mount: hasHistory turns true when the finished reply
+  // refreshes the page, and assistant-ui would run the first-load scroll then. ChatPanel remounts per chat and ?m=.
+  const [scrollToBottomOnLoad] = useState(hasHistory && !focusMessageId);
   const viewport = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const root = viewport.current;
@@ -51,11 +56,11 @@ export function Thread({ ready, focusMessageId, hasHistory }: { ready: boolean; 
     <TooltipProvider>
       <ThreadPrimitive.Root className="@container/thread relative flex h-full min-h-0 flex-col">
         {/* turnAnchor="top" scrolls each new prompt to the top once and never follows the reply down, so the reader
-            starts at the beginning of the answer. ?m= search hits skip the first scroll to the bottom so they can center. */}
+            starts at the beginning of the answer. */}
         <ThreadPrimitive.Viewport
           ref={viewport}
           turnAnchor="top"
-          scrollToBottomOnInitialize={!focusMessageId}
+          scrollToBottomOnInitialize={scrollToBottomOnLoad}
           className="@container flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-8 scrollbar-thin"
         >
           {view === "empty" ? (
