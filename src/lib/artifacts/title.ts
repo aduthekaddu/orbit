@@ -53,7 +53,7 @@ function capTitle(text: string) {
 
 function cleanTitle(raw: string | null): string {
   if (raw === null) return "";
-  return capTitle(decodeEntities(raw.replace(/<[^<>]*>/g, "")).replace(/\s+/g, " ").trim());
+  return capTitle(decodeEntities(raw.replace(/<[^<>]*>/g, "").replace(/[<>]/g, "")).replace(/\s+/g, " ").trim());
 }
 
 function markupTitle(kind: "html" | "svg", source: string): string {

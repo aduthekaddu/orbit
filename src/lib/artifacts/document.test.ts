@@ -103,7 +103,7 @@ for (const kind of ["html", "svg", "react"] as const) {
     const style = document.indexOf("<style>");
     assert.ok(document.indexOf(CSP) < style, "the style follows the content security policy");
     assert.ok(document.indexOf('name="viewport"') < style, "the style follows the viewport meta tag");
-    assert.ok(style < document.indexOf("<script>"), "the style comes before the error bridge");
+    assert.ok(style < document.search(/<script>/), "the style comes before the error bridge");
     assert.ok(style < document.indexOf("<body>"), "the style comes before the body");
     assert.match(styles[0].trim(), /^@layer orbit-base \{[\s\S]*\}$/, "every rule sits in the orbit-base layer");
     let depth = 0;
