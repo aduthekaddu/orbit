@@ -3,7 +3,7 @@ import test, { afterEach } from "node:test";
 import type { UIMessageChunk } from "ai";
 import {
   bindReplyPlan, deleteAfterReply, discardReplyRun, findReplyRun, MAX_RUNNING_PER_USER, releaseReplyRun,
-  replyResponse, reserveReplyRun, resetReplyRunsForTest, startReplyRun, stopReplyRun, watchReply,
+  deleteUserAfterReplies, replyResponse, replyWasDiscarded, reserveReplyRun, resetReplyRunsForTest, startReplyRun, stopReplyRun, watchReply,
 } from "./reply-runs";
 
 afterEach(resetReplyRunsForTest);
@@ -259,4 +259,18 @@ test("removing a chat also holds the slot for a finished reply", async () => {
   assert.deepEqual(reserved, { ok: false, reason: "busy" });
   assert.equal(await deletion, true);
   assert.equal(findReplyRun("chat", "user", "reply-chat"), null);
+});
+
+test("removing an account discards a stopped reply while it drains", async () => {
+  const run = await reserve();
+  stopReplyRun(run.chatId, run.userId);
+  assert.equal(replyWasDiscarded(run), false);
+  const deletion = deleteUserAfterReplies(run.userId, () => ({ ok: true }));
+  try {
+    assert.equal(run.controller.signal.reason, "stopped");
+    assert.equal(replyWasDiscarded(run), true);
+  } finally {
+    releaseReplyRun(run);
+    await deletion;
+  }
 });

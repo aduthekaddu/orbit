@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import path from "node:path";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -7,8 +8,9 @@ import { trySeedConnection } from "./connections";
 import { accountCount, getDb } from "./db";
 import { account, session, user, verification } from "./db/schema";
 import { readEnv } from "./env";
-import { dataDirectory } from "./paths";
 import { getInstance } from "./instance-settings";
+import { claimInvite, pendingInviteHash, spendInvite } from "./invites";
+import { dataDirectory } from "./paths";
 import { parseViewer, policyFor } from "./policy";
 import { readOrCreateSecretFile } from "./secrets";
 import { trySeedAdminGithub } from "./user-github";
@@ -38,6 +40,15 @@ export function orbitAuthOptions() {
   } as const;
 }
 
+const globalAuth = globalThis as typeof globalThis & { __orbitActiveSignups?: Set<Promise<void>> };
+const activeSignups = globalAuth.__orbitActiveSignups ??= new Set();
+const authRequest = new AsyncLocalStorage<Promise<void>>();
+
+export async function afterActiveSignups<T>(mutate: () => T): Promise<T> {
+  while (activeSignups.size > 0) await Promise.allSettled(activeSignups);
+  return mutate();
+}
+
 function createAuth() {
   const options = orbitAuthOptions();
   const auth = betterAuth({
@@ -49,19 +60,36 @@ function createAuth() {
     databaseHooks: {
       user: {
         create: {
-          before: async (user) => {
-            const decision = getDb().transaction(() =>
-              policyFor(getInstance().hostingMode).signup({ accounts: accountCount(), invite: "none" }),
-              { behavior: "immediate" },
-            );
-            if (!decision.ok) throw new APIError("FORBIDDEN", { message: "Signup is closed" });
-            return { data: { ...user, role: decision.role } };
+          before: async (user, ctx) => {
+            const token = ctx?.getHeader?.("x-orbit-invite")?.trim() || null;
+            const approved = getDb().transaction((tx) => {
+              const accounts = accountCount(tx);
+              const now = Date.now();
+              const tokenHash = accounts > 0 && token ? pendingInviteHash(tx, token, now) : null;
+              const invite = tokenHash ? "valid" : accounts > 0 && token ? "invalid" : "none";
+              const decision = policyFor(getInstance(tx).hostingMode).signup({ accounts, invite });
+              if (!decision.ok) {
+                throw new APIError("FORBIDDEN", { message: decision.reason === "invite-invalid" ? "Invite not valid" : "Signup is closed" });
+              }
+              if (decision.invite === "consume" && (!tokenHash || !claimInvite(tx, tokenHash, now))) {
+                throw new APIError("FORBIDDEN", { message: "Invite not valid" });
+              }
+              return { data: { ...user, role: decision.role } };
+            }, { behavior: "immediate" });
+            // Better Auth awaits between approval, user INSERT, and invite spend.
+            const finished = authRequest.getStore();
+            if (finished) activeSignups.add(finished);
+            return approved;
           },
-          after: async (created) => {
-            if (created.role !== "admin") return;
+          after: async (created, ctx) => {
             const viewer = parseViewer(created);
-            trySeedConnection(viewer);
-            trySeedAdminGithub(viewer);
+            if (viewer.role === "admin") {
+              trySeedConnection(viewer);
+              trySeedAdminGithub(viewer);
+              return;
+            }
+            const token = ctx?.getHeader?.("x-orbit-invite")?.trim();
+            if (token) spendInvite(token, viewer.id);
           },
         },
       },
@@ -71,7 +99,19 @@ function createAuth() {
     advanced: { ipAddress: { ipAddressHeaders: [] } },
     telemetry: { enabled: false },
   });
-  return { auth, trustedOrigins: options.trustedOrigins };
+  function handler(request: Request) {
+    const { promise, resolve } = Promise.withResolvers<void>();
+    return authRequest.run(promise, async () => {
+      try {
+        return await auth.handler(request);
+      } finally {
+        activeSignups.delete(promise);
+        resolve();
+      }
+    });
+  }
+
+  return { auth: { ...auth, handler }, trustedOrigins: options.trustedOrigins };
 }
 
 type AuthState = ReturnType<typeof createAuth>;

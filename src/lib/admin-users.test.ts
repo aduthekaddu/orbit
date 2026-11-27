@@ -12,7 +12,7 @@ import { bindReplyPlan, findReplyRun, releaseReplyRun, reserveReplyRun, resetRep
 import { sessionFrom } from "./session";
 
 const sqlite = getDb().$client;
-const redact = new Redactor();
+const redact = new Redactor(null);
 let accounts: Awaited<ReturnType<typeof createTwoAccounts>>;
 
 before(async () => {
@@ -90,6 +90,8 @@ test("admin removal refuses admin and missing ids, then drains a member before c
     assert.deepEqual(await Promise.all([removal, duplicate]), [{ ok: true }, { ok: true }]);
     assert.equal(findReplyRun(activePlan.chatId, member.viewer.id, activePlan.id), null);
     assert.equal(findReplyRun(endedPlan.chatId, member.viewer.id, endedPlan.id), null);
+    assert.deepEqual(active.run.chunks, []);
+    assert.deepEqual(ended.run.chunks, []);
     assert.equal(finishChatReply(activePlan, [{ type: "text", text: "Late answer" }], redact), false);
     assert.equal(getRun(member.viewer.id, dream.date), null);
     assert.equal(await dreamChat(member.viewer, activePlan.chatId, dream), "lost");

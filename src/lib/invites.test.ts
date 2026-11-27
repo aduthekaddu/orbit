@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import test, { after, before } from "node:test";
-import { getAuth } from "./auth";
+import { afterActiveSignups, getAuth } from "./auth";
 import { LOCAL_AUTH_URL } from "./auth-origins";
 import { createTestAccount } from "./auth-test-helpers";
 import { getDb } from "./db";
@@ -132,7 +132,7 @@ test("a failed user INSERT holds the invite for five minutes and then releases i
   clock.mock.mockImplementation(() => now + 5 * 60 * 1000);
   assert.equal((await signup(email, token)).status, 200);
   const member = memberId(email);
-  assert.equal(typeof member, "string");
+  assert.ok(typeof member === "string");
   assert.equal(sqlite.prepare("SELECT used_by FROM invites WHERE id = ?").pluck().get(id), member);
   assert.deepEqual(await removeMember(member), { ok: true });
 });
@@ -167,5 +167,27 @@ test("hosting mode changes revoke unspent invites and keep spent ones", async ()
       assert.equal(inviteRow(made.invite.id), undefined);
     }
     assert.equal(sqlite.prepare("SELECT count(*) FROM invites WHERE id = ? AND used_at IS NOT NULL").pluck().get(id), 1);
+  }
+});
+
+test("a hosting change waits for an approved signup to insert the member and spend the invite", async () => {
+  const { token, id } = await createTeamInvite();
+  const { removeMember } = await import("./admin-users");
+  const modeChange: { result?: Promise<ReturnType<typeof saveInstance>> } = {};
+  sqlite.function("switch_mode_during_signup", () => {
+    modeChange.result = afterActiveSignups(() => saveInstance(admin.viewer.id, { hostingMode: "personal" }));
+    return 0;
+  });
+  sqlite.exec("CREATE TEMP TRIGGER switch_mode_during_signup BEFORE INSERT ON user WHEN NEW.email = 'mode-race@orbit.test' BEGIN SELECT switch_mode_during_signup(); END");
+  try {
+    const response = await signup("mode-race@orbit.test", token);
+    assert.equal(response.status, 200);
+    const member = (await response.json()).user.id;
+    assert.ok(modeChange.result);
+    assert.deepEqual(await modeChange.result, { ok: false, status: 409, error: "Remove other accounts first." });
+    assert.equal(sqlite.prepare("SELECT used_by FROM invites WHERE id = ?").pluck().get(id), member);
+    assert.deepEqual(await removeMember(member), { ok: true });
+  } finally {
+    sqlite.exec("DROP TRIGGER switch_mode_during_signup");
   }
 });
