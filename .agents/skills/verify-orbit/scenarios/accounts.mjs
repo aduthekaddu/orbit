@@ -20,7 +20,8 @@ async function select(page, field, value) {
 
 async function chooseDefault(page) {
   const form = page.getByRole("form", { name: "Default model", exact: true });
-  await select(form, "Model", "mock-genui");
+  await form.getByRole("combobox", { name: "Model", exact: true }).click();
+  await page.getByRole("option", { name: "mock-genui", exact: true }).click();
   await form.getByRole("radio", { name: "Low", exact: true }).click();
   const saved = apiResponse(page, "/api/preferences/model", "PUT");
   await form.getByRole("button", { name: "Save", exact: true }).click();
