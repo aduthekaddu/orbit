@@ -236,7 +236,10 @@ export function AppShell({
     const existing = sentDeletes.current.get(id);
     if (existing) return existing;
 
-    const { promise, resolve } = Promise.withResolvers<boolean>();
+    let resolve!: (removed: boolean) => void;
+    const promise = new Promise<boolean>((done) => {
+      resolve = done;
+    });
     sentDeletes.current.set(id, promise);
     function settle(removed: boolean) {
       writeLeavingDeletes(readLeavingDeletes().filter((leaving) => leaving !== id));
