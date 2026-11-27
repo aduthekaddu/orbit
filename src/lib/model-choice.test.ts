@@ -3,11 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 import test, { after, before } from "node:test";
 import { Redactor } from "./chat-errors";
-import { addConnection as saveConnection, deleteConnection, listConnections, seedConnection } from "./connections";
+import { addConnection as saveConnection, deleteConnection, getModelDefaults, listConnections, saveModelDefaults, seedConnection } from "./connections";
 import { getDb } from "./db";
 import { chats } from "./db/schema";
 import { finishChatReply, getChatForUser, listMessages, planChatWrite } from "./messages";
-import { NOTHING_PINNED, resolveChoice, setChatChoice, type ModelChoice, type ReplyRecord } from "./model-choice";
+import { chatChoice, NOTHING_PINNED, resolveChoice, setChatChoice, type ModelChoice, type ReplyRecord } from "./model-choice";
 import { parseViewer, type Role } from "./policy";
 import { encryptSecret } from "./secrets";
 
@@ -255,5 +255,39 @@ test("adding and deleting a manual connection closes any pending provider adopti
   } finally {
     sql("delete from pending_connection");
     sql("DELETE FROM user WHERE id = ?", user);
+  }
+});
+
+test("Team members pick their own defaults and can pin models from the admin's shared connection", () => {
+  const admin = addUser("u-choice-team-admin", "admin");
+  const member = addUser("u-choice-team-member");
+  addConnection("conn-team-admin", admin.id, "openai-compatible");
+  addConnection("conn-team-dormant", member.id, "openai-compatible");
+  setDefaults(admin.id, "conn-team-admin", "admin-default", "high");
+  setDefaults(member.id, "conn-team-dormant", "old-default", "low");
+  const draft = chat("chat-team-draft", member.id);
+  chat("chat-team-existing", member.id);
+  sql("update chats set connection_id = 'conn-team-dormant', model = 'old-default', reasoning_effort = 'low' where id = 'chat-team-existing'");
+  const existing = chat("chat-team-existing", member.id);
+  sql("update instance_settings set hosting_mode = 'team'");
+  try {
+    assert.deepEqual(resolveChoice(member, draft), { ok: false, reason: "no-model" });
+    assert.deepEqual(resolveChoice(member, existing), { ok: false, reason: "no-model" });
+    assert.deepEqual(resolveChoice(member, existing, { connectionId: "conn-team-dormant", model: "old-default", effort: "low" }), { ok: false, reason: "no-connection" });
+    const choice: ModelChoice = { connectionId: "conn-team-admin", model: "team-model", effort: "medium" };
+    assert.equal(saveModelDefaults(member, choice), true);
+    const resolved = resolveChoice(member, existing);
+    assert.ok(resolved.ok);
+    assert.deepEqual(resolved.choice, choice);
+    assert.equal(resolved.connection.userId, admin.id);
+    assert.equal(getModelDefaults(admin.id).model, "admin-default");
+    setChatChoice(member, draft.id, choice);
+    assert.deepEqual(chatChoice(chat(draft.id, member.id)), choice);
+    assert.equal(deleteConnection(admin.id, choice.connectionId), true);
+    assert.equal(chatChoice(chat(draft.id, member.id)), null);
+    assert.equal(getModelDefaults(member.id).model, null);
+  } finally {
+    sql("update instance_settings set hosting_mode = 'personal'");
+    sql("delete from user where id in (?, ?)", admin.id, member.id);
   }
 });
