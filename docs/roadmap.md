@@ -39,7 +39,7 @@ Orbit is a self-hosted chat app, shaped like ChatGPT or Claude, that runs on you
 | 18 | [Accounts and hosting modes](slices/18.md) | Host Orbit for yourself, a team, or other people, with invites and per-user data. | Shipped in #279 and #281 |
 | 19 | [Tools page and tools sheet](slices/19.md) | Test every tool from one page, and switch tools on or off for a chat. | Planned |
 | 20 | [Files](slices/20.md) | Attach files to a chat, and find, download, or delete them later. | Planned |
-| 21 | [Artifacts page](slices/21.md) | Find, rename, download, and compare versions of every artifact. | Planned |
+| 21 | [Artifacts page](slices/21.md) | Find, rename, download, and compare versions of every artifact. | Shipped in #287 |
 | 22 | [Share links](slices/22.md) | Share a read-only snapshot of a chat, then update or revoke it. | Planned |
 | 23 | [Remote MCP servers](slices/23.md) | Connect outside tool servers, and approve each tool before it runs. | Planned |
 

@@ -10,6 +10,7 @@ import { chatExists, getChatForUser, messageRepository } from "@/lib/messages";
 import { NOTHING_PINNED, resolveChoice } from "@/lib/model-choice";
 import { policyFor } from "@/lib/policy";
 import { artifactHistory } from "@/lib/artifacts/history";
+import { listChatArtifacts } from "@/lib/artifacts/store";
 import { LIMITS } from "@/lib/route-schema";
 import { requireUser } from "@/lib/session";
 import { publicConnections } from "@/lib/request-redactor";
@@ -35,6 +36,7 @@ export default async function ChatPage({
   if (isDraft && (query.new === undefined || id.length > LIMITS.id || chatExists(id))) notFound();
   const saved = isDraft ? toRepository([], null) : messageRepository(id);
   const repository = artifactHistory(saved, typeof query.artifact === "string" ? query.artifact : undefined);
+  const initialArtifacts = isDraft ? {} : listChatArtifacts(session.user.id, id);
   const selectedHead = focusedHead(
     repository.messages.map(({ message, parentId }) => ({ id: message.id, parentId })),
     repository.headId,
@@ -72,6 +74,7 @@ export default async function ChatPage({
         isDraft={isDraft}
         focusMessageId={focusMessageId}
         initialHistory={repository}
+        initialArtifacts={initialArtifacts}
         choice={resolved.ok || (canManageConnections && resolved.reason === "key-unreadable") ? resolved.choice : null}
         choiceLevels={resolved.ok ? effortLevels(resolved.connection.kind, cachedCaps(resolved.connection.id, resolved.choice.model)) : null}
         connections={connections}

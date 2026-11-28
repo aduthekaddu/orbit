@@ -33,6 +33,8 @@ export const LIMITS = {
   label: 100,
   chatTitle: 120,
   memoryText: 2000,
+  artifactTitle: 80,
+  artifactCursor: 128,
   query: 500,
   userMessageText: 50_000,
   assistantText: 200_000,

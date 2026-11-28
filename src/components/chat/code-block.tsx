@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { Highlight } from "prism-react-renderer";
 import type { CodeHeaderProps, SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
 import { CaretDownIcon, CheckIcon, CopyIcon, WarningCircleIcon } from "@phosphor-icons/react";
-import { artifactKind, isArtifactLanguage } from "@/lib/artifacts/detect";
+import { artifactKey, artifactKind, isArtifactLanguage } from "@/lib/artifacts/detect";
 import { artifactTitle } from "@/lib/artifacts/title";
 import { useArtifact } from "@/components/artifacts/use-artifact";
 import { codeBodyStart, replaceCode } from "@/lib/chat-parts";
@@ -46,7 +46,7 @@ function useCodeBlock(language: string | undefined, code: string, node: BlockNod
   const index = codeIndex(node);
   const sourceLanguage = typeof language === "string" && isArtifactLanguage(language) ? language : undefined;
   const kind = sourceLanguage && artifactKind(sourceLanguage);
-  const key = edit && index !== undefined && edit.textOrdinal !== undefined ? `${edit.messageId}.${edit.textOrdinal}.${index}` : null;
+  const key = edit && index !== undefined && edit.textOrdinal !== undefined ? artifactKey(edit.messageId, edit.textOrdinal, index) : null;
   const artifact = artifacts && sourceLanguage && kind && key ? { key, kind, language: sourceLanguage } : null;
   const wrapped = index !== undefined && Boolean(edit?.wrapped.has(index));
   return { edit, artifacts, start, active, index, artifact, wrapped };
@@ -64,13 +64,17 @@ export function CodeHeader({ language, code, node }: CodeHeaderProps) {
     if (!register || !kind || !key || !sourceLanguage || !messageId) return;
     return register({ key, kind, code, language: sourceLanguage });
   }, [register, kind, key, code, sourceLanguage, messageId]);
-  const title = useMemo(() => (kind ? artifactTitle({ kind, code }) : ""), [kind, code]);
+  const derivedTitle = useMemo(() => (kind ? artifactTitle({ kind, code }) : ""), [kind, code]);
 
   if (artifacts && kind && key && !active) {
+    const stored = artifacts.storedFor(key);
+    // The title read from this code stays right after an edit in place, before the saved rows catch up.
+    const title = stored?.userTitle ?? derivedTitle;
     return (
       <ArtifactCard
         kind={kind}
         title={title}
+        version={stored && stored.versions.length > 1 ? stored.number : undefined}
         streaming={Boolean(edit?.streaming)}
         onOpen={() => artifacts.open(key)}
         onEdit={edit?.enabled ? () => edit.setActive(start) : undefined}

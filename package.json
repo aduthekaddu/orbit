@@ -53,10 +53,13 @@
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "remark-gfm": "4.0.1",
+    "remark-parse": "11.0.0",
+    "remark-rehype": "11.1.2",
     "sqlite-vec": "0.1.9",
     "sucrase": "3.35.1",
     "tailwind-merge": "3.7.0",
     "undici": "7.30.2",
+    "unified": "11.0.5",
     "zod": "4.6.7"
   },
   "devDependencies": {

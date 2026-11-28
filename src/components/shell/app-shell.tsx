@@ -72,7 +72,7 @@ function withTitle(chat: ChatSummary, edit: TitleEdit | undefined): ChatSummary 
   return edit && edit.base === chat.title ? { ...chat, title: edit.title } : chat;
 }
 
-const PAGE_TITLES: Readonly<Record<string, string | undefined>> = { "/settings": "Settings", "/memory": "Memory" };
+const PAGE_TITLES: Readonly<Record<string, string | undefined>> = { "/settings": "Settings", "/memory": "Memory", "/artifacts": "Artifacts" };
 
 export function AppShell({
   chats,

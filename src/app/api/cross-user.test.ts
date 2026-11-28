@@ -26,6 +26,7 @@ const adminChat = "admin-chat";
 const adminPrompt = "admin-prompt";
 const adminReply = "admin-reply";
 const memberChat = "member-chat";
+const adminArtifact = "admin-artifact";
 const canary = "accountsisolationcanary";
 const memberModel = "member-model";
 const provider = "https://fixture.invalid/v1";
@@ -88,6 +89,7 @@ before(async () => {
   const message = sqlite.prepare("INSERT INTO messages(id, chat_id, parent_id, role, content, parts, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1)");
   message.run(adminPrompt, adminChat, null, "user", canary, JSON.stringify([{ type: "text", text: canary }]), 0);
   message.run(adminReply, adminChat, adminPrompt, "assistant", "Admin reply", '[{"type":"text","text":"Admin reply"}]', 1);
+  artifact(adminArtifact, admin, adminChat, adminReply, `<p>${canary}</p>`);
   adminNote = saveMemory(admin, { text: `Remember the ${canary}`, kind: "fact", source: "user", sourceChatId: adminChat }).id;
   const noteRow = sqlite.prepare("SELECT seq AS rowid, text FROM memories WHERE id = ?").get(adminNote) as { rowid: number; text: string };
   writeVectors([{ ...noteRow, vector: Array.from({ length: 768 }, (_, i) => Number(i === 0)) }]);
@@ -119,8 +121,14 @@ function routeRequest(spec: Omit<Spec, "status">, cookie?: string) {
   }), { params: Promise.resolve(params) });
 }
 
+// A saved artifact row, as syncMessageArtifacts writes one for an HTML block.
+function artifact(id: string, userId: string, chatId: string, messageId: string, code: string) {
+  sqlite.prepare(`INSERT INTO artifacts (id, user_id, chat_id, message_id, text_ordinal, block_index, kind, language, code, derived_title, user_title, lineage_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, 0, 0, 'html', 'html', ?, 'HTML page', NULL, ?, 1, 1)`).run(id, userId, chatId, messageId, code, id);
+}
+
 function snapshot(id: UserId) {
-  const direct = ["account", "session", "chats", "provider_connections", "hidden_models", "memories", "memory_runs", "user_github", "user_preferences"];
+  const direct = ["account", "artifacts", "session", "chats", "provider_connections", "hidden_models", "memories", "memory_runs", "user_github", "user_preferences"];
   return {
     owned: direct.map((table) => sqlite.prepare(`SELECT * FROM ${table} WHERE user_id = ? ORDER BY rowid`).all(id)),
     user: sqlite.prepare("SELECT * FROM user WHERE id = ?").get(id),
@@ -142,6 +150,8 @@ test("admin access preserves a member's private data, live stream, and completed
   const messages = [{ type: "text", text: "Benign fixture note" }];
   sqlite.prepare("INSERT INTO chats(id, user_id, title, created_at, updated_at, head_id) VALUES (?, ?, 'Fixture', 1, 1, ?)").run(id, member.viewer.id, replyId);
   sqlite.prepare("INSERT INTO messages(id, chat_id, role, content, parts, position, created_at) VALUES (?, ?, 'assistant', 'Benign fixture note', ?, 0, 1)").run(replyId, id, JSON.stringify(messages));
+  const memberArtifact = "member-ownership-artifact";
+  artifact(memberArtifact, member.viewer.id, id, replyId, "<p>Benign fixture page</p>");
   const memory = saveMemory(member.viewer.id, { text: "I like jasmine tea", kind: "preference", source: "user", sourceChatId: id });
   const reserved = await reserveReplyRun(id, member.viewer.id);
   assert.ok(reserved.ok);
@@ -173,6 +183,9 @@ test("admin access preserves a member's private data, live stream, and completed
       { route: "connections/[id]/models", method: "GET", params: { id: memberConnection } },
       { route: "connections/[id]/hidden-models", method: "PUT", params: { id: memberConnection }, input: { modelId: memberModel, hidden: true } },
       { route: "preferences/model", method: "PUT", input: { connectionId: memberConnection, model: memberModel, effort: "medium" } },
+      { route: "artifacts/[id]", method: "GET", params: { id: memberArtifact } },
+      { route: "artifacts/[id]", method: "PATCH", params: { id: memberArtifact }, input: { title: "Fixture title" } },
+      { route: "chats/[id]/artifacts", method: "GET", params: { id } },
       stream,
     ];
     for (const operation of operations) {
@@ -193,6 +206,8 @@ test("admin access preserves a member's private data, live stream, and completed
     assert.deepEqual(await adminNotes.json(), { memories: [] });
     const adminSearch = await routeRequest({ route: "search", method: "GET", query: "?q=Benign" }, admin.cookie);
     assert.deepEqual(await adminSearch.json(), { hits: [] });
+    const adminArtifacts = await routeRequest({ route: "artifacts", method: "GET", query: "?q=Benign" }, admin.cookie);
+    assert.deepEqual(await adminArtifacts.json(), { items: [], nextCursor: null });
     assert.deepEqual(snapshot(member.viewer.id), memberBefore);
   } finally {
     if (!findReplyRun(id, member.viewer.id, replyId)) releaseReplyRun(reserved.run);
@@ -287,6 +302,10 @@ async function crossUserMatrix(t: TestContext, mode: HostingMode, round: number)
     ...["", `?q=${canary}`].map((query) => ({ route: "memories", method: "GET", status: 200, query, body: { memories: [] } })),
     { route: "memories/[id]", method: "PATCH", status: 404, params: { id: adminNote }, input: { text: "changed", kind: "fact" } },
     { route: "memories/[id]", method: "DELETE", status: 404, params: { id: adminNote } },
+    ...["", `?q=${canary}`].map((query) => ({ route: "artifacts", method: "GET", status: 200, query, body: { items: [], nextCursor: null } })),
+    { route: "artifacts/[id]", method: "GET", status: 404, params: { id: adminArtifact } },
+    { route: "artifacts/[id]", method: "PATCH", status: 404, params: { id: adminArtifact }, input: { title: "New title" } },
+    { route: "chats/[id]/artifacts", method: "GET", status: 404, params: { id: adminChat } },
     { route: "connections", method: "GET", status: 200 },
     { route: "connections", method: "POST", status: manages ? 201 : 403, reaches: manages, input: { kind: "openai-compatible", label: "Member", apiKey: crypto.randomUUID(), baseUrl: "http://127.0.0.1/v1" } },
     { route: "connections/[id]", method: "PATCH", status: manages ? 404 : 403, params: { id: adminConnection }, input: { label: "Changed" } },
@@ -409,6 +428,8 @@ test("hosting routes enforce connection ownership and signup across modes", asyn
   const note = saveMemory(member.viewer.id, { text: "Private mode fixture", kind: "fact", source: "user" });
   sqlite.prepare("INSERT INTO chats (id, user_id, created_at, updated_at) VALUES (?, ?, 1, 1)").run(chatId, member.viewer.id);
   sqlite.prepare("INSERT INTO messages (id, chat_id, role, content, parts, position, created_at) VALUES (?, ?, 'assistant', 'Private mode fixture', '[]', 0, 1)").run("private-reply", chatId);
+  const privateArtifact = "private-mode-artifact";
+  artifact(privateArtifact, member.viewer.id, chatId, "private-reply", "<p>Private mode page</p>");
   const setMode = (input: object) => routeRequest({ route: "admin/settings", method: "PUT", input }, admin.cookie);
   const setup = async () => (await routeRequest({ route: "setup", method: "GET" })).json();
   const list = (cookie: string) => routeRequest({ route: "connections", method: "GET" }, cookie);
@@ -436,6 +457,9 @@ test("hosting routes enforce connection ownership and signup across modes", asyn
     turn(adminConnection),
     { route: "memories/[id]", method: "DELETE", params: { id: note.id } },
     { route: "memories/[id]", method: "PATCH", params: { id: note.id }, input: { text: "No access" } },
+    { route: "artifacts/[id]", method: "GET", params: { id: privateArtifact } },
+    { route: "artifacts/[id]", method: "PATCH", params: { id: privateArtifact }, input: { title: "No access" } },
+    { route: "chats/[id]/artifacts", method: "GET", params: { id: chatId } },
   ];
   const assertAdminIsolation = async () => {
     const before = snapshot(member.viewer.id);
@@ -444,6 +468,7 @@ test("hosting routes enforce connection ownership and signup across modes", asyn
     }
     assert.deepEqual(await (await routeRequest({ route: "search", method: "GET", query: "?q=Private" }, admin.cookie)).json(), { hits: [] });
     assert.deepEqual(await (await routeRequest({ route: "memories", method: "GET", query: "?q=Private" }, admin.cookie)).json(), { memories: [] });
+    assert.deepEqual(await (await routeRequest({ route: "artifacts", method: "GET", query: "?q=Private" }, admin.cookie)).json(), { items: [], nextCursor: null });
     assert.deepEqual(snapshot(member.viewer.id), before);
   };
 

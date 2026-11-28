@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getDb } from "./index";
 
-const direct = ["account", "chats", "hidden_models", "memories", "memory_runs", "provider_connections", "session", "user_github", "user_preferences"];
+const direct = ["account", "artifacts", "chats", "hidden_models", "memories", "memory_runs", "provider_connections", "session", "user_github", "user_preferences"];
 const derived = [
+  "artifacts_fts", "artifacts_fts_config", "artifacts_fts_data", "artifacts_fts_docsize", "artifacts_fts_idx",
   "memories_fts", "memories_fts_config", "memories_fts_data", "memories_fts_docsize", "memories_fts_idx",
   "memories_vec", "memories_vec_chunks", "memories_vec_info", "memories_vec_rowids", "memories_vec_vector_chunks00",
   "messages_fts", "messages_fts_config", "messages_fts_data", "messages_fts_docsize", "messages_fts_idx",
@@ -35,16 +36,20 @@ test("every SQLite table has an owner or a documented instance purpose, and user
       sqlite.prepare("INSERT INTO user_github (user_id, updated_at) VALUES (?, 1)").run(id);
       sqlite.prepare("INSERT INTO chats (id, user_id, created_at, updated_at) VALUES (?, ?, 1, 1)").run(id, id);
       sqlite.prepare("INSERT INTO messages (id, chat_id, role, content, parts, position, created_at) VALUES (?, ?, 'user', ?, '[]', 0, 1)").run(id, id, `${id}message`);
+      sqlite.prepare(`INSERT INTO artifacts (id, user_id, chat_id, message_id, text_ordinal, block_index, kind, language, code, derived_title, user_title, lineage_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 0, 0, 'html', 'html', ?, 'Page', ?, ?, 1, 1)`).run(id, id, id, id, `<p>${id}artifact</p>`, `${id}title`, id);
       const memory = sqlite.prepare("INSERT INTO memories (id, user_id, kind, text, text_norm, source_chat_id, source_message_id, created_at) VALUES (?, ?, 'fact', ?, ?, ?, ?, 1)")
         .run(id, id, `${id}memory`, `${id}memory`, id, id);
       sqlite.prepare("INSERT INTO memories_vec (rowid, user_id, embedding) VALUES (cast(? AS integer), ?, ?)")
         .run(memory.lastInsertRowid, id, Buffer.from(Float32Array.from({ length: 768 }, () => 1).buffer));
       sqlite.prepare("INSERT INTO memory_runs (user_id, date, state, started_at, chat_ids, done_chat_ids, retry_chat_ids, added, merged) VALUES (?, '2026-11-27', 'done', 1, '[]', '[]', '[]', 1, 0)").run(id);
     }
-    const needle = (table: "memories_fts" | "messages_fts", word: string) =>
+    const needle = (table: "artifacts_fts" | "memories_fts" | "messages_fts", word: string) =>
       sqlite.prepare(`SELECT count(*) FROM ${table} WHERE ${table} MATCH ?`).pluck().get(word);
     assert.equal(needle("memories_fts", "alphamemory"), 1);
     assert.equal(needle("messages_fts", "alphamessage"), 1);
+    assert.equal(needle("artifacts_fts", "alphaartifact"), 1);
+    assert.equal(needle("artifacts_fts", "betatitle"), 1);
     assert.equal(sqlite.prepare("SELECT count(*) FROM memories_vec WHERE user_id = 'alpha'").pluck().get(), 1);
     assert.throws(() => sqlite.exec("UPDATE user SET role = 'admin' WHERE id = 'beta'"), /UNIQUE/);
 
@@ -63,6 +68,10 @@ test("every SQLite table has an owner or a documented instance purpose, and user
     assert.equal(needle("messages_fts", "betamessage"), 0);
     assert.equal(needle("memories_fts", "alphamemory"), 1);
     assert.equal(needle("messages_fts", "alphamessage"), 1);
+    assert.equal(needle("artifacts_fts", "betaartifact"), 0);
+    assert.equal(needle("artifacts_fts", "betatitle"), 0);
+    assert.equal(needle("artifacts_fts", "alphaartifact"), 1);
+    sqlite.exec("INSERT INTO artifacts_fts(artifacts_fts, rank) VALUES ('integrity-check', 1)");
     assert.equal(sqlite.prepare("SELECT count(*) FROM instance_settings").pluck().get(), 1);
     assert.deepEqual(sqlite.pragma("foreign_key_check"), []);
     const counts = Object.fromEntries([...direct, "memories_vec"].map((table) => [
@@ -74,6 +83,7 @@ test("every SQLite table has an owner or a documented instance purpose, and user
       messages: sqlite.prepare("SELECT count(*) FROM messages WHERE chat_id = 'beta'").pluck().get(),
       messages_fts: needle("messages_fts", "betamessage"),
       memories_fts: needle("memories_fts", "betamemory"),
+      artifacts_fts: needle("artifacts_fts", "betaartifact"),
     })}`);
   } finally {
     sqlite.close();

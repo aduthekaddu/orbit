@@ -24,7 +24,7 @@ Orbit grows in slices. A slice is one pull request that ships one user-visible c
 | 18 | [Accounts and hosting modes](18.md) | `feat/accounts`, then `feat/accounts-modes` | Shipped in #279 and #281 |
 | 19 | [Tools page and tools sheet](19.md) | `feat/tools-page` | Planned |
 | 20 | [Files](20.md) | `feat/files` | Planned |
-| 21 | [Artifacts page](21.md) | `feat/artifacts-page` | Planned |
+| 21 | [Artifacts page](21.md) | `feat/artifacts-page` | Shipped in #287 |
 | 22 | [Share links](22.md) | `feat/share-links` | Planned |
 | 23 | [Remote MCP servers](23.md) | `feat/mcp-servers` | Planned |
 

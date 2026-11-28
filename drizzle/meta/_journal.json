@@ -148,6 +148,20 @@
       "when": 1795810215997,
       "tag": "0020_accounts_modes",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1795861665267,
+      "tag": "0021_artifacts",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1795861675341,
+      "tag": "0022_artifacts_fts",
+      "breakpoints": true
     }
   ]
 }

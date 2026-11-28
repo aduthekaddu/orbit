@@ -4,6 +4,11 @@ export type ArtifactLanguage = "html" | "svg" | "jsx" | "tsx";
 
 export type Artifact = { key: string; kind: ArtifactKind; language: ArtifactLanguage; code: string };
 
+/** The one key format for a block: the thread's CodeHeader, the stored row, and `?artifact=` all use it. */
+export function artifactKey(messageId: string, textOrdinal: number, blockIndex: number): string {
+  return `${messageId}.${textOrdinal}.${blockIndex}`;
+}
+
 const KIND_BY_LANGUAGE: Readonly<Record<ArtifactLanguage, ArtifactKind>> = {
   html: "html", svg: "svg", jsx: "react", tsx: "react",
 };

@@ -7,6 +7,7 @@ import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
 import { focusedHead, type toRepository } from "@/lib/chat-tree";
 import { hasOpenCodeRun } from "@/lib/chat-stopped-runs";
 import { orbitChatTransport } from "@/lib/chat-transport";
+import type { StoredChatArtifact } from "@/lib/artifacts/store";
 import type { PickableConnection } from "@/lib/connections";
 import type { Effort } from "@/lib/effort";
 import type { ModelChoice } from "@/lib/model-choice";
@@ -19,10 +20,14 @@ import { createReplyLink, ReplyLink } from "./reply-link";
 import { StoppedRunSync } from "./stopped-run-sync";
 import { Thread } from "./thread";
 
+// One object for every render, so ArtifactProvider does not read a missing prop as fresh rows.
+const NO_ARTIFACTS: Record<string, StoredChatArtifact> = {};
+
 export function ChatPanel({
   chatId,
   isDraft = false,
   initialHistory,
+  initialArtifacts = NO_ARTIFACTS,
   focusMessageId,
   choice: resolvedChoice,
   choiceLevels = null,
@@ -36,6 +41,8 @@ export function ChatPanel({
   /** `/c/<id>?new` with no chats row yet. The first send creates the row. */
   isDraft?: boolean;
   initialHistory: ReturnType<typeof toRepository>;
+  /** The chat's saved artifact rows by block key, across every branch. */
+  initialArtifacts?: Record<string, StoredChatArtifact>;
   focusMessageId: string | null;
   choice: ModelChoice | null;
   choiceLevels?: Effort[] | null;
@@ -149,7 +156,7 @@ export function ChatPanel({
     <AssistantRuntimeProvider runtime={runtime}>
       <ChatIdProvider chatId={chatId} onEdit={(id) => { editMessageId.current = id; }}>
         <ReplyLink link={link} historyLoaded={historyLoaded} headId={headId} liveReplyId={liveReplyId} savedIds={savedIds} restorePending={restorePending}>
-          <ArtifactProvider>
+          <ArtifactProvider chatId={chatId} initialArtifacts={initialArtifacts}>
             <StoppedRunSync chatId={chatId} stopped={stopped}>
               <ArtifactWorkspace>
                 <ModelChoiceProvider

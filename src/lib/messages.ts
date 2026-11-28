@@ -1,13 +1,15 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { UIMessage } from "ai";
+import { syncMessageArtifacts } from "./artifacts/store";
 import type { Redactor } from "./chat-errors";
 import { replaceTextPart, replaceTextParts } from "./chat-parts";
 import { getDb } from "./db";
 import { assistantHasVisiblePart } from "./genui/spec";
-import { chats, messages, providerConnections } from "./db/schema";
+import { artifacts, chats, messages, providerConnections } from "./db/schema";
 import { isPath, pathTo, toRepository, type StoredMessage } from "./chat-tree";
 import { EFFORT_OUTCOMES, isEffort, type EffortOutcome } from "./effort";
 import type { ReplyRecord } from "./model-choice";
+import type { UserId } from "./policy";
 import { runCodeOutputSchema } from "./sandbox/spec";
 import { stripTerminalControls } from "./sandbox/terminal";
 
@@ -99,7 +101,8 @@ export function replaceFallbackTitle(chatId: string, fallback: string, title: st
   getDb().update(chats).set({ title }).where(and(eq(chats.id, chatId), eq(chats.title, fallback))).run();
 }
 
-function redactPartsCrossBoundary(parts: unknown, redact: Redactor): unknown {
+/** Masks every part, and each run of text or reasoning parts as one text, so a credential split across parts is found too. */
+export function redactPartsCrossBoundary(parts: unknown, redact: Redactor): unknown {
   if (!Array.isArray(parts)) return redact.value(parts);
   const copy = parts.map((part) => {
     if (!part || typeof part !== "object" || Array.isArray(part)) return redact.value(part);
@@ -335,37 +338,57 @@ function replyColumns(reply: ReplyRecord | undefined, redact: Redactor) {
   return { connectionId: connected ? reply.connectionId : null, model: redact.text(reply.model), reasoningEffort: reply.effort, effortOutcome: reply.effortOutcome };
 }
 
-/** Saves a reply with a visible part, unless a row its plan copied has changed. Returns whether it saved. */
+// Callers hold the transaction that wrote the message. The saved row holds the redacted parts, so artifact rows,
+// their titles, and their search entries never see a credential the message write masked. The same redactor masks
+// each title again, since a title read from code drops tags and can join a credential split by them.
+function syncSavedArtifacts(chatId: string, messageId: string, redact: Redactor) {
+  const db = getDb();
+  const saved = db.select({ userId: chats.userId, parts: messages.parts, createdAt: messages.createdAt })
+    .from(messages).innerJoin(chats, eq(chats.id, messages.chatId))
+    .where(and(eq(messages.id, messageId), eq(messages.chatId, chatId))).get();
+  if (!saved) throw new Error("The message is missing inside its own write");
+  syncMessageArtifacts(saved.userId as UserId, chatId, messageId, JSON.parse(saved.parts), saved.createdAt, redact, db);
+}
+
+/** Saves a reply with a visible part, and its artifact rows, unless a row its plan copied has changed. Returns whether it saved. */
 export function finishChatReply(plan: ReplyPlan, parts: unknown, redact: Redactor, reply?: ReplyRecord): boolean {
   if (!assistantHasVisiblePart(parts)) return false;
   const db = getDb();
   return db.transaction(() => {
     if (!unchanged(savedText(plan.chatId, plan.prompt.id), plan.prompt.saved)) return false;
-    if (!plan.continues) return insertMessage(plan.chatId, { id: plan.id, role: "assistant", parts }, plan.prompt.id, redact, reply);
-    if (!unchanged(savedText(plan.chatId, plan.id), plan.continues)) return false;
-    db.update(messages).set({ ...messageBody(parts, redact), ...replyColumns(reply, redact) })
-      .where(eq(messages.id, plan.id)).run();
+    if (!plan.continues) {
+      if (!insertMessage(plan.chatId, { id: plan.id, role: "assistant", parts }, plan.prompt.id, redact, reply)) return false;
+    } else {
+      if (!unchanged(savedText(plan.chatId, plan.id), plan.continues)) return false;
+      db.update(messages).set({ ...messageBody(parts, redact), ...replyColumns(reply, redact) })
+        .where(eq(messages.id, plan.id)).run();
+    }
+    syncSavedArtifacts(plan.chatId, plan.id, redact);
     return true;
   });
 }
 
+/** Saves an edited reply text and its artifact rows in one transaction. */
 export function updateMessageText(chatId: string, messageId: string, text: string, redact: Redactor, partIndex?: number) {
   if (text.trim() === "") return false;
   const db = getDb();
-  const row = db
-    .select()
-    .from(messages)
-    .where(and(eq(messages.id, messageId), eq(messages.chatId, chatId)))
-    .get();
-  if (!row || row.role !== "assistant") return false;
-  const current = JSON.parse(row.parts) as UIMessage["parts"];
-  const parts = partIndex == null ? replaceTextParts(current, text) : replaceTextPart(current, partIndex, text);
-  if (!parts) return false;
-  db.update(messages)
-    .set(messageBody(parts, redact))
-    .where(eq(messages.id, messageId))
-    .run();
-  return true;
+  return db.transaction(() => {
+    const row = db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.id, messageId), eq(messages.chatId, chatId)))
+      .get();
+    if (!row || row.role !== "assistant") return false;
+    const current = JSON.parse(row.parts) as UIMessage["parts"];
+    const parts = partIndex == null ? replaceTextParts(current, text) : replaceTextPart(current, partIndex, text);
+    if (!parts) return false;
+    db.update(messages)
+      .set(messageBody(parts, redact))
+      .where(eq(messages.id, messageId))
+      .run();
+    syncSavedArtifacts(chatId, messageId, redact);
+    return true;
+  });
 }
 
 type ReplyRow = { connectionId: string | null; model: string | null; reasoningEffort: string | null; effortOutcome: string | null };
@@ -448,13 +471,15 @@ export function renameChat(id: string, userId: string, title: string, redact: Re
 }
 
 /**
- * Deletes the user's chat in one transaction. Messages go first, so the messages_fts_ad trigger removes each one
- * from search. Memories keep their row and lose the source through ON DELETE SET NULL. False when it is not theirs.
+ * Deletes the user's chat in one transaction. Artifacts and messages go first, so the artifacts_fts_ad and
+ * messages_fts_ad triggers remove each one from search. Memories keep their row and lose the source through
+ * ON DELETE SET NULL. False when it is not theirs.
  */
 export function deleteChat(id: string, userId: string): boolean {
   const db = getDb();
   return db.transaction(() => {
     if (!getChatForUser(id, userId)) return false;
+    db.delete(artifacts).where(eq(artifacts.chatId, id)).run();
     db.delete(messages).where(eq(messages.chatId, id)).run();
     db.delete(chats).where(and(eq(chats.id, id), eq(chats.userId, userId))).run();
     return true;

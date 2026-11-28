@@ -1,9 +1,9 @@
 "use client";
 
-import { Dish, Padlock, Plug, type HairlineProps } from "@lucasmarkes/hairline/react";
+import { Dish, Padlock, Plug, Stack, type HairlineProps } from "@lucasmarkes/hairline/react";
 import { cn } from "@/lib/utils";
 
-const figures = { dish: Dish, padlock: Padlock, plug: Plug };
+const figures = { dish: Dish, padlock: Padlock, plug: Plug, stack: Stack };
 
 export type FigureName = keyof typeof figures;
 
@@ -13,5 +13,5 @@ export function Figure({
   ...props
 }: { name: FigureName } & Omit<HairlineProps, "theme">) {
   const Component = figures[name];
-  return <Component className={cn("w-full", className)} {...props} />;
+  return <Component data-figure={name} className={cn("w-full", className)} {...props} />;
 }

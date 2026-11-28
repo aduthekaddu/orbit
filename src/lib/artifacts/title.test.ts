@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ArtifactKind, ArtifactLanguage } from "./detect";
-import { ARTIFACT_KIND_LABEL, artifactFileName, artifactTitle } from "./title";
+import { ARTIFACT_KIND_LABEL, artifactFileName, artifactTitle, capTitle, FALLBACK_TITLE, shownTitle } from "./title";
 
 const LANGUAGE: Record<ArtifactKind, ArtifactLanguage> = { html: "html", svg: "svg", react: "jsx" };
 
@@ -160,4 +160,29 @@ test("one 50,000-character run of a single letter is read quickly", () => {
   assert.ok(elapsed < 1_000, `reading ${inputs.length} long inputs took ${Math.round(elapsed)} ms`);
   assert.equal(title("html", `<title>${run}</title>`), "a".repeat(80));
   assert.equal(fileName("html", `<title>${run}</title>`), `${"a".repeat(60)}.html`);
+});
+
+test("each kind has one fallback title, the one a block without a name gets", () => {
+  assert.deepEqual(FALLBACK_TITLE, { html: "HTML page", svg: "SVG image", react: "React component" });
+  assert.equal(title("html", "<p>plain</p>"), FALLBACK_TITLE.html);
+});
+
+test("capTitle keeps 80 code points and drops trailing space", () => {
+  assert.equal(capTitle("short title  "), "short title");
+  assert.equal(capTitle("x".repeat(81)), "x".repeat(80));
+  assert.equal(capTitle(`${"y".repeat(79)} z`), "y".repeat(79));
+  assert.equal(capTitle("😀".repeat(81)), "😀".repeat(80));
+});
+
+test("the shown title is the user's title when set, else the derived title", () => {
+  assert.equal(shownTitle({ userTitle: "Tally", derivedTitle: "Counter" }), "Tally");
+  assert.equal(shownTitle({ userTitle: null, derivedTitle: "Counter" }), "Counter");
+});
+
+test("a download takes its name from a given title, and a blank one keeps the derived name", () => {
+  const counter = { kind: "html" as const, language: "html" as const, code: "<title>Counter</title>" };
+  assert.equal(artifactFileName(counter, "Tally"), "tally.html");
+  assert.equal(artifactFileName({ ...counter, code: "<p>report</p>" }, "Quarterly report"), "quarterly-report.html");
+  assert.equal(artifactFileName({ kind: "react", language: "tsx", code: "export default function App() { return null; }" }, "My App"), "my-app.tsx");
+  for (const blank of [undefined, "", "   "]) assert.equal(artifactFileName(counter, blank), "counter.html");
 });

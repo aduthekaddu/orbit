@@ -2,7 +2,7 @@ import type { Artifact, ArtifactKind } from "./detect";
 
 export const ARTIFACT_KIND_LABEL: Record<ArtifactKind, string> = { html: "HTML", svg: "SVG", react: "React" };
 
-const FALLBACK_TITLE: Record<ArtifactKind, string> = { html: "HTML page", svg: "SVG image", react: "React component" };
+export const FALLBACK_TITLE: Readonly<Record<ArtifactKind, string>> = { html: "HTML page", svg: "SVG image", react: "React component" };
 
 const MAX_TITLE = 80;
 const MAX_SLUG = 60;
@@ -41,8 +41,8 @@ function decodeEntities(text: string) {
     .replace(/&amp;/gi, "&");
 }
 
-/** The first MAX_TITLE code points. Two code units per code point is the most a slice can need. */
-function capTitle(text: string) {
+/** The first MAX_TITLE code points, without trailing space. Two code units per code point is the most a slice can need. */
+export function capTitle(text: string) {
   return Array.from(text.slice(0, MAX_TITLE * 2)).slice(0, MAX_TITLE).join("").trimEnd();
 }
 
@@ -60,7 +60,7 @@ function withoutTags(raw: string) {
 
 function cleanTitle(raw: string | null): string {
   if (raw === null) return "";
-  return capTitle(decodeEntities(withoutTags(raw)).replace(/\s+/g, " ").trim());
+  return decodeEntities(withoutTags(raw)).replace(/\s+/g, " ").trim();
 }
 
 function markupTitle(kind: "html" | "svg", source: string): string {
@@ -107,7 +107,7 @@ function reactTitle(source: string): string {
       if (word === "class" && nameAt === end) continue;
       const name = readName(nameAt);
       if (!name || NOT_A_NAME.has(name)) continue;
-      if (word === "function") return capTitle(name);
+      if (word === "function") return name;
       className ||= name;
     } else if (!bareName && word && !NOT_A_NAME.has(word)) {
       end = skipSpace(source, end, true);
@@ -115,19 +115,36 @@ function reactTitle(source: string): string {
       if (end === source.length || /[\r\n\u2028\u2029]/.test(source[end])) bareName = word;
     }
   }
-  return capTitle(className || bareName);
+  return className || bareName;
+}
+
+/** The name an artifact's code gives itself, before the cut to 80 code points. Empty when it names none. */
+function readTitle(artifact: Pick<Artifact, "kind" | "code">): string {
+  const source = artifact.code.length > MAX_SCAN ? artifact.code.slice(0, MAX_SCAN) : artifact.code;
+  return artifact.kind === "react" ? reactTitle(source) : markupTitle(artifact.kind, source);
 }
 
 /** A short name for an artifact, read from its own code. Render it as text only. */
 export function artifactTitle(artifact: Pick<Artifact, "kind" | "code">): string {
-  const source = artifact.code.length > MAX_SCAN ? artifact.code.slice(0, MAX_SCAN) : artifact.code;
-  const title = artifact.kind === "react" ? reactTitle(source) : markupTitle(artifact.kind, source);
-  return title || FALLBACK_TITLE[artifact.kind];
+  return capTitle(readTitle(artifact)) || FALLBACK_TITLE[artifact.kind];
 }
 
-/** A download name from the artifact's title, such as `signup-form.html`. */
-export function artifactFileName(artifact: Pick<Artifact, "kind" | "language" | "code">): string {
-  const slug = artifactTitle(artifact)
+/**
+ * The title to store for an artifact. Dropping tags can join a credential the code holds in pieces, and the cut to 80
+ * code points can leave part of one, so the title is masked before the cut and again after it.
+ */
+export function maskedArtifactTitle(artifact: Pick<Artifact, "kind" | "code">, redact: { text: (text: string) => string }): string {
+  return redact.text(capTitle(redact.text(readTitle(artifact)))) || FALLBACK_TITLE[artifact.kind];
+}
+
+/** The title an artifact shows: the user's rename when set, else the title read from its code. */
+export function shownTitle(row: { userTitle: string | null; derivedTitle: string }): string {
+  return row.userTitle ?? row.derivedTitle;
+}
+
+/** A download name from the given title, or from the artifact's own title when none is given, such as `signup-form.html`. */
+export function artifactFileName(artifact: Pick<Artifact, "kind" | "language" | "code">, title?: string): string {
+  const slug = (title?.trim() ? title : artifactTitle(artifact))
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, "-")
     .replace(/^-+|-+$/g, "");

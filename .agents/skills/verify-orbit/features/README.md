@@ -46,6 +46,7 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 - [Branching](./branching.md) keeps edited prompts and regenerated answers, switches versions, and restores the last written branch.
 - [History search](./search.md) finds a message from the command palette and titles a new chat.
 - [Artifacts](./artifacts.md) previews HTML, SVG and React, checks frame isolation, and restores the selected preview after reload.
+- [Artifacts page](./artifacts-page.md) links artifact versions, renames and diffs them, and checks the private `/artifacts` library on desktop and phones.
 
 - [Web search](./web-search.md) calls a search tool, reads its results, keeps source links after reload, and shows failed and cancelled runs.
 - [Code sandbox](./sandbox.md) runs Python in real containers, shows code and output, rejects a network escape, and checks the real-provider hash.
