@@ -70,7 +70,7 @@ function SearchSettings({ initial }: { initial: Pick<PublicInstanceSettings, "se
   }
 
   return (
-    <form aria-labelledby="search-heading" onSubmit={onSubmit} className="min-w-0 rounded-xl border bg-card shadow-card">
+    <form id="search" aria-labelledby="search-heading" onSubmit={onSubmit} className="min-w-0 scroll-mt-6 rounded-xl border bg-card shadow-card">
       <div className="border-b px-5 py-3.5">
         <h2 id="search-heading" className="text-sm font-medium">Search</h2>
       </div>
@@ -105,7 +105,7 @@ function SandboxSettings({ available, initial }: { available: boolean; initial: 
   const submit = useSettingsSave(url, "PUT", sandboxBody);
 
   return (
-    <section aria-labelledby="sandbox-heading" className="rounded-xl border bg-card px-5 py-3.5 shadow-card">
+    <section id="sandbox" aria-labelledby="sandbox-heading" className="scroll-mt-6 rounded-xl border bg-card px-5 py-3.5 shadow-card">
       <div className="flex min-h-9 items-center justify-between gap-4">
         <h2 id="sandbox-heading" className="text-sm font-medium">Code sandbox</h2>
         <div data-sandbox-status={enabled ? "on" : "off"} className="flex items-center gap-3 text-meta text-muted-foreground">

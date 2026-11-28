@@ -160,7 +160,13 @@ function CodeEditor({ code, start, language }: { code: string; start: number; la
   );
 }
 
-export function SyntaxHighlighter({ code, language, node }: SyntaxHighlighterProps) {
+/** `standalone` is a block shown without CodeHeader above it, such as a schema on /tools, so every corner is round. */
+export function SyntaxHighlighter({
+  code,
+  language,
+  node,
+  standalone = false,
+}: Omit<SyntaxHighlighterProps, "components"> & Partial<Pick<SyntaxHighlighterProps, "components">> & { standalone?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const { start, active, artifact, wrapped } = useCodeBlock(language, code, node);
 
@@ -173,7 +179,7 @@ export function SyntaxHighlighter({ code, language, node }: SyntaxHighlighterPro
   const collapsible = lines > COLLAPSE_AFTER;
   const capped = collapsible && !expanded;
   return (
-    <div className="mb-4 overflow-hidden rounded-b-lg border bg-surface-sunken">
+    <div className={cn("overflow-hidden border bg-surface-sunken", standalone ? "rounded-lg" : "mb-4 rounded-b-lg")}>
       <div className="relative">
         <ScrollFade
           axis="x"

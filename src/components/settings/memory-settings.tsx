@@ -14,7 +14,7 @@ export function MemorySettings({ initial }: { initial: MemoryPreference }) {
   const submit = useSettingsSave("/api/preferences", "PATCH", savedBody);
 
   return (
-    <section aria-labelledby="memory-heading" className="rounded-xl border bg-card px-5 py-3.5 shadow-card">
+    <section id="memory" aria-labelledby="memory-heading" className="scroll-mt-6 rounded-xl border bg-card px-5 py-3.5 shadow-card">
       <div className="flex min-h-9 items-center justify-between gap-4">
         <h2 id="memory-heading" className="text-sm font-medium">Memory</h2>
         <Switch

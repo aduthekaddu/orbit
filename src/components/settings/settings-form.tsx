@@ -80,7 +80,7 @@ export function SettingsForm({ initial }: { initial: PublicUserGithub }) {
   }
 
   return (
-    <form aria-labelledby="github-heading" onSubmit={onSubmit} className="min-w-0 rounded-xl border bg-card shadow-card">
+    <form id="github" aria-labelledby="github-heading" onSubmit={onSubmit} className="min-w-0 scroll-mt-6 rounded-xl border bg-card shadow-card">
       <div className="border-b px-5 py-3.5">
         <h2 id="github-heading" className="text-sm font-medium">GitHub</h2>
       </div>
