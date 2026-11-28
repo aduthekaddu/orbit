@@ -477,6 +477,21 @@ test("an aborted call rethrows and records nothing", async () => {
   assert.deepEqual(storedIds(account.id), []);
 });
 
+test("a call that returns after its signal aborted records nothing", async () => {
+  const account = freshUser();
+  const controller = new AbortController();
+  const stopping = (output: unknown) => fakeTool(() => {
+    controller.abort();
+    return output;
+  });
+  assert.deepEqual(await run(recordingTool(stopping(found), "web_search", "web_search", account.id, redact), {}, controller.signal), found);
+  const failed = { ok: false, query: "orbit", error: "Search is unavailable" };
+  assert.deepEqual(await run(recordingTool(stopping(failed), "web_search", "web_search", account.id, redact), {}, controller.signal), failed);
+  const denied = { ok: false, error: "Sandbox access was denied. Check the Docker proxy." };
+  assert.deepEqual(await run(recordingTool(stopping(denied), "run_code", "run_code", account.id, redact), {}, controller.signal), denied);
+  assert.deepEqual(storedIds(account.id), []);
+});
+
 test("a thrown tool error rethrows and records the tool's fixed message", async () => {
   const account = freshUser();
   const throwing = (error: Error) => fakeTool(() => {

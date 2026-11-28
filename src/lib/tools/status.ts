@@ -261,6 +261,7 @@ export function recordingTool(tool: Tool, modelToolName: string, toolId: Testabl
         if (!aborted) recordToolCall(userId, toolId, { ok: false, error: thrownToolError(toolId, error, input, redact) }, redact);
         throw error;
       }
+      if (options.abortSignal?.aborted) return output;
       const outcome = resultOutcome(toolId, modelToolName, output);
       if (outcome) recordToolCall(userId, toolId, outcome, redact);
       return output;
