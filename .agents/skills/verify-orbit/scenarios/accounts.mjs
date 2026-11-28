@@ -1,0 +1,462 @@
+import assert from "node:assert/strict";
+import { eventually } from "../../../../src/lib/eventually.mjs";
+
+const teamEmail = "member-team@orbit.local";
+const communityEmail = "member-community@orbit.local";
+const password = "orbit-accounts-fixture";
+const desktop = { width: 1280, height: 800 };
+
+function heading(page, name) {
+  return page.getByRole("heading", { name, exact: true });
+}
+
+function apiResponse(page, path, method) {
+  return page.waitForResponse((response) => new URL(response.url()).pathname === path && response.request().method() === method);
+}
+
+async function select(page, field, value) {
+  await page.getByRole("combobox", { name: field, exact: true }).click();
+  await page.getByRole("option", { name: value, exact: true }).click();
+}
+
+async function chooseDefault(page) {
+  const form = page.getByRole("form", { name: "Default model", exact: true });
+  await form.getByRole("combobox", { name: "Model", exact: true }).click();
+  await page.getByRole("option", { name: "mock-reasoner", exact: true }).click();
+  await form.getByRole("radio", { name: "Low", exact: true }).click();
+  const saved = apiResponse(page, "/api/preferences/model", "PUT");
+  await form.getByRole("button", { name: "Save", exact: true }).click();
+  const response = await saved;
+  assert.equal(response.status(), 200, "save each member's own default model");
+  const { model, effort } = await response.json();
+  assert.deepEqual({ model, effort }, { model: "mock-reasoner", effort: "low" });
+}
+
+async function sendChat(page, prompt, reply = "pong") {
+  const composer = page.getByPlaceholder("Ask anything", { exact: true });
+  const replies = page.locator('[data-message-role="assistant"]').getByText(reply, { exact: true });
+  const before = await replies.count();
+  await composer.fill(prompt);
+  await composer.press("Enter");
+  await replies.nth(before).waitFor({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Send", exact: true }).waitFor();
+  return new URL(page.url()).pathname;
+}
+
+async function signup(page, email, { doubleSubmit = false } = {}) {
+  await page.getByLabel("Name", { exact: true }).fill("Orbit Member");
+  await page.getByLabel("Email", { exact: true }).fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  const response = apiResponse(page, "/api/auth/sign-up/email", "POST");
+  const button = page.getByRole("button", { name: "Create account", exact: true });
+  if (doubleSubmit) {
+    await button.evaluate((target) => { target.click(); target.click(); });
+  } else {
+    await button.click();
+  }
+  assert.equal((await response).status(), 200, "signup succeeds");
+  await page.waitForURL((url) => url.pathname.startsWith("/c/"));
+}
+
+function readFocus() {
+  const element = document.activeElement;
+  const input = element instanceof HTMLInputElement ? element : null;
+  return {
+    tag: element?.tagName ?? "",
+    label: element?.getAttribute("aria-label") ?? "",
+    text: element?.textContent?.trim().slice(0, 40) ?? "",
+    inDialog: Boolean(element?.closest('[role="dialog"]')),
+    filled: input ? input.value.length > 0 : false,
+    selectedAll: input ? input.selectionStart === 0 && input.selectionEnd === input.value.length : false,
+  };
+}
+
+export default async function accounts({ page, origin, step, shot, mockUrl, seedMember }) {
+  await page.goto(`${origin}/admin`);
+  const hosting = page.getByRole("combobox", { name: "Hosting mode", exact: true });
+  if (!step("Admin has Hosting controls", await heading(page, "Hosting").isVisible() && await hosting.isVisible(), "Hosting controls are missing on /admin")) return;
+
+  const request = page.request;
+  const browser = page.context().browser();
+  const contexts = [];
+  const adminSettings = `${origin}/api/admin/settings`;
+  const usersUrl = `${origin}/api/admin/users`;
+  const invitesUrl = `${origin}/api/admin/invites`;
+  const getJSON = async (url, actor = request) => {
+    const response = await actor.get(url);
+    assert.equal(response.status(), 200, `read ${new URL(url).pathname}`);
+    return response.json();
+  };
+  const accountsList = async () => (await getJSON(usersUrl)).users;
+  const invites = async () => (await getJSON(invitesUrl)).invites;
+
+  async function newPage(options = { viewport: desktop }) {
+    const context = await browser.newContext(options);
+    contexts.push(context);
+    return context.newPage();
+  }
+
+  async function hostingMode(label, expected = 200) {
+    const response = apiResponse(page, "/api/admin/settings", "PUT");
+    await select(page, "Hosting mode", label);
+    assert.equal((await response).status(), expected, `switch to ${label}`);
+    await hosting.waitFor();
+  }
+
+  async function createInvite(target = page, name = "Create invite") {
+    const response = apiResponse(target, "/api/admin/invites", "POST");
+    const create = target.getByRole("button", { name: "Create invite", exact: true });
+    await create.focus();
+    await target.keyboard.press("Enter");
+    assert.equal((await response).status(), 201, "create an invite");
+    const link = target.getByRole("textbox", { name: "Invite link", exact: true });
+    await link.waitFor();
+    await focusStep(target, `${name} focuses the selected invite link`, isInviteLink);
+    return link.inputValue();
+  }
+
+  function removeButton(target, email) {
+    return target.getByRole("button", { name: `Remove ${email}`, exact: true });
+  }
+
+  async function fits(target, width, name) {
+    step(`${name} fits ${width} pixels`, await target.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth));
+  }
+
+  async function focusStep(target, name, predicate) {
+    try {
+      await eventually(() => target.evaluate(readFocus), predicate, { timeoutMs: 3_000, what: name });
+      return step(name, true);
+    } catch (error) {
+      return step(name, false, error.message.replace(/\s+/g, " ").slice(0, 240));
+    }
+  }
+
+  const isInviteLink = (focus) => focus.tag === "INPUT" && focus.label === "Invite link" && focus.filled && focus.selectedAll;
+  const isButton = (label) => (focus) => focus.tag === "BUTTON" && (focus.label === label || (focus.label === "" && focus.text === label));
+  const isRemoveButton = (email) => isButton(`Remove ${email}`);
+
+  async function switchDialog(target, label, { confirm = false, pendingInvites = false, shotName = null } = {}) {
+    const mode = target.getByRole("combobox", { name: "Hosting mode", exact: true });
+    const saved = (await mode.innerText()).toLowerCase();
+    const sent = { requests: 0, responses: 0 };
+    const onRequest = (outgoing) => { if (new URL(outgoing.url()).pathname === "/api/admin/settings" && outgoing.method() === "PUT") sent.requests += 1; };
+    const onResponse = (incoming) => { if (new URL(incoming.url()).pathname === "/api/admin/settings" && incoming.request().method() === "PUT") sent.responses += 1; };
+    target.on("request", onRequest);
+    target.on("response", onResponse);
+    try {
+      await select(target, "Hosting mode", label);
+      const dialog = target.getByRole("dialog", { name: `Switch to ${label}?`, exact: true });
+      const shown = await dialog.waitFor({ state: "visible", timeout: 3_000 }).then(() => true, () => false);
+      if (!step(`Switching to ${label} with other accounts opens a confirmation`, shown, `no dialog; ${sent.requests} request(s) already sent`)) {
+        await eventually(() => sent.responses, (count) => count >= sent.requests, { timeoutMs: 5_000, what: "the unconfirmed save to settle" });
+        if (shotName) await shot(shotName, target);
+        assert.equal((await request.put(adminSettings, { data: { hostingMode: saved } })).status(), 200, "restore the hosting mode");
+        await target.reload();
+        return false;
+      }
+      step(`The ${label} confirmation sends nothing before Switch`, sent.requests === 0, `${sent.requests} request(s) sent`);
+      const text = await dialog.innerText();
+      const body = label === "Team" ? "Members will use your connections." : "Members will need their own connections.";
+      step(`The ${label} confirmation says what changes`, text.includes(body), text.replace(/\s+/g, " "));
+      step(`Pending invites line ${pendingInvites ? "shows" : "is absent"} in the ${label} confirmation`, text.includes("Pending invites will be revoked.") === pendingInvites, text.replace(/\s+/g, " "));
+      await focusStep(target, `The ${label} confirmation focuses Cancel first`, (focus) => focus.inDialog && isButton("Cancel")(focus));
+      if (shotName) await shot(shotName, target, { animations: "disabled" });
+      if (!confirm) {
+        await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+        await dialog.waitFor({ state: "hidden" });
+        step(`Cancel keeps ${saved} selected and sends nothing`, (await mode.innerText()).toLowerCase() === saved && sent.requests === 0, `${await mode.innerText()}, ${sent.requests} request(s)`);
+        await focusStep(target, "Cancel returns focus to Hosting mode", (focus) => focus.tag === "BUTTON" && focus.label === "Hosting mode");
+        return true;
+      }
+      const response = apiResponse(target, "/api/admin/settings", "PUT");
+      await dialog.getByRole("button", { name: "Switch", exact: true }).click();
+      assert.equal((await response).status(), 200, `confirm the switch to ${label}`);
+      await dialog.waitFor({ state: "hidden" });
+      step(`Switch sends one request and selects ${label}`, sent.requests === 1 && (await mode.innerText()) === label, `${sent.requests} request(s), ${await mode.innerText()}`);
+      return true;
+    } finally {
+      target.off("request", onRequest);
+      target.off("response", onResponse);
+    }
+  }
+
+  const team = await newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
+  const signedOut = await newPage();
+  const community = await newPage();
+
+  try {
+    assert.equal((await accountsList()).length, 1, "start with only the verify admin");
+    assert.equal((await getJSON(adminSettings)).hostingMode, "personal");
+    assert.equal(await heading(page, "Invites").count(), 0);
+    assert.equal(await hosting.innerText(), "Personal");
+    await hostingMode("Team");
+    await heading(page, "Invites").waitFor();
+    step("A switch with only the admin saves without a confirmation", await page.getByRole("dialog").count() === 0);
+    step("Team shows Invites and keeps Signup closed", await heading(page, "Signup").count() === 0 && !(await getJSON(`${origin}/api/setup`)).signupOpen);
+    await shot("hosting");
+
+    const teamLink = await createInvite(page, "Create invite by keyboard");
+    await shot("invite-focus", page, { maskColor: "#3d434c", animations: "disabled" });
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin });
+    await page.getByRole("button", { name: "Copy", exact: true }).click();
+    await page.getByRole("button", { name: "Copied", exact: true }).waitFor();
+    step("Copy places the one-time link on the clipboard", await page.evaluate(async (link) => await navigator.clipboard.readText() === link, teamLink));
+    await page.evaluate(() => navigator.clipboard.writeText(""));
+    await shot("invite-created", page, { maskColor: "#3d434c" });
+    await page.reload();
+    const pending = await invites();
+    await page.getByRole("button", { name: "Revoke", exact: true }).waitFor();
+    step("Reload keeps the pending invite and hides the one-time link",
+      pending.length === 1 && pending[0].expiresAt && await page.getByRole("textbox", { name: "Invite link", exact: true }).count() === 0 &&
+      await page.getByText(/Expires/).isVisible());
+    await team.goto(teamLink);
+    const teamSignup = team.getByRole("button", { name: "Create account", exact: true });
+    await teamSignup.waitFor();
+    await teamSignup.click();
+    assert.equal(await team.getByLabel("Name", { exact: true }).evaluate((input) => input.validity.valueMissing), true, "blank signup stays on the form");
+    await team.getByLabel("Name", { exact: true }).fill("A".repeat(500));
+    await team.getByLabel("Email", { exact: true }).fill("invalid-email");
+    assert.equal(await team.getByLabel("Email", { exact: true }).evaluate((input) => input.validity.typeMismatch), true, "email field rejects a wrong format");
+    await fits(team, 390, "Invite signup with long input");
+    await team.reload();
+    await teamSignup.waitFor();
+    await fits(team, 390, "Invite signup after refresh");
+    await shot("invite-signup-390", team);
+    await signedOut.goto(teamLink);
+    await signedOut.getByRole("button", { name: "Create account", exact: true }).waitFor();
+    await shot("invite-signup", signedOut);
+    let submissions = 0;
+    team.on("request", (outgoing) => { if (new URL(outgoing.url()).pathname === "/api/auth/sign-up/email") submissions += 1; });
+    await signup(team, teamEmail, { doubleSubmit: true });
+    step("Double submit creates one Team member with one signup request", submissions === 1 && (await accountsList()).filter((account) => account.email === teamEmail).length === 1);
+    await heading(team, "Default model").waitFor();
+    step("Team first visit offers the shared models and hides connection add",
+      await heading(team, "Connect a provider").count() === 0 && await heading(team, "Add connection").count() === 0);
+    await chooseDefault(team);
+    const teamChat = await sendChat(team, "[qa:plain] Say pong for the Team browser check.");
+    step("Team member can chat using their own model default", teamChat.startsWith("/c/"));
+    await sendChat(team, "[qa:remember] Remember I practice the cello.", "Saved.");
+    const memberMemories = await getJSON(`${origin}/api/memories`, team.request);
+    assert.ok(memberMemories.memories.some((entry) => entry.text.includes("practice the cello")), "member can see their own saved memory");
+
+    await team.goto(`${origin}/settings`);
+    for (const name of ["Appearance", "Default model", "Models", "Memory", "GitHub"]) await heading(team, name).waitFor();
+    step("Team settings hides the Connections management card", await heading(team, "Connections").count() === 0);
+    await fits(team, 390, "Team settings");
+    await heading(team, "Default model").evaluate((element) => element.scrollIntoView({ block: "start" }));
+    await shot("team-member-settings-390", team);
+    const desktopTeam = await newPage({ viewport: desktop, storageState: await team.context().storageState() });
+    await desktopTeam.goto(`${origin}/settings`);
+    await heading(desktopTeam, "Models").waitFor();
+    await heading(desktopTeam, "Default model").evaluate((element) => element.scrollIntoView({ block: "start" }));
+    await shot("team-member-settings", desktopTeam);
+    const shared = await getJSON(`${origin}/api/connections`, team.request);
+    assert.ok(Array.isArray(shared) && shared.length > 0, "Team receives a list of connections");
+    step("Team connections expose only id, kind, and label", shared.every((connection) => Object.keys(connection).sort().join(",") === "id,kind,label"));
+    const blockedAdd = await team.request.post(`${origin}/api/connections`, {
+      data: { kind: "openai-compatible", label: "Refused", baseUrl: mockUrl, apiKey: "test-key-not-real" },
+    });
+    step("Team member cannot create connections", blockedAdd.status() === 403, `POST ${blockedAdd.status()}`);
+
+    await signedOut.goto(teamLink);
+    await heading(signedOut, "Invite not valid").waitFor();
+    step("A spent invite renders the invalid state", await signedOut.getByRole("button", { name: "Create account", exact: true }).count() === 0);
+    await shot("invite-reused", signedOut);
+
+    await page.goto(`${origin}/admin`);
+    const signedInLink = await createInvite();
+    const beforeVisit = await invites();
+    const landing = await request.get(signedInLink, { maxRedirects: 0 });
+    assert.equal(landing.status(), 307, "signed-in invite visit redirects");
+    assert.equal(new URL(landing.headers().location, origin).pathname, "/");
+    await signedOut.goto(signedInLink);
+    assert.equal(await signedOut.getByRole("button", { name: "Create account", exact: true }).isVisible(), true, "signed-in visit leaves an invite claimable");
+    step("Signed-in invite visit redirects without claiming the link", beforeVisit.length === 1 && (await invites()).length === 1);
+    const revoked = apiResponse(page, `/api/admin/invites/${beforeVisit[0].id}`, "DELETE");
+    await page.getByRole("button", { name: "Revoke", exact: true }).click();
+    assert.equal((await revoked).status(), 200, "revoke the invite");
+    await focusStep(page, "Revoking the last invite focuses Create invite", isButton("Create invite"));
+    await signedOut.reload();
+    await heading(signedOut, "Invite not valid").waitFor();
+
+    assert.equal((await request.post(invitesUrl)).status(), 201, "create a pending invite for the confirmation");
+    await page.reload();
+    await heading(page, "Users").waitFor();
+    await switchDialog(page, "Community", { pendingInvites: true, shotName: "switch-dialog" });
+    for (const invite of await invites()) assert.equal((await request.delete(`${invitesUrl}/${invite.id}`)).status(), 200, "revoke the confirmation fixture invite");
+    await page.reload();
+    await switchDialog(page, "Community", { confirm: true });
+    for (const [target, width] of [[desktopTeam, 1280], [team, 390]]) {
+      assert.equal((await target.goto(`${origin}${teamChat}`))?.status(), 200);
+      await target.locator('[data-message-role="assistant"]').getByText("pong", { exact: true }).waitFor();
+      const composer = target.getByPlaceholder("Ask anything", { exact: true });
+      const recover = target.getByRole("link", { name: "Add connection", exact: true });
+      const reason = target.getByText("Connect your own provider to keep chatting.", { exact: true });
+      const showsRecovery = await reason.isVisible() && await recover.isVisible() && await composer.isDisabled();
+      if (!step(`The existing Team chat shows Community connection recovery at ${width} pixels`, showsRecovery)) continue;
+      await fits(target, width, "Chat connection recovery");
+      const clip = await composer.locator("xpath=..").boundingBox();
+      assert.ok(clip, "the recovery composer has a visible box");
+      await shot(`team-chat-needs-connection-${width}`, target, { clip });
+      await recover.click();
+      await target.waitForURL((url) => url.pathname === "/settings" && url.hash === "#connections");
+      const connections = target.getByRole("region", { name: "Connections", exact: true });
+      await connections.getByRole("button", { name: "Add", exact: true }).click();
+      step(`Recovery opens the member's Add connection form at ${width} pixels`, await target.getByRole("dialog", { name: "Add connection", exact: true }).isVisible());
+    }
+    await switchDialog(page, "Team", { confirm: true });
+    await hostingMode("Personal", 409);
+    step("Personal asks nothing first", await page.getByRole("dialog").count() === 0);
+    await page.getByRole("alert").filter({ hasText: "Remove other accounts first." }).waitFor();
+    step("Personal change is refused while another account exists", await hosting.innerText() === "Team");
+    const privateChat = await page.goto(`${origin}${teamChat}`);
+    const { memories } = await getJSON(`${origin}/api/memories`);
+    step("Admin cannot open the member chat or see the member memory",
+      privateChat?.status() === 404 && !memories.some((entry) => entry.text.includes("practice the cello")));
+    const member = (await accountsList()).find((account) => account.email === teamEmail);
+    assert.ok(member, "Team member appears in Users");
+
+    await page.goto(`${origin}/admin`);
+    for (const width of [1280, 390, 360]) {
+      const admin = width === 1280 ? page : await newPage({
+        viewport: { width, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1,
+        storageState: await page.context().storageState(),
+      });
+      if (admin !== page) await admin.goto(`${origin}/admin`);
+      for (const section of ["Hosting", "Invites", "Users"]) {
+        await heading(admin, section).scrollIntoViewIfNeeded();
+        await fits(admin, width, section);
+        if (width !== 1280) await shot(`${section.toLowerCase()}-${width}`, admin);
+      }
+      if (width === 390) {
+        await switchDialog(admin, "Community", { shotName: "switch-dialog-390" });
+        await createInvite(admin, "Create invite at 390");
+        await shot("invite-focus-390", admin, { maskColor: "#3d434c", animations: "disabled" });
+        await createInvite(admin, "A second Create invite");
+        const revokes = admin.getByRole("button", { name: "Revoke", exact: true });
+        step("Both invites are pending", await revokes.count() === 2);
+        await revokes.first().click();
+        await eventually(() => revokes.count(), (count) => count === 1, { timeoutMs: 5_000, what: "one pending invite" });
+        await focusStep(admin, "Revoking an invite focuses the next Revoke", isButton("Revoke"));
+        await revokes.first().click();
+        await eventually(() => revokes.count(), (count) => count === 0, { timeoutMs: 5_000, what: "no pending invite" });
+        await focusStep(admin, "Revoking the last invite focuses Create invite", isButton("Create invite"));
+      }
+      await removeButton(admin, teamEmail).click();
+      const dialog = admin.getByRole("dialog", { name: "Remove account", exact: true });
+      await dialog.getByText(teamEmail, { exact: true }).waitFor();
+      await fits(admin, width, "Remove dialog");
+      await shot(width === 1280 ? "remove-dialog" : `remove-dialog-${width}`, admin, { animations: "disabled" });
+      if (width !== 360) {
+        await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+        await dialog.waitFor({ state: "hidden" });
+      } else {
+        const removed = apiResponse(admin, `/api/admin/users/${member.id}`, "DELETE");
+        await dialog.getByRole("button", { name: "Remove", exact: true }).click();
+        assert.equal((await removed).status(), 200, "remove the member");
+        await dialog.waitFor({ state: "hidden" });
+        await focusStep(admin, "Removing the last member focuses the Users heading", (focus) => focus.tag === "H2" && focus.text === "Users");
+      }
+    }
+
+    assert.equal((await team.request.get(`${origin}/api/chats`)).status(), 401, "removed member's session immediately fails");
+    await team.goto(`${origin}${teamChat}`);
+    await team.waitForURL((url) => url.pathname === "/login");
+    await shot("removed-member-login-390", team);
+    await desktopTeam.goto(`${origin}${teamChat}`);
+    await desktopTeam.waitForURL((url) => url.pathname === "/login");
+    await shot("removed-member-login", desktopTeam);
+    await signedOut.goto(teamLink);
+    await heading(signedOut, "Invite not valid").waitFor();
+    step("Removed member is signed out and the link stays spent", true);
+    await page.reload();
+    await hostingMode("Personal");
+    await heading(page, "Invites").waitFor({ state: "hidden" });
+    step("Admin can restore Personal after member removal", (await getJSON(adminSettings)).hostingMode === "personal");
+
+    await hostingMode("Community");
+    await selectSignupOpen();
+    assert.deepEqual(await getJSON(`${origin}/api/setup`), { signupOpen: true });
+    await community.goto(`${origin}/signup`);
+    await signup(community, communityEmail);
+    await community.getByRole("button", { name: "OpenAI-compatible", exact: true }).click();
+    await community.getByLabel("Base URL", { exact: true }).fill("http://10.0.0.1/v1");
+    await community.getByLabel("API key", { exact: true }).fill("test-key-not-real");
+    let added = apiResponse(community, "/api/connections", "POST");
+    await community.getByRole("button", { name: "Add", exact: true }).click();
+    assert.equal((await added).status(), 400, "Community refuses a private provider URL");
+    await community.getByRole("alert").filter({ hasText: "Use a public URL." }).waitFor();
+    await shot("community-private-url", community);
+    await community.getByLabel("Base URL", { exact: true }).fill(mockUrl);
+    added = apiResponse(community, "/api/connections", "POST");
+    await community.getByRole("button", { name: "Add", exact: true }).click();
+    assert.equal((await added).status(), 201, "Community may add the local mock provider in the verify sandbox");
+    await chooseDefault(community);
+    const myChat = await sendChat(community, "[qa:plain] Say pong for the Community browser check.");
+    const adminModels = await community.request.get(`${origin}/api/connections/${shared[0].id}/models`);
+    step("Community member can chat on their own connection and cannot use the admin connection", adminModels.status() === 404);
+
+    await page.goto(`${origin}/admin`);
+    const signupSaved = apiResponse(page, "/api/admin/settings", "PUT");
+    await select(page, "Signup mode", "Invite only");
+    assert.equal((await signupSaved).status(), 200, "close Community signup");
+    step("A Signup change with other accounts saves without a confirmation", await page.getByRole("dialog").count() === 0);
+    await switchDialog(page, "Team", { confirm: true });
+    const reopened = await community.goto(`${origin}${myChat}`);
+    assert.equal(reopened?.status(), 200, "saved chat remains open when the connection owner changes");
+    await community.goto(`${origin}/settings`);
+    await chooseDefault(community);
+    await community.goto(`${origin}${myChat}`);
+    assert.equal(await sendChat(community, "[qa:plain] Use Team for the saved Community chat."), myChat);
+    step("Community to Team can continue an existing chat using the member's new Team default", true);
+
+    const extra = await seedMember();
+    for (const view of [page, await newPage({
+      viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1,
+      storageState: await page.context().storageState(),
+    })]) {
+      const mobile = view !== page;
+      await view.goto(`${origin}/admin`);
+      await heading(view, "Users").waitFor();
+      const members = (await accountsList()).filter((account) => account.role === "member");
+      assert.ok(members.length >= 1 && members.some((account) => account.email === extra.email), "the removal focus check has members");
+      const [first, next] = members;
+      const gone = apiResponse(view, `/api/admin/users/${first.id}`, "DELETE");
+      await removeButton(view, first.email).focus();
+      await view.keyboard.press("Enter");
+      const confirmation = view.getByRole("dialog", { name: "Remove account", exact: true });
+      await confirmation.getByRole("button", { name: "Remove", exact: true }).focus();
+      await view.keyboard.press("Enter");
+      assert.equal((await gone).status(), 200, "remove a member by keyboard");
+      await confirmation.waitFor({ state: "hidden" });
+      if (next) {
+        await focusStep(view, `Removing a member focuses the next Remove${mobile ? " at 390" : ""}`, isRemoveButton(next.email));
+      } else {
+        await focusStep(view, `Removing the last member focuses the Users heading${mobile ? " at 390" : ""}`, (focus) => focus.tag === "H2" && focus.text === "Users");
+      }
+      await shot(mobile ? "focus-after-remove-390" : "focus-after-remove", view, { animations: "disabled" });
+    }
+  } finally {
+    try {
+      for (const account of await accountsList()) {
+        if (account.role === "admin") continue;
+        assert.equal((await request.delete(`${usersUrl}/${account.id}`)).status(), 200, "delete only the synthetic users made by this scenario");
+      }
+      for (const invite of await invites()) {
+        assert.equal((await request.delete(`${invitesUrl}/${invite.id}`)).status(), 200, "revoke pending fixture invites");
+      }
+      const restored = await request.put(adminSettings, { data: { hostingMode: "personal" } });
+      step("Accounts leaves one admin and restores Personal", restored.ok() && (await accountsList()).length === 1 && (await getJSON(adminSettings)).hostingMode === "personal");
+    } finally {
+      await Promise.all(contexts.map((context) => context.close()));
+    }
+  }
+
+  async function selectSignupOpen() {
+    await heading(page, "Signup").waitFor();
+    const saved = apiResponse(page, "/api/admin/settings", "PUT");
+    await select(page, "Signup mode", "Open");
+    assert.equal((await saved).status(), 200, "open Community signup");
+  }
+}

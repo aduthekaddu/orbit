@@ -83,6 +83,7 @@ export const verification = sqliteTable(
 export const instanceSettings = sqliteTable("instance_settings", {
   id: integer("id").primaryKey(),
   hostingMode: text("hosting_mode").notNull().default("personal"),
+  signupMode: text("signup_mode", { enum: ["invite", "open"] }).notNull().default("invite"),
   searxngUrl: text("searxng_url").notNull().default(""),
   tavilyKeyCiphertext: text("tavily_key_ciphertext").notNull().default(""),
   sandbox: text("sandbox", { enum: ["on", "off"] }).notNull().default("on"),
@@ -90,7 +91,22 @@ export const instanceSettings = sqliteTable("instance_settings", {
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 }, (table) => [
   check("instance_settings_single_row", sql`${table.id} = 1`),
+  check("instance_settings_signup_mode", sql`${table.signupMode} IN ('invite', 'open')`),
   check("instance_settings_dream_hour", sql`${table.dreamHour} >= 0 AND ${table.dreamHour} <= 23`),
+]);
+
+export const invites = sqliteTable("invites", {
+  id: text("id").primaryKey(),
+  tokenHash: text("token_hash").notNull().unique(),
+  createdBy: text("created_by").notNull().references(() => user.id, { onDelete: "cascade" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  claimedAt: integer("claimed_at", { mode: "timestamp_ms" }),
+  usedAt: integer("used_at", { mode: "timestamp_ms" }),
+  usedBy: text("used_by").references(() => user.id, { onDelete: "set null" }),
+}, (table) => [
+  index("invites_created_by_idx").on(table.createdBy),
+  index("invites_expires_at_idx").on(table.expiresAt),
 ]);
 
 export const userGithub = sqliteTable("user_github", {

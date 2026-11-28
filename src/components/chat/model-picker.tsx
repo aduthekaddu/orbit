@@ -11,7 +11,7 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDesktop } from "@/components/use-desktop";
 import { listOf, loadedList, useModelLists, type ModelLists } from "@/components/use-model-lists";
-import type { PublicConnection } from "@/lib/connections";
+import type { PickableConnection } from "@/lib/connections";
 import { DEFAULT_EFFORT, effortLevels, type Effort } from "@/lib/effort";
 import type { ModelChoice } from "@/lib/model-choice";
 import type { ListedModel } from "@/lib/model-list";
@@ -22,7 +22,8 @@ import { cn } from "@/lib/utils";
 type Picker = {
   choice: ModelChoice | null;
   choose: (choice: ModelChoice) => void;
-  connections: PublicConnection[];
+  connections: PickableConnection[];
+  canManageConnections: boolean;
   lists: ModelLists;
   load: (connectionId: string) => void;
   known: KnownLevels | null;
@@ -47,12 +48,14 @@ export function ModelChoiceProvider({
   choice,
   onChoose,
   connections,
+  canManageConnections,
   known,
   children,
 }: {
   choice: ModelChoice | null;
   onChoose: (choice: ModelChoice) => void;
-  connections: PublicConnection[];
+  connections: PickableConnection[];
+  canManageConnections: boolean;
   known: KnownLevels | null;
   children: ReactNode;
 }) {
@@ -62,7 +65,7 @@ export function ModelChoiceProvider({
   useEffect(() => {
     if (knownConnection) load(knownConnection);
   }, [knownConnection, load]);
-  return <PickerContext.Provider value={{ choice, choose: onChoose, connections, lists, load, known }}>{children}</PickerContext.Provider>;
+  return <PickerContext.Provider value={{ choice, choose: onChoose, connections, canManageConnections, lists, load, known }}>{children}</PickerContext.Provider>;
 }
 
 function choiceLevels({ choice, connections, lists, known }: Picker): Effort[] | null {
@@ -119,7 +122,7 @@ export function ModelChip() {
 
 function PickerPanel({ layout }: { layout: Layout }) {
   const picker = usePicker();
-  const { choice, choose, connections, lists, load } = picker;
+  const { choice, choose, connections, canManageConnections, lists, load } = picker;
   const [query, setQuery] = useState("");
   const rowCount = connections.reduce((count, connection) => {
     const list = loadedList(listOf(lists, connection.id));
@@ -149,9 +152,11 @@ function PickerPanel({ layout }: { layout: Layout }) {
       <div className="min-h-0 flex-1 overflow-y-auto p-1.5 scrollbar-thin">
         {connections.length === 0 ? (
           <div className="flex justify-center p-3">
-            <Button asChild variant="outline" size="sm">
-              <Link href="/settings#connections">Add connection</Link>
-            </Button>
+            {canManageConnections ? (
+              <Button asChild variant="outline" size="sm">
+                <Link href="/settings#connections">Add connection</Link>
+              </Button>
+            ) : <p className="text-meta text-muted-foreground">No shared connections</p>}
           </div>
         ) : null}
         {connections.map((connection) => (
@@ -188,7 +193,7 @@ function ConnectionGroup({
   onPick,
   onRetry,
 }: {
-  connection: PublicConnection;
+  connection: PickableConnection;
   list: Loaded<ModelList>;
   query: string;
   choice: ModelChoice | null;
@@ -223,7 +228,7 @@ function ConnectionGroup({
         <ul>
           {models.map((model) => (
             <li key={model.id}>
-              <ModelRow model={model} current={choice?.connectionId === connection.id && choice.model === model.id} layout={layout} onPick={() => onPick(model)} />
+              <ModelRow model={model} current={choice?.connectionId === connection.id && choice?.model === model.id} layout={layout} onPick={() => onPick(model)} />
             </li>
           ))}
         </ul>

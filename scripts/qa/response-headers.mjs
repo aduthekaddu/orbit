@@ -31,6 +31,8 @@ const responses = [
   { path: "/login", label: "login page", status: 200, frame: page },
   { path: "/admin", label: "admin page", status: 200, cookie, frame: page },
   { path: "/admin", label: "signed-out admin page", status: 307, frame: page, location: "/login" },
+  { path: "/invite/fixture-token", label: "invalid invite page", status: 200, frame: page, invite: true },
+  { path: "/invite/fixture-token", label: "signed-in invite page", status: 307, cookie, frame: page, invite: true, location: "/" },
   { path: `/c/${id}`, label: "chat page", status: 200, cookie, frame: page },
   { path: "/response-headers-missing-page", label: "missing page", status: 404, cookie },
   { path: "/api/chats", label: "signed-in API", status: 200, cookie },
@@ -52,7 +54,8 @@ for (const response of responses) {
   }
   for (const [name, expected] of Object.entries({
     "x-content-type-options": "nosniff",
-    "referrer-policy": "same-origin",
+    "referrer-policy": response.invite ? "no-referrer" : "same-origin",
+    ...(response.invite ? { "cache-control": "no-store" } : {}),
     "x-powered-by": null,
     ...(frame ? { "x-frame-options": "DENY" } : {}),
   })) {

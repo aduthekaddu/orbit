@@ -24,6 +24,7 @@ export type SettingsLabels<Field extends string> = {
 // a new credential cannot be added without the Redactor covering it.
 const SETTINGS_FIELDS = {
   hostingMode: "setting",
+  signupMode: "setting",
   sandbox: "setting",
   dreamHour: "setting",
   tavilyKeyCiphertext: "credential",

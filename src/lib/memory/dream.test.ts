@@ -186,14 +186,14 @@ test("a manual dream sends the Anthropic fallback option and beta header", async
     db.insert(schema.providerConnections).values({
       id, userId: "dream-user", kind: "anthropic", label: "Claude", apiKeyCiphertext: encryptSecret("test-dream-key"), createdAt: new Date(),
     }).run();
-    saveModelDefaults(viewer.id, { connectionId: id, model, effort: "medium" });
+    saveModelDefaults(viewer, { connectionId: id, model, effort: "medium" });
     const row = await dream.runDream({ viewer, manual: true, date, now: new Date(at(date, 16)) });
     assert.equal(row?.added, 1);
     assert.equal(requests.length, 1);
     assert.equal(requests[0].body.fallbacks, "default");
     assert.match(requests[0].beta ?? "", /server-side-fallback-2026-07-01/);
   } finally {
-    saveModelDefaults(viewer.id, { connectionId: defaultId, model: "mock-genui", effort: "medium" });
+    saveModelDefaults(viewer, { connectionId: defaultId, model: "mock-genui", effort: "medium" });
     db.$client.prepare("DELETE FROM provider_connections WHERE id = ?").run(id);
     if (base === undefined) delete process.env.ORBIT_ANTHROPIC_BASE_URL;
     else process.env.ORBIT_ANTHROPIC_BASE_URL = base;

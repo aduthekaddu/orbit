@@ -12,14 +12,19 @@ function recordPaints() {
     };
     const last = states.at(-1);
     if (!last || JSON.stringify(last) !== JSON.stringify(state)) states.push(state);
+    return state;
   };
-  new MutationObserver(read).observe(document, { subtree: true, childList: true, attributes: true });
+  // A DOM mutation can run while the parser is still adding siblings and stylesheets block rendering.
+  const frame = () => {
+    read();
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
   // The composer's entrance animation moves it a few pixels, so positions are read once finite animations end.
   const settle = async () => {
     const finite = document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity);
     await Promise.all(finite.map((animation) => animation.finished.catch(() => {})));
-    read();
-    return states.at(-1);
+    return new Promise((resolve) => requestAnimationFrame(() => resolve(read())));
   };
   Object.defineProperty(window, "__firstPaint", { value: { states, settle } });
 }
@@ -62,6 +67,13 @@ async function heldLoad({ page, origin, step, shot }, { url, label, saved }) {
     `${label}: the composer does not move at hydration`,
     held.composerTop !== null && held.composerTop === hydrated.state.composerTop,
     `held top=${held.composerTop} hydrated top=${hydrated.state.composerTop}`,
+  );
+  // The empty composer's entrance animation starts 4 px below its resting position.
+  const entranceOffset = saved ? 0 : 4;
+  step(
+    `${label}: the composer stays in place across rendered frames`,
+    held.composerTop !== null && painted.every((state) => Math.abs(state.composerTop - held.composerTop) <= entranceOffset),
+    timeline,
   );
   if (saved) {
     step(`${label}: no empty-chat layout at any point`, painted.every((state) => !state.starters), timeline);

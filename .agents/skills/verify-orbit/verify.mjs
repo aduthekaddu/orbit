@@ -165,7 +165,7 @@ function redact(text) {
   for (const value of [process.env.ORBIT_API_KEY, process.env.BETTER_AUTH_SECRET, VERIFY_PASSWORD, MEMBER_PASSWORD, FAKE_KEY]) {
     if (value) out = out.split(value).join("[redacted]");
   }
-  return out;
+  return out.replace(/(\/invite\/)[a-zA-Z0-9_-]{43}(?![a-zA-Z0-9_-])/g, "$1[redacted]");
 }
 
 async function request(urlPath, { method = "GET", json, cookies, redirect = "manual" } = {}) {
@@ -311,7 +311,7 @@ async function startServer(anthropicBaseUrl) {
       DOCKER_HOST: process.env.DOCKER_HOST ?? "unix:///var/run/docker.sock",
       ...(process.env.ORBIT_OLLAMA_URL ? { ORBIT_OLLAMA_URL: process.env.ORBIT_OLLAMA_URL } : {}),
       ...(publicUrlEnv() ? { ORBIT_PUBLIC_URL: publicUrlEnv() } : {}),
-      ...(anthropicBaseUrl ? { ORBIT_ANTHROPIC_BASE_URL: anthropicBaseUrl } : {}),
+      ...(anthropicBaseUrl ? { ORBIT_ANTHROPIC_BASE_URL: anthropicBaseUrl, ORBIT_PROVIDER_FIXTURE: "1" } : {}),
     },
     detached: true,
     stdio: ["ignore", logFd, logFd],
@@ -881,7 +881,7 @@ async function driveSettings() {
     [defaults.status === 200 && body(defaults).connectionId === id && body(defaults).effort === "high", "the default model did not save"],
     [badEffort.status === 400, "an unknown effort was accepted"],
     [settings.status === 200 && settingsFields === "githubMcpUrl,githubTokenReadable,githubTokenSet", "GET /api/settings did not return the public GitHub fields"],
-    [adminSettings.status === 200 && adminFields === "dreamHour,hostingMode,sandbox,sandboxAvailable,searxngUrl,tavilyKeyReadable,tavilyKeySet" && body(adminSettings).hostingMode === "personal", "GET /api/admin/settings did not return the public Personal settings"],
+    [adminSettings.status === 200 && adminFields === "dreamHour,hostingMode,sandbox,sandboxAvailable,searxngUrl,signupMode,tavilyKeyReadable,tavilyKeySet" && body(adminSettings).hostingMode === "personal" && body(adminSettings).signupMode === "invite", "GET /api/admin/settings did not return the public Personal settings"],
     [removed.status === 200 && Array.isArray(afterDelete) && !afterDelete.some((item) => item.id === id), "the connection was not deleted"],
     [defaultsAfterDelete.connectionId !== id, "the defaults still name the deleted connection"],
     [!responseHasKey, "a response leaked the key"],
@@ -999,9 +999,9 @@ async function browse(scenario) {
     console.log(line);
     return ok;
   };
-  const shot = async (name, target = page) => {
+  const shot = async (name, target = page, options = {}) => {
     const file = path.join(evidence, `${name}.png`);
-    await target.screenshot({ path: file });
+    await target.screenshot({ ...options, path: file, mask: [target.locator("[data-evidence-redact]")] });
     console.log(`shot ${path.relative(repoRoot, file)}`);
   };
   try {

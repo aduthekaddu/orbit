@@ -32,6 +32,8 @@ function importInChild(modulePath: string, options: { cwd?: string; env: NodeJS.
 const DB_REACHING_MODULES = [
   "./src/lib/db/index.ts",
   "./src/lib/instance-settings.ts",
+  "./src/lib/invites.ts",
+  "./src/lib/admin-users.ts",
   "./src/lib/user-github.ts",
   "./src/lib/preferences.ts",
   "./src/lib/messages.ts",

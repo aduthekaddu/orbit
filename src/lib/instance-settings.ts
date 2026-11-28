@@ -1,10 +1,10 @@
-import { eq } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { Redactor, redactUrl, resolveMaskedUrl } from "./chat-errors";
 import { redactionSecrets } from "./connections";
 import { accountCount, getDb, type OrbitDb } from "./db";
-import { instanceSettings } from "./db/schema";
-import { parseHostingMode, policyFor, type HostingMode } from "./policy";
+import { instanceSettings, invites } from "./db/schema";
+import { parseHostingMode, policyFor, switchMode, type HostingMode, type SignupMode } from "./policy";
 import { sandboxEnabled } from "./sandbox/enabled";
 import { decryptSecret, encryptSecret, SecretUnreadable, TAVILY_AAD } from "./secrets";
 import type { UserId } from "./session";
@@ -27,11 +27,14 @@ export type InstanceSettingsRecord = InstanceSearchSecrets & {
 
 export type PublicInstanceSettings = Omit<InstanceSettingsRecord, "hostingMode" | "tavilyApiKey" | "sandbox"> & {
   hostingMode: HostingMode["kind"];
+  signupMode: SignupMode;
   sandboxAvailable: boolean;
   sandbox: boolean;
 };
 
 type InstancePatch = {
+  hostingMode?: HostingMode["kind"];
+  signupMode?: SignupMode;
   searxngUrl?: string;
   tavilyApiKey?: string | null;
   sandbox?: SandboxPreference;
@@ -40,6 +43,7 @@ type InstancePatch = {
 
 const storedSettings = z.object({
   hostingMode: z.string(),
+  signupMode: z.string(),
   searxngUrl: z.string(),
   tavilyKeyCiphertext: z.string(),
   sandbox: z.enum(SANDBOX_PREFERENCES),
@@ -52,7 +56,7 @@ function readInstance(db: Pick<OrbitDb, "select">) {
 }
 
 function instanceFrom(row: z.infer<typeof storedSettings>): InstanceSettingsRecord {
-  const hostingMode = parseHostingMode(row.hostingMode);
+  const hostingMode = parseHostingMode(row.hostingMode, row.signupMode);
   const { searxngUrl, sandbox, dreamHour, tavilyKeyCiphertext } = row;
   const tavilyKeySet = tavilyKeyCiphertext !== "";
   let tavilyApiKey = "";
@@ -68,8 +72,8 @@ function instanceFrom(row: z.infer<typeof storedSettings>): InstanceSettingsReco
   return { hostingMode, searxngUrl, tavilyApiKey, tavilyKeySet, tavilyKeyReadable, sandbox, dreamHour };
 }
 
-export function getInstance(): InstanceSettingsRecord {
-  return instanceFrom(readInstance(getDb()));
+export function getInstance(db: Pick<OrbitDb, "select"> = getDb()): InstanceSettingsRecord {
+  return instanceFrom(readInstance(db));
 }
 
 export function signupOpen() {
@@ -84,6 +88,7 @@ export function toPublicInstance(adminId: UserId, row = getInstance()): PublicIn
   const redact = new Redactor(row, ...redactionSecrets(adminId));
   return {
     hostingMode: row.hostingMode.kind,
+    signupMode: row.hostingMode.kind === "community" ? row.hostingMode.signup : "invite",
     searxngUrl: redactUrl(row.searxngUrl, redact),
     tavilyKeySet: row.tavilyKeySet,
     tavilyKeyReadable: row.tavilyKeyReadable,
@@ -106,11 +111,25 @@ export function resolveInstanceUrls(adminId: UserId, input: Pick<InstancePatch, 
 export function saveInstance(adminId: UserId, input: InstancePatch) {
   return getDb().transaction((tx) => {
     const stored = readInstance(tx);
-    const resolved = resolveInstanceUrls(adminId, input, instanceFrom(stored));
+    const current = instanceFrom(stored);
+    const hosting = input.hostingMode ?? current.hostingMode.kind;
+    if (hosting !== "community" && input.signupMode === "open") {
+      return { ok: false, error: "Signup mode applies to Community mode only.", status: 400 } as const;
+    }
+    const signup = input.signupMode ?? (current.hostingMode.kind === "community" ? current.hostingMode.signup : "invite");
+    const mode = parseHostingMode(hosting, signup);
+    const change = switchMode(current.hostingMode, mode, accountCount(tx));
+    if (!change.ok) return { ok: false, error: "Remove other accounts first.", status: 409 } as const;
+
+    const resolved = resolveInstanceUrls(adminId, input, current);
     if (!resolved.ok) return resolved;
+
+    if (change.deletePendingInvites) tx.delete(invites).where(isNull(invites.usedAt)).run();
 
     const key = input.tavilyApiKey?.trim();
     const updated = tx.update(instanceSettings).set({
+      hostingMode: mode.kind,
+      signupMode: change.resetSignupMode ? "invite" : mode.kind === "community" ? mode.signup : undefined,
       searxngUrl: resolved.url,
       tavilyKeyCiphertext: input.tavilyApiKey === null ? "" : key ? encryptSecret(key, TAVILY_AAD) : undefined,
       sandbox: input.sandbox,

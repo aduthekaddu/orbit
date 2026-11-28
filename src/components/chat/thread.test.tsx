@@ -27,6 +27,7 @@ function firstPaint(messages: StoredMessage[]) {
             focusMessageId={null}
             choice={{ connectionId: "conn-1", model: "claude-opus-5-5", effort: "high" }}
             connections={connections}
+            canManageConnections
           />
         </SearchParamsContext.Provider>
       </PathnameContext.Provider>

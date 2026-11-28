@@ -79,7 +79,7 @@ function legacyDb(dir: string, index: number, signedUp: boolean) {
   } finally {
     sqlite.close();
   }
-  journalAt(folder, 19);
+  journalAt(folder, 20);
   return filename;
 }
 
@@ -129,6 +129,8 @@ for (const index of [17, 12]) {
       assert.equal(typeof connection === "string" && decryptSecret(connection) === provider, true);
       const search = sqlite.prepare("SELECT * FROM instance_settings").get() as { hosting_mode: string; sandbox: string; dream_hour: number; searxng_url: string; tavily_key_ciphertext: string };
       assert.equal(search.hosting_mode, "personal");
+      assert.equal(sqlite.prepare("SELECT signup_mode FROM instance_settings").pluck().get(), "invite");
+      assert.deepEqual(sqlite.prepare("SELECT * FROM invites").all(), []);
       assert.equal(search.sandbox, "on");
       assert.equal(search.dream_hour, 7);
       assert.equal(search.searxng_url, "https://search.example");
@@ -178,5 +180,37 @@ test("reopening after a crash scrubs plaintext and drops unowned rows on a pre-s
     sqlite.exec("INSERT INTO user (id, name, email, role) VALUES ('first', 'First', 'first@orbit.test', 'admin'), ('test', 'Test', 'test@orbit.test', 'member')");
   } finally {
     sqlite.close();
+  }
+});
+
+test("a post-18a install keeps its settings and gains invite-only signup", () => {
+  const dir = fs.mkdtempSync(path.join(dataDirectory(), "accounts-0019-"));
+  const filename = path.join(dir, "orbit.db");
+  const folder = path.join(dir, "drizzle");
+  journalAt(folder, 19);
+  const existing = open(filename);
+  try {
+    migrate(drizzle(existing), { migrationsFolder: folder });
+    existing.exec(`
+      INSERT INTO user (id, name, email, role) VALUES ('legacy-admin', 'Legacy', 'admin@orbit.test', 'admin');
+      INSERT INTO instance_settings(id, searxng_url, dream_hour, updated_at) VALUES (1, 'https://search.example', 4, 1);
+    `);
+  } finally {
+    existing.close();
+  }
+  journalAt(folder, 20);
+  const booted = boot(dir, "getDb().$client.close();");
+  assert.equal(booted.status, 0, booted.stderr);
+  const upgraded = open(filename);
+  try {
+    assert.deepEqual(upgraded.prepare("SELECT id, role FROM user").get(), { id: "legacy-admin", role: "admin" });
+    assert.deepEqual(upgraded.prepare("SELECT hosting_mode, signup_mode, searxng_url, dream_hour FROM instance_settings WHERE id = 1").get(), {
+      hosting_mode: "personal", signup_mode: "invite", searxng_url: "https://search.example", dream_hour: 4,
+    });
+    assert.deepEqual(upgraded.prepare("SELECT id FROM invites").all(), []);
+    assert.equal(upgraded.pragma("integrity_check", { simple: true }), "ok");
+    assert.deepEqual(upgraded.pragma("foreign_key_check"), []);
+  } finally {
+    upgraded.close();
   }
 });

@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { saveModelDefaults } from "./connections";
 import { getDb } from "./db";
-import { providerConnections } from "./db/schema";
+import { providerConnections, user } from "./db/schema";
 import type { Effort } from "./effort";
-import type { UserId } from "./policy";
+import { parseViewer, type UserId } from "./policy";
 import { encryptSecret } from "./secrets";
 
 /**
@@ -18,6 +18,7 @@ export function seedTestConnection(userId: UserId, input: { baseUrl?: string; ap
   const id = existing?.id ?? randomUUID();
   if (existing) db.update(providerConnections).set(values).where(eq(providerConnections.id, id)).run();
   else db.insert(providerConnections).values({ id, userId, kind: "openai-compatible", label: "Test", ...values, createdAt: new Date() }).run();
-  saveModelDefaults(userId, { connectionId: id, model: input.model, effort: input.effort ?? "medium" });
+  const account = db.select({ id: user.id, role: user.role }).from(user).where(eq(user.id, userId)).get();
+  saveModelDefaults(parseViewer(account), { connectionId: id, model: input.model, effort: input.effort ?? "medium" });
   return id;
 }

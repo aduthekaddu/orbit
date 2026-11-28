@@ -69,6 +69,8 @@ export default async function accountsScope({ page, origin, step, shot, useProvi
   let githubSaved = false;
   let searchSaved = false;
   let hourSaved = false;
+  let memberEmail;
+  let modeChanged = false;
   async function chat(actor, prompt, reply) {
     const created = await actor.request.post(`${origin}/api/chats`);
     assert.equal(created.status(), 201, "create an owned chat");
@@ -95,7 +97,12 @@ export default async function accountsScope({ page, origin, step, shot, useProvi
     assert.equal(github.status(), 200, "save the admin's mock GitHub token");
     githubSaved = true;
 
-    await signIn(member, origin, await seedMember());
+    const community = await page.request.put(`${origin}/api/admin/settings`, { data: { hostingMode: "community", signupMode: "invite" } });
+    assert.equal(community.status(), 200, "use Community mode for each account's own connection");
+    modeChanged = true;
+    const credentials = await seedMember();
+    memberEmail = credentials.email;
+    await signIn(member, origin, credentials);
     await connectProvider((pathname, init) => send(member.request, origin, pathname, init), {
       label: "Member mock", baseUrl: mockUrl, apiKey: "test-key-not-real", model: "mock-genui",
     });
@@ -189,8 +196,16 @@ export default async function accountsScope({ page, origin, step, shot, useProvi
     hourSaved = hourResponse.ok();
     const savedDreamHour = hourSaved ? (await hourResponse.json()).dreamHour : null;
     await page.reload();
+    const refreshed = await page.request.get(`${origin}/api/admin/settings`);
+    assert.equal(refreshed.status(), 200, "read the saved dream hour");
+    const persisted = (await refreshed.json()).dreamHour;
+    const displayed = await eventually(() => hour.innerText(), (label) => label.trim() === hourLabel, {
+      timeoutMs: 5_000,
+      what: "the saved hour to appear after the Dreaming select hydrates",
+    });
     step("admin saves the dream hour and it persists after refresh",
-      savedDreamHour === dreamHour && (await hour.innerText()).trim() === hourLabel);
+      savedDreamHour === dreamHour && persisted === dreamHour && displayed.trim() === hourLabel,
+      `PUT ${savedDreamHour}, GET ${persisted}, displayed ${displayed.trim()}`);
     for (const width of [1280, 390, 360]) {
       await page.setViewportSize({ width, height: width === 1280 ? 800 : 844 });
       step(`admin page fits ${width} pixels`, await page.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth));
@@ -220,6 +235,20 @@ export default async function accountsScope({ page, origin, step, shot, useProvi
       step("account scenario cleans up its test notes, chats, settings, and GitHub token",
         results.every((result) => result.status === "fulfilled" && (result.value === undefined || result.value.ok())),
         results.map((result) => result.status === "rejected" ? result.reason.message : result.value?.status()).join(", "));
+      if (modeChanged) {
+        const result = await page.request.get(`${origin}/api/admin/users`);
+        assert.equal(result.status(), 200, "list users for fixture cleanup");
+        const { users } = await result.json();
+        const fixture = users.find((user) => user.email === memberEmail);
+        if (fixture) {
+          const removed = await page.request.delete(`${origin}/api/admin/users/${fixture.id}`);
+          assert.equal(removed.status(), 200, "remove the seeded member");
+        }
+        const host = await page.request.put(`${origin}/api/admin/settings`, { data: { hostingMode: "personal" } });
+        const remaining = await page.request.get(`${origin}/api/admin/users`);
+        step("Account isolation leaves one admin in Personal mode",
+          host.ok() && (await host.json()).hostingMode === "personal" && remaining.ok() && (await remaining.json()).users.length === 1);
+      }
     } finally {
       await Promise.all([mcp.close(), memberContext.close()]);
     }

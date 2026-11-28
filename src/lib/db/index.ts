@@ -4,7 +4,7 @@ import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { readEnv } from "../env";
 import { parseEnvDreamHour } from "../memory/dream-hour";
 import { dataDirectory } from "../paths";
@@ -115,7 +115,6 @@ export function getDb(): OrbitDb {
   return cached;
 }
 
-export function accountCount(db = getDb()) {
-  const row = db.$client.prepare("select count(*) as n from user").get() as { n: number };
-  return row.n;
+export function accountCount(db: Pick<OrbitDb, "select"> = getDb()) {
+  return db.select({ count: count() }).from(schema.user).get()?.count ?? 0;
 }

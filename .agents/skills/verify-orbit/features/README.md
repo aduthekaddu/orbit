@@ -33,7 +33,7 @@ Read this index, then use one feature file as the recipe. The harness is `verify
 
 - [Sign up](./signup.md) creates the only account, opens a draft chat with no chat row, and closes signup.
 - [Sign in](./signin.md) returns that account to a chat.
-- [Account isolation](./accounts.md) checks the admin and member in separate browser contexts.
+- [Accounts](./accounts.md) checks hosting modes, invites, removal, and account isolation in separate browser sessions.
 - [Settings](./settings.md) stores a provider without returning the key.
 - [Chat](./chat.md) streams one turn and reads it back from SQLite.
 - [Model picker](./model-picker.md) picks a model and effort per chat, labels each reply, and covers hidden models, deleted connections, and unreadable keys.

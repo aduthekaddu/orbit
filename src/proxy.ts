@@ -5,16 +5,20 @@ import { isCrossOriginWrite } from "@/lib/auth-origins";
 
 const PUBLIC_PAGES = new Set(["/login", "/signup"]);
 
+function isPublicPage(pathname: string) {
+  return PUBLIC_PAGES.has(pathname) || pathname.startsWith("/invite/");
+}
+
 function routeResponse(request: NextRequest, pathname: string, signedIn: boolean) {
   if (pathname.startsWith("/api")) {
     if (!signedIn) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (isCrossOriginWrite(request, getTrustedOrigins())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     return NextResponse.next();
   }
-  if (!signedIn && !PUBLIC_PAGES.has(pathname)) {
+  if (!signedIn && !isPublicPage(pathname)) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
-  if (signedIn && PUBLIC_PAGES.has(pathname)) {
+  if (signedIn && isPublicPage(pathname)) {
     return NextResponse.redirect(new URL("/", request.url));
   }
   return NextResponse.next();
@@ -37,7 +41,7 @@ export async function proxy(request: NextRequest) {
     headers: request.headers,
     returnHeaders: true,
   });
-  if (!session && !PUBLIC_PAGES.has(pathname)) console.warn(describeAuthMiss(pathname, request.headers));
+  if (!session && !isPublicPage(pathname)) console.warn(describeAuthMiss(pathname, request.headers));
 
   const response = routeResponse(request, pathname, Boolean(session));
   for (const cookie of headers.getSetCookie()) {

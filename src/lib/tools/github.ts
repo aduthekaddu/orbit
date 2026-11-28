@@ -36,7 +36,12 @@ type ListPage = Awaited<ReturnType<MCPClient["listTools"]>>;
 
 type CachedList = { expires: number; definitions: ListPage; shapes: Record<string, Tool> };
 
-const listCache = new Map<string, CachedList>();
+const globalTools = globalThis as typeof globalThis & { __orbitGithubToolLists?: Map<string, Map<string, CachedList>> };
+const listCaches = globalTools.__orbitGithubToolLists ??= new Map();
+
+export function clearGithubToolCache(userId: string) {
+  listCaches.delete(userId);
+}
 
 export function resolveGithubMcpUrl(value: string | undefined): string {
   const trimmed = value?.trim() ?? "";
@@ -496,7 +501,12 @@ export async function githubTools(
       signal: input?.signal,
     });
   const now = input?.now ?? Date.now();
-  const key = createHash("sha256").update(JSON.stringify([userId, mcpUrl, GITHUB_TOOLSETS, extraTools, token])).digest("hex");
+  const key = createHash("sha256").update(JSON.stringify([mcpUrl, GITHUB_TOOLSETS, extraTools, token])).digest("hex");
+  let listCache = listCaches.get(userId);
+  if (!listCache) {
+    listCache = new Map();
+    listCaches.set(userId, listCache);
+  }
   const cached = listCache.get(key);
   if (cached && cached.expires > now) return warmTools(cached, () => open(setupMs), redact, input?.signal);
   const connection = open(timeoutMs());

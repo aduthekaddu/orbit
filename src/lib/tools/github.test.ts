@@ -12,7 +12,7 @@ import { eventually } from "../eventually.mjs";
 process.env.ORBIT_GITHUB_MCP_FIXTURE = "1";
 import { Redactor, redactUrl } from "../chat-errors";
 import { githubLinks } from "./github-links";
-import { checkGithub, githubTools, openGithubTurn } from "./github";
+import { checkGithub, clearGithubToolCache, githubTools, openGithubTurn } from "./github";
 import { toolsForTurn } from "./index";
 
 after(() => {
@@ -732,6 +732,14 @@ test("GitHub tool definitions are cached separately for each account, even with 
     const b = await githubTools(member.id, settings);
     await b.close();
     assert.equal(mock.listCount(), 2);
+
+    clearGithubToolCache(member.id);
+    const stillWarm = await githubTools(viewer.id, settings);
+    await stillWarm.close();
+    assert.equal(mock.listCount(), 2);
+    const relisted = await githubTools(member.id, settings);
+    await relisted.close();
+    assert.equal(mock.listCount(), 3);
   });
 });
 

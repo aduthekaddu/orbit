@@ -146,6 +146,20 @@ PASS session ends after Sign out
 
 Screenshots: `confirm.png`, `network-error.png`, `http-error.png`, `signed-out.png`.
 
+### invite-invalid
+
+Switches the sandbox to Community with invite-only signup, then with open signup. A signed-out browser opens `/invite/<unknown token>` at 1280 and 390 pixels. Checks that **Sign in** and, with open signup, **Create account** start at the heading's left edge within 1 pixel. Ends on Personal.
+
+Pass lines:
+
+```
+PASS invite-only at 1280px: Sign in lines up with the heading
+PASS invite-only at 1280px: no Create account link
+PASS open-signup at 390px: Create account lines up with the heading
+```
+
+Screenshots: `invite-only-1280.png`, `invite-only-390.png`, `open-signup-1280.png`, `open-signup-390.png`.
+
 ### auth-submit
 
 Clears cookies, opens `/login`, fails one sign-in to check that editing clears the error, then stalls navigation to `/` and checks that **Sign in** stays disabled right after success even if a field is edited while navigation is pending, and re-enables when navigation stalls past the reset timeout. Then clears the intercepts and signs in to open a chat.
@@ -177,17 +191,19 @@ Screenshots: `composer.png`, `page.png`.
 
 ### thread-first-paint
 
-Sends one `[qa:plain]` prompt, then opens that chat and a new empty chat with the `/_next/static/chunks/**` scripts held, so the page shows its server HTML. It records each DOM change, releases the scripts, and waits for hydration. It runs at 1280×800 and again on a 390×844 touch screen with the labels prefixed `phone`. Composer positions are read after finite animations end.
+Sends one `[qa:plain]` prompt, then opens that chat and a new empty chat with the `/_next/static/chunks/**` scripts held, so the page shows its server HTML. It samples the layout on animation frames, releases the scripts, and waits for hydration. It runs at 1280×800 and again on a 390×844 touch screen with the labels prefixed `phone`. The held and hydrated composer positions are compared after finite animations end. Frame positions allow the empty composer’s 4px entrance motion.
 
 Pass lines, per label `empty chat` and `saved chat`:
 
 ```
 PASS empty chat: no Jump to latest button before hydration
 PASS empty chat: the composer does not move at hydration
+PASS empty chat: the composer stays in place across rendered frames
 PASS empty chat: the starters show before hydration
 PASS empty chat: the empty layout stays at every point
 PASS saved chat: no Jump to latest button before hydration
 PASS saved chat: the composer does not move at hydration
+PASS saved chat: the composer stays in place across rendered frames
 PASS saved chat: no empty-chat layout at any point
 PASS saved chat: no Jump to latest button over an empty thread
 ```

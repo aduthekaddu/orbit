@@ -1,4 +1,5 @@
 import { createUIMessageStreamResponse, type UIMessageChunk } from "ai";
+import type { RemoveMemberResult } from "./admin-users";
 import { SERVER_TIME_HEADER } from "./thought-time";
 
 export const RESUMABLE_STREAM_ID_HEADER = "x-resumable-stream-id";
@@ -12,8 +13,10 @@ export type ReplyEndPart = { type: "data-reply-end"; data: { reason: ReplyEndRea
 
 type Listener = ReadableStreamDefaultController<UIMessageChunk>;
 type FailureChunk = Extract<UIMessageChunk, { type: "abort" | "error" }>;
+type StopReason = "stopped" | "discarded";
 type RunState =
-  | { kind: "starting" | "running" | "stopping"; listeners: Set<Listener> }
+  | { kind: "starting" | "running"; listeners: Set<Listener> }
+  | { kind: "stopping"; listeners: Set<Listener>; reason: StopReason }
   | { kind: "ended"; graceTimer: ReturnType<typeof setTimeout> };
 
 type ReplyIdentity = { replyId: string; promptId: string };
@@ -35,10 +38,22 @@ type ReserveResult =
   | { ok: false; reason: "busy" | "user-limit" };
 
 const globalRuns = globalThis as typeof globalThis & {
-  __orbitReplyRuns?: { runs: Map<string, ReplyRun>; ended: Set<ReplyRun>; endedBytes: number; deleting: Map<string, Promise<boolean>> };
+  __orbitReplyRuns?: {
+    runs: Map<string, ReplyRun>;
+    ended: Set<ReplyRun>;
+    endedBytes: number;
+    deleting: Map<string, Promise<boolean>>;
+    deletingUsers: Map<string, Promise<RemoveMemberResult>>;
+  };
 };
-const registry = globalRuns.__orbitReplyRuns ??= { runs: new Map(), ended: new Set(), endedBytes: 0, deleting: new Map() };
-const { runs, ended, deleting } = registry;
+const registry = globalRuns.__orbitReplyRuns ??= {
+  runs: new Map(),
+  ended: new Set(),
+  endedBytes: 0,
+  deleting: new Map(),
+  deletingUsers: new Map(),
+};
+const { runs, ended, deleting, deletingUsers } = registry;
 
 function evictEnded(run: ReplyRun) {
   if (run.state.kind !== "ended" || !ended.delete(run)) return;
@@ -52,7 +67,7 @@ export async function reserveReplyRun(
   userId: string,
   { stopWaitMs = STOP_WAIT_MS }: { stopWaitMs?: number } = {},
 ): Promise<ReserveResult> {
-  if (deleting.has(chatId)) return { ok: false, reason: "busy" };
+  if (deleting.has(chatId) || deletingUsers.has(userId)) return { ok: false, reason: "busy" };
   const current = runs.get(chatId);
   if (current?.state.kind === "stopping") {
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -64,7 +79,7 @@ export async function reserveReplyRun(
   }
 
   // Re-read after waiting so only one retry can claim the chat.
-  if (deleting.has(chatId)) return { ok: false, reason: "busy" };
+  if (deleting.has(chatId) || deletingUsers.has(userId)) return { ok: false, reason: "busy" };
   const previous = runs.get(chatId);
   if (previous && previous.state.kind !== "ended") return { ok: false, reason: "busy" };
   let active = 0;
@@ -199,11 +214,15 @@ export function findActiveReplyRun(chatId: string, userId: string): ReplyIdentit
   return findReplyRun(chatId, userId)?.run.identity ?? null;
 }
 
-function abortRun(run: ReplyRun, reason: "stopped" | "discarded") {
-  if (run.state.kind === "starting" || run.state.kind === "running") {
-    run.state = { ...run.state, kind: "stopping" };
-    run.controller.abort(reason);
-  }
+function abortRun(run: ReplyRun, reason: StopReason) {
+  if (run.state.kind === "ended") return;
+  if (run.state.kind === "stopping" && reason === "stopped") return;
+  run.state = { ...run.state, kind: "stopping", reason };
+  run.controller.abort(reason);
+}
+
+export function replyWasDiscarded(run: ReplyRun) {
+  return run.state.kind === "stopping" && run.state.reason === "discarded";
 }
 
 export function stopReplyRun(chatId: string, userId: string) {
@@ -213,12 +232,15 @@ export function stopReplyRun(chatId: string, userId: string) {
   return true;
 }
 
-export async function discardReplyRun(chatId: string) {
-  const run = runs.get(chatId);
-  if (!run) return;
+async function discardRun(run: ReplyRun) {
   abortRun(run, "discarded");
   await run.done;
   evictEnded(run);
+}
+
+export async function discardReplyRun(chatId: string) {
+  const run = runs.get(chatId);
+  if (run) await discardRun(run);
 }
 
 /** Hold the reply slot from the start of discard through the synchronous removal of the chat. */
@@ -235,6 +257,32 @@ export function deleteAfterReply(chatId: string, remove: () => boolean): Promise
     },
     (error: unknown) => {
       deleting.delete(chatId);
+      reject(error);
+    },
+  );
+  return promise;
+}
+
+export function deleteUserAfterReplies(userId: string, remove: () => RemoveMemberResult): Promise<RemoveMemberResult> {
+  const existing = deletingUsers.get(userId);
+  if (existing) return existing;
+
+  const { promise, resolve, reject } = Promise.withResolvers<RemoveMemberResult>();
+  deletingUsers.set(userId, promise);
+  const owned = [...runs.values()].filter((run) => run.userId === userId);
+  void Promise.all(owned.map(discardRun)).then(() => {
+    for (const run of owned) {
+      run.chunks.length = 0;
+      run.bytes = 0;
+    }
+    return remove();
+  }).then(
+    (removed) => {
+      deletingUsers.delete(userId);
+      resolve(removed);
+    },
+    (error: unknown) => {
+      deletingUsers.delete(userId);
       reject(error);
     },
   );

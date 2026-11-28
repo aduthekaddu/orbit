@@ -10,11 +10,11 @@ const derived = [
 ];
 const instance = ["__drizzle_migrations", "instance_settings", "pending_connection", "sqlite_sequence", "verification"];
 
-test("every SQLite table has an owner or a documented instance purpose, and user rows cascade", () => {
+test("every SQLite table has an owner or a documented instance purpose, and user rows cascade", (t) => {
   const sqlite = getDb().$client;
   try {
     const tables = sqlite.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").pluck().all();
-    assert.deepEqual(tables.sort(), [...direct, ...derived, ...instance, "messages", "user"].sort());
+    assert.deepEqual(tables.sort(), [...direct, ...derived, ...instance, "invites", "messages", "user"].sort());
     const cascade = (table: string, column: string, owner: string) => {
       const info = sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string; notnull: number }[];
       assert.equal(info.find((row) => row.name === column)?.notnull, 1, `${table}.${column}`);
@@ -22,6 +22,7 @@ test("every SQLite table has an owner or a documented instance purpose, and user
       assert.ok(keys.some((key) => key.from === column && key.table === owner && key.to === "id" && key.on_delete === "CASCADE"), table);
     };
     for (const table of direct) cascade(table, "user_id", "user");
+    cascade("invites", "created_by", "user");
     cascade("messages", "chat_id", "chats");
 
     for (const [id, role] of [["alpha", "admin"], ["beta", "member"]]) {
@@ -47,18 +48,33 @@ test("every SQLite table has an owner or a documented instance purpose, and user
     assert.equal(sqlite.prepare("SELECT count(*) FROM memories_vec WHERE user_id = 'alpha'").pluck().get(), 1);
     assert.throws(() => sqlite.exec("UPDATE user SET role = 'admin' WHERE id = 'beta'"), /UNIQUE/);
 
-    sqlite.exec("DELETE FROM user WHERE id = 'alpha'");
+    sqlite.exec(`
+      INSERT INTO invites (id, token_hash, created_by, created_at, expires_at, used_at, used_by)
+      VALUES ('invite', 'synthetic-hash', 'alpha', 1, 100, 3, 'beta');
+      DELETE FROM user WHERE id = 'beta';
+    `);
+    assert.deepEqual(sqlite.prepare("SELECT used_at, used_by FROM invites").get(), { used_at: 3, used_by: null });
     for (const table of [...direct, "memories_vec"]) {
-      assert.deepEqual(sqlite.prepare(`SELECT user_id FROM ${table}`).pluck().all(), ["beta"], table);
+      assert.deepEqual(sqlite.prepare(`SELECT user_id FROM ${table}`).pluck().all(), ["alpha"], table);
     }
-    assert.deepEqual(sqlite.prepare("SELECT chat_id FROM messages").pluck().all(), ["beta"]);
-    assert.deepEqual(sqlite.prepare("SELECT id FROM user").pluck().all(), ["beta"]);
-    assert.equal(needle("memories_fts", "alphamemory"), 0);
-    assert.equal(needle("messages_fts", "alphamessage"), 0);
-    assert.equal(needle("memories_fts", "betamemory"), 1);
-    assert.equal(needle("messages_fts", "betamessage"), 1);
+    assert.deepEqual(sqlite.prepare("SELECT chat_id FROM messages").pluck().all(), ["alpha"]);
+    assert.deepEqual(sqlite.prepare("SELECT id FROM user").pluck().all(), ["alpha"]);
+    assert.equal(needle("memories_fts", "betamemory"), 0);
+    assert.equal(needle("messages_fts", "betamessage"), 0);
+    assert.equal(needle("memories_fts", "alphamemory"), 1);
+    assert.equal(needle("messages_fts", "alphamessage"), 1);
     assert.equal(sqlite.prepare("SELECT count(*) FROM instance_settings").pluck().get(), 1);
     assert.deepEqual(sqlite.pragma("foreign_key_check"), []);
+    const counts = Object.fromEntries([...direct, "memories_vec"].map((table) => [
+      table, sqlite.prepare(`SELECT count(*) FROM ${table} WHERE user_id = 'beta'`).pluck().get(),
+    ]));
+    t.diagnostic(`Removed member rows ${JSON.stringify({
+      ...counts,
+      user: sqlite.prepare("SELECT count(*) FROM user WHERE id = 'beta'").pluck().get(),
+      messages: sqlite.prepare("SELECT count(*) FROM messages WHERE chat_id = 'beta'").pluck().get(),
+      messages_fts: needle("messages_fts", "betamessage"),
+      memories_fts: needle("memories_fts", "betamemory"),
+    })}`);
   } finally {
     sqlite.close();
   }

@@ -34,7 +34,7 @@ function anchorClamp() {
 // starts, so until the first message arrives the layout follows what the server saw: saved messages or none.
 type ThreadView = "empty" | "loading" | "messages";
 
-export function Thread({ ready, focusMessageId, hasHistory }: { ready: boolean; focusMessageId?: string | null; hasHistory: boolean }) {
+export function Thread({ ready, needsOwnConnection, focusMessageId, hasHistory }: { ready: boolean; needsOwnConnection: boolean; focusMessageId?: string | null; hasHistory: boolean }) {
   const view = useAuiState((state): ThreadView => (state.thread.messages.length > 0 ? "messages" : hasHistory ? "loading" : "empty"));
   // Saved messages open at the bottom, except a ?m= search hit, which centers. A chat that started empty skips that
   // first scroll: its first prompt is already at the top, and assistant-ui never anchors the first message, so the
@@ -113,7 +113,7 @@ export function Thread({ ready, focusMessageId, hasHistory }: { ready: boolean; 
                     <div ref={setPromptsSlot} className="absolute inset-y-0 right-0 flex items-center" />
                   </div>
                   <div className="mx-auto w-full max-w-chat">
-                    <Composer ready={ready} />
+                    <Composer ready={ready} needsOwnConnection={needsOwnConnection} />
                   </div>
                 </div>
               </ThreadPrimitive.ViewportFooter>

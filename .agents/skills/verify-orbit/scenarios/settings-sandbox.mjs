@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const publicFields = ["dreamHour", "hostingMode", "sandbox", "sandboxAvailable", "searxngUrl", "tavilyKeyReadable", "tavilyKeySet"];
+const publicFields = ["dreamHour", "hostingMode", "sandbox", "sandboxAvailable", "searxngUrl", "signupMode", "tavilyKeyReadable", "tavilyKeySet"];
 
 export default async function settingsSandbox({ page, origin, step, shot, signInMember }) {
   const state = JSON.parse(fs.readFileSync(new URL("../../../../.verify/server.json", import.meta.url), "utf8"));

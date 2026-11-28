@@ -4,6 +4,10 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- Community members can rename a saved connection while its provider is unavailable. When switching from Team to Community leaves a member’s existing chat without a connection, the composer links to their own connection settings. (#281)
+
+- **Admin** now offers Personal, Team, and Community hosting. Team members join by invite and choose their own default model from shared connections. Community members bring their own provider keys and join by invite or open signup. Invite links expire after seven days. The admin can revoke pending invites and remove member accounts. Switching between Team and Community with other accounts present asks first, because it changes whose provider keys members use. Focus moves to the new invite link after Create invite, and to the next row after Revoke or Remove. Community provider connections require public HTTPS. (#281)
+
 - The first account now has an **Admin** page for search, the code sandbox, and the nightly dreaming hour. **Settings** has a Memory switch that pauses recall, memory tools, and scheduled dreaming while keeping saved memories available. Orbit encrypts existing Tavily keys and GitHub tokens on upgrade. Each account owns its GitHub settings and memories. Personal signup still closes after the first account. The dreaming command honors the Memory switch, and a saved default model is only used with its saved connection. (#279)
 
 - Undo is honored when a page closes, and **Sign out** waits for queued deletes and reports a failed delete before ending the session. Queued deletes also work on older browsers. Removing a chat stops its reply before removing its history. Skip links focus the chat composer or page content even when an editor is open. History search preserves identifiers and highlights only the text it shows. Nightly dreaming skips deleted chats left in the retry list, and the Memory page shows generic failures once. (#273)

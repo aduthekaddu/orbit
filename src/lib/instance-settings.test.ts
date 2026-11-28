@@ -97,3 +97,18 @@ test("admin search URLs only mask the admin's provider credentials and round-tri
   assert.equal(saveInstance(adminId, { searxngUrl }).ok, true);
   assert.equal(getInstance().searxngUrl, savedUrl);
 });
+
+test("mode and signup settings save together and a refused switch changes nothing", () => {
+  assert.equal(saveInstance(adminId, { hostingMode: "team" }).ok, true);
+  assert.deepEqual(getInstance().hostingMode, { kind: "team" });
+  assert.equal(toPublicInstance(adminId).signupMode, "invite");
+  assert.equal(saveInstance(adminId, { signupMode: "open" }).ok, false);
+  assert.equal(saveInstance(adminId, { hostingMode: "community", signupMode: "open" }).ok, true);
+  assert.deepEqual(getInstance().hostingMode, { kind: "community", signup: "open" });
+  const before = toPublicInstance(adminId);
+  assert.equal(saveInstance(adminId, { hostingMode: "personal", dreamHour: 2 }).ok, false);
+  assert.deepEqual(toPublicInstance(adminId), before);
+  assert.equal(saveInstance(adminId, { hostingMode: "team" }).ok, true);
+  assert.equal(saveInstance(adminId, { hostingMode: "community" }).ok, true);
+  assert.deepEqual(getInstance().hostingMode, { kind: "community", signup: "invite" });
+});

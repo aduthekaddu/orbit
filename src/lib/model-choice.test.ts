@@ -3,15 +3,16 @@ import fs from "node:fs";
 import path from "node:path";
 import test, { after, before } from "node:test";
 import { Redactor } from "./chat-errors";
-import { addConnection as saveConnection, deleteConnection, listConnections, seedConnection } from "./connections";
+import { addConnection as saveConnection, deleteConnection, getModelDefaults, listConnections, saveModelDefaults, seedConnection } from "./connections";
 import { getDb } from "./db";
 import { chats } from "./db/schema";
 import { finishChatReply, getChatForUser, listMessages, planChatWrite } from "./messages";
-import { NOTHING_PINNED, resolveChoice, setChatChoice, type ModelChoice, type ReplyRecord } from "./model-choice";
+import { chatChoice, NOTHING_PINNED, resolveChoice, setChatChoice, type ModelChoice, type ReplyRecord } from "./model-choice";
 import { parseViewer, type Role } from "./policy";
 import { encryptSecret } from "./secrets";
 
-const ONE = parseViewer({ id: "u-choice-one", role: "member" }).id;
+const firstViewer = parseViewer({ id: "u-choice-one", role: "member" });
+const ONE = firstViewer.id;
 const OTHER = "u-choice-other";
 const BARE = "u-choice-bare";
 const NO_MODEL = "u-choice-no-model";
@@ -105,7 +106,7 @@ test("a chat with no choice of its own uses the user's defaults", () => {
 test("the chat's own choice wins over the defaults, and changing the defaults does not move it", () => {
   const pinned: ModelChoice = { connectionId: "conn-claude", model: "claude-opus-5-5", effort: "high" };
   chat("chat-pinned");
-  setChatChoice("chat-pinned", pinned);
+  setChatChoice(firstViewer, "chat-pinned", pinned);
   assert.deepEqual(resolved(ONE, "chat-pinned").choice, pinned);
   assert.equal(resolved(ONE, "chat-pinned").connection.kind, "anthropic");
 
@@ -120,7 +121,7 @@ test("the chat's own choice wins over the defaults, and changing the defaults do
 
 test("the request wins over the chat and the defaults", () => {
   chat("chat-requested");
-  setChatChoice("chat-requested", { connectionId: "conn-claude", model: "claude-opus-5-5", effort: "high" });
+  setChatChoice(firstViewer, "chat-requested", { connectionId: "conn-claude", model: "claude-opus-5-5", effort: "high" });
   const requested: ModelChoice = { connectionId: "conn-openai", model: "requested-model", effort: "xhigh" };
   const result = resolved(ONE, "chat-requested", requested);
   assert.deepEqual(result.choice, requested);
@@ -188,7 +189,7 @@ test("a choice that names a deleted connection is not pinned, and a chat pinned 
   addConnection("conn-deleted-before-pin", ONE, "openai-compatible");
   chat("chat-pin-after-delete");
   assert.equal(deleteConnection(ONE, "conn-deleted-before-pin"), true);
-  setChatChoice("chat-pin-after-delete", { connectionId: "conn-deleted-before-pin", model: "pinned-model", effort: "high" });
+  setChatChoice(firstViewer, "chat-pin-after-delete", { connectionId: "conn-deleted-before-pin", model: "pinned-model", effort: "high" });
   assert.deepEqual(
     getDb().$client.prepare("select connection_id, model, reasoning_effort from chats where id = 'chat-pin-after-delete'").get(),
     { connection_id: null, model: null, reasoning_effort: null },
@@ -245,7 +246,7 @@ test("adding and deleting a manual connection closes any pending provider adopti
     "http://prior-provider.invalid/v1", encryptSecret(KEY), "prior-model", "low");
   t.mock.method(globalThis, "fetch", async () => Response.json({ data: [{ id: "manual-model" }] }));
   try {
-    const saved = await saveConnection(viewer.id, {
+    const saved = await saveConnection(viewer, {
       kind: "openai-compatible", label: "Manual", baseUrl: "http://provider.invalid/v1", apiKey: "fixture-manual-value",
     }, () => new Redactor(null));
     assert.ok(saved.ok);
@@ -255,5 +256,39 @@ test("adding and deleting a manual connection closes any pending provider adopti
   } finally {
     sql("delete from pending_connection");
     sql("DELETE FROM user WHERE id = ?", user);
+  }
+});
+
+test("Team members pick their own defaults and can pin models from the admin's shared connection", () => {
+  const admin = addUser("u-choice-team-admin", "admin");
+  const member = addUser("u-choice-team-member");
+  addConnection("conn-team-admin", admin.id, "openai-compatible");
+  addConnection("conn-team-dormant", member.id, "openai-compatible");
+  setDefaults(admin.id, "conn-team-admin", "admin-default", "high");
+  setDefaults(member.id, "conn-team-dormant", "old-default", "low");
+  const draft = chat("chat-team-draft", member.id);
+  chat("chat-team-existing", member.id);
+  sql("update chats set connection_id = 'conn-team-dormant', model = 'old-default', reasoning_effort = 'low' where id = 'chat-team-existing'");
+  const existing = chat("chat-team-existing", member.id);
+  sql("update instance_settings set hosting_mode = 'team'");
+  try {
+    assert.deepEqual(resolveChoice(member, draft), { ok: false, reason: "no-model" });
+    assert.deepEqual(resolveChoice(member, existing), { ok: false, reason: "no-model" });
+    assert.deepEqual(resolveChoice(member, existing, { connectionId: "conn-team-dormant", model: "old-default", effort: "low" }), { ok: false, reason: "no-connection" });
+    const choice: ModelChoice = { connectionId: "conn-team-admin", model: "team-model", effort: "medium" };
+    assert.equal(saveModelDefaults(member, choice), true);
+    const resolved = resolveChoice(member, existing);
+    assert.ok(resolved.ok);
+    assert.deepEqual(resolved.choice, choice);
+    assert.equal(resolved.connection.userId, admin.id);
+    assert.equal(getModelDefaults(admin.id).model, "admin-default");
+    setChatChoice(member, draft.id, choice);
+    assert.deepEqual(chatChoice(chat(draft.id, member.id)), choice);
+    assert.equal(deleteConnection(admin.id, choice.connectionId), true);
+    assert.equal(chatChoice(chat(draft.id, member.id)), null);
+    assert.equal(getModelDefaults(member.id).model, null);
+  } finally {
+    sql("update instance_settings set hosting_mode = 'personal'");
+    sql("delete from user where id in (?, ?)", admin.id, member.id);
   }
 });

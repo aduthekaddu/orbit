@@ -162,9 +162,9 @@ async function main() {
 
     db.insert(schema.user).values({ ...viewer, name: "QA", email: "qa@orbit.local", emailVerified: true }).run();
     const redact = new Redactor(null);
-    const added = await addConnection(viewer.id, { kind: "openai-compatible", label: "Mock", baseUrl: provider.url, apiKey: "mock-key-not-real" }, () => redact);
+    const added = await addConnection(viewer, { kind: "openai-compatible", label: "Mock", baseUrl: provider.url, apiKey: "mock-key-not-real" }, () => redact);
     if (!added.ok) throw new Error(`adding the mock connection failed: ${added.reason}`);
-    saveModelDefaults(viewer.id, { connectionId: added.connection.id, model: "mock-genui", effort: "medium" });
+    if (!saveModelDefaults(viewer, { connectionId: added.connection.id, model: "mock-genui", effort: "medium" })) throw new Error("saving the mock model default failed");
 
     const date = "2099-08-08";
     const base = Date.parse(`${date}T12:00:00Z`);

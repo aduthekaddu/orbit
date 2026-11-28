@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
+import dns from "node:dns/promises";
 import fs from "node:fs";
 import http from "node:http";
-import { registerHooks } from "node:module";
+import { registerHooks, syncBuiltinESMExports } from "node:module";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import test, { after, before } from "node:test";
+import test, { after, before, type TestContext } from "node:test";
+import { removeMember } from "./admin-users";
+import { seedTestConnection } from "./connection-fixture";
 import { setModelHidden } from "./connections";
 import { getDb } from "./db";
 import { cachedCaps } from "./model-list";
@@ -17,7 +20,8 @@ import { parseViewer } from "./policy";
 
 const admin = parseViewer({ id: "u-connections-one", role: "admin" });
 const ONE = admin.id;
-const TWO = parseViewer({ id: "u-connections-two", role: "member" }).id;
+const member = parseViewer({ id: "u-connections-two", role: "member" });
+const TWO = member.id;
 const OPENAI_KEY = "made-up-openai-key-0001";
 const ANTHROPIC_KEY = "made-up-anthropic-key-0001";
 const URL_SECRET = "url-pass-secret-01";
@@ -99,8 +103,8 @@ before(async () => {
   fs.cpSync(path.join(originalCwd, "drizzle"), path.join(sandbox, "drizzle"), { recursive: true });
   process.chdir(sandbox);
   const db = getDb();
-  for (const id of [ONE, TWO]) {
-    db.$client.prepare("insert into user (id, name, email, email_verified) values (?, ?, ?, 0)").run(id, id, `${id}@orbit.local`);
+  for (const { id, role } of [admin, member]) {
+    db.$client.prepare("insert into user (id, name, email, email_verified, role) values (?, ?, ?, 0, ?)").run(id, id, `${id}@orbit.local`, role);
   }
   asUser(ONE);
   assert.ok(saveInstance(admin.id, { tavilyApiKey: TAVILY_KEY }).ok);
@@ -198,7 +202,8 @@ test("the database file holds no key bytes", () => {
   }
 });
 
-test("another user's connection is not found", async () => {
+test("another user's connection is not found in Community mode", async () => {
+  assert.ok(saveInstance(admin.id, { hostingMode: "community" }).ok);
   asUser(TWO);
   try {
     assert.deepEqual(await list(), []);
@@ -208,13 +213,47 @@ test("another user's connection is not found", async () => {
     assert.equal((await hide(openaiId, "fixture-model", true)).status, 404);
     assert.equal((await setDefaults({ connectionId: openaiId, model: "fixture-model", effort: "high" })).status, 404);
   } finally {
+    getDb().$client.prepare("update instance_settings set hosting_mode = 'personal'").run();
     asUser(ONE);
   }
   assert.equal((await list()).find((connection) => connection.id === openaiId)?.label, "Local");
 });
 
+test("a Community member can rename an unavailable provider without checking DNS", async (t) => {
+  const baseUrl = "https://provider-fixture.invalid/v1";
+  assert.ok(saveInstance(admin.id, { hostingMode: "community" }).ok);
+  const id = seedTestConnection(TWO, { baseUrl, apiKey: "fixture-provider-key", model: "fixture-model" });
+  const db = getDb().$client;
+  const savedCredentials = db.prepare("select base_url, api_key_ciphertext from provider_connections where id = ?");
+  const before = savedCredentials.get(id);
+  const lookup = t.mock.method(dns, "lookup", async () => { throw new Error("Fixture DNS unavailable"); });
+  syncBuiltinESMExports();
+  asUser(TWO);
+  try {
+    const rotated = await patch(id, { apiKey: "fixture-rotated-key" });
+    assert.equal(rotated.status, 400);
+    assert.deepEqual(rotated.json(), { error: "Use a public URL." });
+    assert.equal(lookup.mock.callCount(), 1, "changing credentials still checks the provider");
+    const moved = await patch(id, { baseUrl: "https://replacement-fixture.invalid/v1" });
+    assert.equal(moved.status, 400);
+    assert.equal(lookup.mock.callCount(), 1, "moving the endpoint still requires a fresh key first");
+
+    const renamed = await patch(id, { label: "Renamed fixture" });
+    assert.equal(renamed.status, 200, renamed.text);
+    assert.equal(renamed.json().label, "Renamed fixture");
+    assert.equal(lookup.mock.callCount(), 1, "a label edit does not resolve the provider");
+    assert.deepEqual(savedCredentials.get(id), before);
+  } finally {
+    lookup.mock.restore();
+    syncBuiltinESMExports();
+    db.prepare("delete from provider_connections where id = ?").run(id);
+    db.prepare("update instance_settings set hosting_mode = 'personal'").run();
+    asUser(ONE);
+  }
+});
+
 test("hiding a model on another user's connection writes nothing and answers not found", () => {
-  const hidden = setModelHidden(TWO, openaiId, "fixture-model", true);
+  const hidden = setModelHidden(member, openaiId, "fixture-model", true);
   assert.deepEqual(sql("select count(*) as n from hidden_models where user_id = ?", TWO), { n: 0 });
   assert.equal(hidden, false);
 });
@@ -423,4 +462,66 @@ test("no response in this file carried a key", () => {
   for (const body of bodies) {
     for (const secret of [OPENAI_KEY, ANTHROPIC_KEY, TAVILY_KEY, URL_SECRET]) assert.equal(body.includes(secret), false, `a response carried ${secret}: ${body}`);
   }
+});
+
+function communityFixture(t: TestContext) {
+  const previous = process.env.ORBIT_PROVIDER_FIXTURE;
+  t.after(() => {
+    if (previous === undefined) delete process.env.ORBIT_PROVIDER_FIXTURE;
+    else process.env.ORBIT_PROVIDER_FIXTURE = previous;
+    getDb().$client.prepare("update instance_settings set hosting_mode = 'personal'").run();
+    asUser(ONE);
+  });
+  process.env.ORBIT_PROVIDER_FIXTURE = "1";
+  assert.ok(saveInstance(admin.id, { hostingMode: "community" }).ok);
+}
+
+test("a hosting mode switch can refuse a connection while its models are loading", async (t) => {
+  communityFixture(t);
+  asUser(TWO);
+  const started = Promise.withResolvers<void>();
+  const served = Promise.withResolvers<Response>();
+  t.mock.method(globalThis, "fetch", async () => {
+    started.resolve();
+    return served.promise;
+  });
+  const creating = create({ kind: "openai-compatible", label: "Pending provider", baseUrl: `${providerBase}/v1`, apiKey: "fixture-connection-key" });
+  try {
+    await started.promise;
+    assert.ok(saveInstance(admin.id, { hostingMode: "team" }).ok);
+  } finally {
+    served.resolve(Response.json({ data: [{ id: "pending-provider-model" }] }));
+    await creating;
+  }
+  assert.equal((await creating).status, 403);
+  assert.deepEqual(sql("select count(*) as n from provider_connections where user_id = ?", TWO), { n: 0 });
+});
+
+test("a provider model list cannot restore cached models after the owning account is removed", async (t) => {
+  communityFixture(t);
+  const removed = parseViewer({ id: "u-connections-removed", role: "member" });
+  getDb().$client.prepare("insert into user (id, name, email, role) values (?, 'Fixture', 'removed@orbit.test', 'member')").run(removed.id);
+  asUser(removed.id);
+  const saved = await create({ kind: "openai-compatible", label: "Removed provider", baseUrl: `${providerBase}/v1`, apiKey: OPENAI_KEY });
+  assert.equal(saved.status, 201);
+  const { id } = saved.json() as Connection;
+  assert.ok(cachedCaps(id, "fixture-model"));
+
+  const started = Promise.withResolvers<void>();
+  const served = Promise.withResolvers<Response>();
+  t.mock.method(globalThis, "fetch", async () => {
+    started.resolve();
+    return served.promise;
+  });
+  const listing = modelsOf(id);
+  try {
+    await started.promise;
+    assert.deepEqual(await removeMember(removed.id), { ok: true });
+    assert.equal(cachedCaps(id, "fixture-model"), null);
+  } finally {
+    served.resolve(Response.json({ data: [{ id: "fixture-model" }] }));
+    await listing;
+  }
+  assert.equal((await listing).status, 404);
+  assert.equal(cachedCaps(id, "fixture-model"), null);
 });
