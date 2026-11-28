@@ -27,6 +27,7 @@ const SETTINGS_FIELDS = {
   signupMode: "setting",
   sandbox: "setting",
   dreamHour: "setting",
+  artifactsBackfilledAt: "setting",
   tavilyKeyCiphertext: "credential",
   tokenCiphertext: "credential",
   mcpUrl: "setting",

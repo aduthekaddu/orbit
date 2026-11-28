@@ -89,6 +89,8 @@ export const instanceSettings = sqliteTable("instance_settings", {
   sandbox: text("sandbox", { enum: ["on", "off"] }).notNull().default("on"),
   dreamHour: integer("dream_hour").notNull().default(3),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  // Null until the startup artifact backfill finishes once. src/lib/artifacts/backfill.ts reads it on every boot.
+  artifactsBackfilledAt: integer("artifacts_backfilled_at", { mode: "timestamp_ms" }),
 }, (table) => [
   check("instance_settings_single_row", sql`${table.id} = 1`),
   check("instance_settings_signup_mode", sql`${table.signupMode} IN ('invite', 'open')`),
@@ -224,6 +226,40 @@ export const memories = sqliteTable(
   (table) => [
     index("memories_user_id_idx").on(table.userId),
     uniqueIndex("memories_user_text_norm_idx").on(table.userId, table.textNorm),
+  ],
+);
+
+// One row per HTML, SVG, or React block in a saved assistant reply. `seq` is the stable rowid of artifacts_fts.
+// Every version in a lineage holds the lineage's user_title, so a rename touches every row and search sees it on each.
+export const artifacts = sqliteTable(
+  "artifacts",
+  {
+    seq: integer("seq").primaryKey({ autoIncrement: true }),
+    id: text("id").notNull().unique(),
+    userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    chatId: text("chat_id").notNull().references(() => chats.id, { onDelete: "cascade" }),
+    messageId: text("message_id").notNull().references(() => messages.id, { onDelete: "cascade" }),
+    textOrdinal: integer("text_ordinal").notNull(),
+    blockIndex: integer("block_index").notNull(),
+    kind: text("kind", { enum: ["html", "svg", "react"] }).notNull(),
+    language: text("language", { enum: ["html", "svg", "jsx", "tsx"] }).notNull(),
+    code: text("code").notNull(),
+    derivedTitle: text("derived_title").notNull(),
+    userTitle: text("user_title"),
+    lineageId: text("lineage_id").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    check("artifacts_slot_nonneg", sql`${table.textOrdinal} >= 0 AND ${table.blockIndex} >= 0`),
+    check(
+      "artifacts_kind_language",
+      sql`(${table.kind} = 'html' AND ${table.language} = 'html') OR (${table.kind} = 'svg' AND ${table.language} = 'svg') OR (${table.kind} = 'react' AND ${table.language} IN ('jsx', 'tsx'))`,
+    ),
+    uniqueIndex("artifacts_message_slot_idx").on(table.messageId, table.textOrdinal, table.blockIndex),
+    index("artifacts_user_updated_idx").on(table.userId, table.updatedAt, table.seq),
+    index("artifacts_user_lineage_idx").on(table.userId, table.lineageId, table.createdAt, table.seq),
+    index("artifacts_chat_idx").on(table.chatId),
   ],
 );
 
