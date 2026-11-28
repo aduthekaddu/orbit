@@ -99,7 +99,7 @@ test("a reply's artifacts are saved from the redacted text, so no credential rea
 });
 
 test("a credential split by tags in the code never comes back whole or in part in the title", () => {
-  const key = "zq9splitsecret0042abcd";
+  const key = `zq9${crypto.randomUUID().replaceAll("-", "").slice(0, 19)}`;
   const masking = new Redactor({ apiKey: key, tavilyApiKey: "", githubToken: "" });
   // The message text holds the key with tags inside it, so masking the message finds nothing to mask.
   const split = `${key.slice(0, 5)}<strong>${key.slice(5, 12)}</strong>${key.slice(12)}`;
