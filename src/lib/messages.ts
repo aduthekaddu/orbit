@@ -9,6 +9,7 @@ import { isPath, pathTo, toRepository, type StoredMessage } from "./chat-tree";
 import { EFFORT_OUTCOMES, isEffort, type EffortOutcome } from "./effort";
 import type { ReplyRecord } from "./model-choice";
 import { runCodeOutputSchema } from "./sandbox/spec";
+import { LIMITS } from "./route-schema";
 import { normalizeDisabledTools } from "./tools/metadata";
 import { stripTerminalControls } from "./sandbox/terminal";
 
@@ -486,9 +487,30 @@ export function parseDisabledTools(raw: string): string[] {
   return Array.isArray(value) ? normalizeDisabledTools(value.filter((entry): entry is string => typeof entry === "string")) : [];
 }
 
-/** Saves the user's chat's disabled tools and leaves updated_at alone, so the sidebar order stays. Null when it is not theirs. */
+/** Saves a draft's first list of disabled tools and leaves updated_at alone, so the sidebar order stays. Null when it is not theirs. */
 export function setChatDisabledTools(id: string, userId: string, disabledTools: readonly string[]): string[] | null {
   const normalized = normalizeDisabledTools(disabledTools);
   const result = getDb().update(chats).set({ disabledTools: JSON.stringify(normalized) }).where(and(eq(chats.id, id), eq(chats.userId, userId))).run();
   return result.changes === 0 ? null : normalized;
+}
+
+export type ToolSwitches = { off: readonly string[]; on: readonly string[] };
+export type SwitchedTools = { status: "saved"; disabledTools: string[] } | { status: "not-found" } | { status: "too-many" };
+
+/**
+ * Turns tools off and on in the user's chat and answers its stored list. It reads and writes the row in one
+ * transaction, so a switch another tab saved meanwhile stays. It leaves updated_at alone, so the sidebar order stays,
+ * and refuses a list longer than LIMITS.disabledTools.
+ */
+export function switchChatTools(id: string, userId: string, { off, on }: ToolSwitches): SwitchedTools {
+  return getDb().transaction((tx): SwitchedTools => {
+    const chat = tx.select({ disabledTools: chats.disabledTools }).from(chats).where(and(eq(chats.id, id), eq(chats.userId, userId))).get();
+    if (!chat) return { status: "not-found" };
+    const turnedOn = new Set(on);
+    const disabledTools = normalizeDisabledTools([...parseDisabledTools(chat.disabledTools), ...off].filter((tool) => !turnedOn.has(tool)));
+    if (disabledTools.length > LIMITS.disabledTools) return { status: "too-many" };
+    const stored = JSON.stringify(disabledTools);
+    if (stored !== chat.disabledTools) tx.update(chats).set({ disabledTools: stored }).where(eq(chats.id, id)).run();
+    return { status: "saved", disabledTools };
+  }, { behavior: "immediate" });
 }

@@ -98,8 +98,12 @@ test.afterEach(() => {
   globalThis.fetch = realFetch;
 });
 
+// The chat's stored list on the fake server, which PATCH /api/chats/[id] changes the way the route does.
+let stored = new Set<string>();
+
 // Holds every request until the test answers it, and counts how many were out at once.
-function serve() {
+function serve(initial: string[] = []) {
+  stored = new Set(initial);
   const sent: Sent[] = [];
   const counts = { open: 0, most: 0 };
   globalThis.fetch = (input, init) => {
@@ -124,17 +128,19 @@ function serve() {
 const arrived = (sent: Sent[], count: number) =>
   eventually(() => sent.length, (length) => length >= count, { timeoutMs: 2_000, what: `${count} PATCH request(s)` });
 
-// The server's answer to PATCH /api/chats/[id]: the stored list, normalized.
+type Switches = { toolsOff: string[]; toolsOn: string[] };
+
+// The server's answer to PATCH /api/chats/[id]: the stored list with the switches applied, in canonical order.
 function accept(request: Sent) {
-  const { disabledTools } = request.body as { disabledTools: string[] };
-  request.answer(Response.json({ id: "chat-1", title: "New chat", disabledTools: [...new Set(disabledTools)].sort() }));
+  const { toolsOff, toolsOn } = request.body as Switches;
+  for (const id of toolsOff) stored.add(id);
+  for (const id of toolsOn) stored.delete(id);
+  request.answer(Response.json({ id: "chat-1", title: "New chat", disabledTools: [...stored].sort() }));
 }
 
-const sorted = (request: Sent) => [...(request.body as { disabledTools: string[] }).disabledTools].sort();
-
-function assertPatch(request: Sent) {
+function assertPatch(request: Sent, switches: Switches) {
   assert.deepEqual({ path: request.path, method: request.method }, { path: "/api/chats/chat-1", method: "PATCH" });
-  assert.deepEqual(Object.keys(request.body as object), ["disabledTools"], "the PATCH carries only disabledTools");
+  assert.deepEqual(request.body, switches, "the PATCH carries only the switches that changed");
 }
 
 // --- Panel ----------------------------------------------------------------------------------------
@@ -213,7 +219,7 @@ test("a draft keeps its switches locally, sends no PATCH, and hands the list to 
 });
 
 test("the switches lock while a draft's first send creates the chat, then save through PATCH", async () => {
-  const { sent } = serve();
+  const { sent } = serve(["web_search"]);
   const store = draft();
   store.toggle("web_search", false);
   store.sendStarted();
@@ -226,10 +232,10 @@ test("the switches lock while a draft's first send creates the chat, then save t
   assert.equal(store.draftDisabledTools(), undefined, "a saved chat's send carries no list");
   store.toggle("memory", false);
   await arrived(sent, 1);
-  assertPatch(sent[0]);
-  assert.deepEqual(sorted(sent[0]), ["memory", "web_search"]);
+  assertPatch(sent[0], { toolsOff: ["memory"], toolsOn: [] });
   accept(sent[0]);
   await store.flush();
+  assert.deepEqual(shown(store), [["Web search", false], ["GitHub", true], ["Memory", false]]);
 });
 
 test("a first send that fails before the chat exists unlocks the switches and keeps the draft", async () => {
@@ -251,8 +257,7 @@ test("a saved chat sends one PATCH at a time and folds clicks made meanwhile int
   const store = saved();
   store.toggle("web_search", false);
   await arrived(sent, 1);
-  assertPatch(sent[0]);
-  assert.deepEqual(sorted(sent[0]), ["web_search"]);
+  assertPatch(sent[0], { toolsOff: ["web_search"], toolsOn: [] });
 
   store.toggle("memory", false);
   store.toggle("memory", true);
@@ -261,8 +266,7 @@ test("a saved chat sends one PATCH at a time and folds clicks made meanwhile int
 
   accept(sent[0]);
   await arrived(sent, 2);
-  assertPatch(sent[1]);
-  assert.deepEqual(sorted(sent[1]), ["github", "web_search"]);
+  assertPatch(sent[1], { toolsOff: ["github"], toolsOn: [] });
   accept(sent[1]);
   await store.flush();
   assert.equal(sent.length, 2, "the memory clicks cancel out and send nothing");
@@ -270,14 +274,22 @@ test("a saved chat sends one PATCH at a time and folds clicks made meanwhile int
   assert.deepEqual(shown(store), [["Web search", false], ["GitHub", false], ["Memory", true]]);
 });
 
-test("a saved chat keeps entries for tools that are not available right now", async () => {
-  const { sent } = serve();
-  const store = saved(["github"]);
+test("a saved chat's PATCH carries only the switches that changed, however long the stored list is", async () => {
+  const servers = Array.from({ length: 60 }, (_, index) => `mcp:${"s".repeat(70)}-${index}`);
+  const { sent } = serve(["github", "memory", ...servers]);
+  const store = saved(["github", "memory", ...servers]);
   store.toggle("web_search", false);
+  store.toggle("memory", true);
   await arrived(sent, 1);
-  assert.deepEqual(sorted(sent[0]), ["github", "web_search"]);
+  assertPatch(sent[0], { toolsOff: ["web_search"], toolsOn: [] });
+  store.toggle("web_search", true);
   accept(sent[0]);
+  await arrived(sent, 2);
+  assertPatch(sent[1], { toolsOff: [], toolsOn: ["memory", "web_search"] });
+  assert.ok(JSON.stringify(sent[1].body).length < 4096, "the body stays under the route's 4096-byte cap");
+  accept(sent[1]);
   await store.flush();
+  assert.deepEqual([...store.getSnapshot().committed].sort(), ["github", ...servers].sort(), "entries for tools not available right now stay");
 });
 
 test("a failed PATCH puts the switch back and shows Could not save tools. until the next save works", async () => {
@@ -306,7 +318,7 @@ test("a failed PATCH puts the switch back and shows Could not save tools. until 
 });
 
 test("a PATCH lost on the network rolls back the same way", async () => {
-  const { sent } = serve();
+  const { sent } = serve(["memory"]);
   const store = saved(["memory"]);
   store.toggle("memory", true);
   await arrived(sent, 1);
@@ -324,8 +336,7 @@ test("when a PATCH fails, only what it carried goes back and a click made meanwh
   store.toggle("memory", false);
   sent[0].answer(Response.json({ error: "Internal error" }, { status: 500 }));
   await arrived(sent, 2);
-  assertPatch(sent[1]);
-  assert.deepEqual(sorted(sent[1]), ["memory"]);
+  assertPatch(sent[1], { toolsOff: ["memory"], toolsOn: [] });
   accept(sent[1]);
   await store.flush();
   assert.deepEqual(shown(store), [["Web search", true], ["GitHub", true], ["Memory", false]]);
@@ -338,7 +349,7 @@ test("a saved chat keeps its switches usable while a reply streams", async () =>
   assert.ok(switches(paintPanel(store)).every((item) => !item.disabled));
   store.toggle("web_search", false);
   await arrived(sent, 1);
-  assertPatch(sent[0]);
+  assertPatch(sent[0], { toolsOff: ["web_search"], toolsOn: [] });
   accept(sent[0]);
   store.sendFinished();
   await store.flush();

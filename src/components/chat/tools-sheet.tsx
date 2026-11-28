@@ -41,13 +41,10 @@ function unsaved(changes: Iterable<[string, boolean]>, committed: ReadonlySet<st
   return new Map([...changes].filter(([id, off]) => off !== committed.has(id)));
 }
 
-function applied(committed: ReadonlySet<string>, changes: ReadonlyMap<string, boolean>) {
-  const next = new Set(committed);
-  for (const [id, off] of changes) {
-    if (off) next.add(id);
-    else next.delete(id);
-  }
-  return [...next].sort();
+// Only the switches that moved, so the server keeps what another tab changed meanwhile.
+function switches(changes: ReadonlyMap<string, boolean>) {
+  const ids = (off: boolean) => [...changes].filter(([, value]) => value === off).map(([id]) => id).sort();
+  return { toolsOff: ids(true), toolsOn: ids(false) };
 }
 
 /** One chat's tool switches. A saved chat sends one PATCH at a time and folds clicks made meanwhile into the next. */
@@ -68,11 +65,10 @@ export function createToolsStore({ chatId, initialDisabledTools, draft }: { chat
   function send() {
     if (state.phase !== "saved" || state.inFlight !== null || state.pending.size === 0) return;
     const carried = state.pending;
-    const disabledTools = applied(state.committed, carried);
     set({ ...state, inFlight: carried, pending: new Map() });
     void requestJson(
       `/api/chats/${encodeURIComponent(chatId)}`,
-      { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ disabledTools }) },
+      { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(switches(carried)) },
       {
         parse: savedChat,
         onOk: (body) => {

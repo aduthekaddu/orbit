@@ -44,7 +44,7 @@ export const LIMITS = {
   requestBytes: 33_554_432,
 } as const;
 
-/** A chat's disabled tools, as PATCH /api/chats/[id] and a draft's first POST /api/chat send them. */
+/** Tool ids a chat turns off: a draft's first list in POST /api/chat, and `toolsOff` or `toolsOn` in PATCH /api/chats/[id]. */
 export const disabledToolsSchema = r.list(r.text(LIMITS.toolId).refine(isDisabledToolEntry), LIMITS.disabledTools);
 
 export type JsonBody = { ok: true; json: unknown } | { ok: false; reason: "too-large" | "invalid" };

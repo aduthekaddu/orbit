@@ -1,4 +1,4 @@
-import { deleteChat, getChatForUser, messageRepository, parseDisabledTools, renameChat, setChatDisabledTools } from "@/lib/messages";
+import { deleteChat, getChatForUser, messageRepository, parseDisabledTools, renameChat, switchChatTools } from "@/lib/messages";
 import { deleteAfterReply } from "@/lib/reply-runs";
 import { disabledToolsSchema, LIMITS, r, readJsonBody } from "@/lib/route-schema";
 import { sessionFrom, unauthorized } from "@/lib/session";
@@ -8,10 +8,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const paramsSchema = r.object({ id: r.text(LIMITS.id).min(1) });
+// A tools change names only the switches that moved, so a tab with an older list cannot undo another tab's change.
 const patchSchema = r.object({
   title: r.requiredText(LIMITS.chatTitle).optional(),
-  disabledTools: disabledToolsSchema.optional(),
-}).strict().refine((value) => value.title !== undefined || value.disabledTools !== undefined);
+  toolsOff: disabledToolsSchema.optional(),
+  toolsOn: disabledToolsSchema.optional(),
+}).strict()
+  .refine((value) => value.title !== undefined || value.toolsOff !== undefined || value.toolsOn !== undefined)
+  .refine(({ toolsOff = [], toolsOn = [] }) => !toolsOff.some((id) => toolsOn.includes(id)));
 const PATCH_BYTES = 4096;
 const invalid = () => Response.json({ error: "Invalid chat update" }, { status: 400 });
 
@@ -47,14 +51,16 @@ export async function PATCH(request: Request, context: Context) {
   const parsed = patchSchema.safeParse(body.json);
   if (!parsed.success) return invalid();
   const { id } = params.data;
-  const { title, disabledTools } = parsed.data;
+  const { title, toolsOff = [], toolsOn = [] } = parsed.data;
   const chat = getChatForUser(id, session.user.id);
   if (!chat) return notFound();
-  // No await from here on, so both writes land on the chat the check above found.
+  // No await from here on, so both writes land on the chat the check above found. Tools go first, since they can refuse.
+  const tools = switchChatTools(id, session.user.id, { off: toolsOff, on: toolsOn });
+  if (tools.status === "too-many") return invalid();
+  if (tools.status === "not-found") return notFound();
   const renamed = title === undefined ? chat : renameChat(id, session.user.id, title, requestRedactor(session.user));
-  const tools = disabledTools === undefined ? parseDisabledTools(chat.disabledTools) : setChatDisabledTools(id, session.user.id, disabledTools);
-  if (!renamed || !tools) return notFound();
-  return Response.json({ id, title: renamed.title, disabledTools: tools });
+  if (!renamed) return notFound();
+  return Response.json({ id, title: renamed.title, disabledTools: tools.disabledTools });
 }
 
 export async function DELETE(request: Request, context: Context) {

@@ -15,6 +15,7 @@ import { saveMemory } from "@/lib/memory/store";
 import { bindReplyPlan, findReplyRun, releaseReplyRun, reserveReplyRun, startReplyRun } from "@/lib/reply-runs";
 import { searchMessages } from "@/lib/search";
 import { saveInstance } from "@/lib/instance-settings";
+import { createToolsStore } from "@/components/chat/tools-sheet";
 
 const ME = "u-chat-owner";
 const OTHER = "u-chat-other";
@@ -231,35 +232,48 @@ test("GET answers a chat's disabled tools, all on by default", async () => {
   assert.deepEqual((await answer(await get("tools-default"))).body.disabledTools, []);
 });
 
-test("PATCH saves disabled tools in canonical order, answers them, and leaves the title and updated_at alone", async () => {
+test("PATCH turns tools off and on in the stored list, answers it in canonical order, and leaves updated_at alone", async () => {
   chat("tools-save", ME, "Keep title", new Date(77_000));
   signIn(ME);
-  const saved = await answer(await patch("tools-save", JSON.stringify({ disabledTools: ["web_search", "memory", "web_search"] })));
+  const saved = await answer(await patch("tools-save", JSON.stringify({ toolsOff: ["web_search", "memory", "web_search"] })));
   assert.deepEqual(saved.body, { id: "tools-save", title: "Keep title", disabledTools: ["memory", "web_search"] });
   assert.equal(saved.status, 200);
   assert.deepEqual(row("tools-save"), { title: "Keep title", updatedAt: 77_000 });
   assert.equal(disabledColumn("tools-save"), '["memory","web_search"]');
   assert.deepEqual((await answer(await get("tools-save"))).body.disabledTools, ["memory", "web_search"]);
 
-  const both = await answer(await patch("tools-save", JSON.stringify({ title: "Renamed", disabledTools: ["mcp:docs-server"] })));
-  assert.deepEqual(both.body, { id: "tools-save", title: "Renamed", disabledTools: ["mcp:docs-server"] });
-  const cleared = await answer(await patch("tools-save", JSON.stringify({ disabledTools: [] })));
-  assert.deepEqual(cleared.body, { id: "tools-save", title: "Renamed", disabledTools: [] });
+  const both = await answer(await patch("tools-save", JSON.stringify({ title: "Renamed", toolsOff: ["mcp:docs-server"], toolsOn: ["web_search"] })));
+  assert.deepEqual(both.body, { id: "tools-save", title: "Renamed", disabledTools: ["mcp:docs-server", "memory"] });
+  const again = await answer(await patch("tools-save", JSON.stringify({ toolsOff: ["memory"], toolsOn: ["github"] })));
+  assert.deepEqual(again.body.disabledTools, ["mcp:docs-server", "memory"], "a switch already in place changes nothing");
+  const titleOnly = await answer(await patch("tools-save", JSON.stringify({ title: "Kept tools" })));
+  assert.deepEqual(titleOnly.body, { id: "tools-save", title: "Kept tools", disabledTools: ["mcp:docs-server", "memory"] });
+  const cleared = await answer(await patch("tools-save", JSON.stringify({ toolsOn: ["mcp:docs-server", "memory"] })));
+  assert.deepEqual(cleared.body, { id: "tools-save", title: "Kept tools", disabledTools: [] });
+  assert.equal(disabledColumn("tools-save"), "[]");
   assert.equal(row("tools-save")?.updatedAt, 77_000, "toggling tools never reorders the sidebar");
 });
 
-test("PATCH accepts 64 disabled tools and refuses Generated UI, unknown ids, long ids, and 65 entries with 400", async () => {
+test("PATCH keeps at most 64 tools off and refuses Generated UI, unknown ids, long ids, a tool both off and on, and the old full list with 400", async () => {
   chat("tools-bad", ME, "Strict");
   signIn(ME);
   const servers = (count: number) => Array.from({ length: count }, (_, index) => `mcp:server-${index}`);
-  assert.equal((await patch("tools-bad", JSON.stringify({ disabledTools: ["web_search", "run_code", "github", "memory", ...servers(60)] }))).status, 200);
-  assert.equal((await patch("tools-bad", JSON.stringify({ disabledTools: ["memory"] }))).status, 200);
-  for (const disabledTools of [
+  assert.equal((await patch("tools-bad", JSON.stringify({ toolsOff: ["web_search", "run_code", "github", "memory", ...servers(60)] }))).status, 200);
+  const invalid = { status: 400, body: { error: "Invalid chat update" }, text: '{"error":"Invalid chat update"}' };
+  assert.deepEqual(await answer(await patch("tools-bad", JSON.stringify({ toolsOff: ["mcp:one-more"] }))), invalid, "a 65th tool off");
+  assert.equal(JSON.parse(String(disabledColumn("tools-bad"))).length, 64);
+  assert.equal((await patch("tools-bad", JSON.stringify({ toolsOn: [...servers(60), "web_search", "run_code", "github"] }))).status, 200);
+  assert.equal(disabledColumn("tools-bad"), '["memory"]');
+  for (const ids of [
     ["render_ui"], ["web_search", "render_ui"], ["bogus"], ["remember"], ["mcp:"], [`mcp:${"a".repeat(81)}`], ["mcp:bad id"], ["x".repeat(101)], [7], "web_search", null, servers(65),
   ]) {
-    assert.deepEqual(await answer(await patch("tools-bad", JSON.stringify({ disabledTools }))), { status: 400, body: { error: "Invalid chat update" }, text: '{"error":"Invalid chat update"}' }, JSON.stringify(disabledTools).slice(0, 80));
+    for (const field of ["toolsOff", "toolsOn"]) {
+      assert.deepEqual(await answer(await patch("tools-bad", JSON.stringify({ [field]: ids }))), invalid, `${field} ${JSON.stringify(ids).slice(0, 80)}`);
+    }
   }
-  assert.equal((await patch("tools-bad", JSON.stringify({ disabledTools: ["memory"], extra: true }))).status, 400);
+  for (const body of [{ toolsOff: ["github"], toolsOn: ["github"] }, { toolsOff: ["github"], extra: true }, { disabledTools: ["github"] }]) {
+    assert.deepEqual(await answer(await patch("tools-bad", JSON.stringify(body))), invalid, JSON.stringify(body));
+  }
   assert.equal(disabledColumn("tools-bad"), '["memory"]');
 });
 
@@ -275,8 +289,30 @@ test("GET drops entries a stored list should not hold", async () => {
 test("PATCH of disabled tools answers 404 for another user's chat and 401 when signed out", async () => {
   chat("tools-theirs", OTHER, "Theirs");
   signIn(ME);
-  assert.deepEqual((await answer(await patch("tools-theirs", JSON.stringify({ disabledTools: ["memory"] })))).body, { error: "Not found" });
+  assert.deepEqual((await answer(await patch("tools-theirs", JSON.stringify({ toolsOff: ["memory"] })))).body, { error: "Not found" });
   signIn(null);
-  assert.equal((await patch("tools-theirs", JSON.stringify({ disabledTools: ["memory"] }))).status, 401);
+  assert.equal((await patch("tools-theirs", JSON.stringify({ toolsOff: ["memory"] }))).status, 401);
   assert.equal(disabledColumn("tools-theirs"), "[]");
+});
+
+test("two tabs that each switch a different tool keep both changes", async (t) => {
+  chat("tools-tabs", ME, "Tabs");
+  signIn(ME);
+  const realFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = realFetch;
+  });
+  globalThis.fetch = async (input, init) => {
+    const request = new Request(new URL(String(input), "http://127.0.0.1"), init);
+    return request.method === "PATCH" ? route.PATCH(request, params("tools-tabs")) : route.GET(request, params("tools-tabs"));
+  };
+  const tab = () => createToolsStore({ chatId: "tools-tabs", initialDisabledTools: [], draft: false });
+  const [first, second] = [tab(), tab()];
+  first.toggle("memory", false);
+  await first.flush();
+  second.toggle("web_search", false);
+  await second.flush();
+  assert.equal(disabledColumn("tools-tabs"), '["memory","web_search"]', "the second tab kept Memory off");
+  assert.deepEqual([...second.getSnapshot().committed].sort(), ["memory", "web_search"], "the second tab shows the first tab's change");
+  assert.equal(second.getSnapshot().failed, false);
 });

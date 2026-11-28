@@ -280,6 +280,7 @@ async function crossUserMatrix(t: TestContext, mode: HostingMode, round: number)
     { route: "chats", method: "POST", status: 201 },
     { route: "chats/[id]", method: "GET", status: 404, params: { id: adminChat } },
     { route: "chats/[id]", method: "PATCH", status: 404, params: { id: adminChat }, input: { title: "New title" } },
+    { route: "chats/[id]", method: "PATCH", status: 404, params: { id: adminChat }, input: { toolsOff: ["web_search"], toolsOn: ["memory"] } },
     { route: "chats/[id]", method: "DELETE", status: 404, params: { id: adminChat } },
     ...[adminChat, subject.chat].map((id) => ({ route: "chats/[id]/messages/[messageId]", method: "PATCH", status: 404, params: { id, messageId: adminReply }, input: { text: "New reply" } })),
     ...["", `?replyId=${adminReply}`].map((query) => ({ route: "chats/[id]/stream", method: "GET", status: 404, params: { id: adminChat }, query })),

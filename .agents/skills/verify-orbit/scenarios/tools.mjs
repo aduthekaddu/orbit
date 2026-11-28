@@ -522,16 +522,17 @@ export default async function tools({ page, origin, step, shot, useProvider, see
     const savedMemory = page.waitForResponse((response) => pathOf(response) === `/api/chats/${memoryChat}` && response.request().method() === "PATCH");
     await toolSwitch(tray, "Memory").click();
     const memoryPatch = await savedMemory;
+    const memoryBody = memoryPatch.request().postDataJSON();
     const orderAfter = await chatOrder();
     const sidebarAfter = await sidebarOrder();
     // A title can land on the newer draft chat meanwhile, so only the order and this chat's own time are compared.
     const ids = (order) => order.map(({ id }) => id);
     const memoryTime = (order) => order.find(({ id }) => id === memoryChat)?.updatedAt ?? null;
     step(
-      "turning Memory off saves with PATCH 200 and leaves the chat order, the sidebar order, and the chat's updatedAt unchanged",
-      memoryPatch.status() === 200 && orderBefore[0]?.id === draftId && isDeepStrictEqual(ids(orderBefore), ids(orderAfter)) && memoryTime(orderBefore) !== null && memoryTime(orderBefore) === memoryTime(orderAfter) &&
+      "turning Memory off sends only that switch, saves with PATCH 200, and leaves the chat order, the sidebar order, and the chat's updatedAt unchanged",
+      memoryPatch.status() === 200 && isDeepStrictEqual(memoryBody, { toolsOff: ["memory"], toolsOn: [] }) && orderBefore[0]?.id === draftId && isDeepStrictEqual(ids(orderBefore), ids(orderAfter)) && memoryTime(orderBefore) !== null && memoryTime(orderBefore) === memoryTime(orderAfter) &&
         sidebarBefore.length > 1 && isDeepStrictEqual(sidebarBefore, sidebarAfter),
-      `status ${memoryPatch.status()}, first ${orderBefore[0]?.id}, order kept ${isDeepStrictEqual(ids(orderBefore), ids(orderAfter))}, sidebar ${JSON.stringify(sidebarBefore)} -> ${JSON.stringify(sidebarAfter)}, updatedAt ${memoryTime(orderBefore)} -> ${memoryTime(orderAfter)}`,
+      `status ${memoryPatch.status()}, body ${JSON.stringify(memoryBody)}, first ${orderBefore[0]?.id}, order kept ${isDeepStrictEqual(ids(orderBefore), ids(orderAfter))}, sidebar ${JSON.stringify(sidebarBefore)} -> ${JSON.stringify(sidebarAfter)}, updatedAt ${memoryTime(orderBefore)} -> ${memoryTime(orderAfter)}`,
     );
     await page.keyboard.press("Escape");
     offset = logSize();
@@ -730,7 +731,7 @@ export default async function tools({ page, origin, step, shot, useProvider, see
     const memberLine = await lineOf(member, "web_search", "status");
     step("the member's Test on Web search shows 3 results", memberTest.status() === 200 && /^3 results · /.test(memberLine), `status ${memberTest.status()}, line ${JSON.stringify(memberLine)}`);
     const adminTools = (await readJson(`${origin}/api/chats/${memoryChat}`)).disabledTools;
-    const crossPatch = await member.request.patch(`${origin}/api/chats/${memoryChat}`, { data: { disabledTools: ["github", "run_code"] } });
+    const crossPatch = await member.request.patch(`${origin}/api/chats/${memoryChat}`, { data: { toolsOff: ["github", "run_code"] } });
     const adminChat = await readJson(`${origin}/api/chats/${memoryChat}`);
     step(
       "the member gets 404 on PATCH of the admin's chat, and the chat keeps its tools",
