@@ -76,10 +76,13 @@ const KIND_FILTERS: { value: KindFilter; label: string }[] = [
   { value: "react", label: "React" },
 ];
 
-/** The right pane. `loading` keeps the version on screen until the next one arrives, so stepping through versions never flashes. */
+/**
+ * The right pane. While another version of the same lineage loads, `previous` keeps the open one on screen, so stepping
+ * through versions never flashes. `lineageId` marks the row at once, before the detail arrives.
+ */
 type DetailState =
   | { status: "ready"; detail: ArtifactDetail }
-  | { status: "loading"; id: string; previous: ArtifactDetail | null }
+  | { status: "loading"; id: string; lineageId: string | null; previous: ArtifactDetail | null }
   | { status: "failed"; id: string }
   | { status: "missing"; id: string };
 
@@ -279,14 +282,18 @@ export function ArtifactLibrary({ initial, requestedId, initialDetail }: {
     });
   }
 
-  const showDetail = useCallback((id: string, explicit: boolean) => {
+  const showDetail = useCallback((id: string, explicit: boolean, lineageId: string | null) => {
     const known = details.current.get(id);
     if (known) {
       latestDetail();
       setSelection({ detail: { status: "ready", detail: known }, explicit });
       return;
     }
-    setSelection((current) => ({ detail: { status: "loading", id, previous: shownDetail(current.detail) }, explicit }));
+    setSelection((current) => {
+      const shown = shownDetail(current.detail);
+      const previous = shown && lineageId !== null && shown.lineageId === lineageId ? shown : null;
+      return { detail: { status: "loading", id, lineageId, previous }, explicit };
+    });
     const signal = latestDetail();
     void requestJson(`/api/artifacts/${encodeURIComponent(id)}`, { signal }, {
       parse: detailBody,
@@ -309,7 +316,7 @@ export function ArtifactLibrary({ initial, requestedId, initialDetail }: {
         pushed.current = false;
         setSelection((current) => ({ ...current, explicit: false }));
       } else {
-        showDetail(id, true);
+        showDetail(id, true, null);
       }
     }
     window.addEventListener("popstate", onPopState);
@@ -322,12 +329,12 @@ export function ArtifactLibrary({ initial, requestedId, initialDetail }: {
       window.history.pushState(null, "", urlWithId(item.id));
       pushed.current = true;
     }
-    showDetail(item.id, true);
+    showDetail(item.id, true, item.lineageId);
   }
 
   function selectVersion(version: ArtifactVersionSummary) {
     window.history.replaceState(null, "", urlWithId(version.id));
-    showDetail(version.id, true);
+    showDetail(version.id, true, shownDetail(selection.detail)?.lineageId ?? null);
   }
 
   function back() {
@@ -350,7 +357,7 @@ export function ArtifactLibrary({ initial, requestedId, initialDetail }: {
     if (list.status === "loading") return { ...list, previous: list.previous.map((item) => withRename(item, renames)) };
     return list;
   }, [list, renames]);
-  const selectedLineageId = shownDetail(selection.detail)?.lineageId ?? null;
+  const selectedLineageId = selection.detail?.status === "loading" ? selection.detail.lineageId : shownDetail(selection.detail)?.lineageId ?? null;
 
   if (list.status === "done" && list.items.length === 0 && !filtered && !selection.explicit) {
     return (
@@ -409,7 +416,7 @@ export function ArtifactLibrary({ initial, requestedId, initialDetail }: {
           state={selection.detail}
           renames={renames}
           onBack={back}
-          onRetry={(id) => showDetail(id, selection.explicit)}
+          onRetry={(id) => showDetail(id, selection.explicit, null)}
           onSelectVersion={selectVersion}
           onRenamed={renamed}
         />
