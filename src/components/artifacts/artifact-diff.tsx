@@ -120,7 +120,7 @@ export function ArtifactDiff({ current, versions }: { current: { id: string; cod
 
   const picker = (
     <Select value={base.id} onValueChange={setChosenId}>
-      <SelectTrigger size="sm" aria-label="Compare with" className="num pointer-coarse:h-11">
+      <SelectTrigger size="sm" aria-label="Compare with" className="num pointer-coarse:min-h-touch">
         <SelectValue>{`v${base.number}`}</SelectValue>
       </SelectTrigger>
       <SelectContent>

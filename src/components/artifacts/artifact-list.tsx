@@ -30,9 +30,10 @@ function formatDay(value: string) {
   return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: thisYear ? undefined : "numeric" }).format(date);
 }
 
-function kindLine(item: ArtifactListItem) {
+function KindLine({ item }: { item: ArtifactListItem }) {
   const kind = ARTIFACT_KIND_LABEL[item.kind];
-  return item.versionCount > 1 ? `${kind} · ${item.versionCount} versions` : kind;
+  if (item.versionCount < 2) return kind;
+  return <>{kind} · <span className="num">{item.versionCount}</span> versions</>;
 }
 
 function plainClick(event: MouseEvent) {
@@ -74,7 +75,7 @@ function ArtifactRow({ item, selected, inBrowser, onOpen }: { item: ArtifactList
             <span className="num shrink-0 text-meta text-muted-foreground">{inBrowser ? formatDay(item.updatedAt) : null}</span>
           </span>
           <span className="flex min-w-0 gap-1 text-meta text-muted-foreground">
-            <span className="num shrink-0">{kindLine(item)}</span>
+            <span className="shrink-0"><KindLine item={item} /></span>
             <span aria-hidden className="shrink-0">·</span>
             <span className="min-w-0 truncate">{chatLabel(item.chatTitle)}</span>
           </span>
