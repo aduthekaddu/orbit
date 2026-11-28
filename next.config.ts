@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "same-origin" },
         ],
       },
-      ...["/", "/new", "/login", "/signup", "/settings", "/admin", "/memory", "/c/:id", "/invite/:token"].map((source) => ({
+      ...["/", "/new", "/login", "/signup", "/settings", "/admin", "/memory", "/tools", "/c/:id", "/invite/:token"].map((source) => ({
         source,
         headers: [
           { key: "Content-Security-Policy", value: "frame-src 'none'; frame-ancestors 'none'" },
