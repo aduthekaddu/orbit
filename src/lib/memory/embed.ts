@@ -30,7 +30,7 @@ function embedError(error: unknown): string {
   return "Ollama is unreachable";
 }
 
-export async function embed(texts: string[], kind: EmbedKind, timeoutMs = TIMEOUT_MS): Promise<EmbedResult> {
+export async function embed(texts: string[], kind: EmbedKind, timeoutMs = TIMEOUT_MS, signal?: AbortSignal): Promise<EmbedResult> {
   if (texts.length === 0) return { ok: true, vectors: [] };
   let response: Response;
   try {
@@ -38,7 +38,7 @@ export async function embed(texts: string[], kind: EmbedKind, timeoutMs = TIMEOU
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ model: EMBED_MODEL, input: texts.map((text) => TASK_PREFIX[kind] + text) }),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
     return { ok: false, error: embedError(error) };
@@ -100,7 +100,15 @@ function freshStatus(): OllamaStatus | null {
   return statusCache.status;
 }
 
-export function ollamaStatus(timeoutMs = QUERY_EMBED_TIMEOUT_MS): Promise<OllamaStatus> {
+/** Whether Ollama embeds. `fresh` skips the cached failure and the shared probe, for a check a person asked for. */
+export function ollamaStatus(timeoutMs = QUERY_EMBED_TIMEOUT_MS, options: { fresh?: boolean; signal?: AbortSignal } = {}): Promise<OllamaStatus> {
+  if (options.fresh) {
+    return embed(["orbit"], "query", timeoutMs, options.signal).then((result) => {
+      const status: OllamaStatus = result.ok ? { ok: true } : { ok: false, error: result.error };
+      if (!options.signal?.aborted) rememberStatus(status);
+      return status;
+    });
+  }
   const cached = freshStatus();
   if (cached) return Promise.resolve(cached);
   const url = ollamaBaseUrl();

@@ -1,9 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { Redactor, redactUrl, resolveMaskedUrl } from "./chat-errors";
 import { redactionSecrets } from "./connections";
 import { getDb } from "./db";
-import { userGithub } from "./db/schema";
+import { toolStatus, userGithub } from "./db/schema";
 import { readEnv } from "./env";
 import { decryptSecret, encryptSecret, GITHUB_AAD, SecretUnreadable } from "./secrets";
 import type { UserId, Viewer } from "./session";
@@ -79,6 +79,10 @@ export function saveGithub(userId: UserId, input: GithubPatch) {
     const values = { tokenCiphertext, mcpUrl: resolved.url, updatedAt: new Date() };
     const row = tx.insert(userGithub).values({ userId, ...values })
       .onConflictDoUpdate({ target: userGithub.userId, set: values }).returning().get();
+    // A GitHub status found with the old token or URL says nothing about the new ones.
+    if (tokenCiphertext !== (current?.tokenCiphertext ?? "") || resolved.url !== (current?.mcpUrl ?? "")) {
+      tx.delete(toolStatus).where(and(eq(toolStatus.userId, userId), eq(toolStatus.toolId, "github"))).run();
+    }
     return { ok: true, settings: toPublicGithub(userId, githubFrom(row)) } as const;
   }, { behavior: "immediate" });
 }

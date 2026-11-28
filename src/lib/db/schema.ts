@@ -181,6 +181,7 @@ export const chats = sqliteTable(
     connectionId: text("connection_id"),
     model: text("model"),
     reasoningEffort: text("reasoning_effort"),
+    disabledTools: text("disabled_tools").notNull().default("[]"),
   },
   (table) => [index("chats_user_id_idx").on(table.userId)],
 );
@@ -259,3 +260,11 @@ export const userPreferences = sqliteTable("user_preferences", {
   providerSetupComplete: integer("provider_setup_complete", { mode: "boolean" }).notNull().default(false),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
+
+export const toolStatus = sqliteTable("tool_status", {
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  toolId: text("tool_id").notNull(),
+  lastOkAt: integer("last_ok_at", { mode: "timestamp_ms" }),
+  lastFailedAt: integer("last_failed_at", { mode: "timestamp_ms" }),
+  lastError: text("last_error"),
+}, (table) => [primaryKey({ columns: [table.userId, table.toolId] })]);

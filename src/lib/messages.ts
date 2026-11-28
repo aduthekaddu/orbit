@@ -9,6 +9,7 @@ import { isPath, pathTo, toRepository, type StoredMessage } from "./chat-tree";
 import { EFFORT_OUTCOMES, isEffort, type EffortOutcome } from "./effort";
 import type { ReplyRecord } from "./model-choice";
 import { runCodeOutputSchema } from "./sandbox/spec";
+import { normalizeDisabledTools } from "./tools/metadata";
 import { stripTerminalControls } from "./sandbox/terminal";
 
 export function textFromParts(parts: unknown): string {
@@ -472,4 +473,22 @@ export function createChat(userId: string) {
   const now = new Date();
   getDb().insert(chats).values({ id, userId, title: "New chat", createdAt: now, updatedAt: now }).run();
   return { id };
+}
+
+/** The chat's disabled tools from its stored JSON. Entries a list should not hold, or text that is not a list, drop out. */
+export function parseDisabledTools(raw: string): string[] {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  return Array.isArray(value) ? normalizeDisabledTools(value.filter((entry): entry is string => typeof entry === "string")) : [];
+}
+
+/** Saves the user's chat's disabled tools and leaves updated_at alone, so the sidebar order stays. Null when it is not theirs. */
+export function setChatDisabledTools(id: string, userId: string, disabledTools: readonly string[]): string[] | null {
+  const normalized = normalizeDisabledTools(disabledTools);
+  const result = getDb().update(chats).set({ disabledTools: JSON.stringify(normalized) }).where(and(eq(chats.id, id), eq(chats.userId, userId))).run();
+  return result.changes === 0 ? null : normalized;
 }

@@ -1,9 +1,9 @@
-import { eq, isNull } from "drizzle-orm";
+import { eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { Redactor, redactUrl, resolveMaskedUrl } from "./chat-errors";
 import { redactionSecrets } from "./connections";
 import { accountCount, getDb, type OrbitDb } from "./db";
-import { instanceSettings, invites } from "./db/schema";
+import { instanceSettings, invites, toolStatus } from "./db/schema";
 import { parseHostingMode, policyFor, switchMode, type HostingMode, type SignupMode } from "./policy";
 import { sandboxEnabled } from "./sandbox/enabled";
 import { decryptSecret, encryptSecret, SecretUnreadable, TAVILY_AAD } from "./secrets";
@@ -136,6 +136,12 @@ export function saveInstance(adminId: UserId, input: InstancePatch) {
       dreamHour: input.dreamHour,
       updatedAt: new Date(),
     }).where(onlyInstance).returning().get();
+    // A status found with the old search or sandbox settings says nothing about the new ones.
+    const stale = [
+      ...(updated.searxngUrl !== stored.searxngUrl || updated.tavilyKeyCiphertext !== stored.tavilyKeyCiphertext ? ["web_search"] : []),
+      ...(updated.sandbox !== stored.sandbox ? ["run_code"] : []),
+    ];
+    if (stale.length > 0) tx.delete(toolStatus).where(inArray(toolStatus.toolId, stale)).run();
     return { ok: true, settings: toPublicInstance(adminId, instanceFrom(storedSettings.parse(updated))) } as const;
   }, { behavior: "immediate" });
 }
