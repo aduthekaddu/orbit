@@ -492,6 +492,8 @@ export default async function tools({ page, origin, step, shot, useProvider, see
       draftOff && chatPatches.length === patchesBefore && draftLabel === "Tools (1 off)" && draftDot,
       `off ${draftOff}, PATCHes ${chatPatches.length - patchesBefore}, label ${draftLabel}, dot ${draftDot}`,
     );
+    // The switch slides for 150ms after a click; shoot its settled state.
+    await tray.evaluate((element) => Promise.all(element.getAnimations({ subtree: true }).filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime)).map((animation) => animation.finished)));
     await shot("popover");
     await page.keyboard.press("Escape");
     await tray.waitFor({ state: "hidden" });
