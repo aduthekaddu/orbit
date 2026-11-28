@@ -31,7 +31,11 @@ function textOf(node: Element | RootContent): string {
   return "children" in node ? node.children.map(textOf).join("") : "";
 }
 
-/** Each rendered `<pre><code>` block, read the way CodeHeader reads it: the `language-*` class and the element's text. */
+/**
+ * Each rendered `<pre><code>` block, read the way CodeHeader reads it: the `language-*` class and the element's text.
+ * The parser and remark-rehype recurse once per nesting level, so text nested a few thousand quotes or lists deep
+ * overflows the stack. The chat's renderer overflows on that text too and shows no card, so it holds no blocks here.
+ */
 function renderedBlocks(markdown: string) {
   const blocks: { index: number; language: string; code: string }[] = [];
   const visit = (node: Root | RootContent) => {
@@ -46,7 +50,12 @@ function renderedBlocks(markdown: string) {
     }
     if ("children" in node) node.children.forEach(visit);
   };
-  visit(renderer.runSync(renderer.parse(markdown)));
+  try {
+    visit(renderer.runSync(renderer.parse(markdown)));
+  } catch (error) {
+    if (error instanceof RangeError) return [];
+    throw error;
+  }
   return blocks;
 }
 

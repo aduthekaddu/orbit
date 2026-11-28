@@ -61,16 +61,16 @@ function backfill(db: OrbitDb, batchSize: number): BackfillResult {
   for (let start = 0; start < candidates.length; start += batchSize) {
     db.transaction(() => {
       for (const message of candidates.slice(start, start + batchSize)) {
-        let parts: unknown;
+        const owner = parseViewer({ id: message.userId, role: message.role });
+        const redact = redactorFor(owner);
+        // Parts that are not JSON, or JSON nested too deep to mask, count as corrupt, so one row never stops a boot.
+        let masked: unknown;
         try {
-          parts = JSON.parse(partsOf.get(message.id) as string);
+          masked = redactPartsCrossBoundary(JSON.parse(partsOf.get(message.id) as string), redact);
         } catch {
           skippedCorrupt++;
           continue;
         }
-        const owner = parseViewer({ id: message.userId, role: message.role });
-        const redact = redactorFor(owner);
-        const masked = redactPartsCrossBoundary(parts, redact);
         const synced = syncMessageArtifacts(owner.id, message.chatId, message.id, masked, new Date(message.createdAt), redact, db, { backfill: true });
         insertedRows += synced.inserted;
       }
@@ -78,7 +78,7 @@ function backfill(db: OrbitDb, batchSize: number): BackfillResult {
   }
   // Stamped only after the last batch commits, so a pass cut short runs again on the next boot.
   db.update(instanceSettings).set({ artifactsBackfilledAt: new Date() }).where(eq(instanceSettings.id, 1)).run();
-  if (skippedCorrupt > 0) console.warn("[artifacts] backfill skipped messages whose parts are not JSON", { count: skippedCorrupt });
+  if (skippedCorrupt > 0) console.warn("[artifacts] backfill skipped messages whose parts it could not read", { count: skippedCorrupt });
   return { skipped: false, scannedMessages: candidates.length, insertedRows, skippedCorrupt, durationMs: Math.round(performance.now() - started) };
 }
 
