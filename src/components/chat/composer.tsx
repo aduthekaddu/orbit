@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ModelChip } from "./model-picker";
 import { useReplyLink } from "./reply-link";
+import { ToolsTrigger } from "./tools-sheet";
 
 const roundAction =
   "flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-[background-color,color,scale] duration-150 ease-orbit hover:bg-primary/90 enabled:active:scale-90 disabled:bg-surface-raised disabled:text-muted-foreground/60";
@@ -41,7 +42,12 @@ export function Composer({ ready, needsOwnConnection = false, inputRef }: { read
           <Button asChild variant="outline" size="sm" className="pointer-coarse:h-11">
             <Link href="/settings#connections">Add connection</Link>
           </Button>
-        ) : <ModelChip />}
+        ) : (
+          <div className="flex min-w-0 items-center gap-1.5">
+            <ToolsTrigger />
+            <ModelChip />
+          </div>
+        )}
         {reply.stopError && <p role="alert" className="text-meta text-destructive">{reply.stopError}</p>}
         <AuiIf condition={(state) => state.thread.isRunning || reconnecting || stopping}>
           <button type="button" aria-label="Stop" className={roundAction} disabled={!reply.canStop} onClick={() => void reply.stop?.()}>

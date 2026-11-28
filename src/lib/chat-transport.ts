@@ -44,6 +44,10 @@ export function orbitChatTransport(
     onSend?: () => void;
     onReconnectResponse?: (status: number) => void;
     onServerTime?: (serverTime: number) => void;
+    // A draft's first send carries the tools it turned off. A saved chat returns undefined, since the server reads the row.
+    disabledTools?: () => string[] | undefined;
+    // Awaited before the request leaves, so a tools save still in flight applies to this reply.
+    beforeSend?: () => Promise<void>;
   },
 ) {
   return new OrbitChatTransport({
@@ -71,16 +75,20 @@ export function orbitChatTransport(
       return { api: `/api/chats/${encodeURIComponent(chatId)}/stream${query}` };
     },
     // assistant-ui replaces the request id with its local thread id. The open chat id has to win.
-    prepareSendMessagesRequest: ({ body, messages, trigger, messageId }) => ({
-      body: {
-        ...body,
-        id: chatId,
-        messages,
-        trigger,
-        messageId,
-        editMessageId: trigger === "submit-message" ? options?.editMessageId?.() ?? undefined : undefined,
-        modelChoice: options?.modelChoice?.() ?? undefined,
-      },
-    }),
+    prepareSendMessagesRequest: async ({ body, messages, trigger, messageId }) => {
+      await options?.beforeSend?.();
+      return {
+        body: {
+          ...body,
+          id: chatId,
+          messages,
+          trigger,
+          messageId,
+          editMessageId: trigger === "submit-message" ? options?.editMessageId?.() ?? undefined : undefined,
+          modelChoice: options?.modelChoice?.() ?? undefined,
+          disabledTools: options?.disabledTools?.(),
+        },
+      };
+    },
   });
 }

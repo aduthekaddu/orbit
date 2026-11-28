@@ -18,6 +18,10 @@ import { ModelChoiceProvider } from "./model-picker";
 import { createReplyLink, ReplyLink } from "./reply-link";
 import { StoppedRunSync } from "./stopped-run-sync";
 import { Thread } from "./thread";
+import { createToolsStore, ToolsProvider, type AvailableTool } from "./tools-sheet";
+
+const NO_TOOLS: AvailableTool[] = [];
+const NONE_OFF: string[] = [];
 
 export function ChatPanel({
   chatId,
@@ -31,6 +35,8 @@ export function ChatPanel({
   needsOwnConnection = false,
   liveReplyId = null,
   restorePending = true,
+  availableTools = NO_TOOLS,
+  initialDisabledTools = NONE_OFF,
 }: {
   chatId: string;
   /** `/c/<id>?new` with no chats row yet. The first send creates the row. */
@@ -44,6 +50,9 @@ export function ChatPanel({
   needsOwnConnection?: boolean;
   liveReplyId?: string | null;
   restorePending?: boolean;
+  /** The ready tools this chat may turn off. */
+  availableTools?: AvailableTool[];
+  initialDisabledTools?: string[];
 }) {
   const router = useRouter();
   const editMessageId = useRef<string | null>(null);
@@ -82,6 +91,11 @@ export function ChatPanel({
     // A send that dropped before its headers lands here once a refresh finds the committed row.
     if (!isDraft) dropNewParam(chatId);
   }, [chatId, isDraft]);
+  const [tools] = useState(() => createToolsStore({ chatId, initialDisabledTools, draft: isDraft }));
+  // A first send that lost its reply id still saved the row, which the refresh after it finds.
+  useEffect(() => {
+    if (!isDraft) tools.chatCreated(initialDisabledTools);
+  }, [initialDisabledTools, isDraft, tools]);
   useEffect(() => () => {
     // Leaving before the reply ends skips its refresh, and the sidebar would miss the new chat. The server can save
     // the chat seconds before the headers arrive, so any send counts. A refresh after a failed send changes nothing.
@@ -98,17 +112,21 @@ export function ChatPanel({
       return id;
     },
     modelChoice: () => sendChoice.current,
+    disabledTools: () => tools.draftDisabledTools(),
+    beforeSend: () => tools.flush(),
     onSend: () => {
       if (draft.current) sentDraft.current = true;
+      tools.sendStarted();
     },
     // A reply ID proves POST /api/chat committed the chat and its prompt, so a reload must open the saved chat.
     onReplyId: (replyId) => {
       if (draft.current) dropNewParam(chatId);
+      tools.chatCreated();
       link.accept(replyId);
     },
     onReconnectResponse: link.reconnectResponse,
     onServerTime: link.syncClock,
-  }), [chatId, link]);
+  }), [chatId, link, tools]);
   const history = useMemo<ThreadHistoryAdapter>(() => ({
     async load() { throw new Error("Chat history requires the ai-sdk/v6 format"); },
     async append() {},
@@ -133,7 +151,9 @@ export function ChatPanel({
     adapters: { history },
     transport,
     isSendDisabled: state.kind === "reconnecting" || state.kind === "stopping",
+    // The SDK calls onFinish after an error or an abort too, so a refused first send unlocks the switches.
     onFinish: ({ message, messages, isAbort, isDisconnect }) => {
+      tools.sendFinished();
       link.finish({ isAbort, isDisconnect, messages });
       if (!isDisconnect && hasOpenCodeRun(message)) {
         setStopped((ids) => ids.includes(message.id) ? ids : [...ids, message.id]);
@@ -159,7 +179,9 @@ export function ChatPanel({
                   known={resolvedChoice && { connectionId: resolvedChoice.connectionId, model: resolvedChoice.model, levels: choiceLevels }}
                   onChoose={setPicked}
                 >
-                  <Thread ready={choice !== null} needsOwnConnection={needsOwnConnection} focusMessageId={focusMessageId} hasHistory={initialHistory.messages.length > 0} />
+                  <ToolsProvider store={tools} availableTools={availableTools}>
+                    <Thread ready={choice !== null} needsOwnConnection={needsOwnConnection} focusMessageId={focusMessageId} hasHistory={initialHistory.messages.length > 0} />
+                  </ToolsProvider>
                 </ModelChoiceProvider>
               </ArtifactWorkspace>
             </StoppedRunSync>
