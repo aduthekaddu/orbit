@@ -8,7 +8,7 @@ import { NOTHING_PINNED, resolveChoice } from "../model-choice";
 import type { UserId, Viewer } from "../policy";
 import { getMemoryEnabled } from "../preferences";
 import { getInstance } from "../instance-settings";
-import { providerFetch } from "../net-guard";
+import { providerFetch, refuseDownloads } from "../net-guard";
 import { languageModelFor } from "../provider";
 import { modelRedactors } from "../request-redactor";
 import { embed, embedPending } from "./embed";
@@ -346,6 +346,7 @@ export async function dreamChat(viewer: Viewer, chatId: string, input: { date: s
         prompt: promptFor(messages.slice(offset, offset + PAGE)),
         maxRetries: 0,
         abortSignal: AbortSignal.timeout(60_000),
+        experimental_download: refuseDownloads,
       });
       candidates.push(...generated.object.candidates);
     }

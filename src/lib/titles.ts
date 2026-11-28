@@ -3,6 +3,7 @@ import { after } from "next/server";
 import type { Redactor } from "./chat-errors";
 import type { EffortCallOptions } from "./effort";
 import { chatTitle, replaceFallbackTitle } from "./messages";
+import { refuseDownloads } from "./net-guard";
 
 export const TITLE_ASK = "Write a title of at most six words.";
 
@@ -57,6 +58,7 @@ async function saveTitle(
       maxOutputTokens: input.call.maxOutputTokens,
       timeout: 10_000,
       maxRetries: 0,
+      experimental_download: refuseDownloads,
     });
     const next = input.redact.text(cleanTitle(input.redact.text(result.text)));
     if (!next) {

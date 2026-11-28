@@ -17,7 +17,7 @@ import { EFFORTS, effortCallOptions, effortLevels, effortOutcome, titleCallOptio
 import { beginTurn, chatExists, finishChatReply, getChatForUser, redactChatTitle, storedAssistantParts, storedMessageIds, textFromParts, touchChat } from "@/lib/messages";
 import { chatChoice, NOTHING_PINNED, resolveChoice, sameChoice, setChatChoice, type ReplyRecord } from "@/lib/model-choice";
 import { cachedCaps } from "@/lib/model-list";
-import { providerFetch } from "@/lib/net-guard";
+import { providerFetch, refuseDownloads } from "@/lib/net-guard";
 import { knownAdaptiveThinking, languageModelFor } from "@/lib/provider";
 import { settleReasoningTimes, stampReasoningTimes, stripOrbitTiming } from "@/lib/reasoning-time";
 import { bindReplyPlan, releaseReplyRun, replyResponse, replyWasDiscarded, reserveReplyRun, startReplyRun, type ReplyEndPart, type ReplyEndReason } from "@/lib/reply-runs";
@@ -66,15 +66,13 @@ const UNRESOLVED = {
 
 const TEXT_TOO_LONG = "text-too-long";
 
-const partSchema = (textMax: number) =>
-  r.looseObject({
-    type: r.text(LIMITS.partType),
-    text: r.text(textMax).optional(),
-  });
+// Orbit's composer sends only text. A file part with a remote URL would make the AI SDK fetch that URL from the server.
+const USER_PART_TYPE = r.literal("text");
+const PART_TYPE = r.text(LIMITS.partType);
 
-const partsSchema = (textMax: number) =>
+const partsSchema = (type: typeof USER_PART_TYPE | typeof PART_TYPE, textMax: number) =>
   r
-    .list(partSchema(textMax), LIMITS.partsPerMessage)
+    .list(r.looseObject({ type, text: r.text(textMax).optional() }), LIMITS.partsPerMessage)
     .refine((parts) => parts.reduce((total, part) => total + (part.text?.length ?? 0), 0) <= textMax, {
       message: TEXT_TOO_LONG,
     })
@@ -84,12 +82,12 @@ const addedMessageSchema = r.discriminatedUnion("role", [
   r.object({
     id: r.text(LIMITS.id).min(1),
     role: r.literal("user"),
-    parts: partsSchema(LIMITS.userMessageText),
+    parts: partsSchema(USER_PART_TYPE, LIMITS.userMessageText),
   }),
   r.object({
     id: r.text(LIMITS.id).min(1),
     role: r.enum(["assistant", "system"]),
-    parts: partsSchema(LIMITS.assistantText),
+    parts: partsSchema(PART_TYPE, LIMITS.assistantText),
   }),
 ]);
 
@@ -281,6 +279,7 @@ export async function POST(request: Request) {
       stopWhen: stepCountIs(CHAT_STEP_LIMIT),
       prepareStep: answerStepFor(tools),
       abortSignal: signal,
+      experimental_download: refuseDownloads,
       ...effort.options,
       onError: ({ error }) => logProviderError(error, redact),
     });

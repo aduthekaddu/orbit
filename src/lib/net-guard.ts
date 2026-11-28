@@ -1,6 +1,7 @@
 import type { LookupAddress } from "node:dns";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
+import { DownloadError, type Experimental_DownloadFunction } from "ai";
 import { Agent, buildConnector } from "undici";
 import { readEnv } from "./env";
 import { policyFor, type HostingMode } from "./policy";
@@ -11,17 +12,21 @@ const ipv4Ranges: [string, number][] = [
   ["198.51.100.0", 24], ["203.0.113.0", 24], ["224.0.0.0", 4], ["240.0.0.0", 4],
 ];
 const ipv6Ranges: [string, number][] = [
-  ["::", 128], ["100::", 64], ["2001::", 32], ["2001:db8::", 32], ["2002::", 16], ["64:ff9b::", 96],
-  ["64:ff9b:1::", 48], ["fc00::", 7], ["fe80::", 10], ["fec0::", 10], ["ff00::", 8],
+  ["100::", 64], ["2001::", 32], ["2001:db8::", 32], ["2002::", 16], ["64:ff9b::", 96], ["64:ff9b:1::", 48],
+  ["::ffff:0:0:0", 96], ["fc00::", 7], ["fe80::", 10], ["fec0::", 10], ["ff00::", 8],
 ];
 
 function makeBlocklist({ allowLoopback }: { allowLoopback: boolean }) {
   const blocklist = new BlockList();
   for (const [address, bits] of ipv4Ranges) blocklist.addSubnet(address, bits, "ipv4");
   for (const [address, bits] of ipv6Ranges) blocklist.addSubnet(address, bits, "ipv6");
-  if (!allowLoopback) {
+  // ::/96 holds ::, ::1, and the deprecated IPv4-compatible addresses such as ::127.0.0.1.
+  if (allowLoopback) {
+    blocklist.addAddress("::", "ipv6");
+    blocklist.addRange("::2", "::255.255.255.255", "ipv6");
+  } else {
     blocklist.addSubnet("127.0.0.0", 8, "ipv4");
-    blocklist.addAddress("::1", "ipv6");
+    blocklist.addSubnet("::", 96, "ipv6");
   }
   return blocklist;
 }
@@ -107,3 +112,10 @@ export function providerFetch(mode: HostingMode): typeof fetch | undefined {
   if (!policyFor(mode).guardsPrivateHosts) return undefined;
   return readEnv("ORBIT_PROVIDER_FIXTURE") === "1" ? fixtureFetch : publicFetch;
 }
+
+// Orbit sends no remote file to a model, so the AI SDK never fetches a prompt or generated file URL from the server.
+export const refuseDownloads: Experimental_DownloadFunction = async (requests) => {
+  const [first] = requests;
+  if (first) throw new DownloadError({ url: first.url.toString(), message: "Orbit does not fetch remote files." });
+  return [];
+};
