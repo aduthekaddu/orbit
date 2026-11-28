@@ -192,14 +192,14 @@ test("a chat send reports that it started before its answer arrives", async () =
   await assert.rejects(sent, { message: "Message is too long." });
 });
 
-function sendWith(options: Parameters<typeof orbitChatTransport>[1]) {
+function sendWith(options: Parameters<typeof orbitChatTransport>[1], abortSignal?: AbortSignal) {
   const transport = orbitChatTransport("c1", { api: "http://orbit.test/api/chat", ...options });
   transport.setRuntime({
     thread: { getModelContext: () => undefined },
     threads: { mainItem: { initialize: async () => ({ remoteId: "local" }) } },
   } as never);
   const messages: UIMessage[] = [{ id: "u1", role: "user", parts: [{ type: "text", text: "hi" }] }];
-  return transport.sendMessages({ chatId: "c1", messageId: undefined, trigger: "submit-message", messages, abortSignal: undefined });
+  return transport.sendMessages({ chatId: "c1", messageId: undefined, trigger: "submit-message", messages, abortSignal });
 }
 
 test("a draft's first send carries the tools it turned off", async () => {
@@ -245,4 +245,20 @@ test("a send waits for a pending tools save before the request leaves", async ()
   release();
   await sending;
   assert.deepEqual(events, ["saved", "sent"]);
+});
+
+test("Stop ends a send that waits for a tools save, and the request never leaves", { timeout: 2_000 }, async () => {
+  const controller = new AbortController();
+  const events: string[] = [];
+  const sending = sendWith({
+    beforeSend: () => new Promise<void>(() => {}),
+    onSend: () => events.push("send"),
+    fetch: async () => {
+      events.push("fetch");
+      return new Response("data: [DONE]\n\n");
+    },
+  }, controller.signal);
+  controller.abort();
+  await assert.rejects(sending, { name: "AbortError" });
+  assert.deepEqual(events, []);
 });
