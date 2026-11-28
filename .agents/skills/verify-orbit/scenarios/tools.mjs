@@ -249,6 +249,15 @@ export default async function tools({ page, origin, step, shot, useProvider, see
       };
     });
 
+  // A keyboard user's first Tab lands on the skip link, and Enter moves focus to <main>, past the sidebar's chats.
+  async function skipToContent(target) {
+    await target.keyboard.press("Tab");
+    const link = (await focused(target)).text;
+    if (!/^Skip to (content|chat)$/.test(link)) return { link, inMain: false };
+    await target.keyboard.press("Enter");
+    return { link, inMain: await target.evaluate(() => document.activeElement?.id === "content") };
+  }
+
   async function tabUntil(target, matches, limit = 80) {
     for (let count = 0; count < limit; count += 1) {
       await target.keyboard.press("Tab");
@@ -611,25 +620,32 @@ export default async function tools({ page, origin, step, shot, useProvider, see
     );
 
     // --- Keyboard -------------------------------------------------------------------------------------
+    // Each read below waits at most a few seconds, so a missed key fails this step instead of the scenario.
+    const expanded = () => expander(page, "web_search").getAttribute("aria-expanded", { timeout: 5_000 }).catch(() => "missing");
     await openTools();
-    const reachedRow = await tabUntil(page, (focus) => focus.row === "web_search" && focus.expands, 200);
-    await page.keyboard.press("Enter");
-    const opened = await eventually(() => expander(page, "web_search").getAttribute("aria-expanded"), (value) => value === "true", { timeoutMs: 5_000, what: "Enter to expand" }).catch(() => "false");
-    await page.keyboard.press("Space");
-    const closed = await eventually(() => expander(page, "web_search").getAttribute("aria-expanded"), (value) => value === "false", { timeoutMs: 5_000, what: "Space to collapse" }).catch(() => "true");
-    await page.keyboard.press("Tab");
-    const onTest = await focused(page);
-    const keyedTest = page.waitForRequest((sent) => new URL(sent.url()).pathname === "/api/tools/web_search/test" && sent.method() === "POST", { timeout: 10_000 }).then(() => true, () => false);
-    await page.keyboard.press("Enter");
-    const ranByKey = await keyedTest;
-    const stillClosed = (await expander(page, "web_search").getAttribute("aria-expanded")) === "false";
-    const keyedSettled = await eventually(() => testButton(page, "web_search").getAttribute("aria-busy"), (value) => value === null, { timeoutMs: 20_000, what: "the keyed Test to finish" }).then(() => true, () => false);
-    const afterTest = await focused(page);
-    const keptFocus = afterTest.row === "web_search" && afterTest.text === "Test";
+    const skip = await skipToContent(page);
+    const reachedRow = skip.inMain && (await tabUntil(page, (focus) => focus.row === "web_search" && focus.expands, 10));
+    const keys = { skip, reachedRow };
+    if (reachedRow) {
+      await page.keyboard.press("Enter");
+      keys.opened = await eventually(expanded, (value) => value === "true", { timeoutMs: 5_000, what: "Enter to expand" }).catch(expanded);
+      await page.keyboard.press("Space");
+      keys.closed = await eventually(expanded, (value) => value === "false", { timeoutMs: 5_000, what: "Space to collapse" }).catch(expanded);
+      await page.keyboard.press("Tab");
+      keys.onTest = await focused(page);
+      const keyedTest = page.waitForRequest((sent) => new URL(sent.url()).pathname === "/api/tools/web_search/test" && sent.method() === "POST", { timeout: 10_000 }).then(() => true, () => false);
+      await page.keyboard.press("Enter");
+      keys.ranByKey = await keyedTest;
+      keys.stillClosed = (await expanded()) === "false";
+      keys.keyedSettled = await eventually(() => testButton(page, "web_search").getAttribute("aria-busy", { timeout: 5_000 }), (value) => value === null, { timeoutMs: 20_000, what: "the keyed Test to finish" }).then(() => true, () => false);
+      const afterTest = await focused(page);
+      keys.afterTest = { row: afterTest.row, text: afterTest.text };
+    }
     step(
-      "Tab reaches Web search, Enter expands, Space collapses, Tab reaches Test, Enter runs it, and focus stays on Test",
-      reachedRow && opened === "true" && closed === "false" && onTest.row === "web_search" && onTest.text === "Test" && ranByKey && stillClosed && keyedSettled && keptFocus,
-      JSON.stringify({ reachedRow, opened, closed, onTest, ranByKey, stillClosed, keyedSettled, afterTest: { row: afterTest.row, text: afterTest.text } }),
+      "Tab to the skip link and Enter skip the sidebar, Tab reaches Web search, Enter expands, Space collapses, Tab reaches Test, Enter runs it, and focus stays on Test",
+      reachedRow && keys.opened === "true" && keys.closed === "false" && keys.onTest?.row === "web_search" && keys.onTest?.text === "Test" &&
+        keys.ranByKey && keys.stillClosed && keys.keyedSettled && keys.afterTest?.row === "web_search" && keys.afterTest?.text === "Test",
+      JSON.stringify(keys),
     );
 
     await page.goto(`${origin}/c/${memoryChat}`);
@@ -642,21 +658,22 @@ export default async function tools({ page, origin, step, shot, useProvider, see
     await page.keyboard.press("Shift+Tab");
     await page.keyboard.press("Enter");
     tray = popover(page);
-    await tray.waitFor();
+    const trayOpened = await tray.waitFor({ timeout: 5_000 }).then(() => true, () => false);
     if ((await focused(page)).role !== "switch") await page.keyboard.press("Tab");
     const onSwitch = await focused(page);
     const firstSwitch = tray.getByRole("switch").first();
-    const switchBefore = await firstSwitch.getAttribute("aria-checked");
+    const switchState = () => firstSwitch.getAttribute("aria-checked", { timeout: 5_000 }).catch(() => "missing");
+    const switchBefore = await switchState();
     await page.keyboard.press("Space");
-    const switchAfter = await eventually(() => firstSwitch.getAttribute("aria-checked"), (value) => value !== switchBefore, { timeoutMs: 5_000, what: "Space to toggle the switch" }).catch(() => switchBefore);
+    const switchAfter = await eventually(switchState, (value) => value !== switchBefore, { timeoutMs: 5_000, what: "Space to toggle the switch" }).catch(() => switchBefore);
     const stayedOpen = await tray.isVisible();
     await page.keyboard.press("Escape");
-    await tray.waitFor({ state: "hidden" });
+    const trayClosed = await tray.waitFor({ state: "hidden", timeout: 5_000 }).then(() => true, () => false);
     const backOnTrigger = await focused(page);
     step(
       "the composer tabs to + then the model chip, Enter opens the popover, Space toggles a switch in place, and Escape returns to +",
-      afterComposer.toolsTrigger && afterTrigger.modelChip && onSwitch.role === "switch" && onSwitch.inPopover && switchAfter !== switchBefore && stayedOpen && backOnTrigger.toolsTrigger,
-      JSON.stringify({ afterComposer, afterTrigger, onSwitch, switchBefore, switchAfter, stayedOpen, backOnTrigger }),
+      afterComposer.toolsTrigger && afterTrigger.modelChip && trayOpened && onSwitch.role === "switch" && onSwitch.inPopover && switchBefore !== "missing" && switchAfter !== switchBefore && stayedOpen && trayClosed && backOnTrigger.toolsTrigger,
+      JSON.stringify({ afterComposer, afterTrigger, trayOpened, onSwitch, switchBefore, switchAfter, stayedOpen, trayClosed, backOnTrigger }),
     );
 
     // --- Phones -----------------------------------------------------------------------------------
