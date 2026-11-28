@@ -266,8 +266,9 @@ export function ArtifactLibrary({ initial, requestedId, initialDetail }: {
     setFilter(next);
     filterNow.current = next;
     window.clearTimeout(searchTimer.current);
+    // An answer still on its way is for the old search, so it is dropped now, not when the next request goes out.
+    latestList();
     if (!isFiltered(next)) {
-      latestList();
       setList(firstPage(initial));
       return;
     }
