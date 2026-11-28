@@ -191,11 +191,16 @@ const STATUS: Record<ToolView["status"], { word: string; dot: string }> = {
 
 const UNREADABLE: Partial<Record<ToolId, string>> = { web_search: "Key unreadable", github: "Token unreadable" };
 
-function Alert({ children }: { children: ReactNode }) {
+function Alert({ text, onRetry }: { text: string; onRetry?: () => void }) {
   return (
-    <div role="alert" className="flex min-w-0 items-start gap-1.5 text-meta text-destructive">
-      <WarningCircleIcon weight="regular" className="mt-0.75 size-3.5 shrink-0" />
-      {children}
+    <div role="alert" className={cn("flex min-w-0 gap-1.5 text-meta text-destructive", onRetry ? "items-center" : "items-start")}>
+      <WarningCircleIcon weight="regular" className={cn("size-3.5 shrink-0", !onRetry && "mt-0.75")} />
+      <span className="min-w-0 flex-1 wrap-anywhere">{text}</span>
+      {onRetry ? (
+        <Button variant="outline" size="xs" className="max-sm:min-h-touch" onClick={onRetry}>
+          Retry
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -282,11 +287,7 @@ function ToolRowItem({ row, list }: { row: ToolRow; list: ToolsListStore }) {
       {unreadable || error || test.status === "passed" ? (
         <div className="-mt-1 flex flex-col gap-1 px-4 pb-3 sm:pr-5 sm:pb-3.5 sm:pl-17.5">
           {unreadable ? <p className="text-meta text-destructive">{unreadable}</p> : null}
-          {error ? (
-            <Alert>
-              <span className="min-w-0 wrap-anywhere">{error}</span>
-            </Alert>
-          ) : null}
+          {error ? <Alert text={error} /> : null}
           {test.status === "passed" ? (
             <p role="status" className="num text-meta text-muted-foreground">
               {test.summary} · {formatMs(test.ms)}
@@ -320,20 +321,14 @@ function ToolDetails({ row, list }: { row: ToolRow; list: ToolsListStore }) {
       </Button>
     </div>
   ) : null;
-  const error = details.status === "failed" ? failureText(details.failure, "Could not load tool details.") : details.data.error;
-  if (details.status === "failed" || error !== undefined) {
-    return (
-      <div className="flex flex-col gap-2">
-        <Alert>
-          <span className="min-w-0 flex-1 wrap-anywhere">{error}</span>
-          <Button variant="outline" size="xs" className="max-sm:min-h-touch" onClick={() => void list.retry(tool.id)}>
-            Retry
-          </Button>
-        </Alert>
-        {configureLink}
-      </div>
-    );
-  }
+  const failed = (text: string) => (
+    <div className="flex flex-col gap-2">
+      <Alert text={text} onRetry={() => void list.retry(tool.id)} />
+      {configureLink}
+    </div>
+  );
+  if (details.status === "failed") return failed(failureText(details.failure, "Could not load tool details."));
+  if (details.data.error !== undefined) return failed(details.data.error);
   const { instruction, tools } = details.data;
   if (tools.length === 0) {
     return (
