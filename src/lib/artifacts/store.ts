@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import type { Redactor } from "../chat-errors";
 import { getDb, type OrbitDb } from "../db";
 import { artifacts, chats, messages } from "../db/schema";
@@ -120,7 +120,9 @@ export function syncMessageArtifacts(
 ): { inserted: number } {
   const blocks = extractArtifacts(parts);
   return db.transaction(() => {
-    const stored = db.select().from(artifacts).where(and(eq(artifacts.userId, userId), eq(artifacts.messageId, messageId))).all();
+    // The unary + keeps SQLite on the message slot index. Without it the planner picks artifacts_user_updated_idx
+    // and reads every artifact the user has on each write.
+    const stored = db.select().from(artifacts).where(and(sql`+${artifacts.userId} = ${userId}`, eq(artifacts.messageId, messageId))).all();
     if (blocks.length === 0 && stored.length === 0) return { inserted: 0 };
     const now = new Date();
     const unpaired = new Set(stored);
