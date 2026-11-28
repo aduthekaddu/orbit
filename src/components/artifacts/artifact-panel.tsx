@@ -239,6 +239,8 @@ export function ArtifactPanel({ artifact, stored, onClose, onFix, onSelectVersio
   // Enter, Escape and blur all end a rename; only the first one counts.
   const renameEnded = useRef(false);
   const refocusRename = useRef(false);
+  // Set while focus returns to Rename after a rename ends, which opens no tooltip.
+  const quietFocus = useRef(false);
   const { copied, failed, copy } = useCopy();
   const derived = useMemo(() => artifactTitle(artifact), [artifact]);
   // The code's own title stays right after an edit in place, before the saved rows catch up.
@@ -256,7 +258,9 @@ export function ArtifactPanel({ artifact, stored, onClose, onFix, onSelectVersio
   useEffect(() => {
     if (rename.status === "editing" || !refocusRename.current) return;
     refocusRename.current = false;
+    quietFocus.current = true;
     renameButton.current?.focus();
+    quietFocus.current = false;
   }, [rename.status]);
 
   function startRename() {
@@ -347,7 +351,14 @@ export function ArtifactPanel({ artifact, stored, onClose, onFix, onSelectVersio
             <h2 className="min-w-0 truncate pl-1 text-sm font-medium">{title}</h2>
             {stored ? (
               <IconAction label="Rename artifact">
-                <button ref={renameButton} type="button" onClick={() => { if (rename.status !== "saving") startRename(); }} className={cn(iconActionClass, "shrink-0")}>
+                <button
+                  ref={renameButton}
+                  type="button"
+                  // Radix opens no tooltip for a prevented focus. It would cover the versions strip and take its clicks.
+                  onFocus={(event) => { if (quietFocus.current) event.preventDefault(); }}
+                  onClick={() => { if (rename.status !== "saving") startRename(); }}
+                  className={cn(iconActionClass, "shrink-0")}
+                >
                   <PencilSimpleIcon weight="light" />
                 </button>
               </IconAction>
