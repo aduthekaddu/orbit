@@ -9,8 +9,8 @@ const DEFAULT_TIMEOUT_MS = 60_000;
 export type MigrationLockOptions = {
   dir?: string;
   timeoutMs?: number;
-  /** The lock file in `dir`. Work that must not block migrations, such as the artifact backfill, takes its own. */
-  name?: string;
+  /** Which lock file in `dir`. The artifact backfill takes its own, so it never blocks migrations. */
+  lock?: "migrations" | "artifact-backfill";
 };
 
 /** The waiter gave up after `timeoutMs` while another process held the lock. */
@@ -25,7 +25,8 @@ export class LockTimeout extends Error {}
 export function withMigrationLock<T>(run: () => T, options: MigrationLockOptions = {}): T {
   const dir = options.dir ?? dataDirectory();
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const lockPath = path.join(dir, options.name ?? LOCK_NAME);
+  // One literal name per join, so the build's file tracing stays scoped to the lock files.
+  const lockPath = options.lock === "artifact-backfill" ? path.join(dir, ".artifacts-backfill.lock.db") : path.join(dir, LOCK_NAME);
   const sqlite = openLockDatabase(lockPath);
   try {
     restrict(lockPath);

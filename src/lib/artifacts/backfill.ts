@@ -16,7 +16,7 @@ export type BackfillResult = {
 
 const BATCH_SIZE = 200;
 // The pass holds its own lock file, not the migration lock, so a process opening the database never waits for it.
-export const BACKFILL_LOCK = ".artifacts-backfill.lock.db";
+export const BACKFILL_LOCK = "artifact-backfill";
 // A pass over tens of thousands of messages holds its lock for seconds. Another process booting meanwhile waits this
 // long, then leaves the pass to the holder instead of failing its own start.
 const LOCK_WAIT_MS = 5_000;
@@ -77,7 +77,7 @@ export function backfillArtifacts(options: { batchSize?: number; lockDir?: strin
   try {
     return withMigrationLock(
       () => (stamped(db) ? skipped() : backfill(db, options.batchSize ?? BATCH_SIZE)),
-      { dir: options.lockDir ?? dataDirectory(), name: BACKFILL_LOCK, timeoutMs: options.lockTimeoutMs ?? LOCK_WAIT_MS },
+      { dir: options.lockDir ?? dataDirectory(), lock: BACKFILL_LOCK, timeoutMs: options.lockTimeoutMs ?? LOCK_WAIT_MS },
     );
   } catch (error) {
     if (!(error instanceof LockTimeout)) throw error;

@@ -39,7 +39,7 @@ after(async () => {
   for (const dir of lockDirs) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-// The lock file a backfill pass holds, which other processes coordinate on. Undefined before it had its own file.
+// The lock a backfill pass holds, which other processes coordinate on. Undefined before it had its own file.
 const BACKFILL_LOCK = (backfillModule as { BACKFILL_LOCK?: string }).BACKFILL_LOCK;
 
 // Another process that holds the backfill's lock in `dir` until it is killed, like a second server mid-pass.
@@ -50,7 +50,7 @@ async function holdLock(dir: string) {
       withMigrationLock(() => {
         console.log("HOLD");
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 30_000);
-      }, { dir: ${JSON.stringify(dir)}, name: ${JSON.stringify(BACKFILL_LOCK)}, timeoutMs: 20_000 });
+      }, { dir: ${JSON.stringify(dir)}, lock: ${JSON.stringify(BACKFILL_LOCK)}, timeoutMs: 20_000 });
     });
   `], { cwd: process.cwd(), stdio: ["ignore", "pipe", "inherit"] });
   holders.push(holder);
