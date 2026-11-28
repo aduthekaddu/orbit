@@ -1,6 +1,6 @@
-import { deleteChat, getChatForUser, messageRepository, renameChat } from "@/lib/messages";
+import { deleteChat, getChatForUser, messageRepository, parseDisabledTools, renameChat, setChatDisabledTools } from "@/lib/messages";
 import { deleteAfterReply } from "@/lib/reply-runs";
-import { LIMITS, r, readJsonBody } from "@/lib/route-schema";
+import { disabledToolsSchema, LIMITS, r, readJsonBody } from "@/lib/route-schema";
 import { sessionFrom, unauthorized } from "@/lib/session";
 import { requestRedactor } from "@/lib/request-redactor";
 
@@ -8,8 +8,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const paramsSchema = r.object({ id: r.text(LIMITS.id).min(1) });
-const renameSchema = r.object({ title: r.requiredText(LIMITS.chatTitle) }).strict();
-const RENAME_BYTES = 4096;
+const patchSchema = r.object({
+  title: r.requiredText(LIMITS.chatTitle).optional(),
+  disabledTools: disabledToolsSchema.optional(),
+}).strict().refine((value) => value.title !== undefined || value.disabledTools !== undefined);
+const PATCH_BYTES = 4096;
+const invalid = () => Response.json({ error: "Invalid chat update" }, { status: 400 });
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -25,6 +29,7 @@ export async function GET(request: Request, context: Context) {
   return Response.json({
     id: chat.id,
     title: chat.title,
+    disabledTools: parseDisabledTools(chat.disabledTools),
     ...messageRepository(chat.id),
   });
 }
@@ -34,16 +39,22 @@ export async function PATCH(request: Request, context: Context) {
   if (!session) return unauthorized();
   const params = paramsSchema.safeParse(await context.params);
   if (!params.success) return notFound();
-  const body = await readJsonBody(request, RENAME_BYTES);
+  const body = await readJsonBody(request, PATCH_BYTES);
   if (!body.ok) {
     if (body.reason === "too-large") return Response.json({ error: "Request body is too large." }, { status: 413 });
-    return Response.json({ error: "Invalid chat title" }, { status: 400 });
+    return invalid();
   }
-  const parsed = renameSchema.safeParse(body.json);
-  if (!parsed.success) return Response.json({ error: "Invalid chat title" }, { status: 400 });
-  const renamed = renameChat(params.data.id, session.user.id, parsed.data.title, requestRedactor(session.user));
-  if (!renamed) return notFound();
-  return Response.json(renamed);
+  const parsed = patchSchema.safeParse(body.json);
+  if (!parsed.success) return invalid();
+  const { id } = params.data;
+  const { title, disabledTools } = parsed.data;
+  const chat = getChatForUser(id, session.user.id);
+  if (!chat) return notFound();
+  // No await from here on, so both writes land on the chat the check above found.
+  const renamed = title === undefined ? chat : renameChat(id, session.user.id, title, requestRedactor(session.user));
+  const tools = disabledTools === undefined ? parseDisabledTools(chat.disabledTools) : setChatDisabledTools(id, session.user.id, disabledTools);
+  if (!renamed || !tools) return notFound();
+  return Response.json({ id, title: renamed.title, disabledTools: tools });
 }
 
 export async function DELETE(request: Request, context: Context) {

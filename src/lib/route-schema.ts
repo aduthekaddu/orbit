@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isDisabledToolEntry } from "./tools/metadata";
 
 // The only way a route schema builds a string or a list. A route file imports `r`
 // from here, never `z` from "zod", so a field with no size limit does not compile.
@@ -38,8 +39,13 @@ export const LIMITS = {
   assistantText: 200_000,
   partType: 100,
   partsPerMessage: 500,
+  disabledTools: 64,
+  toolId: 100,
   requestBytes: 33_554_432,
 } as const;
+
+/** A chat's disabled tools, as PATCH /api/chats/[id] and a draft's first POST /api/chat send them. */
+export const disabledToolsSchema = r.list(r.text(LIMITS.toolId).refine(isDisabledToolEntry), LIMITS.disabledTools);
 
 export type JsonBody = { ok: true; json: unknown } | { ok: false; reason: "too-large" | "invalid" };
 
