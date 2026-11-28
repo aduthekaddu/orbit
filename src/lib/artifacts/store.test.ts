@@ -98,6 +98,27 @@ test("a reply's artifacts are saved from the redacted text, so no credential rea
   assert.deepEqual(listArtifacts(USER, { q: key }).items, []);
 });
 
+test("a credential split by tags in the code never comes back whole or in part in the title", () => {
+  const key = "zq9splitsecret0042abcd";
+  const masking = new Redactor({ apiKey: key, tavilyApiKey: "", githubToken: "" });
+  // The message text holds the key with tags inside it, so masking the message finds nothing to mask.
+  const split = `${key.slice(0, 5)}<strong>${key.slice(5, 12)}</strong>${key.slice(12)}`;
+  const page = (heading: string) => `\`\`\`html\n<h1>${heading}</h1>\n\`\`\``;
+  const chat = newChat();
+  send(chat, [prompt("split-p")], "split-a", page(`Key ${split}`), masking);
+  const saved = only("split-a");
+  assert.equal(saved.derivedTitle, "Key [redacted]");
+  assert.equal(ftsHits(key), 0);
+  assert.deepEqual(listArtifacts(USER, { q: key }).items, []);
+  assert.equal(getArtifact(USER, saved.id)?.title, "Key [redacted]");
+
+  // The key starts before the 80-code-point cut and ends after it, so only a cut made after masking drops all of it.
+  assert.equal(updateMessageText(chat, "split-a", page(`${"x".repeat(60)} ${split}`), masking), true);
+  const edited = only("split-a");
+  assert.equal(edited.derivedTitle, `${"x".repeat(60)} [redacted]`);
+  assert.equal(edited.derivedTitle.includes(key.slice(0, 5)), false);
+});
+
 test("a failed artifact write rolls back the reply and the edit that carried it", () => {
   const chat = newChat();
   sqlite().exec("CREATE TEMP TRIGGER artifacts_refuse BEFORE INSERT ON main.artifacts BEGIN SELECT RAISE(ABORT, 'artifact write refused'); END");
