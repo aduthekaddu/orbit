@@ -311,8 +311,11 @@ test("Test shows Testing while it runs, keeps the row expandable, then shows the
   let row = rowOf(paint(list), "memory");
   const pending = testButton(row);
   assert.equal(textOf(pending), "Testing");
-  assert.ok(isDisabled(pending), "Test is disabled while it runs");
+  assert.equal(attr(pending, "aria-disabled"), "true", "Test reads as unavailable while it runs");
+  assert.ok(!isDisabled(pending), "Test stays focusable while it runs, so a keyboard user keeps their place");
   assert.equal(attr(pending, "aria-busy"), "true");
+  await list.test("memory");
+  assert.equal(sent.length, 1, "a second press while the test runs sends nothing");
   assert.ok(!isDisabled(expandButton(row)), "the row still expands while testing");
 
   const opening = list.toggle("memory");

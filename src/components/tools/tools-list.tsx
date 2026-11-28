@@ -237,7 +237,7 @@ function ToolRowItem({ row, list }: { row: ToolRow; list: ToolsListStore }) {
   let action: ReactNode = null;
   if (tool.canTest) {
     action = (
-      <Button variant="outline" size="sm" disabled={pending} aria-busy={pending || undefined} onClick={() => void list.test(tool.id)} className="ml-auto max-sm:min-h-touch">
+      <Button variant="outline" size="sm" aria-disabled={pending || undefined} aria-busy={pending || undefined} onClick={() => void list.test(tool.id)} className="ml-auto aria-disabled:cursor-default aria-disabled:opacity-50 max-sm:min-h-touch">
         {pending ? <OrbitMark busy tone="mono" className="size-3.5" /> : null}
         {pending ? "Testing" : "Test"}
       </Button>

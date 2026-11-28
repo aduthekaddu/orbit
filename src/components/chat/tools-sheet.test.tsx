@@ -56,6 +56,12 @@ function switches(html: string): ShownSwitch[] {
   });
 }
 
+// The text of the element each role="switch" names in aria-labelledby.
+const labelledBy = (html: string) => startTags(html, /\srole="switch"/).map((tag) => {
+  const id = attr(tag, "aria-labelledby");
+  const named = id ? new RegExp(`<[a-z]+[^>]*\\sid="${id}"[^>]*>([\\s\\S]*?)</`).exec(html) : null;
+  return named ? textOf(named[1]) : null;
+});
 const shown = (store: ToolsStore, tools = TOOLS) => switches(paintPanel(store, tools)).map(({ label, on }) => [label, on]);
 
 // The outer HTML of the element whose start tag begins at `start`.
@@ -140,6 +146,7 @@ test("the panel has one labelled switch per available tool, on unless this chat 
     { label: "GitHub", on: true, disabled: false },
     { label: "Memory", on: false, disabled: false },
   ]);
+  assert.deepEqual(labelledBy(html), ["Web search", "GitHub", "Memory"], "each switch names its tool for assistive tech that skips <label for> on a button");
   assert.doesNotMatch(textOf(html), /Generated UI|Code sandbox/, "only the tools the page passed are listed");
   assert.deepEqual(alerts(html), []);
 });

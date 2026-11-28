@@ -595,10 +595,14 @@ export default async function tools({ page, origin, step, shot, useProvider, see
     await page.keyboard.press("Enter");
     const ranByKey = await keyedTest;
     const stillClosed = (await expander(page, "web_search").getAttribute("aria-expanded")) === "false";
+    const testButton = page.locator('[data-tool-row="web_search"] button:not([aria-controls])').first();
+    const settled = await eventually(() => testButton.getAttribute("aria-busy"), (value) => value === null, { timeoutMs: 20_000, what: "the keyed Test to finish" }).then(() => true, () => false);
+    const afterTest = await focused(page);
+    const keptFocus = afterTest.row === "web_search" && afterTest.text === "Test";
     step(
-      "Tab reaches Web search, Enter expands, Space collapses, Tab reaches Test, and Enter runs it",
-      reachedRow && opened === "true" && closed === "false" && onTest.row === "web_search" && onTest.text === "Test" && ranByKey && stillClosed,
-      JSON.stringify({ reachedRow, opened, closed, onTest, ranByKey, stillClosed }),
+      "Tab reaches Web search, Enter expands, Space collapses, Tab reaches Test, Enter runs it, and focus stays on Test",
+      reachedRow && opened === "true" && closed === "false" && onTest.row === "web_search" && onTest.text === "Test" && ranByKey && stillClosed && settled && keptFocus,
+      JSON.stringify({ reachedRow, opened, closed, onTest, ranByKey, stillClosed, settled, afterTest: { row: afterTest.row, text: afterTest.text } }),
     );
 
     await page.goto(`${origin}/c/${memoryChat}`);

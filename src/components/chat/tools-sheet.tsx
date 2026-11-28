@@ -258,9 +258,9 @@ function ToolSwitch({
     <li className={cn("flex items-center gap-3 rounded-md px-2", layout === "sheet" ? "min-h-touch" : "min-h-9 pointer-coarse:min-h-touch")}>
       <label htmlFor={id} className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 text-sm text-foreground">
         <Icon weight="regular" className="size-4 shrink-0 text-muted-foreground" />
-        <span className="truncate">{tool.label}</span>
+        <span id={`${id}-label`} className="truncate">{tool.label}</span>
       </label>
-      <Switch id={id} checked={on} disabled={locked} onCheckedChange={onChange} />
+      <Switch id={id} aria-labelledby={`${id}-label`} checked={on} disabled={locked} onCheckedChange={onChange} />
     </li>
   );
 }
