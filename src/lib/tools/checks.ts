@@ -94,11 +94,14 @@ export async function runToolCheck(viewer: Viewer, id: TestableToolId, signal: A
   }
   signal.throwIfAborted();
   if (!check.ok && checkSignal.aborted) check = { ok: false, error: timeouts[id] };
-  const error = check.ok ? null : sanitizeToolError(check.error, redact);
-  recordToolCall(viewer.id, id, error === null ? { ok: true } : { ok: false, error }, redact);
   const ms = Math.round(performance.now() - started);
-  const tool = toolViewFor(viewer, id);
-  return check.ok ? { ok: true, ms, summary: check.summary, tool } : { ok: false, ms, error: error ?? TOOL_ERRORS.checkFailed, tool };
+  if (check.ok) {
+    recordToolCall(viewer.id, id, { ok: true }, redact);
+    return { ok: true, ms, summary: check.summary, tool: toolViewFor(viewer, id) };
+  }
+  const error = sanitizeToolError(check.error, redact);
+  recordToolCall(viewer.id, id, { ok: false, error }, redact);
+  return { ok: false, ms, error, tool: toolViewFor(viewer, id) };
 }
 
 type Slot = { inFlight: boolean; lastStartedAt: number };
