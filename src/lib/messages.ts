@@ -338,14 +338,15 @@ function replyColumns(reply: ReplyRecord | undefined, redact: Redactor) {
 }
 
 // Callers hold the transaction that wrote the message. The saved row holds the redacted parts, so artifact rows,
-// their titles, and their search entries never see a credential the message write masked.
-function syncSavedArtifacts(chatId: string, messageId: string) {
+// their titles, and their search entries never see a credential the message write masked. The same redactor masks
+// each title again, since a title read from code drops tags and can join a credential split by them.
+function syncSavedArtifacts(chatId: string, messageId: string, redact: Redactor) {
   const db = getDb();
   const saved = db.select({ userId: chats.userId, parts: messages.parts, createdAt: messages.createdAt })
     .from(messages).innerJoin(chats, eq(chats.id, messages.chatId))
     .where(and(eq(messages.id, messageId), eq(messages.chatId, chatId))).get();
   if (!saved) throw new Error("The message is missing inside its own write");
-  syncMessageArtifacts(saved.userId as UserId, chatId, messageId, JSON.parse(saved.parts), saved.createdAt, db);
+  syncMessageArtifacts(saved.userId as UserId, chatId, messageId, JSON.parse(saved.parts), saved.createdAt, redact, db);
 }
 
 /** Saves a reply with a visible part, and its artifact rows, unless a row its plan copied has changed. Returns whether it saved. */
@@ -361,7 +362,7 @@ export function finishChatReply(plan: ReplyPlan, parts: unknown, redact: Redacto
       db.update(messages).set({ ...messageBody(parts, redact), ...replyColumns(reply, redact) })
         .where(eq(messages.id, plan.id)).run();
     }
-    syncSavedArtifacts(plan.chatId, plan.id);
+    syncSavedArtifacts(plan.chatId, plan.id, redact);
     return true;
   });
 }
@@ -384,7 +385,7 @@ export function updateMessageText(chatId: string, messageId: string, text: strin
       .set(messageBody(parts, redact))
       .where(eq(messages.id, messageId))
       .run();
-    syncSavedArtifacts(chatId, messageId);
+    syncSavedArtifacts(chatId, messageId, redact);
     return true;
   });
 }

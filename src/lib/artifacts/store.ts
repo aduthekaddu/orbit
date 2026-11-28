@@ -105,9 +105,10 @@ function chatArtifacts(db: OrbitDb, userId: UserId, chatId: string): ExistingArt
 }
 
 /**
- * Makes a message's artifact rows match its parts. Callers pass the parts as saved, after redaction. Unchanged blocks
- * keep their row even when they moved, edited blocks keep the row in their slot, rows of removed blocks go, and new
- * blocks get rows that join a lineage through lineageFor. Running it again with the same parts writes nothing.
+ * Makes a message's artifact rows match its parts. Callers pass the parts as saved, after redaction, and the redactor
+ * that masked them, which masks each title read from the code again. Unchanged blocks keep their row even when they
+ * moved, edited blocks keep the row in their slot, rows of removed blocks go, and new blocks get rows that join a
+ * lineage through lineageFor. Running it again with the same parts writes nothing.
  */
 export function syncMessageArtifacts(
   userId: UserId,
@@ -115,10 +116,11 @@ export function syncMessageArtifacts(
   messageId: string,
   parts: unknown,
   messageCreatedAt: Date,
+  redact: Redactor,
   db: OrbitDb = getDb(),
   options: { backfill?: boolean } = {},
 ): { inserted: number } {
-  const blocks = extractArtifacts(parts);
+  const blocks = extractArtifacts(parts, redact);
   return db.transaction(() => {
     // The unary + keeps SQLite on the message slot index. Without it the planner picks artifacts_user_updated_idx
     // and reads every artifact the user has on each write.

@@ -158,8 +158,8 @@ test("syncing a message again with the same parts writes nothing", () => {
   const before = rows("again-a");
   const message = sqlite().prepare("SELECT parts, created_at AS createdAt FROM messages WHERE id = 'again-a'").get() as { parts: string; createdAt: number };
   const start = changes();
-  syncMessageArtifacts(USER, chat, "again-a", JSON.parse(message.parts), new Date(message.createdAt), getDb());
-  syncMessageArtifacts(USER, chat, "again-a", JSON.parse(message.parts), new Date(message.createdAt), getDb());
+  syncMessageArtifacts(USER, chat, "again-a", JSON.parse(message.parts), new Date(message.createdAt), redact, getDb());
+  syncMessageArtifacts(USER, chat, "again-a", JSON.parse(message.parts), new Date(message.createdAt), redact, getDb());
   assert.equal(changes() - start, 0);
   assert.deepEqual(rows("again-a"), before);
 });

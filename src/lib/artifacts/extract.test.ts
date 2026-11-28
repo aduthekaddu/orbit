@@ -6,17 +6,19 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { rehypeCodeBlocks } from "../markdown-code";
 import { isArtifactLanguage } from "./detect";
+import { Redactor } from "../chat-errors";
 import { extractArtifacts } from "./extract";
 
 const text = (value: string) => ({ type: "text", text: value });
+const redact = new Redactor(null);
 
 function slots(parts: unknown) {
-  return extractArtifacts(parts).map(({ textOrdinal, blockIndex, artifactPosition, kind, language }) => ({ textOrdinal, blockIndex, artifactPosition, kind, language }));
+  return extractArtifacts(parts, redact).map(({ textOrdinal, blockIndex, artifactPosition, kind, language }) => ({ textOrdinal, blockIndex, artifactPosition, kind, language }));
 }
 
 test("anything but a parts array holds no artifacts", () => {
   for (const parts of [null, undefined, "```html\n<p>a</p>\n```", { type: "text", text: "```html\n<p>a</p>\n```" }, 7]) {
-    assert.deepEqual(extractArtifacts(parts), []);
+    assert.deepEqual(extractArtifacts(parts, redact), []);
   }
 });
 
@@ -54,7 +56,7 @@ test("a space before the tag, a longer fence, a tilde fence, and an info string 
 
 test("jsx and tsx blocks are React artifacts that keep their own language", () => {
   const markdown = "```tsx\nexport default function Typed(): null { return null; }\n```\n\n```jsx\nexport default function Plain() { return null; }\n```";
-  assert.deepEqual(extractArtifacts([text(markdown)]).map(({ kind, language, derivedTitle }) => [kind, language, derivedTitle]), [
+  assert.deepEqual(extractArtifacts([text(markdown)], redact).map(({ kind, language, derivedTitle }) => [kind, language, derivedTitle]), [
     ["react", "tsx", "Typed"],
     ["react", "jsx", "Plain"],
   ]);
@@ -72,13 +74,13 @@ test("artifactPosition counts artifacts across the whole message, blockIndex res
 });
 
 test("the code ends in one newline as the renderer shows it, and an empty block stays empty", () => {
-  const codes = extractArtifacts([text("```html\n<h1>A</h1>\n```\n\n```html\n```\n\n```svg\n<svg></svg>\n\n\n```")]).map((artifact) => artifact.code);
+  const codes = extractArtifacts([text("```html\n<h1>A</h1>\n```\n\n```html\n```\n\n```svg\n<svg></svg>\n\n\n```")], redact).map((artifact) => artifact.code);
   assert.deepEqual(codes, ["<h1>A</h1>\n", "", "<svg></svg>\n\n\n"]);
 });
 
 test("code blocks inside blockquotes and lists are artifacts too", () => {
   const markdown = "> ```html\n> <p>quoted</p>\n> ```\n\n- item\n\n  ```svg\n  <svg></svg>\n  ```";
-  assert.deepEqual(extractArtifacts([text(markdown)]).map(({ blockIndex, kind, code }) => [blockIndex, kind, code]), [
+  assert.deepEqual(extractArtifacts([text(markdown)], redact).map(({ blockIndex, kind, code }) => [blockIndex, kind, code]), [
     [0, "html", "<p>quoted</p>\n"],
     [1, "svg", "<svg></svg>\n"],
   ]);
@@ -86,7 +88,7 @@ test("code blocks inside blockquotes and lists are artifacts too", () => {
 
 test("each artifact carries the title read from its code, or the kind's fallback", () => {
   const markdown = "```html\n<title>Counter</title>\n```\n\n```html\n<p>no title</p>\n```\n\n```svg\n<svg></svg>\n```";
-  assert.deepEqual(extractArtifacts([text(markdown)]).map((artifact) => artifact.derivedTitle), ["Counter", "HTML page", "SVG image"]);
+  assert.deepEqual(extractArtifacts([text(markdown)], redact).map((artifact) => artifact.derivedTitle), ["Counter", "HTML page", "SVG image"]);
 });
 
 test("a footnote definition moves to the end of the page, so the block after it keeps the renderer's number", () => {
@@ -123,7 +125,7 @@ test("extraction matches the chat renderer's block numbers, languages, and code 
     "| a | b |\n| - | - |\n| `x` | y |\n\n<pre><code>raw html</code></pre>\n\n```html\n<p>after a table and raw html</p>\n```",
   ];
   for (const markdown of corpus) {
-    const extracted = extractArtifacts([text(markdown)]).map(({ blockIndex, language, code }) => ({ blockIndex, language, code }));
+    const extracted = extractArtifacts([text(markdown)], redact).map(({ blockIndex, language, code }) => ({ blockIndex, language, code }));
     assert.deepEqual(extracted, rendered(markdown), markdown);
   }
 });

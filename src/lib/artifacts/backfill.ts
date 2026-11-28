@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { Redactor } from "../chat-errors";
 import { getDb, type OrbitDb } from "../db";
 import { LockTimeout, withMigrationLock } from "../db/migration-lock";
 import { instanceSettings } from "../db/schema";
@@ -54,7 +55,7 @@ function backfill(db: OrbitDb, batchSize: number): BackfillResult {
           skippedCorrupt++;
           continue;
         }
-        const synced = syncMessageArtifacts(message.userId as UserId, message.chatId, message.id, parts, new Date(message.createdAt), db, { backfill: true });
+        const synced = syncMessageArtifacts(message.userId as UserId, message.chatId, message.id, parts, new Date(message.createdAt), new Redactor(null), db, { backfill: true });
         insertedRows += synced.inserted;
       }
     });

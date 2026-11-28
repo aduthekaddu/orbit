@@ -60,7 +60,7 @@ function withoutTags(raw: string) {
 
 function cleanTitle(raw: string | null): string {
   if (raw === null) return "";
-  return capTitle(decodeEntities(withoutTags(raw)).replace(/\s+/g, " ").trim());
+  return decodeEntities(withoutTags(raw)).replace(/\s+/g, " ").trim();
 }
 
 function markupTitle(kind: "html" | "svg", source: string): string {
@@ -107,7 +107,7 @@ function reactTitle(source: string): string {
       if (word === "class" && nameAt === end) continue;
       const name = readName(nameAt);
       if (!name || NOT_A_NAME.has(name)) continue;
-      if (word === "function") return capTitle(name);
+      if (word === "function") return name;
       className ||= name;
     } else if (!bareName && word && !NOT_A_NAME.has(word)) {
       end = skipSpace(source, end, true);
@@ -115,14 +115,26 @@ function reactTitle(source: string): string {
       if (end === source.length || /[\r\n\u2028\u2029]/.test(source[end])) bareName = word;
     }
   }
-  return capTitle(className || bareName);
+  return className || bareName;
+}
+
+/** The name an artifact's code gives itself, before the cut to 80 code points. Empty when it names none. */
+function readTitle(artifact: Pick<Artifact, "kind" | "code">): string {
+  const source = artifact.code.length > MAX_SCAN ? artifact.code.slice(0, MAX_SCAN) : artifact.code;
+  return artifact.kind === "react" ? reactTitle(source) : markupTitle(artifact.kind, source);
 }
 
 /** A short name for an artifact, read from its own code. Render it as text only. */
 export function artifactTitle(artifact: Pick<Artifact, "kind" | "code">): string {
-  const source = artifact.code.length > MAX_SCAN ? artifact.code.slice(0, MAX_SCAN) : artifact.code;
-  const title = artifact.kind === "react" ? reactTitle(source) : markupTitle(artifact.kind, source);
-  return title || FALLBACK_TITLE[artifact.kind];
+  return capTitle(readTitle(artifact)) || FALLBACK_TITLE[artifact.kind];
+}
+
+/**
+ * The title to store for an artifact. Dropping tags can join a credential the code holds in pieces, and the cut to 80
+ * code points can leave part of one, so the title is masked before the cut and again after it.
+ */
+export function maskedArtifactTitle(artifact: Pick<Artifact, "kind" | "code">, redact: { text: (text: string) => string }): string {
+  return redact.text(capTitle(redact.text(readTitle(artifact)))) || FALLBACK_TITLE[artifact.kind];
 }
 
 /** The title an artifact shows: the user's rename when set, else the title read from its code. */

@@ -5,7 +5,8 @@ import remarkRehype from "remark-rehype";
 import { unified } from "unified";
 import { rehypeCodeBlocks } from "../markdown-code";
 import { artifactKind, isArtifactLanguage, type ArtifactKind, type ArtifactLanguage } from "./detect";
-import { artifactTitle } from "./title";
+import type { Redactor } from "../chat-errors";
+import { maskedArtifactTitle } from "./title";
 
 export type ExtractedArtifact = {
   /** 0-based index among the message's text parts. */
@@ -49,8 +50,8 @@ function renderedBlocks(markdown: string) {
   return blocks;
 }
 
-/** The HTML, SVG, and React blocks of a message's parts, keyed the way the thread renders them. */
-export function extractArtifacts(parts: unknown): ExtractedArtifact[] {
+/** The HTML, SVG, and React blocks of a message's parts, keyed the way the thread renders them, with masked titles. */
+export function extractArtifacts(parts: unknown, redact: Redactor): ExtractedArtifact[] {
   if (!Array.isArray(parts)) return [];
   const found: ExtractedArtifact[] = [];
   let textOrdinal = 0;
@@ -63,7 +64,7 @@ export function extractArtifacts(parts: unknown): ExtractedArtifact[] {
       const kind = artifactKind(block.language)!;
       found.push({
         textOrdinal, blockIndex: block.index, artifactPosition: found.length,
-        kind, language: block.language, code: block.code, derivedTitle: artifactTitle({ kind, code: block.code }),
+        kind, language: block.language, code: block.code, derivedTitle: maskedArtifactTitle({ kind, code: block.code }, redact),
       });
     }
     textOrdinal++;
