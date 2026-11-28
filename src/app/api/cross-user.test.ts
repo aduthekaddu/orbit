@@ -391,6 +391,8 @@ async function crossUserMatrix(t: TestContext, mode: HostingMode, round: number)
   assert.equal(turns.length, taken + 1, "the member turn reached the provider");
   assertScopedTurn(turns.at(-1), shared ? "admin-model" : memberModel);
 
+  const githubRows = () => Number(sqlite.prepare("SELECT count(*) FROM tool_status WHERE user_id = ? AND tool_id = 'github'").pluck().get(member));
+  assert.equal(githubRows(), 1, "the member's check of the saved GitHub settings left a status row");
   const save = specs.find((spec) => spec.route === "settings" && spec.method === "PUT" && spec.status === 200);
   assert.ok(save);
   assert.equal((await routeRequest(save)).status, 401);
@@ -398,8 +400,8 @@ async function crossUserMatrix(t: TestContext, mode: HostingMode, round: number)
   assert.equal(saved.status, 200);
   assert.equal((await saved.json()).githubTokenSet, true);
   assert.deepEqual(snapshot(admin.viewer.id), afterAdmin);
+  assert.equal(githubRows(), 0, "a new GitHub token clears the status the old settings made");
 
-  assert.ok(Number(sqlite.prepare("SELECT count(*) FROM tool_status WHERE user_id = ?").pluck().get(member)) > 0, "the member's GitHub check left a status row to delete");
   const removed = await routeRequest({ route: "admin/users/[id]", method: "DELETE", params: { id: member } }, admin.cookie);
   assert.equal(removed.status, 200);
   assert.deepEqual(await removed.json(), { ok: true });
