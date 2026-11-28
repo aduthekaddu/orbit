@@ -107,7 +107,7 @@ The first account is the admin. Open **Admin → Hosting** to choose how people 
 | Team | The admin shares a single-use invite that expires after seven days. | Members use the admin’s connections and choose their own default model. |
 | Community | Signup is by invite. The admin can open signup to anyone. | Each account adds its own connection. Provider URLs must use public HTTPS. |
 
-An invite link appears when you create it. Copy it before leaving the page. Changing hosting modes revokes pending invites. To return to Personal, first remove the other accounts under **Admin → Users**. Removing an account signs it out and deletes its data.
+An invite link appears when you create it. Copy it before leaving the page. Changing hosting modes revokes pending invites. With other accounts present, switching between Team and Community asks you to confirm first. To return to Personal, first remove the other accounts under **Admin → Users**. Removing an account signs it out and deletes its data.
 
 ### Configuration
 

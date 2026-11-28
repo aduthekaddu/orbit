@@ -22,6 +22,8 @@ Read `.verify/evidence/accounts/summary.txt`. The Team member signs up using an 
 
 The admin cannot switch to Personal while a member exists. Remove the member from the 360-pixel admin page and check that the member's session ends. In Community, verify open signup and check that the connection form refuses a private URL. Then use the local mock provider, send a message, and switch to Team to continue the same chat on an admin connection.
 
+With other accounts present, switching between Team and Community opens a confirmation that Cancel dismisses with no request. The scenario also checks keyboard focus: Create invite lands on the selected invite link, and Revoke and Remove land on the next row or the section.
+
 Inspect the admin captures at 1280, 390, and 360 pixels. The invite creation capture covers the one-time link.
 
 ## Check account isolation

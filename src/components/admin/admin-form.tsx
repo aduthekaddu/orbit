@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import type { PublicInstanceSettings } from "@/lib/instance-settings";
 import { appliedSave, type SettingsSnapshot } from "@/lib/settings-form";
-import { HostingSettings, InviteSettings, UserSettings } from "./account-settings";
+import { HostingSettings, InviteSettings, UserSettings, useAdminLists } from "./account-settings";
 
 const url = "/api/admin/settings";
 const searchBody = z.object({ searxngUrl: z.string(), tavilyKeySet: z.boolean(), tavilyKeyReadable: z.boolean() });
@@ -21,12 +21,13 @@ const hours = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2
 
 export function AdminForm({ initial }: { initial: PublicInstanceSettings }) {
   const [mode, setMode] = useState({ hostingMode: initial.hostingMode, signupMode: initial.signupMode });
+  const { users, invites } = useAdminLists(mode.hostingMode);
 
   return (
     <>
-      <HostingSettings mode={mode} onSaved={setMode} />
-      {mode.hostingMode === "personal" ? null : <InviteSettings key={mode.hostingMode} />}
-      <UserSettings />
+      <HostingSettings mode={mode} users={users.state} invites={invites.state} onSaved={setMode} />
+      {mode.hostingMode === "personal" ? null : <InviteSettings key={mode.hostingMode} invites={invites} />}
+      <UserSettings users={users} />
       <SearchSettings initial={initial} />
       <SandboxSettings available={initial.sandboxAvailable} initial={initial.sandbox} />
       <DreamSettings initial={initial.dreamHour} />
