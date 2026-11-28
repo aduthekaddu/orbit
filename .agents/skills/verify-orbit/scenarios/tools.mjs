@@ -107,6 +107,8 @@ export default async function tools({ page, origin, step, shot, useProvider, see
   const testButton = (target, id) => row(target, id).getByRole("button", { name: /^Test(ing)?$/ });
   const setUp = (target, id) => row(target, id).getByRole("link", { name: "Set up", exact: true });
   const region = (target, id) => row(target, id).getByRole("region");
+  // The caret turns over 200ms. A shot taken sooner shows it half turned.
+  const settled = (target, id) => row(target, id).evaluate((element) => Promise.all(element.getAnimations({ subtree: true }).filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime)).map((animation) => animation.finished)));
 
   // React marks the nodes it hydrated. A click before hydration does nothing.
   const hydrated = (locator, what) =>
@@ -425,6 +427,7 @@ export default async function tools({ page, origin, step, shot, useProvider, see
       schema: isDeepStrictEqual(rendered, inspected.tools?.[0]?.inputSchema),
     };
     step("expanding Web search shows web_search, its description, its JSON Schema, and the search instruction", Object.values(shows).every(Boolean), JSON.stringify(shows));
+    await settled(page, "web_search");
     await shot("expanded");
 
     await newChat();
@@ -663,6 +666,7 @@ export default async function tools({ page, origin, step, shot, useProvider, see
         });
         const fits = await phone.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
         step("the expanded schema scrolls sideways inside its well at 390px", well.scrolls && well.right <= well.width && fits, JSON.stringify({ ...well, fits }));
+        await settled(phone, "web_search");
         await shot("expanded-390", phone);
       }
 
