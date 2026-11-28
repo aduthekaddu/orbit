@@ -15,6 +15,10 @@ export type BackfillResult = {
 };
 
 const BATCH_SIZE = 200;
+// A pass over tens of thousands of messages holds the lock for seconds. Another process booting meanwhile waits this
+// long, then leaves the pass to the holder instead of failing its own start.
+const LOCK_WAIT_MS = 5_000;
+const LOCK_TIMEOUT = /^Timed out after \d+ms waiting for the database migration lock/;
 
 const skipped = (): BackfillResult => ({ skipped: true, scannedMessages: 0, insertedRows: 0, skippedCorrupt: 0, durationMs: 0 });
 
@@ -63,13 +67,20 @@ function backfill(db: OrbitDb, batchSize: number): BackfillResult {
 /**
  * Indexes the artifacts of replies saved before the artifacts table existed. Runs once per install: after the stamp
  * in instance_settings is set, a boot reads no messages and takes no lock. A rerun after a crash converges, because
- * syncMessageArtifacts writes nothing for a message whose rows already match.
+ * syncMessageArtifacts writes nothing for a message whose rows already match. A boot that cannot get the lock in time
+ * skips the pass, and a later boot runs it if the holder did not.
  */
-export function backfillArtifacts(options: { batchSize?: number; lockDir?: string } = {}): BackfillResult {
+export function backfillArtifacts(options: { batchSize?: number; lockDir?: string; lockTimeoutMs?: number } = {}): BackfillResult {
   const db = getDb();
   if (stamped(db)) return skipped();
-  return withMigrationLock(
-    () => (stamped(db) ? skipped() : backfill(db, options.batchSize ?? BATCH_SIZE)),
-    { dir: options.lockDir ?? dataDirectory() },
-  );
+  try {
+    return withMigrationLock(
+      () => (stamped(db) ? skipped() : backfill(db, options.batchSize ?? BATCH_SIZE)),
+      { dir: options.lockDir ?? dataDirectory(), timeoutMs: options.lockTimeoutMs ?? LOCK_WAIT_MS },
+    );
+  } catch (error) {
+    if (!(error instanceof Error && LOCK_TIMEOUT.test(error.message))) throw error;
+    console.info("[artifacts] backfill left to the process that holds the database lock");
+    return skipped();
+  }
 }
