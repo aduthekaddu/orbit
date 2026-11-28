@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Orbit is a self-hosted chat app for one user: Next.js App Router, the AI SDK, assistant-ui, and SQLite through Drizzle. Read `ARCHITECTURE.md` before you change a route, a table, or the chat stream. Read `docs/design.md` before you change UI.
+Orbit is a self-hosted chat app. The admin hosts it for one person, a team, or a community. It uses Next.js App Router, the AI SDK, assistant-ui, and SQLite through Drizzle. Read `ARCHITECTURE.md` before you change a route, a table, or the chat stream. Read `docs/design.md` before you change UI.
 
 ## Done
 
