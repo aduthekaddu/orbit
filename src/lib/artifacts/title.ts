@@ -2,7 +2,7 @@ import type { Artifact, ArtifactKind } from "./detect";
 
 export const ARTIFACT_KIND_LABEL: Record<ArtifactKind, string> = { html: "HTML", svg: "SVG", react: "React" };
 
-const FALLBACK_TITLE: Record<ArtifactKind, string> = { html: "HTML page", svg: "SVG image", react: "React component" };
+export const FALLBACK_TITLE: Readonly<Record<ArtifactKind, string>> = { html: "HTML page", svg: "SVG image", react: "React component" };
 
 const MAX_TITLE = 80;
 const MAX_SLUG = 60;
@@ -41,8 +41,8 @@ function decodeEntities(text: string) {
     .replace(/&amp;/gi, "&");
 }
 
-/** The first MAX_TITLE code points. Two code units per code point is the most a slice can need. */
-function capTitle(text: string) {
+/** The first MAX_TITLE code points, without trailing space. Two code units per code point is the most a slice can need. */
+export function capTitle(text: string) {
   return Array.from(text.slice(0, MAX_TITLE * 2)).slice(0, MAX_TITLE).join("").trimEnd();
 }
 
@@ -125,9 +125,14 @@ export function artifactTitle(artifact: Pick<Artifact, "kind" | "code">): string
   return title || FALLBACK_TITLE[artifact.kind];
 }
 
-/** A download name from the artifact's title, such as `signup-form.html`. */
-export function artifactFileName(artifact: Pick<Artifact, "kind" | "language" | "code">): string {
-  const slug = artifactTitle(artifact)
+/** The title an artifact shows: the user's rename when set, else the title read from its code. */
+export function shownTitle(row: { userTitle: string | null; derivedTitle: string }): string {
+  return row.userTitle ?? row.derivedTitle;
+}
+
+/** A download name from the given title, or from the artifact's own title when none is given, such as `signup-form.html`. */
+export function artifactFileName(artifact: Pick<Artifact, "kind" | "language" | "code">, title?: string): string {
+  const slug = (title?.trim() ? title : artifactTitle(artifact))
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, "-")
     .replace(/^-+|-+$/g, "");
