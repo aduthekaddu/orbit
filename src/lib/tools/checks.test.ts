@@ -420,6 +420,19 @@ test("a second test of the same tool waits while one runs and for 10 seconds aft
   assert.equal(otherUser.body.summary, "3 results");
 });
 
+test("a check that outlives a settings save records nothing and answers the tool as the new settings leave it", async (t) => {
+  const held = await heldSearxng(t);
+  assert.ok(saveInstance(admin.id, { searxngUrl: held.url, tavilyApiKey: null }).ok);
+  const checking = runToolCheck(admin, "web_search", live());
+  await eventually(() => held.count(), (count) => count >= 1, { timeoutMs: 5_000, what: "the check to reach SearXNG" });
+  assert.ok(saveInstance(admin.id, { searxngUrl: "https://search.example" }).ok);
+  held.release();
+  const response = await checking;
+  assert.equal(response.ok && response.summary, "3 results");
+  assert.equal(response.tool.health.state, "untested");
+  assert.equal(statusRow(admin.id, "web_search"), undefined);
+});
+
 test("an off tool answers 409 with its fixed message, writes nothing, and leaves the next test free", async (t) => {
   const account = freshUser();
   const refusals: Array<[string, Viewer, () => void, string]> = [

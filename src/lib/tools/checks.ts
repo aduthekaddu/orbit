@@ -74,10 +74,24 @@ const checks: Record<TestableToolId, (context: Context, signal: AbortSignal, dep
   },
 };
 
+// The settings each check runs with. Saving new ones clears the tool's status, so a check that outlived that save
+// records nothing. Compared in memory only.
+const settingsOf: Record<TestableToolId, (context: Context) => readonly unknown[]> = {
+  web_search: ({ instance }) => [instance.searxngUrl, instance.tavilyApiKey],
+  run_code: ({ instance }) => [instance.sandbox],
+  github: ({ user }) => [user.github.githubToken, user.github.githubMcpUrl],
+  memory: ({ user }) => [user.memory],
+};
+
+function sameSettings(id: TestableToolId, before: Context, now: Context) {
+  const [a, b] = [settingsOf[id](before), settingsOf[id](now)];
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
 /**
  * Runs one real call of the tool for the viewer, records the outcome in tool_status, and answers the updated row.
  * When `signal` aborts, it throws and records nothing. When the 15 second ceiling fires first, it records the
- * tool's timeout message.
+ * tool's timeout message. When the tool's settings changed while it ran, it records nothing.
  */
 export async function runToolCheck(viewer: Viewer, id: TestableToolId, signal: AbortSignal, deps: Partial<ToolCheckDeps> = {}): Promise<ToolCheckResponse> {
   const started = performance.now();
@@ -95,12 +109,13 @@ export async function runToolCheck(viewer: Viewer, id: TestableToolId, signal: A
   signal.throwIfAborted();
   if (!check.ok && checkSignal.aborted) check = { ok: false, error: timeouts[id] };
   const ms = Math.round(performance.now() - started);
+  const current = sameSettings(id, context, loadToolContext(viewer.id));
   if (check.ok) {
-    recordToolCall(viewer.id, id, { ok: true }, redact);
+    if (current) recordToolCall(viewer.id, id, { ok: true }, redact);
     return { ok: true, ms, summary: check.summary, tool: toolViewFor(viewer, id) };
   }
   const error = sanitizeToolError(check.error, redact);
-  recordToolCall(viewer.id, id, { ok: false, error }, redact);
+  if (current) recordToolCall(viewer.id, id, { ok: false, error }, redact);
   return { ok: false, ms, error, tool: toolViewFor(viewer, id) };
 }
 
