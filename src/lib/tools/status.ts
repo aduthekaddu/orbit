@@ -232,7 +232,8 @@ function resultOutcome(toolId: TestableToolId, modelToolName: string, output: un
   }
 }
 
-function thrownError(toolId: TestableToolId, error: unknown, input: unknown, redact: Redactor): string {
+/** The fixed message for a call of a testable tool that threw. */
+export function thrownToolError(toolId: TestableToolId, error: unknown, input: unknown, redact: Redactor): string {
   switch (toolId) {
     case "web_search":
       return TOOL_ERRORS.searchUnavailable;
@@ -257,7 +258,7 @@ export function recordingTool(tool: Tool, modelToolName: string, toolId: Testabl
         output = await execute(input, options);
       } catch (error) {
         const aborted = options.abortSignal?.aborted || error instanceof Error && error.name === "AbortError";
-        if (!aborted) recordToolCall(userId, toolId, { ok: false, error: thrownError(toolId, error, input, redact) }, redact);
+        if (!aborted) recordToolCall(userId, toolId, { ok: false, error: thrownToolError(toolId, error, input, redact) }, redact);
         throw error;
       }
       const outcome = resultOutcome(toolId, modelToolName, output);
