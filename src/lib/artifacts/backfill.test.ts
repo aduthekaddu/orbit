@@ -44,7 +44,7 @@ type Row = { id: string; messageId: string; lineageId: string; userTitle: string
 
 function rows(): Row[] {
   return sqlite().prepare(`SELECT id, message_id AS messageId, lineage_id AS lineageId, user_title AS userTitle, kind,
-    created_at AS createdAt, updated_at AS updatedAt FROM artifacts ORDER BY seq`).all() as Row[];
+    created_at AS createdAt, updated_at AS updatedAt FROM artifacts ORDER BY message_id, seq`).all() as Row[];
 }
 
 const stamp = () => sqlite().prepare("SELECT artifacts_backfilled_at FROM instance_settings WHERE id = 1").pluck().get() as number | null;

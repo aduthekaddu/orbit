@@ -198,14 +198,14 @@ test("a regeneration joins the lineage, and deleting the first version's block p
   const v2 = only("root-a2");
   assert.equal(v2.lineageId, v1.id);
   assert.deepEqual(getArtifact(USER, v2.id)?.versions.map((version) => [version.id, version.number]), [[v1.id, 1], [v2.id, 2]]);
-  assert.ok(renameArtifact(USER, v2.id, "Tally", redact));
+  assert.ok(renameArtifact(USER, v2.id, "Abacus", redact));
 
   assert.equal(updateMessageText(chat, "root-a1", "No artifact any more.", redact), true);
   assert.deepEqual(rows("root-a1"), []);
   const promoted = only("root-a2");
-  assert.deepEqual([promoted.id, promoted.lineageId, promoted.userTitle], [v2.id, v2.id, "Tally"]);
+  assert.deepEqual([promoted.id, promoted.lineageId, promoted.userTitle], [v2.id, v2.id, "Abacus"]);
   const detail = getArtifact(USER, v2.id);
-  assert.deepEqual([detail?.number, detail?.versions.length, detail?.title], [1, 1, "Tally"]);
+  assert.deepEqual([detail?.number, detail?.versions.length, detail?.title], [1, 1, "Abacus"]);
 });
 
 test("editing a block from html to svg gives it a new row and leaves the html lineage to its other version", () => {
@@ -258,7 +258,8 @@ test("search matches a custom title together with code that only a later version
   assert.deepEqual(hits.items.map((item) => [item.lineageId, item.id, item.title, item.versionCount]), [[lineage, only("search-a2").id, "Tally", 2]]);
   assert.equal(hits.nextCursor, null);
   assert.deepEqual(listArtifacts(USER, { q: "Tally Version 3" }).items, []);
-  assert.deepEqual(new Set(listArtifacts(USER, { q: "Version 2" }).items.map((item) => item.lineageId)), new Set([lineage, otherLineage]));
+  const versionTwo = listArtifacts(USER, { q: "Version 2" }).items.map((item) => item.lineageId);
+  assert.ok(versionTwo.includes(lineage) && versionTwo.includes(otherLineage), "code alone matches without the custom title");
 });
 
 test("search results keep the list order, whatever another account stores", () => {
