@@ -9,11 +9,13 @@ const UI = {
   title: (scope) => scope.getByRole("heading", { level: 2 }).first(),
   rename: (scope) => scope.getByRole("button", { name: "Rename artifact", exact: true }),
   titleInput: (scope) => scope.getByRole("textbox", { name: "Artifact title", exact: true }),
-  version: (scope, number) => scope.getByRole("button", { name: `v${number}`, exact: true }),
-  versions: (scope) => scope.getByRole("button", { name: /^v\d+$/ }),
+  versionGroup: (scope) => scope.getByRole("group", { name: "Versions", exact: true }),
+  version: (scope, number) => UI.versionGroup(scope).getByRole("button", { name: `v${number}`, exact: true }),
+  versions: (scope) => UI.versionGroup(scope).getByRole("button"),
   tab: (scope, name) => scope.getByRole("tab", { name, exact: true }),
   diffPanel: (scope) => scope.getByRole("tabpanel", { name: "Diff", exact: true }),
-  diffBase: (scope) => scope.getByRole("combobox").first(),
+  diffBase: (scope) => scope.getByRole("combobox", { name: "Compare with", exact: true }),
+  diffLines: (scope, kind) => scope.locator(`[data-diff-line="${kind}"]`),
   option: (page, name) => page.getByRole("option", { name, exact: true }),
   button: (scope, name) => scope.getByRole("button", { name, exact: true }),
   back: (scope) => scope.getByRole("button", { name: "Back", exact: true }),
@@ -21,8 +23,8 @@ const UI = {
   card: (reply, title) => reply.getByRole("button", { name: `Open ${title}`, exact: true }),
   cards: (reply) => reply.getByRole("button", { name: /^Open / }),
   sidebarLink: (page) => page.getByRole("link", { name: "Artifacts", exact: true }),
-  search: (scope) => scope.getByRole("searchbox").or(scope.getByRole("textbox", { name: /search/i })).first(),
-  kind: (scope, name) => scope.getByRole("button", { name, exact: true }).or(scope.getByRole("radio", { name, exact: true })).first(),
+  search: (scope) => scope.getByRole("searchbox", { name: "Search artifacts", exact: true }),
+  kind: (scope, name) => scope.getByRole("radiogroup", { name: "Kind", exact: true }).getByRole("radio", { name, exact: true }),
   rows: (scope) => scope.locator("[data-artifact-row]"),
   row: (scope, lineageId) => scope.locator(`[data-artifact-row="${lineageId}"]`),
   pageHeading: (scope) => scope.getByRole("heading", { name: "Artifacts", exact: true }),
@@ -55,6 +57,21 @@ async function frameSecurity(frame, origin) {
   }, origin);
 }
 
+// Names the element that took a click meant for another, from Playwright's call log.
+function interceptor(error) {
+  const line = error.message.split("\n").find((entry) => entry.includes("intercepts pointer events"));
+  if (!line) throw error;
+  const role = /role="([^"]+)"/.exec(line)?.[1] ?? "element";
+  const text = />([^<]+)<\//.exec(line)?.[1] ?? "";
+  return `${role} "${text}" intercepts pointer events`;
+}
+
+// A search or a kind filter keeps the old rows on screen, marked busy, until its answer arrives.
+async function listedRows(scope) {
+  await eventually(() => scope.locator('[aria-busy="true"]').count(), (count) => count === 0, { timeoutMs: UI_WAIT, what: "the artifact list to finish loading" });
+  return UI.rows(scope).allInnerTexts();
+}
+
 const noOverflow = (target) => target.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 const settle = (locator) => locator.evaluate((node) => Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => null))));
 
@@ -83,7 +100,12 @@ export default async function artifactsPage({ page, origin, step, shot, signInMe
 
   async function section(name, run) {
     try { await run(); }
-    catch (error) { step(name, false, error.message.split("\n")[0]); }
+    catch (error) {
+      // Playwright puts the locator it waited for in its call log, below the first line.
+      const lines = error.message.split("\n");
+      const waited = lines.find((line) => line.includes("waiting for"))?.trim();
+      step(name, false, waited ? `${lines[0]} (${waited})` : lines[0]);
+    }
   }
   async function json(response, what) {
     if (!response.ok()) throw new Error(`${what} answered ${response.status()}`);
@@ -203,19 +225,36 @@ export default async function artifactsPage({ page, origin, step, shot, signInMe
   });
 
   await section("code diff in the chat panel", async () => {
-    await (await need(UI.version(panel, 3), "v3 button")).click();
+    // Enter in rename puts focus back on Rename artifact, which opens its tooltip. A click on v3 must still reach v3.
+    await eventually(() => UI.rename(panel).evaluate((node) => node === document.activeElement), Boolean, { timeoutMs: UI_WAIT, what: "focus back on Rename artifact" });
+    const v3 = await need(UI.version(panel, 3), "v3 button");
+    const blocked = await v3.click({ timeout: UI_WAIT }).then(() => null, interceptor);
+    step("after a rename, a click on v3 reaches v3", blocked === null, blocked ?? "");
+    if (blocked) {
+      await shot("rename-tooltip");
+      // Escape closes the tooltip and leaves the panel open, the way a user gets past it.
+      await page.keyboard.press("Escape");
+      await v3.click();
+    }
     await previewShows(state.texts[2]);
     await (await need(UI.tab(panel, "Diff"), "Diff tab")).click();
     const diff = await need(UI.diffPanel(panel), "Diff tab panel");
     await need(diff.getByText(state.texts[2], { exact: false }), `${state.texts[2]} in the diff`);
-    const text = await diff.innerText();
-    step("Diff on v3 compares against v2 by default", await UI.diffBase(diff).innerText().then((base) => base.includes("v2")), await UI.diffBase(diff).innerText());
-    step("Diff marks the old Version line removed and the new one added",
-      new RegExp(`-[^\\n]*${state.texts[1]}`).test(text) && new RegExp(`\\+[^\\n]*${state.texts[2]}`).test(text) && text.includes("+1") && text.includes("-1"), JSON.stringify(text.slice(0, 400)));
+    const lines = async () => ({
+      removed: await UI.diffLines(diff, "removed").allInnerTexts(),
+      added: await UI.diffLines(diff, "added").allInnerTexts(),
+      text: await diff.innerText(),
+    });
+    const marks = ({ removed, added, text }, older) => removed.length === 1 && added.length === 1
+      && removed[0].includes(older) && added[0].includes(state.texts[2]) && text.includes("+1") && text.includes("-1");
+    step("Diff on v3 compares against v2 by default", (await UI.diffBase(diff).innerText()).trim() === "v2", await UI.diffBase(diff).innerText());
+    const byDefault = await lines();
+    step("Diff marks the old Version line removed and the new one added", marks(byDefault, state.texts[1]), JSON.stringify(byDefault));
     await UI.diffBase(diff).click();
     await (await need(UI.option(page, "v1"), "v1 option in the base selector")).click();
-    await need(diff.getByText(state.texts[0], { exact: false }), `${state.texts[0]} in the diff`);
-    step("switching the base to v1 compares v1 with v3", !(await diff.innerText()).includes(state.texts[1]));
+    await need(UI.diffLines(diff, "removed").getByText(state.texts[0], { exact: false }), `${state.texts[0]} removed in the diff`);
+    const fromV1 = await lines();
+    step("switching the base to v1 compares v1 with v3", (await UI.diffBase(diff).innerText()).trim() === "v1" && marks(fromV1, state.texts[0]) && !fromV1.text.includes(state.texts[1]), JSON.stringify(fromV1));
     await shot("diff");
   });
 
@@ -250,10 +289,11 @@ export default async function artifactsPage({ page, origin, step, shot, signInMe
 
     const search = await need(UI.search(library), "artifact search field");
     await search.fill("Tally");
-    await need(UI.row(library, state.lineageId), "Tally row for the search Tally");
+    const byTitle = await listedRows(library);
     await search.fill(`Tally ${state.texts[1]}`);
-    await need(UI.row(library, state.lineageId), `Tally row for the search Tally ${state.texts[1]}`);
-    step("search finds Tally by its title and by a later version's code", true);
+    const byCode = await listedRows(library);
+    step("search finds Tally by its title and by a later version's code",
+      byTitle.length === 1 && byTitle[0].startsWith("Tally") && byCode.some((text) => text.startsWith("Tally")), JSON.stringify({ byTitle, byCode }));
     await shot("search");
     await search.fill("zzqxnomatch");
     await need(library.getByText(UI.noMatch, { exact: true }), UI.noMatch);
@@ -261,13 +301,16 @@ export default async function artifactsPage({ page, origin, step, shot, signInMe
     await search.fill("");
 
     await UI.kind(library, "HTML").click();
-    await need(UI.row(library, state.lineageId), "Tally row under HTML");
-    const htmlRows = await UI.rows(library).allInnerTexts();
+    const htmlRows = await listedRows(library);
+    const htmlChecked = await UI.kind(library, "HTML").getAttribute("aria-checked");
     await UI.kind(library, "SVG").click();
-    await UI.row(library, state.lineageId).waitFor({ state: "hidden", timeout: UI_WAIT });
-    const svgRows = await UI.rows(library).allInnerTexts();
-    step("the HTML and SVG filters show only their kind", htmlRows.every((text) => text.includes("HTML")) && svgRows.length > 0 && svgRows.every((text) => text.includes("SVG")), JSON.stringify({ htmlRows, svgRows }));
+    const svgRows = await listedRows(library);
+    const kindOf = (text) => text.split("\n")[2];
+    step("the HTML and SVG filters show only their kind",
+      htmlChecked === "true" && htmlRows.some((text) => text.startsWith("Tally")) && htmlRows.every((text) => kindOf(text).startsWith("HTML"))
+        && svgRows.length > 0 && svgRows.every((text) => kindOf(text) === "SVG"), JSON.stringify({ htmlRows, svgRows }));
     await UI.kind(library, "All").click();
+    await listedRows(library);
 
     await UI.row(library, state.lineageId).click();
     await need(UI.title(library).getByText("Tally", { exact: true }), "Tally in the detail header");
