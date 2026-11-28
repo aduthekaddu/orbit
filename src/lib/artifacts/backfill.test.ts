@@ -6,11 +6,12 @@ import test, { after, before } from "node:test";
 import { Redactor } from "../chat-errors";
 import { getDb } from "../db";
 import { eventually } from "../eventually.mjs";
+import { saveInstance } from "../instance-settings";
 import { parseViewer } from "../policy";
 import { withMigrationLock } from "../db/migration-lock";
 import * as backfillModule from "./backfill";
 import { backfillArtifacts } from "./backfill";
-import { getArtifact, renameArtifact } from "./store";
+import { getArtifact, listArtifacts, renameArtifact } from "./store";
 
 const USER = parseViewer({ id: "u-backfill", role: "admin" }).id;
 const sqlite = () => getDb().$client;
@@ -170,4 +171,24 @@ test("a running backfill does not hold the lock that opening the database waits 
   const dir = lockDir();
   await holdLock(dir);
   assert.equal(withMigrationLock(() => "entered", { dir, timeoutMs: 200 }), "entered");
+});
+
+test("a backfill masks each reply with its owner's credentials before it indexes the artifacts, and leaves the message as saved", () => {
+  // A reply saved before messages were masked on write still holds the admin's search key.
+  const key = "zq9backfillsecret0042";
+  assert.ok(saveInstance(USER, { tavilyApiKey: key }).ok);
+  sqlite().exec("UPDATE instance_settings SET artifacts_backfilled_at = NULL");
+  chat("bf-secret");
+  legacy("bf-secret", "bf-secret-p", "user", null, "Show the key");
+  const body = `\`\`\`html\n<title>Key ${key}</title><p>${key}</p>\n\`\`\``;
+  legacy("bf-secret", "bf-secret-a", "assistant", "bf-secret-p", body);
+  backfillArtifacts({ lockDir: lockDir() });
+
+  const row = sqlite().prepare("SELECT id, code, derived_title AS derivedTitle FROM artifacts WHERE message_id = 'bf-secret-a'").get() as { id: string; code: string; derivedTitle: string };
+  assert.equal(row.code, "<title>Key [redacted]</title><p>[redacted]</p>\n");
+  assert.equal(row.derivedTitle, "Key [redacted]");
+  assert.equal(getArtifact(USER, row.id)?.code.includes(key), false);
+  assert.equal(sqlite().prepare("SELECT count(*) FROM artifacts_fts WHERE artifacts_fts MATCH ?").pluck().get(`"${key}"`), 0);
+  assert.deepEqual(listArtifacts(USER, { q: key }).items, []);
+  assert.deepEqual(JSON.parse(sqlite().prepare("SELECT parts FROM messages WHERE id = 'bf-secret-a'").pluck().get() as string), [{ type: "text", text: body }]);
 });
