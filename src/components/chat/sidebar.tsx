@@ -3,7 +3,7 @@
 import { useReducer, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BrainIcon, GearSixIcon, MagnifyingGlassIcon, NotePencilIcon, ShieldCheckIcon, SidebarSimpleIcon, SignOutIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import { BrainIcon, CubeIcon, GearSixIcon, MagnifyingGlassIcon, NotePencilIcon, ShieldCheckIcon, SidebarSimpleIcon, SignOutIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { authClient } from "@/lib/auth-client";
 import { idleSubmit, submitTransition } from "@/lib/submit-state";
 import type { Role } from "@/lib/session";
@@ -129,6 +129,7 @@ export function Sidebar({
         {(
           [
             { href: "/memory", label: "Memory", Icon: BrainIcon },
+            { href: "/artifacts", label: "Artifacts", Icon: CubeIcon },
             { href: "/settings", label: "Settings", Icon: GearSixIcon },
             ...(role === "admin" ? [{ href: "/admin", label: "Admin", Icon: ShieldCheckIcon }] : []),
           ] as const
