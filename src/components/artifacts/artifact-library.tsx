@@ -112,6 +112,11 @@ function selectionFrom(requestedId: string | null, initialDetail: ArtifactDetail
   return { detail: initialDetail ? { status: "ready", detail: initialDetail } : null, explicit: false };
 }
 
+/** Whether `state` still waits for the answer to a request for `id`. A newer selection or a refresh replaces it. */
+function awaits(state: DetailState | null, id: string) {
+  return state?.status === "loading" && state.id === id;
+}
+
 function shownDetail(state: DetailState | null) {
   if (state?.status === "ready") return state.detail;
   if (state?.status === "loading") return state.previous;
@@ -241,7 +246,9 @@ export function ArtifactLibrary({ initial, requestedId, initialDetail }: {
   }, [latestList]);
 
   // The server's first page holds the unfiltered list. A search or a kind filter still open after a refresh runs again.
+  // A detail still loading belongs to the page before the refresh, so it is dropped with the versions loaded so far.
   useEffect(() => {
+    latestDetail();
     details.current = new Map();
     if (initialDetail) remember(initialDetail);
     if (isFiltered(filterNow.current)) loadList(filterNow.current);
@@ -249,7 +256,7 @@ export function ArtifactLibrary({ initial, requestedId, initialDetail }: {
       latestList();
       setList(firstPage(initial));
     }
-  }, [initial, initialDetail, loadList, latestList, remember]);
+  }, [initial, initialDetail, loadList, latestList, latestDetail, remember]);
 
   useEffect(() => () => window.clearTimeout(searchTimer.current), []);
 
@@ -299,12 +306,12 @@ export function ArtifactLibrary({ initial, requestedId, initialDetail }: {
       parse: detailBody,
       onOk: ({ artifact }) => {
         remember(artifact);
-        setSelection((current) => ({ ...current, detail: { status: "ready", detail: artifact } }));
+        setSelection((current) => (awaits(current.detail, id) ? { ...current, detail: { status: "ready", detail: artifact } } : current));
       },
-      onFailed: (failure) => setSelection((current) => ({
+      onFailed: (failure) => setSelection((current) => (awaits(current.detail, id) ? {
         ...current,
         detail: failure.kind === "http" && failure.status === 404 ? { status: "missing", id } : { status: "failed", id },
-      })),
+      } : current)),
     });
   }, [latestDetail, remember]);
 
