@@ -84,7 +84,6 @@ export const TOOL_ERRORS = {
   sandboxOutOfMemory: "Code sandbox out of memory.",
   sandboxUnexpected: "Code sandbox returned unexpected output.",
   githubTimedOut: "GitHub timed out.",
-  githubCallFailed: "GitHub tool call failed.",
   memoryUnavailable: "Memory storage is unavailable.",
   checkFailed: "Tool check failed.",
 } as const;
@@ -213,7 +212,7 @@ function fixedOr(output: unknown, fallback: string): string {
 }
 
 // A failed result proves the backend answered unless it is an infrastructure failure, so a model's bad input does
-// not mark a healthy tool Failing.
+// not mark a healthy tool Failing. Any GitHub result, an isError one included, came back over a working MCP session.
 function resultOutcome(toolId: TestableToolId, modelToolName: string, output: unknown): ToolCallOutcome | null {
   const end = toolRunEnd({ state: "output-available", output }, false, modelToolName);
   if (end.status === "cancelled" || end.status === "running") return null;
@@ -228,7 +227,7 @@ function resultOutcome(toolId: TestableToolId, modelToolName: string, output: un
       return { ok: false, error: search.state === "failed" ? fixedOr(search, TOOL_ERRORS.searchUnavailable) : TOOL_ERRORS.searchUnavailable };
     }
     case "github":
-      return { ok: false, error: TOOL_ERRORS.githubCallFailed };
+      return { ok: true };
   }
 }
 

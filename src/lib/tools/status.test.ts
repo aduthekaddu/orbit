@@ -41,7 +41,6 @@ const ALLOWED_ERRORS = [
   "GitHub did not return a login.",
   "GitHub is unavailable.",
   "GitHub timed out.",
-  "GitHub tool call failed.",
   "Memory storage is unavailable.",
 ];
 
@@ -549,13 +548,14 @@ test("a rejected memory proves storage answered, and a storage failure marks Mem
   assertFailing(broken.id, "memory", "Memory storage is unavailable.");
 });
 
-test("a GitHub tool result marks GitHub working, and an error result marks it failing", async () => {
+test("any returned GitHub result marks GitHub working, since an error result such as a wrong path still came from GitHub", async () => {
   const account = freshUser();
   await run(recordingTool(fakeTool(() => ({ content: [{ type: "text", text: "[]" }] })), "github_list_issues", "github", account.id, redact));
   assertWorking(account.id, "github");
   const other = freshUser();
-  await run(recordingTool(fakeTool(() => ({ isError: true, content: [{ type: "text", text: `bad ${GITHUB_TOKEN}` }] })), "github_get_me", "github", other.id, redact));
-  assertFailing(other.id, "github", "GitHub tool call failed.");
+  recordToolCall(other.id, "github", { ok: false, error: "GitHub is unavailable." });
+  await run(recordingTool(fakeTool(() => ({ isError: true, content: [{ type: "text", text: "Not Found: file not found" }] })), "github_get_file_contents", "github", other.id, redact));
+  assertWorking(other.id, "github");
 });
 
 test("recording a call for a deleted account does not break the call", async () => {
