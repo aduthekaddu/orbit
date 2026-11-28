@@ -65,21 +65,30 @@ export function createToolsStore({ chatId, initialDisabledTools, draft }: { chat
   function send() {
     if (state.phase !== "saved" || state.inFlight !== null || state.pending.size === 0) return;
     const carried = state.pending;
+    const url = `/api/chats/${encodeURIComponent(chatId)}`;
+    // Clicks made while the PATCH was out still save, unless the server already holds them.
+    const settle = (committed: ReadonlySet<string>, failed: boolean) => {
+      set({ ...state, committed, inFlight: null, pending: unsaved(state.pending, committed), failed });
+      send();
+    };
     set({ ...state, inFlight: carried, pending: new Map() });
     void requestJson(
-      `/api/chats/${encodeURIComponent(chatId)}`,
+      url,
       { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(switches(carried)) },
       {
         parse: savedChat,
-        onOk: (body) => {
-          const committed = new Set(body.disabledTools);
-          set({ ...state, committed, inFlight: null, pending: unsaved(state.pending, committed), failed: false });
-          send();
-        },
-        // Only what the failed PATCH carried goes back. Clicks made while it was out still save.
+        onOk: (body) => settle(new Set(body.disabledTools), false),
+        // The PATCH may have saved before its answer was lost, so the switches take the list the server holds now.
+        // Only when that read fails too does what the PATCH carried go back.
         onFailed: () => {
-          set({ ...state, inFlight: null, pending: unsaved(state.pending, state.committed), failed: true });
-          send();
+          void requestJson(url, { method: "GET" }, {
+            parse: savedChat,
+            onOk: (body) => {
+              const committed = new Set(body.disabledTools);
+              settle(committed, unsaved(carried, committed).size > 0);
+            },
+            onFailed: () => settle(state.committed, true),
+          });
         },
       },
     );

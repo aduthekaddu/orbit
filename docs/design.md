@@ -149,7 +149,7 @@ An artifact in a reply shows as a card (`src/components/chat/artifact-card.tsx`)
 
 ### Composer tools
 
-**+** (`data-tools-trigger`) is a 32px round button before the model chip. A 6px sun dot on its corner and the label `Tools (N off)` mark a chat with tools turned off. It opens the same panel as a `Popover` on desktop and a `Sheet` under 48rem: one `Switch` per ready tool that can be turned off, named by its label, and a **Tools** link to `/tools`. Generated UI is never listed. A switch saves at once, and a failed save puts it back and shows `Could not save tools.` inside the open panel. A draft keeps its switches in the page until its first send.
+**+** (`data-tools-trigger`) is a 32px round button before the model chip. A 6px sun dot on its corner and the label `Tools (N off)` mark a chat with tools turned off. It opens the same panel as a `Popover` on desktop and a `Sheet` under 48rem: one `Switch` per ready tool that can be turned off, named by its label, and a **Tools** link to `/tools`. Generated UI is never listed. A switch saves at once. When a save fails, the panel reads the chat back and shows the switches as the server holds them, so a save whose answer was lost keeps its change. If that change is not saved, or the chat cannot be read, the switch goes back and `Could not save tools.` shows inside the open panel. A draft keeps its switches in the page until its first send.
 
 ## json-render widgets
 

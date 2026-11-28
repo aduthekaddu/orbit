@@ -101,12 +101,18 @@ test.afterEach(() => {
 // The chat's stored list on the fake server, which PATCH /api/chats/[id] changes the way the route does.
 let stored = new Set<string>();
 
-// Holds every request until the test answers it, and counts how many were out at once.
+// Holds every PATCH until the test answers it, and counts how many were out at once. GET /api/chats/[id] answers
+// the stored list at once, or fails while `reads.fail` is set.
 function serve(initial: string[] = []) {
   stored = new Set(initial);
   const sent: Sent[] = [];
   const counts = { open: 0, most: 0 };
+  const reads = { fail: false };
   globalThis.fetch = (input, init) => {
+    if ((init?.method ?? "GET") === "GET") {
+      if (reads.fail) return Promise.reject(new TypeError("Failed to fetch"));
+      return Promise.resolve(Response.json({ id: "chat-1", title: "New chat", disabledTools: [...stored].sort(), messages: [], headId: null }));
+    }
     counts.open += 1;
     counts.most = Math.max(counts.most, counts.open);
     return new Promise<Response>((resolve, reject) => {
@@ -122,7 +128,7 @@ function serve(initial: string[] = []) {
       });
     });
   };
-  return { sent, counts };
+  return { sent, counts, reads };
 }
 
 const arrived = (sent: Sent[], count: number) =>
@@ -317,11 +323,25 @@ test("a failed PATCH puts the switch back and shows Could not save tools. until 
   assert.deepEqual(shown(store), [["Web search", true], ["GitHub", true], ["Memory", false]]);
 });
 
-test("a PATCH lost on the network rolls back the same way", async () => {
+test("a PATCH that saved but lost its answer leaves the switch as the server saved it", async () => {
   const { sent } = serve(["memory"]);
   const store = saved(["memory"]);
   store.toggle("memory", true);
   await arrived(sent, 1);
+  stored.delete("memory");
+  sent[0].answer(new TypeError("Failed to fetch"));
+  await store.flush();
+  assert.deepEqual(shown(store)[2], ["Memory", true]);
+  assert.deepEqual(alerts(paintPanel(store)), [], "nothing failed to save");
+  assert.equal(sent.length, 1);
+});
+
+test("a PATCH lost on the network rolls back the same way when the chat cannot be read either", async () => {
+  const { sent, reads } = serve(["memory"]);
+  const store = saved(["memory"]);
+  store.toggle("memory", true);
+  await arrived(sent, 1);
+  reads.fail = true;
   sent[0].answer(new TypeError("Failed to fetch"));
   await store.flush();
   assert.deepEqual(shown(store)[2], ["Memory", false]);

@@ -569,6 +569,33 @@ export default async function tools({ page, origin, step, shot, useProvider, see
     const stored = await readJson(`${origin}/api/chats/${memoryChat}`);
     step("the failed save left the chat's stored tools as they were", isDeepStrictEqual(stored.disabledTools, ["memory"]), JSON.stringify(stored.disabledTools));
 
+    // --- A save whose answer is lost ------------------------------------------------------------------
+    const loseAnswer = async (route) => {
+      if (route.request().method() !== "PATCH") return route.fallback();
+      await route.fetch();
+      return route.abort("failed");
+    };
+    await page.route("**/api/chats/*", loseAnswer);
+    try {
+      tray = await openToolsPopover();
+      const web = toolSwitch(tray, "Web search");
+      const reread = page.waitForResponse((response) => pathOf(response) === `/api/chats/${memoryChat}` && response.request().method() === "GET", { timeout: 10_000 }).then(() => true, () => false);
+      await web.click();
+      const readBack = await reread;
+      const offAfter = await eventually(() => web.getAttribute("aria-checked"), (value) => value === "false", { timeoutMs: 5_000, what: "the switch to stay off" }).catch(() => "rolled back");
+      const alertGone = await eventually(() => tray.getByRole("alert").count(), (count) => count === 0, { timeoutMs: 5_000, what: "the save error to clear" }).then(() => true, () => false);
+      const kept = (await readJson(`${origin}/api/chats/${memoryChat}`)).disabledTools;
+      step(
+        "a PATCH that saved but lost its answer reads the chat back, keeps Web search off as saved, and shows no save error",
+        readBack && offAfter === "false" && alertGone && isDeepStrictEqual(kept, ["memory", "web_search"]),
+        `read ${readBack}, switch ${offAfter}, alert gone ${alertGone}, stored ${JSON.stringify(kept)}`,
+      );
+      await page.keyboard.press("Escape");
+    } finally {
+      await page.unroute("**/api/chats/*", loseAnswer);
+    }
+    assert.equal((await request.patch(`${origin}/api/chats/${memoryChat}`, { data: { toolsOn: ["web_search"] } })).status(), 200, "turn Web search back on");
+
     // --- A real chat call updates health --------------------------------------------------------------
     const resetSearch = await apiTool("web_search");
     const testsBefore = testRequests.length;
