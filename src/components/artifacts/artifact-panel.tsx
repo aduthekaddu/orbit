@@ -370,8 +370,9 @@ export function ArtifactPanel({ artifact, stored, onClose, onFix, onSelectVersio
         </p>
       ) : null}
       {stored ? <ArtifactVersions versions={stored.versions} currentId={stored.id} onSelect={onSelectVersion} /> : null}
-      <div className="flex shrink-0 items-center gap-1 border-b p-2">
-        <div role="tablist" aria-label="Artifact view" className="flex min-w-0 gap-1">
+      {/* At a large text size on a phone the actions drop under the tabs instead of widening the page. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-1 border-b p-2">
+        <div role="tablist" aria-label="Artifact view" className="flex gap-1">
           {views.map((value) => (
             <Button key={value} ref={(node) => { tabRefs.current[value] = node; }} role="tab" tabIndex={view === value ? 0 : -1} aria-selected={view === value} aria-controls={`artifact-${value}`} id={`artifact-tab-${value}`} variant="ghost" size="sm" onClick={() => setTab(value)} onKeyDown={(event) => tabKeyDown(event, value)} className={cn("pointer-coarse:h-11", view === value && "bg-surface-raised")}>
               {VIEW_LABEL[value]}
