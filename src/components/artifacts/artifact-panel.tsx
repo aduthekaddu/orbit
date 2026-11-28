@@ -97,7 +97,11 @@ export function ArtifactWorkspace({ children }: { children: ReactNode }) {
   ) : null;
   return (
     <div className="flex h-full min-h-0 min-w-0">
-      <div ref={chat} className="min-h-0 min-w-0 flex-1">{children}</div>
+      <div ref={chat} className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* With the panel closed the failure shows above the thread, since an edit in the thread started the refresh. */}
+        {artifact ? null : stale}
+        <div className="min-h-0 flex-1">{children}</div>
+      </div>
       {artifact && wide ? (
         <aside aria-label="Artifact" className="flex h-full min-w-[380px] basis-[45%] shrink-0 flex-col border-l">
           {stale}
