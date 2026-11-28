@@ -16,4 +16,5 @@ npm-debug.log*
 .DS_Store
 coverage
 .verify/
-.claude/
+.claude/*
+!.claude/settings.json
