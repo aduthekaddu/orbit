@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { startMockMcp } from "../../../../scripts/qa/mock-mcp.mjs";
 import { startMockSearxng } from "../../../../scripts/qa/mock-searxng.mjs";
-import { searchSave } from "../../../../scripts/qa/settings-save.mjs";
+import { githubSave, searchSave } from "../../../../scripts/qa/settings-save.mjs";
 import { eventually } from "../../../../src/lib/eventually.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
@@ -193,7 +193,7 @@ export default async function tools({ page, origin, step, shot, useProvider, see
     const before = await replies.count();
     await composer(target).fill(prompt);
     await composer(target).press("Enter");
-    await replies.nth(before).getByText(reply).first().waitFor({ timeout: 30_000 });
+    await replies.nth(before).getByText(reply).filter({ visible: true }).first().waitFor({ timeout: 30_000 });
     await target.getByRole("button", { name: "Send", exact: true }).waitFor({ timeout: 30_000 });
     return replies.nth(before).innerText();
   }
@@ -229,6 +229,8 @@ export default async function tools({ page, origin, step, shot, useProvider, see
     const { chats: listed } = await readJson(`${origin}/api/chats`);
     return listed.map(({ id, updatedAt }) => ({ id, updatedAt }));
   }
+
+  const sidebarOrder = () => page.locator('nav a[href^="/c/"]').evaluateAll((links) => links.map((link) => link.getAttribute("href")));
 
   const focused = (target) =>
     target.evaluate(() => {
@@ -350,9 +352,16 @@ export default async function tools({ page, origin, step, shot, useProvider, see
       `status ${again.status()}, Retry-After ${retryAfter}, alert ${JSON.stringify(limited)}`,
     );
 
-    const github = await request.put(`${origin}/api/settings`, { data: { githubToken: mcp.token, githubMcpUrl: mcp.url } });
+    await page.goto(`${origin}/settings`);
+    const tokenField = page.getByLabel("Token", { exact: true });
+    await hydrated(tokenField, "the settings page to hydrate");
+    await tokenField.fill(mcp.token);
+    await page.getByLabel("MCP URL", { exact: true }).fill(mcp.url);
+    const githubSaved = page.waitForResponse((response) => pathOf(response) === "/api/settings" && response.request().method() === "PUT");
+    await githubSave(page).click();
+    const github = await githubSaved;
     changed.github = github.ok();
-    assert.equal(github.status(), 200, "save the mock GitHub token");
+    assert.equal(github.status(), 200, "save the mock GitHub token on /settings");
     await openTools();
     const githubStart = await rowState(page, "github");
     const checked = await pressTest(page, "github");
@@ -505,18 +514,21 @@ export default async function tools({ page, origin, step, shot, useProvider, see
     await page.goto(`${origin}/c/${memoryChat}`);
     await composerReady();
     const orderBefore = await chatOrder();
+    const sidebarBefore = await sidebarOrder();
     tray = await openToolsPopover();
     const savedMemory = page.waitForResponse((response) => pathOf(response) === `/api/chats/${memoryChat}` && response.request().method() === "PATCH");
     await toolSwitch(tray, "Memory").click();
     const memoryPatch = await savedMemory;
     const orderAfter = await chatOrder();
+    const sidebarAfter = await sidebarOrder();
     // A title can land on the newer draft chat meanwhile, so only the order and this chat's own time are compared.
     const ids = (order) => order.map(({ id }) => id);
     const memoryTime = (order) => order.find(({ id }) => id === memoryChat)?.updatedAt ?? null;
     step(
-      "turning Memory off saves with PATCH 200 and leaves the chat order and the chat's updatedAt unchanged",
-      memoryPatch.status() === 200 && orderBefore[0]?.id === draftId && isDeepStrictEqual(ids(orderBefore), ids(orderAfter)) && memoryTime(orderBefore) !== null && memoryTime(orderBefore) === memoryTime(orderAfter),
-      `status ${memoryPatch.status()}, first ${orderBefore[0]?.id}, order kept ${isDeepStrictEqual(ids(orderBefore), ids(orderAfter))}, updatedAt ${memoryTime(orderBefore)} -> ${memoryTime(orderAfter)}`,
+      "turning Memory off saves with PATCH 200 and leaves the chat order, the sidebar order, and the chat's updatedAt unchanged",
+      memoryPatch.status() === 200 && orderBefore[0]?.id === draftId && isDeepStrictEqual(ids(orderBefore), ids(orderAfter)) && memoryTime(orderBefore) !== null && memoryTime(orderBefore) === memoryTime(orderAfter) &&
+        sidebarBefore.length > 1 && isDeepStrictEqual(sidebarBefore, sidebarAfter),
+      `status ${memoryPatch.status()}, first ${orderBefore[0]?.id}, order kept ${isDeepStrictEqual(ids(orderBefore), ids(orderAfter))}, sidebar ${JSON.stringify(sidebarBefore)} -> ${JSON.stringify(sidebarAfter)}, updatedAt ${memoryTime(orderBefore)} -> ${memoryTime(orderAfter)}`,
     );
     await page.keyboard.press("Escape");
     offset = logSize();
