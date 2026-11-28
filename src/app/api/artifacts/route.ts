@@ -6,7 +6,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const querySchema = r.object({
-  q: r.text(LIMITS.query).optional(),
+  // FTS5 refuses a match expression that holds NUL, so control characters are refused here.
+  q: r.text(LIMITS.query).regex(/^\P{Cc}*$/u).optional(),
   kind: r.enum(["html", "svg", "react"]).optional(),
   cursor: r.text(LIMITS.artifactCursor).regex(/^\d+:\d+$/).optional(),
 });
