@@ -953,6 +953,8 @@ function claudeReply(res, body, raw, scenario) {
 
 // The AI SDK retries a 500 twice, so three failures make the first send fail in the browser.
 const failuresByPrompt = new Map();
+// Each artifact-version reply in this mock process gets the next number, so a regenerate or an edited prompt makes a new version.
+let artifactVersion = 0;
 
 const server = http.createServer((req, res) => {
   if (!req.url) {
@@ -1153,6 +1155,11 @@ const server = http.createServer((req, res) => {
     }
     if (scenario === "artifact-multiple") {
       textResponse(res, "```html\n<h1>First artifact</h1>\n```\n\n```html\n<h1>Second artifact</h1>\n```\n\n```html\n<h1>Third artifact</h1>\n```");
+      return;
+    }
+    if (scenario === "artifact-version") {
+      artifactVersion += 1;
+      textResponse(res, `\`\`\`html\n<title>Counter</title>\n<h1>Counter</h1>\n<p>Version ${artifactVersion}</p>\n\`\`\``);
       return;
     }
     if (scenario === "artifact-form") {

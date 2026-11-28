@@ -69,12 +69,18 @@ export default async function securityHeaders({ page, origin, step, shot }) {
   await shot("react-preview");
   await close();
 
-  for (const path of ["/settings", "/memory"]) {
-    await page.goto(origin + path);
+  const frameHeaders = {};
+  for (const path of ["/settings", "/memory", "/artifacts"]) {
+    const response = await page.goto(origin + path);
     await page.waitForLoadState("load");
+    const headers = await response.allHeaders();
+    frameHeaders[path] = { status: response.status(), csp: headers["content-security-policy"] ?? null, xfo: headers["x-frame-options"] ?? null };
   }
+  const artifactsHeaders = frameHeaders["/artifacts"];
+  step("the Artifacts page sends frame-ancestors 'none' and X-Frame-Options DENY",
+    artifactsHeaders.status === 200 && artifactsHeaders.csp?.includes("frame-ancestors 'none'") && artifactsHeaders.xfo === "DENY", JSON.stringify(artifactsHeaders));
   const unexpected = violations.filter((violation) => !isControl(violation));
-  step("zero CSP violations on the chat, settings and memory pages and in the previews", unexpected.length === 0, JSON.stringify(unexpected));
+  step("zero CSP violations on the chat, settings, memory and artifacts pages and in the previews", unexpected.length === 0, JSON.stringify(unexpected));
 
   const probe = http.createServer((request, response) => {
     const target = new URL(request.url, "http://probe").searchParams.get("target");
@@ -87,7 +93,7 @@ export default async function securityHeaders({ page, origin, step, shot }) {
   const probeOrigin = `http://127.0.0.1:${probe.address().port}`;
   const framer = await page.context().newPage();
   try {
-    for (const [label, target] of [["the login page", "/login"], ["a chat page", `/c/${id}`], ["Settings", "/settings"], ["Memory", "/memory"]]) {
+    for (const [label, target] of [["the login page", "/login"], ["a chat page", `/c/${id}`], ["Settings", "/settings"], ["Memory", "/memory"], ["Artifacts", "/artifacts"]]) {
       await framer.goto(`${probeOrigin}/?target=${encodeURIComponent(target)}`);
       const urls = await eventually(
         () => Object.fromEntries(framer.frames().filter((frame) => frame !== framer.mainFrame()).map((frame) => [frame.name(), frame.url()])),
