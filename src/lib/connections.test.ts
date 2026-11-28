@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
+import dns from "node:dns/promises";
 import fs from "node:fs";
 import http from "node:http";
-import { registerHooks } from "node:module";
+import { registerHooks, syncBuiltinESMExports } from "node:module";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test, { after, before, type TestContext } from "node:test";
 import { removeMember } from "./admin-users";
+import { seedTestConnection } from "./connection-fixture";
 import { setModelHidden } from "./connections";
 import { getDb } from "./db";
 import { cachedCaps } from "./model-list";
@@ -215,6 +217,39 @@ test("another user's connection is not found in Community mode", async () => {
     asUser(ONE);
   }
   assert.equal((await list()).find((connection) => connection.id === openaiId)?.label, "Local");
+});
+
+test("a Community member can rename an unavailable provider without checking DNS", async (t) => {
+  const baseUrl = "https://provider-fixture.invalid/v1";
+  assert.ok(saveInstance(admin.id, { hostingMode: "community" }).ok);
+  const id = seedTestConnection(TWO, { baseUrl, apiKey: "fixture-provider-key", model: "fixture-model" });
+  const db = getDb().$client;
+  const savedCredentials = db.prepare("select base_url, api_key_ciphertext from provider_connections where id = ?");
+  const before = savedCredentials.get(id);
+  const lookup = t.mock.method(dns, "lookup", async () => { throw new Error("Fixture DNS unavailable"); });
+  syncBuiltinESMExports();
+  asUser(TWO);
+  try {
+    const rotated = await patch(id, { apiKey: "fixture-rotated-key" });
+    assert.equal(rotated.status, 400);
+    assert.deepEqual(rotated.json(), { error: "Use a public URL." });
+    assert.equal(lookup.mock.callCount(), 1, "changing credentials still checks the provider");
+    const moved = await patch(id, { baseUrl: "https://replacement-fixture.invalid/v1" });
+    assert.equal(moved.status, 400);
+    assert.equal(lookup.mock.callCount(), 1, "moving the endpoint still requires a fresh key first");
+
+    const renamed = await patch(id, { label: "Renamed fixture" });
+    assert.equal(renamed.status, 200, renamed.text);
+    assert.equal(renamed.json().label, "Renamed fixture");
+    assert.equal(lookup.mock.callCount(), 1, "a label edit does not resolve the provider");
+    assert.deepEqual(savedCredentials.get(id), before);
+  } finally {
+    lookup.mock.restore();
+    syncBuiltinESMExports();
+    db.prepare("delete from provider_connections where id = ?").run(id);
+    db.prepare("update instance_settings set hosting_mode = 'personal'").run();
+    asUser(ONE);
+  }
 });
 
 test("hiding a model on another user's connection writes nothing and answers not found", () => {

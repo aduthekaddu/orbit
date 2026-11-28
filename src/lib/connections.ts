@@ -8,7 +8,7 @@ import { getDb, urlHostLabel } from "./db";
 import { chats, hiddenModels, pendingConnection, providerConnections, user, userPreferences } from "./db/schema";
 import { DEFAULT_EFFORT, isEffort, type Effort } from "./effort";
 import { readEnv } from "./env";
-import { clearModelCaps, listModels, rememberModelCaps } from "./model-list";
+import { clearModelCaps, listModels, rememberModelCaps, type ListedModel } from "./model-list";
 import { getInstance } from "./instance-settings";
 import { checkProviderUrl, providerFetch } from "./net-guard";
 import { policyFor, type UserId, type Viewer } from "./policy";
@@ -147,13 +147,13 @@ function connectionWriteRefusal(viewer: Viewer, guarded: boolean) {
   return policy.guardsPrivateHosts && !guarded ? { ok: false, reason: "conflict" } as const : null;
 }
 
-async function checkModelsForSave(viewer: Viewer, connection: ProviderConnection, apiKey: string | undefined, redact: Redactor) {
+async function checkModelsForSave(viewer: Viewer, connection: ProviderConnection, apiKey: string, redact: Redactor) {
   const fetch = providerFetch(getInstance().hostingMode);
   if (fetch && !await checkProviderUrl(providerUrl(connection))) return REQUIRE_PUBLIC_URL;
   const guarded = fetch !== undefined;
   const refusal = connectionWriteRefusal(viewer, guarded);
   if (refusal) return refusal;
-  const models = apiKey ? await listModels(connection, apiKey, redact, { cache: false, fetch }) : null;
+  const models = await listModels(connection, apiKey, redact, { cache: false, fetch });
   return { ok: true, models, guarded } as const;
 }
 
@@ -210,21 +210,23 @@ export async function updateConnection(viewer: Viewer, id: string, patch: Connec
   }
   const nextSecrets = secretsOf(next, apiKey ?? "");
   if (redact.withCredentials(nextSecrets).text(next.label) !== next.label) return LABEL_HOLDS_CREDENTIAL;
-  const checked = await checkModelsForSave(viewer, next, apiKey, redact);
-  if (!checked.ok) return checked;
-  const refusal = connectionWriteRefusal(viewer, checked.guarded);
-  if (refusal) return refusal;
-  const { models } = checked;
+  // A label edit has no provider request. Credential writes, including moves, still validate before saving.
+  let models: ListedModel[] | null = null;
   if (apiKey) {
+    const checked = await checkModelsForSave(viewer, next, apiKey, redact);
+    if (!checked.ok) return checked;
+    const refusal = connectionWriteRefusal(viewer, checked.guarded);
+    if (refusal) return refusal;
     if (!getConnection(userId, id)) return { ok: false, reason: "not-found" };
-    if (!models) return { ok: false, reason: "unreachable" };
+    if (!checked.models) return { ok: false, reason: "unreachable" };
     if (redactFor(userId).withCredentials(nextSecrets).text(next.label) !== next.label) return LABEL_HOLDS_CREDENTIAL;
+    models = checked.models;
   }
   const { changes } = getDb()
     .update(providerConnections)
     .set({
       label: next.label,
-      ...(next.kind === "openai-compatible" ? { baseUrl: next.baseUrl } : {}),
+      ...(apiKey && next.kind === "openai-compatible" ? { baseUrl: next.baseUrl } : {}),
       ...(apiKey ? { apiKeyCiphertext: encryptSecret(apiKey) } : {}),
     })
     .where(and(

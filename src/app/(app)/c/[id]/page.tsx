@@ -44,7 +44,8 @@ export default async function ChatPage({
   const liveReplyId = active && selectedHead === active.promptId ? active.replyId : null;
   const restorePending = isDraft ? false : active ? liveReplyId !== null : selectedHead === saved.headId;
   const resolved = resolveChoice(session.user, chat ?? NOTHING_PINNED);
-  const canManageConnections = policyFor(getInstance().hostingMode).mayCreateConnection(session.user);
+  const { hostingMode } = getInstance();
+  const canManageConnections = policyFor(hostingMode).mayCreateConnection(session.user);
   const connections = publicConnections(session.user);
   if (!resolved.ok && repository.messages.length === 0) {
     let title = "Connect a provider";
@@ -75,6 +76,7 @@ export default async function ChatPage({
         choiceLevels={resolved.ok ? effortLevels(resolved.connection.kind, cachedCaps(resolved.connection.id, resolved.choice.model)) : null}
         connections={connections}
         canManageConnections={canManageConnections}
+        needsOwnConnection={hostingMode.kind === "community" && session.user.role === "member" && !resolved.ok && resolved.reason === "no-connection"}
         liveReplyId={liveReplyId}
         restorePending={restorePending}
       />

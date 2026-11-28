@@ -286,6 +286,26 @@ export default async function accounts({ page, origin, step, shot, mockUrl, seed
     await switchDialog(page, "Community", { pendingInvites: true, shotName: "switch-dialog" });
     for (const invite of await invites()) assert.equal((await request.delete(`${invitesUrl}/${invite.id}`)).status(), 200, "revoke the confirmation fixture invite");
     await page.reload();
+    await switchDialog(page, "Community", { confirm: true });
+    for (const [target, width] of [[desktopTeam, 1280], [team, 390]]) {
+      assert.equal((await target.goto(`${origin}${teamChat}`))?.status(), 200);
+      await target.locator('[data-message-role="assistant"]').getByText("pong", { exact: true }).waitFor();
+      const composer = target.getByPlaceholder("Ask anything", { exact: true });
+      const recover = target.getByRole("link", { name: "Add connection", exact: true });
+      const reason = target.getByText("Connect your own provider to keep chatting.", { exact: true });
+      const showsRecovery = await reason.isVisible() && await recover.isVisible() && await composer.isDisabled();
+      if (!step(`The existing Team chat shows Community connection recovery at ${width} pixels`, showsRecovery)) continue;
+      await fits(target, width, "Chat connection recovery");
+      const clip = await composer.locator("xpath=..").boundingBox();
+      assert.ok(clip, "the recovery composer has a visible box");
+      await shot(`team-chat-needs-connection-${width}`, target, { clip });
+      await recover.click();
+      await target.waitForURL((url) => url.pathname === "/settings" && url.hash === "#connections");
+      const connections = target.getByRole("region", { name: "Connections", exact: true });
+      await connections.getByRole("button", { name: "Add", exact: true }).click();
+      step(`Recovery opens the member's Add connection form at ${width} pixels`, await target.getByRole("dialog", { name: "Add connection", exact: true }).isVisible());
+    }
+    await switchDialog(page, "Team", { confirm: true });
     await hostingMode("Personal", 409);
     step("Personal asks nothing first", await page.getByRole("dialog").count() === 0);
     await page.getByRole("alert").filter({ hasText: "Remove other accounts first." }).waitFor();

@@ -28,6 +28,7 @@ export function ChatPanel({
   choiceLevels = null,
   connections,
   canManageConnections,
+  needsOwnConnection = false,
   liveReplyId = null,
   restorePending = true,
 }: {
@@ -40,6 +41,7 @@ export function ChatPanel({
   choiceLevels?: Effort[] | null;
   connections: PickableConnection[];
   canManageConnections: boolean;
+  needsOwnConnection?: boolean;
   liveReplyId?: string | null;
   restorePending?: boolean;
 }) {
@@ -157,7 +159,7 @@ export function ChatPanel({
                   known={resolvedChoice && { connectionId: resolvedChoice.connectionId, model: resolvedChoice.model, levels: choiceLevels }}
                   onChoose={setPicked}
                 >
-                  <Thread ready={choice !== null} focusMessageId={focusMessageId} hasHistory={initialHistory.messages.length > 0} />
+                  <Thread ready={choice !== null} needsOwnConnection={needsOwnConnection} focusMessageId={focusMessageId} hasHistory={initialHistory.messages.length > 0} />
                 </ModelChoiceProvider>
               </ArtifactWorkspace>
             </StoppedRunSync>
