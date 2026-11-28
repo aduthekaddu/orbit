@@ -6,6 +6,14 @@ import { cleanMemoryText, deleteMemory, MemoryRejected, saveMemory, type MemoryK
 
 export type MemorySource = { chatId: string | null; messageId: string | null };
 
+/** What remember returns when SQLite would not save the memory, as opposed to a memory the model got wrong. */
+export const MEMORY_STORAGE_FAILURE = "Could not save memory";
+const storageFailureSchema = z.object({ error: z.literal(MEMORY_STORAGE_FAILURE) });
+
+export function memoryStorageFailed(output: unknown): boolean {
+  return storageFailureSchema.safeParse(output).success;
+}
+
 const kindSchema = z.enum(["fact", "preference", "summary"]);
 
 function isForeignKey(error: unknown): boolean {
@@ -48,10 +56,10 @@ export function rememberFact(
       return { id: memory.id, text: redact ? redact.text(memory.text) : memory.text };
     } catch (error) {
       if (error instanceof MemoryRejected) return { error: error.message };
-      if (!isForeignKey(error)) return { error: "Could not save memory" };
+      if (!isForeignKey(error)) return { error: MEMORY_STORAGE_FAILURE };
     }
   }
-  return { error: "Could not save memory" };
+  return { error: MEMORY_STORAGE_FAILURE };
 }
 
 export function createRememberTool(userId: UserId, source: MemorySource = { chatId: null, messageId: null }, redact?: Redactor) {

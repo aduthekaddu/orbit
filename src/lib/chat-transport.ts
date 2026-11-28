@@ -31,6 +31,17 @@ function plainRefusals(send: typeof fetch): typeof fetch {
   };
 }
 
+// Waits for `pending` unless `signal` aborts first, and then rejects with the abort reason the way fetch does.
+function unlessAborted(pending: Promise<void> | undefined, signal: AbortSignal | null | undefined): Promise<void> {
+  if (!pending || !signal) return pending ?? Promise.resolve();
+  return new Promise<void>((resolve, reject) => {
+    const stop = () => reject(signal.reason);
+    if (signal.aborted) return stop();
+    signal.addEventListener("abort", stop, { once: true });
+    pending.then(resolve, reject).finally(() => signal.removeEventListener("abort", stop));
+  });
+}
+
 export function orbitChatTransport(
   chatId: string,
   options?: {
@@ -44,13 +55,21 @@ export function orbitChatTransport(
     onSend?: () => void;
     onReconnectResponse?: (status: number) => void;
     onServerTime?: (serverTime: number) => void;
+    // A draft's first send carries the tools it turned off. A saved chat returns undefined, since the server reads the row.
+    disabledTools?: () => string[] | undefined;
+    // Awaited before the request leaves, so a tools save still in flight applies to this reply. Stop ends the wait,
+    // and the request never leaves. A saved chat's body carries no tools list, so the wait can follow its body.
+    beforeSend?: () => Promise<void>;
   },
 ) {
   return new OrbitChatTransport({
     api: options?.api ?? "/api/chat",
     headers: options?.headers,
     fetch: plainRefusals(async (input, init) => {
-      if (init?.method !== "GET") options?.onSend?.();
+      if (init?.method !== "GET") {
+        await unlessAborted(options?.beforeSend?.(), init?.signal);
+        options?.onSend?.();
+      }
       const response = await (options?.fetch ?? fetch)(input, init);
       if (!init?.signal?.aborted) {
         if (response.ok) {
@@ -80,6 +99,7 @@ export function orbitChatTransport(
         messageId,
         editMessageId: trigger === "submit-message" ? options?.editMessageId?.() ?? undefined : undefined,
         modelChoice: options?.modelChoice?.() ?? undefined,
+        disabledTools: options?.disabledTools?.(),
       },
     }),
   });

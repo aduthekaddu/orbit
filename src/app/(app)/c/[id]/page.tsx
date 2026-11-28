@@ -6,7 +6,7 @@ import { getModelDefaults } from "@/lib/connections";
 import { effortLevels } from "@/lib/effort";
 import { getInstance } from "@/lib/instance-settings";
 import { cachedCaps } from "@/lib/model-list";
-import { chatExists, getChatForUser, messageRepository } from "@/lib/messages";
+import { chatExists, getChatForUser, messageRepository, parseDisabledTools } from "@/lib/messages";
 import { NOTHING_PINNED, resolveChoice } from "@/lib/model-choice";
 import { policyFor } from "@/lib/policy";
 import { artifactHistory } from "@/lib/artifacts/history";
@@ -15,6 +15,7 @@ import { requireUser } from "@/lib/session";
 import { publicConnections } from "@/lib/request-redactor";
 import { focusedHead, toRepository } from "@/lib/chat-tree";
 import { findActiveReplyRun } from "@/lib/reply-runs";
+import { listToolViews } from "@/lib/tools/status";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,9 @@ export default async function ChatPage({
       </div>
     );
   }
+  const availableTools = listToolViews(session.user)
+    .filter((tool) => tool.setup.state === "ready" && tool.toggleable)
+    .map((tool) => ({ id: tool.id, label: tool.label }));
   return (
     <div className="min-h-0 flex-1">
       <ChatPanel
@@ -79,6 +83,8 @@ export default async function ChatPage({
         needsOwnConnection={hostingMode.kind === "community" && session.user.role === "member" && !resolved.ok && resolved.reason === "no-connection"}
         liveReplyId={liveReplyId}
         restorePending={restorePending}
+        availableTools={availableTools}
+        initialDisabledTools={chat ? parseDisabledTools(chat.disabledTools) : []}
       />
     </div>
   );

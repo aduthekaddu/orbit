@@ -4,7 +4,7 @@ import { Fragment, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { Command, defaultFilter } from "cmdk";
-import { BrainIcon, ChatCircleIcon, GearSixIcon, MagnifyingGlassIcon, NotePencilIcon, ShieldCheckIcon } from "@phosphor-icons/react";
+import { BrainIcon, ChatCircleIcon, GearSixIcon, MagnifyingGlassIcon, NotePencilIcon, ShieldCheckIcon, WrenchIcon } from "@phosphor-icons/react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ScrollFade } from "@/components/ui/scroll-fade";
 import { chatLabel, type ChatSummary } from "@/components/chat/chat-row-menu";
@@ -122,6 +122,10 @@ export function CommandPalette({
                 <Command.Item value="Memory" onSelect={() => run(() => router.push("/memory"))} className={itemClass}>
                   <BrainIcon weight="light" className="size-4" />
                   Memory
+                </Command.Item>
+                <Command.Item value="Tools" onSelect={() => run(() => router.push("/tools"))} className={itemClass}>
+                  <WrenchIcon weight="light" className="size-4" />
+                  Tools
                 </Command.Item>
                 {role === "admin" ? (
                   <Command.Item value="Admin" onSelect={() => run(() => router.push("/admin"))} className={itemClass}>

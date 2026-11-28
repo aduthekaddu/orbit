@@ -30,6 +30,8 @@ export type GithubSettings = StoredCredentials & { githubToken: string; githubMc
 export type McpToolSet = {
   tools: Record<string, Tool>;
   close: () => Promise<void>;
+  /** The safe githubFailureText of a connection that failed to open. */
+  error?: string;
 };
 
 type ListPage = Awaited<ReturnType<MCPClient["listTools"]>>;
@@ -535,8 +537,9 @@ export async function openGithubTurn(
   } catch (error) {
     if (signal?.aborted) throw error;
     const redact = options?.redact ?? new Redactor(settings);
-    redact.logError("github tools unavailable", githubFailureText(error, redact));
-    return emptySet();
+    const failure = githubFailureText(error, redact);
+    redact.logError("github tools unavailable", failure);
+    return { ...emptySet(), error: failure };
   }
 }
 

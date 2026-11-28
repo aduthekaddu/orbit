@@ -168,24 +168,30 @@ export function writeVectors(rows: { rowid: number; text: string; vector: number
   run.immediate(rows);
 }
 
+/** Full-text matches for recall. A broken memories_fts reads as no match, so recall still answers. */
 export function textMatchIds(userId: UserId, query: string, limit = 20): string[] {
-  const match = toOrMatchQuery(query.trim());
-  if (!match) return [];
   try {
-    const rows = getDb().$client
-      .prepare(
-        `SELECT memories.id AS id
-         FROM memories_fts
-         JOIN memories ON memories.rowid = memories_fts.rowid
-         WHERE memories.user_id = ? AND memories_fts MATCH ?
-         ORDER BY bm25(memories_fts)
-         LIMIT ?`,
-      )
-      .all(userId, match, limit) as { id: string }[];
-    return rows.map((row) => row.id);
+    return textMatchIdsOrThrow(userId, query, limit);
   } catch {
     return [];
   }
+}
+
+/** Full-text matches that throw when memories_fts is broken, so the Memory check can see it. */
+export function textMatchIdsOrThrow(userId: UserId, query: string, limit = 20): string[] {
+  const match = toOrMatchQuery(query.trim());
+  if (!match) return [];
+  const rows = getDb().$client
+    .prepare(
+      `SELECT memories.id AS id
+       FROM memories_fts
+       JOIN memories ON memories.rowid = memories_fts.rowid
+       WHERE memories.user_id = ? AND memories_fts MATCH ?
+       ORDER BY bm25(memories_fts)
+       LIMIT ?`,
+    )
+    .all(userId, match, limit) as { id: string }[];
+  return rows.map((row) => row.id);
 }
 
 // L2 distance between nomic vectors made with the task prefixes in embed.ts. 0.97 is cosine similarity 0.53.

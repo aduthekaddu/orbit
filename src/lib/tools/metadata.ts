@@ -92,3 +92,43 @@ export function summaryFor(name: string, run: ToolRun): string {
   const phrase = definition.said?.[run.status] ?? definition.title;
   return typeof phrase === "function" ? phrase(run) : phrase;
 }
+
+export const TOOL_IDS = ["web_search", "run_code", "github", "memory", "render_ui"] as const;
+export type ToolId = (typeof TOOL_IDS)[number];
+
+export const TESTABLE_TOOL_IDS = ["web_search", "run_code", "github", "memory"] as const;
+export type TestableToolId = (typeof TESTABLE_TOOL_IDS)[number];
+
+export const TOGGLEABLE_TOOL_IDS = ["web_search", "run_code", "github", "memory"] as const;
+export type ToggleableToolId = (typeof TOGGLEABLE_TOOL_IDS)[number];
+
+export type ToolScope = "instance" | "personal" | "built-in";
+
+export type ToolCatalogEntry = { id: ToolId; label: string; scope: ToolScope; testable: boolean; toggleable: boolean };
+
+export const TOOL_CATALOG: Record<ToolId, ToolCatalogEntry> = {
+  web_search: { id: "web_search", label: "Web search", scope: "instance", testable: true, toggleable: true },
+  run_code: { id: "run_code", label: "Code sandbox", scope: "instance", testable: true, toggleable: true },
+  github: { id: "github", label: "GitHub", scope: "personal", testable: true, toggleable: true },
+  memory: { id: "memory", label: "Memory", scope: "personal", testable: true, toggleable: true },
+  render_ui: { id: "render_ui", label: "Generated UI", scope: "built-in", testable: false, toggleable: false },
+};
+
+const MODEL_TOOL_OWNERS: Record<string, ToolId> = { web_search: "web_search", run_code: "run_code", remember: "memory", forget: "memory", render_ui: "render_ui" };
+
+/** The tool that owns a model tool name, or null for a name Orbit does not give the model. */
+export function toolIdFor(modelToolName: string): ToolId | null {
+  if (modelToolName.startsWith("github_")) return "github";
+  return Object.hasOwn(MODEL_TOOL_OWNERS, modelToolName) ? MODEL_TOOL_OWNERS[modelToolName] : null;
+}
+
+export const MCP_DISABLED_PATTERN = /^mcp:[A-Za-z0-9_-]{1,80}$/;
+
+/** A chat may turn off a switchable tool or, from Slice 23, an MCP server. Generated UI stays on. */
+export function isDisabledToolEntry(value: string): boolean {
+  return (TOGGLEABLE_TOOL_IDS as readonly string[]).includes(value) || MCP_DISABLED_PATTERN.test(value);
+}
+
+export function normalizeDisabledTools(values: readonly string[]): string[] {
+  return [...new Set(values.filter(isDisabledToolEntry))].sort();
+}

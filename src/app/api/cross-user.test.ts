@@ -29,6 +29,9 @@ const memberChat = "member-chat";
 const canary = "accountsisolationcanary";
 const memberModel = "member-model";
 const provider = "https://fixture.invalid/v1";
+const adminTavilyKey = crypto.randomUUID();
+const adminGithubToken = crypto.randomUUID();
+const adminSearxng = "https://search.example";
 
 type Handler = (request: Request, context: { params: Promise<Record<string, string>> }) => Response | Promise<Response>;
 type Spec = { route: string; method: string; status: number; params?: Record<string, string>; query?: string; input?: object; body?: unknown; reaches?: boolean; turn?: boolean };
@@ -79,8 +82,8 @@ before(async () => {
     sqlite.prepare("INSERT INTO chats(id, user_id, title, created_at, updated_at) VALUES (?, ?, 'New chat', 1, 1)").run(chat, account.viewer.id);
     subjects.set(kind, { ...account, chat, connection: seedTestConnection(account.viewer.id, { baseUrl: provider, apiKey: crypto.randomUUID(), model: memberModel }) });
   }
-  assert.ok(saveInstance(admin, { searxngUrl: "https://search.example", tavilyApiKey: crypto.randomUUID() }).ok);
-  assert.ok(saveGithub(admin, { githubToken: crypto.randomUUID() }).ok);
+  assert.ok(saveInstance(admin, { searxngUrl: adminSearxng, tavilyApiKey: adminTavilyKey }).ok);
+  assert.ok(saveGithub(admin, { githubToken: adminGithubToken }).ok);
   savePreferences(admin, { theme: "light", memory: "off" });
   sqlite.prepare("INSERT INTO pending_connection VALUES (1, ?, ?, 'pending-model', 'low', 0)").run(provider, encryptSecret(crypto.randomUUID()));
   sqlite.prepare("INSERT INTO chats(id, user_id, title, created_at, updated_at, head_id) VALUES (?, ?, ?, 1, 1, ?)").run(adminChat, admin, "Admin private title", adminReply);
@@ -120,7 +123,7 @@ function routeRequest(spec: Omit<Spec, "status">, cookie?: string) {
 }
 
 function snapshot(id: UserId) {
-  const direct = ["account", "session", "chats", "provider_connections", "hidden_models", "memories", "memory_runs", "user_github", "user_preferences"];
+  const direct = ["account", "session", "chats", "provider_connections", "hidden_models", "memories", "memory_runs", "tool_status", "user_github", "user_preferences"];
   return {
     owned: direct.map((table) => sqlite.prepare(`SELECT * FROM ${table} WHERE user_id = ? ORDER BY rowid`).all(id)),
     user: sqlite.prepare("SELECT * FROM user WHERE id = ?").get(id),
@@ -277,6 +280,7 @@ async function crossUserMatrix(t: TestContext, mode: HostingMode, round: number)
     { route: "chats", method: "POST", status: 201 },
     { route: "chats/[id]", method: "GET", status: 404, params: { id: adminChat } },
     { route: "chats/[id]", method: "PATCH", status: 404, params: { id: adminChat }, input: { title: "New title" } },
+    { route: "chats/[id]", method: "PATCH", status: 404, params: { id: adminChat }, input: { toolsOff: ["web_search"], toolsOn: ["memory"] } },
     { route: "chats/[id]", method: "DELETE", status: 404, params: { id: adminChat } },
     ...[adminChat, subject.chat].map((id) => ({ route: "chats/[id]/messages/[messageId]", method: "PATCH", status: 404, params: { id, messageId: adminReply }, input: { text: "New reply" } })),
     ...["", `?replyId=${adminReply}`].map((query) => ({ route: "chats/[id]/stream", method: "GET", status: 404, params: { id: adminChat }, query })),
@@ -293,6 +297,11 @@ async function crossUserMatrix(t: TestContext, mode: HostingMode, round: number)
     { route: "connections/[id]", method: "DELETE", status: manages ? 404 : 403, params: { id: adminConnection } },
     { route: "connections/[id]/models", method: "GET", status: sharedStatus, reaches: shared, params: { id: adminConnection } },
     { route: "connections/[id]/hidden-models", method: "PUT", status: sharedStatus, params: { id: adminConnection }, input: { modelId: "admin-model", hidden: true } },
+    { route: "tools", method: "GET", status: 200 },
+    { route: "tools/[id]", method: "GET", status: 200, params: { id: "web_search" } },
+    { route: "tools/[id]", method: "GET", status: 200, params: { id: "github" }, body: { id: "github", setup: { state: "missing", configure: "self" }, instruction: null, tools: [] } },
+    { route: "tools/[id]/test", method: "POST", status: 409, params: { id: "github" }, body: { error: "Add a GitHub token." } },
+    { route: "tools/[id]/test", method: "POST", status: 400, params: { id: "render_ui" } },
     {
       route: "chat", method: "POST", status: sharedStatus, reaches: shared, turn: shared,
       input: { ...chatBody(subject.chat, "shared-prompt", `Where is ${canary}?`), modelChoice: { connectionId: adminConnection, model: "admin-model", effort: "medium" } },
@@ -321,6 +330,8 @@ async function crossUserMatrix(t: TestContext, mode: HostingMode, round: number)
     return new Response(chunks.join("") + "data: [DONE]\n\n", { headers: { "content-type": "text/event-stream" } });
   });
 
+  // The admin's own tool status, which no member route may read or change.
+  sqlite.prepare("INSERT OR REPLACE INTO tool_status (user_id, tool_id, last_ok_at) VALUES (?, 'web_search', ?)").run(admin.viewer.id, 1_000 + round);
   const before = snapshot(admin.viewer.id);
   const adminRead = await routeRequest({ route: "admin/settings", method: "GET" }, admin.cookie);
   assert.equal(adminRead.status, 200);
@@ -355,6 +366,15 @@ async function crossUserMatrix(t: TestContext, mode: HostingMode, round: number)
         if (shared) assert.deepEqual(Object.keys(body[0]).sort(), ["id", "kind", "label"], label);
       }
       if (spec.route === "connections" && spec.method === "POST" && spec.status === 201) assert.equal(sqlite.prepare("SELECT user_id FROM provider_connections WHERE id = ?").pluck().get(body.id), member, label);
+      if (spec.route === "tools" && spec.method === "GET") {
+        assert.deepEqual(body.tools.map((tool: { id: string }) => tool.id), ["web_search", "run_code", "github", "memory", "render_ui"], label);
+        const search = body.tools[0];
+        assert.deepEqual({ status: search.status, health: search.health, configureHref: search.configureHref }, { status: "untested", health: { state: "untested" }, configureHref: null }, label);
+      }
+      if (spec.route === "tools/[id]" && spec.params?.id === "web_search") assert.deepEqual(body.tools.map((tool: { name: string }) => tool.name), ["web_search"], label);
+      if (spec.route.startsWith("tools")) {
+        for (const secret of [adminTavilyKey, adminGithubToken, adminSearxng]) assert.equal(JSON.stringify(body).includes(secret), false, `${label} holds an admin secret`);
+      }
     }
     if (!spec.reaches) assert.equal(providerCalls, callsBefore, label);
     assert.deepEqual(snapshot(admin.viewer.id), afterAdmin, label);
@@ -372,6 +392,8 @@ async function crossUserMatrix(t: TestContext, mode: HostingMode, round: number)
   assert.equal(turns.length, taken + 1, "the member turn reached the provider");
   assertScopedTurn(turns.at(-1), shared ? "admin-model" : memberModel);
 
+  const githubRows = () => Number(sqlite.prepare("SELECT count(*) FROM tool_status WHERE user_id = ? AND tool_id = 'github'").pluck().get(member));
+  assert.equal(githubRows(), 1, "the member's check of the saved GitHub settings left a status row");
   const save = specs.find((spec) => spec.route === "settings" && spec.method === "PUT" && spec.status === 200);
   assert.ok(save);
   assert.equal((await routeRequest(save)).status, 401);
@@ -379,6 +401,7 @@ async function crossUserMatrix(t: TestContext, mode: HostingMode, round: number)
   assert.equal(saved.status, 200);
   assert.equal((await saved.json()).githubTokenSet, true);
   assert.deepEqual(snapshot(admin.viewer.id), afterAdmin);
+  assert.equal(githubRows(), 0, "a new GitHub token clears the status the old settings made");
 
   const removed = await routeRequest({ route: "admin/users/[id]", method: "DELETE", params: { id: member } }, admin.cookie);
   assert.equal(removed.status, 200);

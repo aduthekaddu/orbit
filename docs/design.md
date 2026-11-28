@@ -141,6 +141,16 @@ An artifact in a reply shows as a card (`src/components/chat/artifact-card.tsx`)
 
 `Figure` (`src/components/figure.tsx`) renders a hairline figure by name, `"dish"` for an empty chat, `"padlock"` on sign-in, `"plug"` when no provider is configured. It fills its parent's width at a 5:4 ratio, so size the parent. Plates are filled with `--hairline-plate`, which is the page color. On any other surface, set `--hairline-plate` on the parent to that surface's color. To add a figure, import it from `@lucasmarkes/hairline/react` and add it to the `figures` record.
 
+### Tools page
+
+`/tools` uses the settings page column: one `bg-card` card with a row per tool, in the order Web search, Code sandbox, GitHub, Memory, Generated UI. A row is one button that opens the tool's model definitions, holding a caret that turns 90°, the tool icon, the name, and the status: a 6px dot and **Working**, **Failing**, **Not tested**, **Off**, or **On**. On the right sit the last good call time in `num text-meta` and **Test**, or **Set up** for a tool the viewer can set up. Under 640px the row takes two lines, and every control is 44px.
+
+**Test** reads `Testing` with a busy `OrbitMark` while the check runs. It stays focusable with `aria-disabled`, so a keyboard user keeps their place, and a second press shows the wait message from the server. A pass shows one status line, such as `3 results · 142 ms`. A failure shows one `text-destructive` alert line with `WarningCircleIcon`. The open panel shows each model tool's name, description, and JSON Schema in a standalone `SyntaxHighlighter`, then the system instruction in a sunken well, and **Configure** when the viewer can change the tool's settings. A tool that is not set up reads `Not sent to the model`.
+
+### Composer tools
+
+**+** (`data-tools-trigger`) is a 32px round button before the model chip. A 6px sun dot on its corner and the label `Tools (N off)` mark a chat with tools turned off. It opens the same panel as a `Popover` on desktop and a `Sheet` under 48rem: one `Switch` per ready tool that can be turned off, named by its label, and a **Tools** link to `/tools`. Generated UI is never listed. A switch saves at once. When a save fails, the panel reads the chat back and shows the switches as the server holds them, so a save whose answer was lost keeps its change. If that change is not saved, or the chat cannot be read, the switch goes back and `Could not save tools.` shows inside the open panel. A draft keeps its switches in the page until its first send.
+
 ## json-render widgets
 
 A `render_ui` reply renders inline, as part of the answer. It has no run frame and no status word. `RenderUiPart` draws exactly one surface, `[data-genui]`: `bg-card`, `border`, `shadow-card`, `rounded-xl`, 16px padding (12px on phones), at most `max-w-chat`. Nothing inside it draws a border box or its own card. The only fills inside are the table header row, the status-tinted callout, and the sunken code well. Series take `--chart-1` onward in order. Code takes the `--syntax-*` tokens.

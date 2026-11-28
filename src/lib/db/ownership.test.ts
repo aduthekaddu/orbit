@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getDb } from "./index";
 
-const direct = ["account", "chats", "hidden_models", "memories", "memory_runs", "provider_connections", "session", "user_github", "user_preferences"];
+const direct = ["account", "chats", "hidden_models", "memories", "memory_runs", "provider_connections", "session", "tool_status", "user_github", "user_preferences"];
 const derived = [
   "memories_fts", "memories_fts_config", "memories_fts_data", "memories_fts_docsize", "memories_fts_idx",
   "memories_vec", "memories_vec_chunks", "memories_vec_info", "memories_vec_rowids", "memories_vec_vector_chunks00",
@@ -33,6 +33,7 @@ test("every SQLite table has an owner or a documented instance purpose, and user
       sqlite.prepare("INSERT INTO hidden_models (user_id, connection_id, model_id) VALUES (?, ?, 'model')").run(id, id);
       sqlite.prepare("INSERT INTO user_preferences (user_id, default_connection_id, updated_at) VALUES (?, ?, 1)").run(id, id);
       sqlite.prepare("INSERT INTO user_github (user_id, updated_at) VALUES (?, 1)").run(id);
+      sqlite.prepare("INSERT INTO tool_status (user_id, tool_id, last_ok_at) VALUES (?, 'web_search', 1)").run(id);
       sqlite.prepare("INSERT INTO chats (id, user_id, created_at, updated_at) VALUES (?, ?, 1, 1)").run(id, id);
       sqlite.prepare("INSERT INTO messages (id, chat_id, role, content, parts, position, created_at) VALUES (?, ?, 'user', ?, '[]', 0, 1)").run(id, id, `${id}message`);
       const memory = sqlite.prepare("INSERT INTO memories (id, user_id, kind, text, text_norm, source_chat_id, source_message_id, created_at) VALUES (?, ?, 'fact', ?, ?, ?, ?, 1)")

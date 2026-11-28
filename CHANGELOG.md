@@ -4,6 +4,8 @@ All notable changes to Orbit are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+- A new **Tools** page lists Web search, Code sandbox, GitHub, Memory, and Generated UI with their setup and health. **Test** makes one real call to a tool and shows the result count, login, exit code, or memory count, or a fixed error that never includes a key, token, or URL. Each row opens to the exact tool definitions and system instruction the model receives. Real chat tool calls and **Check** on saved GitHub settings keep the health current, and saving new settings resets it. **+** in the composer turns Web search, Code sandbox, GitHub, or Memory off for one chat, starting with the next reply. Turning Memory off also stops that chat from recalling saved notes. A draft keeps its switches until its first message, and the sidebar order does not change. (#286)
+
 - Community members can rename a saved connection while its provider is unavailable. When switching from Team to Community leaves a member’s existing chat without a connection, the composer links to their own connection settings. (#281)
 
 - **Admin** now offers Personal, Team, and Community hosting. Team members join by invite and choose their own default model from shared connections. Community members bring their own provider keys and join by invite or open signup. Invite links expire after seven days. The admin can revoke pending invites and remove member accounts. Switching between Team and Community with other accounts present asks first, because it changes whose provider keys members use. Focus moves to the new invite link after Create invite, and to the next row after Revoke or Remove. Community provider connections require public HTTPS. (#281)
