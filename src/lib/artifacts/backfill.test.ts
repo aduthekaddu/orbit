@@ -192,3 +192,21 @@ test("a backfill masks each reply with its owner's credentials before it indexes
   assert.deepEqual(listArtifacts(USER, { q: key }).items, []);
   assert.deepEqual(JSON.parse(sqlite().prepare("SELECT parts FROM messages WHERE id = 'bf-secret-a'").pluck().get() as string), [{ type: "text", text: body }]);
 });
+
+test("a reply that cannot be rendered or masked never stops the backfill, and the pass still indexes the rest", (t) => {
+  sqlite().exec("UPDATE instance_settings SET artifacts_backfilled_at = NULL");
+  chat("bf-deep");
+  legacy("bf-deep", "bf-deep-p", "user", null, "Quote it");
+  // Too deeply nested for the markdown renderer.
+  legacy("bf-deep", "bf-deep-a", "assistant", "bf-deep-p", `${"> ".repeat(3_500)}\`\`\`html\n<h1>Deep</h1>\n\`\`\``);
+  // Valid JSON nested too deeply to mask.
+  const nested = `${"[".repeat(20_000)}${"]".repeat(20_000)}`;
+  legacy("bf-deep", "bf-nested-a", "assistant", "bf-deep-p", "```html\n<h1>Nested</h1>\n```", `[{"type":"text","text":"\`\`\`html\\n<h1>Nested</h1>\\n\`\`\`"},{"type":"tool-run","output":${nested}}]`);
+  legacy("bf-deep", "bf-after-a", "assistant", "bf-deep-p", "```html\n<title>After deep</title>\n```");
+  t.mock.method(console, "warn", () => {});
+  const result = backfillArtifacts({ lockDir: lockDir() });
+  assert.equal(result.skipped, false);
+  assert.notEqual(stamp(), null);
+  const indexed = new Set(rows().map((row) => row.messageId));
+  assert.deepEqual([indexed.has("bf-deep-a"), indexed.has("bf-nested-a"), indexed.has("bf-after-a")], [false, false, true]);
+});

@@ -119,6 +119,16 @@ test("a credential split by tags in the code never comes back whole or in part i
   assert.equal(edited.derivedTitle.includes(key.slice(0, 5)), false);
 });
 
+test("a reply nested too deep to render saves, with rows for the parts that render", () => {
+  const deep = `${"> ".repeat(3_500)}\`\`\`html\n<h1>Deep</h1>\n\`\`\``;
+  const chat = newChat();
+  send(chat, [prompt("deep-p")], "deep-a", [text(deep), text(html("After"))]);
+  assert.equal(sqlite().prepare("SELECT count(*) FROM messages WHERE id = 'deep-a'").pluck().get(), 1);
+  assert.deepEqual(rows("deep-a").map((row) => [row.textOrdinal, row.blockIndex, row.derivedTitle]), [[1, 0, "After"]]);
+  assert.equal(updateMessageText(chat, "deep-a", deep, redact, 1), true);
+  assert.deepEqual(rows("deep-a"), []);
+});
+
 test("a failed artifact write rolls back the reply and the edit that carried it", () => {
   const chat = newChat();
   sqlite().exec("CREATE TEMP TRIGGER artifacts_refuse BEFORE INSERT ON main.artifacts BEGIN SELECT RAISE(ABORT, 'artifact write refused'); END");

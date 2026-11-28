@@ -129,3 +129,11 @@ test("extraction matches the chat renderer's block numbers, languages, and code 
     assert.deepEqual(extracted, rendered(markdown), markdown);
   }
 });
+
+test("a text part nested too deep to render holds no artifacts, the chat renders no card for it, and later parts keep their keys", () => {
+  for (const depth of [3_500, 20_000]) {
+    const deep = `${"> ".repeat(depth)}\`\`\`html\n<h1>Deep</h1>\n\`\`\``;
+    assert.throws(() => rendered(deep), RangeError, `the chat renderer cannot render ${depth} nested quotes either`);
+    assert.deepEqual(slots([text(deep), text("```html\n<h1>After</h1>\n```")]), [{ textOrdinal: 1, blockIndex: 0, artifactPosition: 0, kind: "html", language: "html" }], `${depth} nested quotes`);
+  }
+});
