@@ -146,6 +146,20 @@ PASS session ends after Sign out
 
 Screenshots: `confirm.png`, `network-error.png`, `http-error.png`, `signed-out.png`.
 
+### invite-invalid
+
+Switches the sandbox to Community with invite-only signup, then with open signup. A signed-out browser opens `/invite/<unknown token>` at 1280 and 390 pixels. Checks that **Sign in** and, with open signup, **Create account** start at the heading's left edge within 1 pixel. Ends on Personal.
+
+Pass lines:
+
+```
+PASS invite-only at 1280px: Sign in lines up with the heading
+PASS invite-only at 1280px: no Create account link
+PASS open-signup at 390px: Create account lines up with the heading
+```
+
+Screenshots: `invite-only-1280.png`, `invite-only-390.png`, `open-signup-1280.png`, `open-signup-390.png`.
+
 ### auth-submit
 
 Clears cookies, opens `/login`, fails one sign-in to check that editing clears the error, then stalls navigation to `/` and checks that **Sign in** stays disabled right after success even if a field is edited while navigation is pending, and re-enables when navigation stalls past the reset timeout. Then clears the intercepts and signs in to open a chat.
