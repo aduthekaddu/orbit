@@ -127,7 +127,7 @@ test("the list filters by kind and searches the owner's artifacts only", async (
 
 test("the list refuses a bad kind, cursor, or query with 400", async () => {
   signIn(ME);
-  for (const query of ["?kind=python", "?cursor=abc", "?cursor=1", "?cursor=1:2:3", "?cursor=-1:2", `?cursor=${"1".repeat(100)}:${"2".repeat(28)}`, `?q=${"a".repeat(501)}`]) {
+  for (const query of ["?kind=python", "?cursor=abc", "?cursor=1", "?cursor=1:2:3", "?cursor=-1:2", `?cursor=${"1".repeat(100)}:${"2".repeat(28)}`, `?q=${"a".repeat(501)}`, "?q=Counter%00x", "?q=a%01b", "?q=a%0Ab", "?q=a%7Fb"]) {
     assert.equal((await list.GET(listUrl(query))).status, 400, query);
   }
 });
