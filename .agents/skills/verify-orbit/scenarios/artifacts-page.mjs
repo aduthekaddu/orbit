@@ -31,6 +31,8 @@ const UI = {
   empty: "No artifacts",
   noMatch: "No matching artifacts",
   notFound: "Artifact not found",
+  refreshFailed: "Could not refresh artifacts",
+  fold: (scope) => scope.getByRole("button", { name: /unchanged lines?$/ }),
   deleteToast: (page) => page.getByRole("status").filter({ hasText: "Chat deleted" }),
 };
 const UI_WAIT = 5_000;
@@ -140,6 +142,39 @@ export default async function artifactsPage({ page, origin, step, shot, signInMe
     const found = /Version \d+/.exec(text)?.[0];
     if (!found) throw new Error(`reply ${messageId} holds no Version line`);
     return found;
+  }
+  // Resolves once the browser has finished or dropped `request`.
+  function whenDone(request) {
+    return new Promise((resolve) => {
+      const done = (settled) => {
+        if (settled !== request) return;
+        page.off("requestfinished", done);
+        page.off("requestfailed", done);
+        resolve();
+      };
+      page.on("requestfinished", done);
+      page.on("requestfailed", done);
+    });
+  }
+  // Two frames after an answer is in, so the page has applied it.
+  const painted = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  // Holds each matching request until the scenario releases it. With `answerFirst` the server answers at once and
+  // only its answer waits, like a reply already on its way when something else happens.
+  async function hold(pattern, matches, { answerFirst = false } = {}) {
+    const held = [];
+    const handler = async (route) => {
+      if (!matches(route.request())) return route.continue();
+      const entry = { request: route.request(), done: whenDone(route.request()), answered: false };
+      const gate = new Promise((resolve) => { entry.release = resolve; });
+      held.push(entry);
+      const response = answerFirst ? await route.fetch().catch(() => null) : null;
+      entry.answered = true;
+      await gate;
+      // The page may have dropped the request meanwhile.
+      await (response ? route.fulfill({ response }) : route.continue()).catch(() => null);
+    };
+    await page.route(pattern, handler);
+    return { held, stop: () => page.unroute(pattern, handler) };
   }
   const previewShows = (text, frameOf = iframe) => need(frameOf.contentFrame().getByText(text, { exact: true }), `preview showing ${text}`, 10_000);
   const query = (name, url = page.url()) => new URL(url).searchParams.get(name);
@@ -359,6 +394,121 @@ export default async function artifactsPage({ page, origin, step, shot, signInMe
     await page.goto(`${origin}/artifacts?id=not-a-real-id`);
     await need(library.getByText(UI.notFound, { exact: true }), UI.notFound);
     step("an unknown ?id= says Artifact not found", true);
+  });
+
+  await section("the library follows other tabs and ignores late answers", async () => {
+    const chatId = await newChat();
+    const first = await send("[qa:artifact-version]");
+    await reply.getByRole("button", { name: "Regenerate", exact: true }).click();
+    await reply.locator("[data-branch-picker]").getByText("2 / 2", { exact: true }).waitFor({ timeout: REPLY_WAIT });
+    const second = await settled();
+    // Long enough that Diff folds the unchanged lines around the one that differs.
+    const longPage = (marker) => ["```html", "<title>Counter</title>", ...Array.from({ length: 12 }, (_, i) => `<p>Head ${i + 1}</p>`), `<p>${marker}</p>`, ...Array.from({ length: 12 }, (_, i) => `<p>Tail ${i + 1}</p>`), "```"].join("\n");
+    const edit = async (messageId, marker) => json(await page.request.patch(`${origin}/api/chats/${chatId}/messages/${messageId}`, { data: { text: longPage(marker) } }), `PATCH message ${messageId}`);
+    await edit(first, "Edit one");
+    await edit(second, "Edit two");
+    const stored = await chatArtifacts(chatId);
+    const [v1, v2] = [stored[`${first}.0.0`], stored[`${second}.0.0`]];
+    if (!v1 || !v2 || v1.lineageId !== v2.lineageId) throw new Error(`no two-version lineage: ${JSON.stringify(Object.keys(stored))}`);
+
+    await page.goto(`${origin}/artifacts?id=${encodeURIComponent(v2.id)}`);
+    await previewShows("Edit two");
+    await UI.version(library, 1).click();
+    await previewShows("Edit one");
+    await UI.version(library, 2).click();
+    await previewShows("Edit two");
+
+    // Another tab edits v1 and renames the lineage, while this page holds both versions from before.
+    await edit(first, "Edit three");
+    await UI.version(library, 1).click();
+    const edited = await previewShows("Edit three").then(() => true, () => false);
+    step("a version edited in another tab shows its new code when opened again", edited);
+    const renamed = await page.request.patch(`${origin}/api/artifacts/${encodeURIComponent(v1.id)}`, { data: { title: "Elsewhere" } });
+    if (!renamed.ok()) throw new Error(`PATCH /api/artifacts/<v1> answered ${renamed.status()}`);
+    await UI.version(library, 2).click();
+    const retitled = await need(UI.title(library).getByText("Elsewhere", { exact: true }), "Elsewhere in the detail header").then(() => true, () => false);
+    step("a rename from another tab shows on a version opened before it", retitled, await UI.title(library).innerText());
+    await UI.tab(library, "Diff").click();
+    const diff = await need(UI.diffPanel(library), "Diff tab panel in the library");
+    const based = await need(UI.diffLines(diff, "removed").getByText("Edit three", { exact: false }), "Edit three removed in the diff").then(() => true, () => false);
+    step("Diff compares with the base version's code as edited in another tab", based, JSON.stringify(await UI.diffLines(diff, "removed").allInnerTexts()));
+
+    const fold = UI.fold(diff).first();
+    await need(fold, "a folded run of unchanged lines");
+    await fold.focus();
+    await page.keyboard.press("Enter");
+    const kept = await eventually(() => diff.evaluate((node) => document.activeElement !== document.body && node.contains(document.activeElement)), Boolean, { timeoutMs: UI_WAIT, what: "focus inside the diff after the fold opens" }).then(() => true, () => false);
+    step("Enter on a fold opens it and keeps focus in the diff", kept, await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 80) ?? "none"));
+    await shot("fold-focus");
+
+    // An answer to an earlier search lands during the wait before the next search is sent.
+    const searches = await hold(/\/api\/artifacts\?/, (request) => ["zzqlate", "Counter"].includes(new URL(request.url()).searchParams.get("q")));
+    try {
+      const search = await need(UI.search(library), "artifact search field");
+      await search.fill("zzqlate");
+      const older = await eventually(() => searches.held.find((entry) => new URL(entry.request.url()).searchParams.get("q") === "zzqlate"), Boolean, { timeoutMs: UI_WAIT, what: "the zzqlate search to be sent" });
+      await search.fill("Counter");
+      older.release();
+      await older.done;
+      await painted();
+      const leaked = await library.getByText(UI.noMatch, { exact: true }).isVisible();
+      step("an answer to an older search never shows under the newer one", !leaked, leaked ? `${UI.noMatch} shows while the search reads Counter` : "");
+      const newer = await eventually(() => searches.held.find((entry) => new URL(entry.request.url()).searchParams.get("q") === "Counter"), Boolean, { timeoutMs: UI_WAIT, what: "the Counter search to be sent" });
+      newer.release();
+      const counterRows = await listedRows(library);
+      step("the newer search then shows its own rows", counterRows.length > 0 && counterRows.every((text) => !text.includes(UI.noMatch)), JSON.stringify(counterRows));
+      await search.fill("");
+    } finally {
+      await searches.stop();
+    }
+
+    // A detail answer already on its way when the source chat is deleted and the page refreshes.
+    await page.goto(`${origin}/artifacts?id=${encodeURIComponent(v2.id)}`);
+    await previewShows("Edit two");
+    const details = await hold(`${origin}/api/artifacts/${encodeURIComponent(v1.id)}`, () => true, { answerFirst: true });
+    try {
+      await UI.version(library, 1).click();
+      const late = await eventually(() => details.held.find((entry) => entry.answered), Boolean, { timeoutMs: UI_WAIT, what: "the server to answer the v1 detail" });
+      const sidebar = page.locator("aside").filter({ has: page.getByRole("button", { name: "New chat" }) }).first();
+      const link = sidebar.locator(`a[href="/c/${chatId}"]`);
+      await link.hover();
+      await link.locator("..").getByRole("button", { name: /^Actions for / }).click();
+      await page.getByRole("menuitem", { name: "Delete" }).click();
+      await need(UI.deleteToast(page), "Chat deleted toast");
+      await UI.deleteToast(page).waitFor({ state: "hidden", timeout: 15_000 });
+      await need(library.getByText(UI.notFound, { exact: true }), `${UI.notFound} after the delete`, 10_000);
+      late.release();
+      await late.done;
+      await painted();
+      const stillMissing = await library.getByText(UI.notFound, { exact: true }).isVisible();
+      step("a late answer for a deleted chat's artifact leaves Artifact not found", stillMissing, stillMissing ? "" : `the header reads ${await UI.title(library).innerText().catch(() => "nothing")}`);
+      await shot("late-detail");
+    } finally {
+      await details.stop();
+    }
+  });
+
+  await section("a failed artifact refresh shows while the panel is closed", async () => {
+    const chatId = await newChat();
+    await send("[qa:artifact-html]");
+    const refused = (route) => route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Refused" }) });
+    const rowsUrl = `${origin}/api/chats/${chatId}/artifacts`;
+    await page.route(rowsUrl, refused);
+    try {
+      await reply.getByRole("button", { name: "Edit code", exact: true }).click();
+      const editor = page.getByRole("textbox", { name: "Edit html block", exact: true });
+      await editor.fill((await editor.inputValue()).replace("Artifact HTML", "Artifact refreshed"));
+      await page.getByRole("button", { name: "Save", exact: true }).click();
+      await editor.waitFor({ state: "hidden" });
+    } finally {
+      await page.unroute(rowsUrl, refused);
+    }
+    const alert = page.getByRole("alert").filter({ hasText: UI.refreshFailed });
+    const shown = await alert.waitFor({ timeout: UI_WAIT }).then(() => true, () => false);
+    step("a failed artifact refresh shows in the chat while the panel is closed", shown && !await panel.isVisible(), `alert ${shown} panel ${await panel.isVisible()}`);
+    await shot("refresh-failed");
+    const cleared = shown && await UI.button(alert, "Retry").click().then(() => alert.waitFor({ state: "hidden", timeout: UI_WAIT })).then(() => true, () => false);
+    step("Retry reloads the rows and clears the alert", cleared);
   });
 
   await section("deleting a chat removes its artifacts", async () => {
