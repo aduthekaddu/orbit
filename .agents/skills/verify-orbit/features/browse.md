@@ -191,17 +191,19 @@ Screenshots: `composer.png`, `page.png`.
 
 ### thread-first-paint
 
-Sends one `[qa:plain]` prompt, then opens that chat and a new empty chat with the `/_next/static/chunks/**` scripts held, so the page shows its server HTML. It records each DOM change, releases the scripts, and waits for hydration. It runs at 1280×800 and again on a 390×844 touch screen with the labels prefixed `phone`. Composer positions are read after finite animations end.
+Sends one `[qa:plain]` prompt, then opens that chat and a new empty chat with the `/_next/static/chunks/**` scripts held, so the page shows its server HTML. It samples the layout on animation frames, releases the scripts, and waits for hydration. It runs at 1280×800 and again on a 390×844 touch screen with the labels prefixed `phone`. The held and hydrated composer positions are compared after finite animations end. Frame positions allow the empty composer’s 4px entrance motion.
 
 Pass lines, per label `empty chat` and `saved chat`:
 
 ```
 PASS empty chat: no Jump to latest button before hydration
 PASS empty chat: the composer does not move at hydration
+PASS empty chat: the composer stays in place across rendered frames
 PASS empty chat: the starters show before hydration
 PASS empty chat: the empty layout stays at every point
 PASS saved chat: no Jump to latest button before hydration
 PASS saved chat: the composer does not move at hydration
+PASS saved chat: the composer stays in place across rendered frames
 PASS saved chat: no empty-chat layout at any point
 PASS saved chat: no Jump to latest button over an empty thread
 ```
