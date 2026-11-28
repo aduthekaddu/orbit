@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { ArrowRightIcon, CaretUpDownIcon } from "@phosphor-icons/react";
 import { diffArtifactLines, type DiffHunk, type DiffLine } from "@/lib/artifacts/diff";
@@ -53,12 +53,24 @@ function Line({ line }: { line: DiffLine }) {
 
 function DiffHunks({ hunks }: { hunks: DiffHunk[] }) {
   const [opened, setOpened] = useState<ReadonlySet<number>>(() => new Set());
+  // Opening a fold removes its button, so focus moves to the lines it showed instead of falling back to the page.
+  const [lastOpened, setLastOpened] = useState<number | null>(null);
+  const openedLines = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (lastOpened !== null) openedLines.current?.focus();
+  }, [lastOpened]);
   return (
     <ScrollFade axis="x" fade="var(--surface-sunken)" className="min-h-0 flex-1 overflow-y-auto bg-surface-sunken scrollbar-thin">
       <div className="w-max min-w-full py-2 font-mono text-code">
         {hunks.map((hunk, index) => {
-          if (hunk.kind === "changes" || opened.has(index)) {
-            return hunk.lines.map((line) => <Line key={`${line.beforeLine}:${line.afterLine}`} line={line} />);
+          const lines = hunk.lines.map((line) => <Line key={`${line.beforeLine}:${line.afterLine}`} line={line} />);
+          if (hunk.kind === "changes") return lines;
+          if (opened.has(index)) {
+            return (
+              <div key={`open:${index}`} ref={index === lastOpened ? openedLines : undefined} tabIndex={-1} className="outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset">
+                {lines}
+              </div>
+            );
           }
           const count = hunk.lines.length;
           return (
@@ -66,7 +78,10 @@ function DiffHunks({ hunks }: { hunks: DiffHunk[] }) {
               key={`fold:${index}`}
               type="button"
               aria-expanded={false}
-              onClick={() => setOpened((current) => new Set(current).add(index))}
+              onClick={() => {
+                setOpened((current) => new Set(current).add(index));
+                setLastOpened(index);
+              }}
               className="my-1 flex h-7 w-full cursor-pointer items-center gap-2 border-y bg-card px-3 font-sans text-meta text-muted-foreground transition-colors duration-150 ease-orbit outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset pointer-coarse:h-11"
             >
               <CaretUpDownIcon weight="regular" className="size-3.5" />
