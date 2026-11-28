@@ -7,6 +7,8 @@ import { Redactor } from "../chat-errors";
 import { getDb } from "../db";
 import { eventually } from "../eventually.mjs";
 import { parseViewer } from "../policy";
+import { withMigrationLock } from "../db/migration-lock";
+import * as backfillModule from "./backfill";
 import { backfillArtifacts } from "./backfill";
 import { getArtifact, renameArtifact } from "./store";
 
@@ -37,7 +39,10 @@ after(async () => {
   for (const dir of lockDirs) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-// Another process that holds the migration lock in `dir` until it is killed, like a second server still booting.
+// The lock file a backfill pass holds, which other processes coordinate on. Undefined before it had its own file.
+const BACKFILL_LOCK = (backfillModule as { BACKFILL_LOCK?: string }).BACKFILL_LOCK;
+
+// Another process that holds the backfill's lock in `dir` until it is killed, like a second server mid-pass.
 async function holdLock(dir: string) {
   const holder = spawn(process.execPath, ["--import", "tsx", "-e", `
     import("./src/lib/db/migration-lock.ts").then((mod) => {
@@ -45,7 +50,7 @@ async function holdLock(dir: string) {
       withMigrationLock(() => {
         console.log("HOLD");
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 30_000);
-      }, { dir: ${JSON.stringify(dir)}, timeoutMs: 20_000 });
+      }, { dir: ${JSON.stringify(dir)}, name: ${JSON.stringify(BACKFILL_LOCK)}, timeoutMs: 20_000 });
     });
   `], { cwd: process.cwd(), stdio: ["ignore", "pipe", "inherit"] });
   holders.push(holder);
@@ -159,4 +164,10 @@ test("a boot that finds another process holding the lock skips the backfill inst
   assert.deepEqual({ ...later, durationMs: 0 }, { skipped: false, scannedMessages: 6, insertedRows: 1, skippedCorrupt: 1, durationMs: 0 });
   assert.deepEqual(rows().map((row) => row.messageId), ["bf-a1", "bf-a2", "bf-late-a", "bf-tilde-a"]);
   assert.notEqual(stamp(), null);
+});
+
+test("a running backfill does not hold the lock that opening the database waits for", async () => {
+  const dir = lockDir();
+  await holdLock(dir);
+  assert.equal(withMigrationLock(() => "entered", { dir, timeoutMs: 200 }), "entered");
 });
