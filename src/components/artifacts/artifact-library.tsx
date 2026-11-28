@@ -78,10 +78,12 @@ const KIND_FILTERS: { value: KindFilter; label: string }[] = [
 
 /**
  * The right pane. While another version of the same lineage loads, `previous` keeps the open one on screen, so stepping
- * through versions never flashes. `lineageId` marks the row at once, before the detail arrives.
+ * through versions never flashes. `lineageId` marks the row at once, before the detail arrives. A version loaded
+ * before shows at once as `refreshing` while it loads again, since another tab may have edited or renamed it.
  */
 type DetailState =
   | { status: "ready"; detail: ArtifactDetail }
+  | { status: "refreshing"; detail: ArtifactDetail }
   | { status: "loading"; id: string; lineageId: string | null; previous: ArtifactDetail | null }
   | { status: "failed"; id: string }
   | { status: "missing"; id: string };
@@ -114,11 +116,11 @@ function selectionFrom(requestedId: string | null, initialDetail: ArtifactDetail
 
 /** Whether `state` still waits for the answer to a request for `id`. A newer selection or a refresh replaces it. */
 function awaits(state: DetailState | null, id: string) {
-  return state?.status === "loading" && state.id === id;
+  return (state?.status === "loading" && state.id === id) || (state?.status === "refreshing" && state.detail.id === id);
 }
 
 function shownDetail(state: DetailState | null) {
-  if (state?.status === "ready") return state.detail;
+  if (state?.status === "ready" || state?.status === "refreshing") return state.detail;
   if (state?.status === "loading") return state.previous;
   return null;
 }
@@ -226,7 +228,7 @@ export function ArtifactLibrary({ initial, requestedId, initialDetail }: {
   const latestDetail = useLatestRequest();
   const searchTimer = useRef<number | undefined>(undefined);
   const filterNow = useRef(filter);
-  // Versions already loaded, so stepping back and forth between them is instant.
+  // Versions already loaded, so stepping back and forth between them shows them at once while they load again.
   const details = useRef(new Map<string, ArtifactDetail>());
   // Whether the open detail has its own history entry, which Back then leaves instead of replacing.
   const pushed = useRef(false);
@@ -291,12 +293,8 @@ export function ArtifactLibrary({ initial, requestedId, initialDetail }: {
 
   const showDetail = useCallback((id: string, explicit: boolean, lineageId: string | null) => {
     const known = details.current.get(id);
-    if (known) {
-      latestDetail();
-      setSelection({ detail: { status: "ready", detail: known }, explicit });
-      return;
-    }
     setSelection((current) => {
+      if (known) return { detail: { status: "refreshing", detail: known }, explicit };
       const shown = shownDetail(current.detail);
       const previous = shown && lineageId !== null && shown.lineageId === lineageId ? shown : null;
       return { detail: { status: "loading", id, lineageId, previous }, explicit };
@@ -306,7 +304,13 @@ export function ArtifactLibrary({ initial, requestedId, initialDetail }: {
       parse: detailBody,
       onOk: ({ artifact }) => {
         remember(artifact);
-        setSelection((current) => (awaits(current.detail, id) ? { ...current, detail: { status: "ready", detail: artifact } } : current));
+        setSelection((current) => {
+          if (!awaits(current.detail, id)) return current;
+          // An unchanged answer keeps the shown object, so the panel does not render again.
+          const shown = shownDetail(current.detail);
+          const detail = shown && JSON.stringify(shown) === JSON.stringify(artifact) ? shown : artifact;
+          return { ...current, detail: { status: "ready", detail } };
+        });
       },
       onFailed: (failure) => setSelection((current) => (awaits(current.detail, id) ? {
         ...current,
