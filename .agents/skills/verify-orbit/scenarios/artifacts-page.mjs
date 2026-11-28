@@ -260,17 +260,12 @@ export default async function artifactsPage({ page, origin, step, shot, signInMe
   });
 
   await section("code diff in the chat panel", async () => {
-    // Enter in rename puts focus back on Rename artifact, which opens its tooltip. A click on v3 must still reach v3.
+    // Enter in rename puts focus back on Rename artifact. Its tooltip would open over the versions strip, so a click on
+    // v3 must still reach v3.
     await eventually(() => UI.rename(panel).evaluate((node) => node === document.activeElement), Boolean, { timeoutMs: UI_WAIT, what: "focus back on Rename artifact" });
     const v3 = await need(UI.version(panel, 3), "v3 button");
     const blocked = await v3.click({ timeout: UI_WAIT }).then(() => null, interceptor);
     step("after a rename, a click on v3 reaches v3", blocked === null, blocked ?? "");
-    if (blocked) {
-      await shot("rename-tooltip");
-      // Escape closes the tooltip and leaves the panel open, the way a user gets past it.
-      await page.keyboard.press("Escape");
-      await v3.click();
-    }
     await previewShows(state.texts[2]);
     await (await need(UI.tab(panel, "Diff"), "Diff tab")).click();
     const diff = await need(UI.diffPanel(panel), "Diff tab panel");
