@@ -1,5 +1,7 @@
-import { QuietLink, SignupForm } from "@/components/auth/auth-form";
+import Link from "next/link";
+import { SignupForm } from "@/components/auth/auth-form";
 import { AuthShell } from "@/components/auth/auth-shell";
+import { Button } from "@/components/ui/button";
 import { signupOpen } from "@/lib/instance-settings";
 import { inspectInvite } from "@/lib/invites";
 
@@ -10,11 +12,18 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   if (inspectInvite(token).kind === "pending") {
     return <AuthShell title="Create account"><SignupForm inviteToken={token} /></AuthShell>;
   }
+  const open = signupOpen();
   return (
     <AuthShell title="Invite not valid">
       <div className="flex flex-col gap-3">
-        <QuietLink href="/login">Sign in</QuietLink>
-        {signupOpen() ? <QuietLink href="/signup">Create account</QuietLink> : null}
+        <Button asChild>
+          <Link href="/login">Sign in</Link>
+        </Button>
+        {open ? (
+          <Button asChild variant="outline">
+            <Link href="/signup">Create account</Link>
+          </Button>
+        ) : null}
       </div>
     </AuthShell>
   );
