@@ -101,7 +101,8 @@ export function replaceFallbackTitle(chatId: string, fallback: string, title: st
   getDb().update(chats).set({ title }).where(and(eq(chats.id, chatId), eq(chats.title, fallback))).run();
 }
 
-function redactPartsCrossBoundary(parts: unknown, redact: Redactor): unknown {
+/** Masks every part, and each run of text or reasoning parts as one text, so a credential split across parts is found too. */
+export function redactPartsCrossBoundary(parts: unknown, redact: Redactor): unknown {
   if (!Array.isArray(parts)) return redact.value(parts);
   const copy = parts.map((part) => {
     if (!part || typeof part !== "object" || Array.isArray(part)) return redact.value(part);

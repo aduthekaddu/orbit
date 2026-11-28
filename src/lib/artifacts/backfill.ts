@@ -1,10 +1,12 @@
 import { eq } from "drizzle-orm";
-import { Redactor } from "../chat-errors";
+import type { Redactor } from "../chat-errors";
 import { getDb, type OrbitDb } from "../db";
 import { LockTimeout, withMigrationLock } from "../db/migration-lock";
 import { instanceSettings } from "../db/schema";
+import { redactPartsCrossBoundary } from "../messages";
 import { dataDirectory } from "../paths";
-import type { UserId } from "../policy";
+import { parseViewer, type UserId, type Viewer } from "../policy";
+import { requestRedactor } from "../request-redactor";
 import { syncMessageArtifacts } from "./store";
 
 export type BackfillResult = {
@@ -29,20 +31,31 @@ function stamped(db: OrbitDb) {
   return row?.at != null;
 }
 
-type Candidate = { id: string; chatId: string; userId: string; createdAt: number };
+type Candidate = { id: string; chatId: string; userId: string; role: string; createdAt: number };
 
 function backfill(db: OrbitDb, batchSize: number): BackfillResult {
   const started = performance.now();
   // Every artifact block needs a backtick or tilde fence: an indented block has no language. Chats go one at a time,
   // oldest message first, so lineageFor sees each earlier version before its regenerations, edits, and follow-ups.
   const candidates = db.$client.prepare(`
-    SELECT messages.id, messages.chat_id AS chatId, chats.user_id AS userId, messages.created_at AS createdAt
+    SELECT messages.id, messages.chat_id AS chatId, chats.user_id AS userId, user.role, messages.created_at AS createdAt
     FROM messages
     JOIN chats ON chats.id = messages.chat_id
+    JOIN user ON user.id = chats.user_id
     WHERE messages.role = 'assistant'
       AND (instr(messages.content, '\`\`\`') > 0 OR instr(messages.content, '~~~') > 0)
     ORDER BY chats.id ASC, messages.created_at ASC, messages.rowid ASC`).all() as Candidate[];
   const partsOf = db.$client.prepare("SELECT parts FROM messages WHERE id = ?").pluck();
+  // Replies saved before messages were masked on write can hold a credential, so each is masked the way a write masks
+  // it, with its owner's credentials, before its artifacts are indexed. The message row stays as saved.
+  const redactors = new Map<UserId, Redactor>();
+  const redactorFor = (owner: Viewer) => {
+    const known = redactors.get(owner.id);
+    if (known) return known;
+    const redact = requestRedactor(owner);
+    redactors.set(owner.id, redact);
+    return redact;
+  };
   let insertedRows = 0;
   let skippedCorrupt = 0;
   for (let start = 0; start < candidates.length; start += batchSize) {
@@ -55,7 +68,10 @@ function backfill(db: OrbitDb, batchSize: number): BackfillResult {
           skippedCorrupt++;
           continue;
         }
-        const synced = syncMessageArtifacts(message.userId as UserId, message.chatId, message.id, parts, new Date(message.createdAt), new Redactor(null), db, { backfill: true });
+        const owner = parseViewer({ id: message.userId, role: message.role });
+        const redact = redactorFor(owner);
+        const masked = redactPartsCrossBoundary(parts, redact);
+        const synced = syncMessageArtifacts(owner.id, message.chatId, message.id, masked, new Date(message.createdAt), redact, db, { backfill: true });
         insertedRows += synced.inserted;
       }
     });
