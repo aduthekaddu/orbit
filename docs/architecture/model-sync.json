@@ -5,7 +5,7 @@
   "src/lib/genui/spec.ts assistantHasVisiblePart": "07c8c236dc87ea744a4843a514fa938da0a6cb55f32e77e8ddd4378324c33dc4",
   "src/lib/genui/spec.ts settleInterruptedParts": "621627203d26c0dc23e1601106f8c15d93489c9e6e70a1b89fa615cf0f597284",
   "src/lib/messages.ts beginTurn": "9bb4a550846e5ba745957a5d4ca0318aaf09f4fb04e3e360cd1f3f038bdc7d68",
-  "src/lib/messages.ts finishChatReply": "7d1641f6beaa2be360184bbbbd6484538469fdc68b494a3bba3c7b40264592d4",
+  "src/lib/messages.ts finishChatReply": "7eabec81483e4450644d87227eda6f8c231dddf34654b0cdf5f2b2e5f59c3750",
   "src/lib/messages.ts insertMessage": "7a31965d210c552f2349b0edde2cd0df468c5028365b1f49cc82ba59cdab4856",
   "src/lib/messages.ts matchesIncomingBody": "c97e93082e7ecc92fd4570379b01f18e539c86a9eea483941a6e157d05a150fd",
   "src/lib/messages.ts messageRepository": "872a9c3ed1b1a150027cb46b9e3b0c2364390eb4059dcd82e300ed92a62898f8",
@@ -13,5 +13,5 @@
   "src/lib/messages.ts planChatWrite": "a7dffabc1fadc309eee9678a35899c5d3f4c2439f80b825731f6c202564427d9",
   "src/lib/messages.ts savedText": "19eb076594fd20202b80ca4e2cff0c1e63576d48b6917e35f34991799257c892",
   "src/lib/messages.ts unchanged": "eb0497aedcd5adf965c95e8c250effc5457117d249567cd96e0c8c0d14d6225f",
-  "src/lib/messages.ts updateMessageText": "6cf39833f741d93265a676eb417a0838c7335276c7901ca4095e07b05d953f2b"
+  "src/lib/messages.ts updateMessageText": "c7ae9b73d6487a0e26cbc0e581148de0c97ee10be4645b0cbd3e235ecae74c25"
 }
