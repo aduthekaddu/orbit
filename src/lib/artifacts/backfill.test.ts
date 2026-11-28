@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import test, { after, before } from "node:test";
 import { Redactor } from "../chat-errors";
 import { getDb } from "../db";
+import { eventually } from "../eventually.mjs";
 import { parseViewer } from "../policy";
 import { backfillArtifacts } from "./backfill";
 import { getArtifact, renameArtifact } from "./store";
@@ -11,6 +13,7 @@ import { getArtifact, renameArtifact } from "./store";
 const USER = parseViewer({ id: "u-backfill", role: "admin" }).id;
 const sqlite = () => getDb().$client;
 const lockDirs: string[] = [];
+const holders: ChildProcess[] = [];
 
 function lockDir() {
   const dir = fs.mkdtempSync(path.join(process.env.ORBIT_DATA_DIR!, "backfill-lock-"));
@@ -22,10 +25,35 @@ before(() => {
   sqlite().prepare("INSERT INTO user (id, name, email, role) VALUES (?, 'Backfill', 'backfill@orbit.test', 'admin')").run(USER);
 });
 
-after(() => {
+after(async () => {
+  await Promise.all(holders.map((holder) => new Promise((resolve) => {
+    if (holder.exitCode !== null || holder.signalCode !== null) resolve(null);
+    else {
+      holder.once("exit", resolve);
+      holder.kill("SIGKILL");
+    }
+  })));
   getDb().$client.close();
   for (const dir of lockDirs) fs.rmSync(dir, { recursive: true, force: true });
 });
+
+// Another process that holds the migration lock in `dir` until it is killed, like a second server still booting.
+async function holdLock(dir: string) {
+  const holder = spawn(process.execPath, ["--import", "tsx", "-e", `
+    import("./src/lib/db/migration-lock.ts").then((mod) => {
+      const withMigrationLock = mod.withMigrationLock ?? mod.default.withMigrationLock;
+      withMigrationLock(() => {
+        console.log("HOLD");
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 30_000);
+      }, { dir: ${JSON.stringify(dir)}, timeoutMs: 20_000 });
+    });
+  `], { cwd: process.cwd(), stdio: ["ignore", "pipe", "inherit"] });
+  holders.push(holder);
+  let output = "";
+  holder.stdout?.on("data", (chunk) => { output += chunk; });
+  await eventually(() => output, (text) => text.includes("HOLD"), { timeoutMs: 15_000, what: "the other process to hold the lock" });
+  return holder;
+}
 
 let clock = 10_000;
 function chat(id: string) {
@@ -112,4 +140,23 @@ test("an existing database backfills its artifacts once, survives a crash rerun,
   assert.deepEqual(backfillArtifacts({ lockDir: quiet }), { skipped: true, scannedMessages: 0, insertedRows: 0, skippedCorrupt: 0, durationMs: 0 });
   assert.deepEqual(fs.readdirSync(quiet), []);
   assert.equal(rows().length, 3);
+});
+
+test("a boot that finds another process holding the lock skips the backfill instead of failing, and a later boot runs it", async () => {
+  sqlite().exec("UPDATE instance_settings SET artifacts_backfilled_at = NULL");
+  const dir = lockDir();
+  const holder = await holdLock(dir);
+  const started = performance.now();
+  assert.deepEqual(backfillArtifacts({ lockDir: dir, lockTimeoutMs: 200 }), { skipped: true, scannedMessages: 0, insertedRows: 0, skippedCorrupt: 0, durationMs: 0 });
+  assert.ok(performance.now() - started < 5_000, "the boot waited at most about the lock timeout");
+  assert.equal(stamp(), null);
+  assert.equal(rows().length, 3);
+
+  const exited = new Promise((resolve) => holder.once("exit", resolve));
+  holder.kill("SIGKILL");
+  await exited;
+  const later = backfillArtifacts({ lockDir: dir });
+  assert.deepEqual({ ...later, durationMs: 0 }, { skipped: false, scannedMessages: 6, insertedRows: 1, skippedCorrupt: 1, durationMs: 0 });
+  assert.deepEqual(rows().map((row) => row.messageId), ["bf-a1", "bf-a2", "bf-late-a", "bf-tilde-a"]);
+  assert.notEqual(stamp(), null);
 });
