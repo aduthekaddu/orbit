@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Element } from "hast";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { ArtifactVersionSummary, StoredChatArtifact } from "@/lib/artifacts/store";
 import { ArtifactContext } from "@/components/artifacts/use-artifact";
 import { ArtifactCard } from "./artifact-card";
 import { CodeHeader, SyntaxHighlighter } from "./code-block";
@@ -101,9 +102,18 @@ test("a streaming artifact card is marked busy and its Open button waits", () =>
 
 const FORM = "<!doctype html>\n<title>Signup form</title>\n<form><input name=\"email\"><button>Join</button></form>\n";
 
-function renderArtifact(value: CodeEditContextValue, language = "html", code = FORM) {
+function renderArtifact(value: CodeEditContextValue, language = "html", code = FORM, saved: Record<string, StoredChatArtifact> = {}) {
   const components = { Pre: "pre", Code: "code" } as never;
-  const artifacts = { artifact: undefined, register: () => () => {}, open: () => {}, close: () => {} };
+  const artifacts = {
+    artifact: undefined,
+    register: () => () => {},
+    open: () => {},
+    close: () => {},
+    storedFor: (key: string) => saved[key],
+    hasLive: () => false,
+    applyRename: () => {},
+    refresh: () => {},
+  };
   return renderToStaticMarkup(
     <ArtifactContext.Provider value={artifacts}>
       <CodeEditContext.Provider value={value}>
@@ -158,4 +168,54 @@ test("code blocks inside reasoning stay plain code blocks with no card", () => {
   assert.doesNotMatch(markup, /aria-label="Open /);
   assert.match(markup, /<pre\b/);
   assert.match(markup, />Wrap</);
+});
+
+function text(markup: string) {
+  return markup.replace(/<[^>]*>/g, "").replace(/&amp;/g, "&");
+}
+
+function version(number: number): ArtifactVersionSummary {
+  return {
+    id: `row-${number}`,
+    number,
+    messageId: number === 2 ? "m1" : "m0",
+    key: number === 2 ? "m1.0.0" : "m0.0.0",
+    language: "html",
+    derivedTitle: "Signup form",
+    createdAt: `2026-11-0${number}T10:00:00.000Z`,
+    updatedAt: `2026-11-0${number}T10:00:00.000Z`,
+  };
+}
+
+function saved(userTitle: string | null, versions: ArtifactVersionSummary[]): Record<string, StoredChatArtifact> {
+  const row = versions.find((entry) => entry.key === "m1.0.0") ?? versions[0];
+  return {
+    "m1.0.0": { id: row.id, key: "m1.0.0", title: userTitle ?? "Signup form", derivedTitle: "Signup form", userTitle, lineageId: versions[0].id, number: row.number, versions },
+  };
+}
+
+test("an artifact card in a lineage of several versions shows which version it is", () => {
+  const markup = renderToStaticMarkup(<ArtifactCard kind="html" title="Tally" version={2} streaming={false} onOpen={() => {}} />);
+  assert.match(text(markup), /HTML · v2/);
+  assert.match(markup, /<span[^>]*class="[^"]*\bnum\b[^"]*"[^>]*>v2<\/span>/, "the version uses tabular figures");
+});
+
+test("an artifact card without a version shows its kind alone", () => {
+  const markup = renderToStaticMarkup(<ArtifactCard kind="svg" title="Logo" streaming={false} onOpen={() => {}} />);
+  assert.doesNotMatch(text(markup), /·/);
+});
+
+test("a saved artifact card shows its renamed title and its version in the lineage", () => {
+  const markup = renderArtifact(artifactContext(), "html", FORM, saved("Tally", [version(1), version(2)]));
+  assert.match(markup, />Tally</);
+  assert.doesNotMatch(markup, />Signup form</);
+  assert.match(markup, /<button[^>]*aria-label="Open Tally"/);
+  assert.match(text(markup), /HTML · v2/);
+});
+
+test("a saved artifact with one version and no rename keeps the title from its code and no version", () => {
+  const markup = renderArtifact(artifactContext(), "html", FORM, saved(null, [version(2)]));
+  assert.match(markup, />Signup form</);
+  assert.match(markup, /<button[^>]*aria-label="Open Signup form"/);
+  assert.doesNotMatch(text(markup), /v\d/);
 });
