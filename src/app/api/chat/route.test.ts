@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import dns from "node:dns";
 import fs from "node:fs";
 import http from "node:http";
 import { registerHooks } from "node:module";
@@ -794,4 +795,72 @@ test("a send to another user's chat answers 404 and writes nothing", async () =>
   assert.deepEqual(messages.listMessages("c-theirs"), []);
   assert.equal(findReplyRun("c-theirs", other), null);
   assert.deepEqual(db.$client.prepare("select user_id as userId, title, updated_at as updatedAt from chats where id = 'c-theirs'").get(), { userId: other, title: "Theirs", updatedAt: 3_000 });
+});
+
+const FILE_HOST = "files.orbit-test.invalid";
+
+// A name that resolves to loopback without public DNS, served by a listener that counts the requests it gets.
+async function loopbackFileHost(t: TestContext) {
+  const requests: string[] = [];
+  const server = http.createServer((req, res) => {
+    requests.push(req.url ?? "");
+    res.writeHead(200, { "content-type": "image/png" }).end(Buffer.from("89504e470d0a1a0a", "hex"));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const lookup = dns.lookup;
+  dns.lookup = ((hostname: string, options: unknown, callback: unknown) => {
+    const done = (typeof options === "function" ? options : callback) as (...args: unknown[]) => void;
+    const all = typeof options === "object" && options !== null && (options as { all?: boolean }).all;
+    if (hostname !== FILE_HOST) return (lookup as (...args: unknown[]) => void)(hostname, options, callback);
+    if (all) done(null, [{ address: "127.0.0.1", family: 4 }]);
+    else done(null, "127.0.0.1", 4);
+  }) as typeof dns.lookup;
+  t.after(async () => {
+    dns.lookup = lookup;
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+  const base = `http://${FILE_HOST}:${(server.address() as { port: number }).port}`;
+  const probe = await fetch(`${base}/probe`);
+  await probe.arrayBuffer();
+  assert.deepEqual(requests.splice(0), ["/probe"], "the test host reaches the listener");
+  return { base, requests };
+}
+
+const remoteFile = (url: string) => ({ type: "file", mediaType: "image/png", url });
+
+test("a new prompt with a remote file part is refused before anything fetches it", async (t) => {
+  const { base, requests } = await loopbackFileHost(t);
+  const outcomes: Record<string, { status: number; chatRow: boolean }> = {};
+  for (const [name, mediaType] of [["image", "image/png"], ["pdf", "application/pdf"]]) {
+    const chatId = `c-remote-file-${name}`;
+    const response = await post({
+      id: chatId,
+      trigger: "submit-message",
+      messages: [{ id: `${chatId}-u1`, role: "user", parts: [{ type: "text", text: "look" }, { ...remoteFile(`${base}/${name}-part`), mediaType }] }],
+    });
+    await response.text();
+    await Promise.allSettled(afterTasks);
+    outcomes[name] = { status: response.status, chatRow: messages.getChatForUser(chatId, USER_ID) !== null };
+  }
+  assert.deepEqual(requests, []);
+  assert.deepEqual(outcomes, { image: { status: 400, chatRow: false }, pdf: { status: 400, chatRow: false } });
+});
+
+test("a stored remote file part is never fetched on a later turn", async (t) => {
+  const { base, requests } = await loopbackFileHost(t);
+  const chatId = "c-stored-remote-file";
+  const stored = { id: `${chatId}-u1`, role: "user" as const, parts: [{ type: "text", text: "look" }, remoteFile(`${base}/stored-part`)] };
+  assert.equal(messages.beginTurn(chatId, USER_ID, [stored], new Redactor(null), "submit-message").ok, true);
+  const response = await post({
+    id: chatId,
+    trigger: "submit-message",
+    messages: [stored, userMessage(`${chatId}-u2`, "and now?")],
+  });
+  const streamed = streamChunks(await response.text());
+  await Promise.allSettled(afterTasks);
+  assert.equal(response.status, 200);
+  assert.deepEqual(requests, []);
+  assert.equal(streamed.some((chunk) => chunk.type === "error"), true, "the turn reports that it could not continue");
+  assert.equal(savedReply(chatId), undefined);
 });

@@ -9,6 +9,7 @@ const blocked = [
   "192.0.2.1", "192.88.99.1", "192.168.0.1", "198.18.0.1", "198.51.100.1", "203.0.113.1", "224.0.0.1", "255.255.255.255",
   "::", "::1", "100::1", "2001::1", "2001:db8::1", "2002::1", "64:ff9b::a00:1", "64:ff9b:1::1", "fc00::1",
   "fe80::1", "fe80::1%eth0", "fec0::1", "ff02::1", "::ffff:127.0.0.1", "::ffff:7f00:1",
+  "::127.0.0.1", "::7f00:1", "::a00:1", "::808:808", "::ffff:0:7f00:1", "::ffff:0:a00:1", "::ffff:0:808:808",
 ];
 
 const publicIPv4 = "93.184.216.34";
@@ -30,7 +31,10 @@ test("Community URLs require public HTTPS, and the fixture allows plain HTTP onl
     else process.env.ORBIT_PROVIDER_FIXTURE = fixture;
   });
   delete process.env.ORBIT_PROVIDER_FIXTURE;
-  for (const url of ["file:///dev/null", "ftp://provider.invalid/", `http://${publicIPv4}/`, "https://127.0.0.1/", "https://127.1/", "https://[fe80::1%eth0]/"]) {
+  for (const url of [
+    "file:///dev/null", "ftp://provider.invalid/", `http://${publicIPv4}/`, "https://127.0.0.1/", "https://127.1/", "https://[fe80::1%eth0]/",
+    "https://[::127.0.0.1]/", "https://[::ffff:0:7f00:1]/",
+  ]) {
     assert.equal(await checkProviderUrl(url), false, url);
   }
   assert.equal(await checkProviderUrl(`https://${publicIPv4}/v1`), true);
@@ -39,6 +43,8 @@ test("Community URLs require public HTTPS, and the fixture allows plain HTTP onl
   assert.equal(await checkProviderUrl("http://127.0.0.1:9/v1"), true);
   assert.equal(await checkProviderUrl("http://[::1]:9/v1"), true);
   assert.equal(await checkProviderUrl("http://10.0.0.1/v1"), false);
+  assert.equal(await checkProviderUrl("https://[::127.0.0.1]/v1"), false);
+  assert.equal(await checkProviderUrl("https://[::ffff:0:7f00:1]/v1"), false);
   assert.equal(await checkProviderUrl(`http://${publicIPv4}/v1`), false);
 });
 
