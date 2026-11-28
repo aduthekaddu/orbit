@@ -191,3 +191,58 @@ test("a chat send reports that it started before its answer arrives", async () =
   answer(Response.json({ error: "Message is too long." }, { status: 413 }));
   await assert.rejects(sent, { message: "Message is too long." });
 });
+
+function sendWith(options: Parameters<typeof orbitChatTransport>[1]) {
+  const transport = orbitChatTransport("c1", { api: "http://orbit.test/api/chat", ...options });
+  transport.setRuntime({
+    thread: { getModelContext: () => undefined },
+    threads: { mainItem: { initialize: async () => ({ remoteId: "local" }) } },
+  } as never);
+  const messages: UIMessage[] = [{ id: "u1", role: "user", parts: [{ type: "text", text: "hi" }] }];
+  return transport.sendMessages({ chatId: "c1", messageId: undefined, trigger: "submit-message", messages, abortSignal: undefined });
+}
+
+test("a draft's first send carries the tools it turned off", async () => {
+  const bodies: unknown[] = [];
+  await sendWith({
+    disabledTools: () => ["web_search"],
+    fetch: async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response("data: [DONE]\n\n");
+    },
+  }).catch(() => undefined);
+  assert.deepEqual((bodies[0] as { disabledTools?: unknown }).disabledTools, ["web_search"]);
+});
+
+test("a saved chat's send carries no tools list", async () => {
+  const bodies: unknown[] = [];
+  await sendWith({
+    disabledTools: () => undefined,
+    fetch: async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response("data: [DONE]\n\n");
+    },
+  }).catch(() => undefined);
+  assert.equal("disabledTools" in (bodies[0] as object), false);
+});
+
+test("a send waits for a pending tools save before the request leaves", async () => {
+  let release!: () => void;
+  const saved = new Promise<void>((resolve) => { release = resolve; });
+  const events: string[] = [];
+  const sending = sendWith({
+    beforeSend: async () => {
+      await saved;
+      events.push("saved");
+    },
+    fetch: async () => {
+      events.push("sent");
+      return new Response("data: [DONE]\n\n");
+    },
+  }).catch(() => undefined);
+  await Promise.resolve();
+  assert.deepEqual(events, []);
+  release();
+  await sending;
+  assert.deepEqual(events, ["saved", "sent"]);
+});

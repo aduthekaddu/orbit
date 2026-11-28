@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cardFor, summaryFor, titleFor, type ToolRun } from "./metadata";
+import {
+  cardFor, isDisabledToolEntry, normalizeDisabledTools, summaryFor, titleFor, toolIdFor,
+  TESTABLE_TOOL_IDS, TOGGLEABLE_TOOL_IDS, TOOL_CATALOG, TOOL_IDS, type ToolRun,
+} from "./metadata";
 
 const results = (count: number) => ({
   ok: true,
@@ -69,4 +72,65 @@ for (const [name, toolRun, expected] of table) {
 
 test("no summary shows a raw tool name", () => {
   for (const [name, toolRun] of table) assert.doesNotMatch(summaryFor(name, toolRun), /_|remember|forget|github_/);
+});
+
+test("the tool catalog lists the five tools in page order with their scope and switches", () => {
+  assert.deepEqual(TOOL_IDS, ["web_search", "run_code", "github", "memory", "render_ui"]);
+  assert.deepEqual(TESTABLE_TOOL_IDS, ["web_search", "run_code", "github", "memory"]);
+  assert.deepEqual(TOGGLEABLE_TOOL_IDS, ["web_search", "run_code", "github", "memory"]);
+  assert.deepEqual(TOOL_CATALOG, {
+    web_search: { id: "web_search", label: "Web search", scope: "instance", testable: true, toggleable: true },
+    run_code: { id: "run_code", label: "Code sandbox", scope: "instance", testable: true, toggleable: true },
+    github: { id: "github", label: "GitHub", scope: "personal", testable: true, toggleable: true },
+    memory: { id: "memory", label: "Memory", scope: "personal", testable: true, toggleable: true },
+    render_ui: { id: "render_ui", label: "Generated UI", scope: "built-in", testable: false, toggleable: false },
+  });
+});
+
+test("catalog labels leave the tool card titles alone", () => {
+  assert.equal(TOOL_CATALOG.run_code.label, "Code sandbox");
+  assert.equal(titleFor("run_code"), "Run code");
+  assert.equal(TOOL_CATALOG.render_ui.label, "Generated UI");
+  assert.equal(titleFor("render_ui"), "View");
+});
+
+test("each model tool name maps to the tool that owns it", () => {
+  const table: Array<[string, string | null]> = [
+    ["web_search", "web_search"],
+    ["run_code", "run_code"],
+    ["remember", "memory"],
+    ["forget", "memory"],
+    ["render_ui", "render_ui"],
+    ["github_list_issues", "github"],
+    ["github_get_me", "github"],
+    ["github", null],
+    ["memory", null],
+    ["mcp:server", null],
+    ["web_search_v2", null],
+    ["do_thing", null],
+    ["", null],
+  ];
+  for (const [name, owner] of table) assert.equal(toolIdFor(name), owner, name);
+});
+
+test("a disabled tool entry is a switchable tool id or an MCP server id", () => {
+  for (const value of ["web_search", "run_code", "github", "memory", "mcp:server", "mcp:A_b-9", `mcp:${"a".repeat(80)}`]) {
+    assert.equal(isDisabledToolEntry(value), true, value);
+  }
+  for (const value of [
+    "render_ui", "", "remember", "forget", "github_list_issues", "WEB_SEARCH", " web_search", "web_search ",
+    "mcp:", `mcp:${"a".repeat(81)}`, "mcp:a b", "mcp:a/b", "mcp:a.b", "mcp:server\n", "MCP:server", "tool:server",
+  ]) {
+    assert.equal(isDisabledToolEntry(value), false, JSON.stringify(value));
+  }
+});
+
+test("disabled tools normalize to sorted unique valid entries", () => {
+  assert.deepEqual(normalizeDisabledTools([]), []);
+  assert.deepEqual(
+    normalizeDisabledTools(["web_search", "memory", "web_search", "render_ui", "mcp:b", "mcp:a", "bogus", "mcp:"]),
+    ["mcp:a", "mcp:b", "memory", "web_search"],
+  );
+  assert.deepEqual(normalizeDisabledTools(["render_ui"]), []);
+  assert.deepEqual(normalizeDisabledTools(["run_code", "github"]), ["github", "run_code"]);
 });

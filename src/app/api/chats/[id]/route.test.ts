@@ -134,7 +134,7 @@ test("GET answers the owner's chat and 404 for another user's, a missing, or an 
 test("PATCH renames the chat with a trimmed, masked title and leaves updated_at alone", async () => {
   chat("rename", ME, "Old title", new Date(42_000));
   signIn(ME);
-  assert.deepEqual(await answer(await patch("rename", JSON.stringify({ title: "  Trip plans  " }))), { status: 200, body: { id: "rename", title: "Trip plans" }, text: '{"id":"rename","title":"Trip plans"}' });
+  assert.deepEqual(await answer(await patch("rename", JSON.stringify({ title: "  Trip plans  " }))), { status: 200, body: { id: "rename", title: "Trip plans", disabledTools: [] }, text: '{"id":"rename","title":"Trip plans","disabledTools":[]}' });
   assert.deepEqual(row("rename"), { title: "Trip plans", updatedAt: 42_000 });
   assert.equal((await answer(await patch("rename", JSON.stringify({ title: `key ${STORED_KEY}` })))).body.title, "key [redacted]");
   assert.equal(row("rename")?.title, "key [redacted]");
@@ -147,7 +147,7 @@ test("PATCH refuses a blank, overlong, malformed, or widened body with 400 and a
   chat("rename-bad", ME, "Keep me");
   signIn(ME);
   for (const body of [JSON.stringify({ title: "   " }), JSON.stringify({ title: "t".repeat(121) }), JSON.stringify({ title: "ok", extra: 1 }), JSON.stringify({}), JSON.stringify({ title: 7 }), "{not json", "[]"]) {
-    assert.deepEqual(await answer(await patch("rename-bad", body)), { status: 400, body: { error: "Invalid chat title" }, text: '{"error":"Invalid chat title"}' }, body);
+    assert.deepEqual(await answer(await patch("rename-bad", body)), { status: 400, body: { error: "Invalid chat update" }, text: '{"error":"Invalid chat update"}' }, body);
   }
   const huge = JSON.stringify({ title: "t".repeat(5_000) });
   assert.deepEqual((await answer(await patch("rename-bad", huge))).body, { error: "Request body is too large." });
@@ -215,4 +215,68 @@ test("DELETE answers 404 for another user's chat and 401 when signed out without
     await run.done;
     releaseReplyRun(run);
   }
+});
+
+function disabledColumn(id: string) {
+  return getDb().$client.prepare("select disabled_tools from chats where id = ?").pluck().get(id);
+}
+
+function get(id: string) {
+  return route.GET(new Request(`http://127.0.0.1/api/chats/${id}`), params(id));
+}
+
+test("GET answers a chat's disabled tools, all on by default", async () => {
+  chat("tools-default", ME, "Defaults");
+  signIn(ME);
+  assert.deepEqual((await answer(await get("tools-default"))).body.disabledTools, []);
+});
+
+test("PATCH saves disabled tools in canonical order, answers them, and leaves the title and updated_at alone", async () => {
+  chat("tools-save", ME, "Keep title", new Date(77_000));
+  signIn(ME);
+  const saved = await answer(await patch("tools-save", JSON.stringify({ disabledTools: ["web_search", "memory", "web_search"] })));
+  assert.deepEqual(saved.body, { id: "tools-save", title: "Keep title", disabledTools: ["memory", "web_search"] });
+  assert.equal(saved.status, 200);
+  assert.deepEqual(row("tools-save"), { title: "Keep title", updatedAt: 77_000 });
+  assert.equal(disabledColumn("tools-save"), '["memory","web_search"]');
+  assert.deepEqual((await answer(await get("tools-save"))).body.disabledTools, ["memory", "web_search"]);
+
+  const both = await answer(await patch("tools-save", JSON.stringify({ title: "Renamed", disabledTools: ["mcp:docs-server"] })));
+  assert.deepEqual(both.body, { id: "tools-save", title: "Renamed", disabledTools: ["mcp:docs-server"] });
+  const cleared = await answer(await patch("tools-save", JSON.stringify({ disabledTools: [] })));
+  assert.deepEqual(cleared.body, { id: "tools-save", title: "Renamed", disabledTools: [] });
+  assert.equal(row("tools-save")?.updatedAt, 77_000, "toggling tools never reorders the sidebar");
+});
+
+test("PATCH accepts 64 disabled tools and refuses Generated UI, unknown ids, long ids, and 65 entries with 400", async () => {
+  chat("tools-bad", ME, "Strict");
+  signIn(ME);
+  const servers = (count: number) => Array.from({ length: count }, (_, index) => `mcp:server-${index}`);
+  assert.equal((await patch("tools-bad", JSON.stringify({ disabledTools: ["web_search", "run_code", "github", "memory", ...servers(60)] }))).status, 200);
+  assert.equal((await patch("tools-bad", JSON.stringify({ disabledTools: ["memory"] }))).status, 200);
+  for (const disabledTools of [
+    ["render_ui"], ["web_search", "render_ui"], ["bogus"], ["remember"], ["mcp:"], [`mcp:${"a".repeat(81)}`], ["mcp:bad id"], ["x".repeat(101)], [7], "web_search", null, servers(65),
+  ]) {
+    assert.deepEqual(await answer(await patch("tools-bad", JSON.stringify({ disabledTools }))), { status: 400, body: { error: "Invalid chat update" }, text: '{"error":"Invalid chat update"}' }, JSON.stringify(disabledTools).slice(0, 80));
+  }
+  assert.equal((await patch("tools-bad", JSON.stringify({ disabledTools: ["memory"], extra: true }))).status, 400);
+  assert.equal(disabledColumn("tools-bad"), '["memory"]');
+});
+
+test("GET drops entries a stored list should not hold", async () => {
+  chat("tools-raw", ME, "Raw");
+  signIn(ME);
+  getDb().$client.prepare("update chats set disabled_tools = ? where id = ?").run('["render_ui","web_search","bogus",7,"web_search"]', "tools-raw");
+  assert.deepEqual((await answer(await get("tools-raw"))).body.disabledTools, ["web_search"]);
+  getDb().$client.prepare("update chats set disabled_tools = ? where id = ?").run("{not json", "tools-raw");
+  assert.deepEqual((await answer(await get("tools-raw"))).body.disabledTools, []);
+});
+
+test("PATCH of disabled tools answers 404 for another user's chat and 401 when signed out", async () => {
+  chat("tools-theirs", OTHER, "Theirs");
+  signIn(ME);
+  assert.deepEqual((await answer(await patch("tools-theirs", JSON.stringify({ disabledTools: ["memory"] })))).body, { error: "Not found" });
+  signIn(null);
+  assert.equal((await patch("tools-theirs", JSON.stringify({ disabledTools: ["memory"] }))).status, 401);
+  assert.equal(disabledColumn("tools-theirs"), "[]");
 });

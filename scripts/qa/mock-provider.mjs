@@ -1147,6 +1147,11 @@ const server = http.createServer((req, res) => {
       }
       return;
     }
+    if (scenario === "tools") {
+      const names = (body.tools ?? []).map((entry) => entry.function?.name).filter((name) => typeof name === "string").sort();
+      textResponse(res, `tools: ${names.join(", ")}`);
+      return;
+    }
     if (scenario === "zebracorn") {
       textResponse(res, "A zebracorn stood in the road.");
       return;
