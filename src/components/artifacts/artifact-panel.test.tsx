@@ -212,9 +212,10 @@ test("Diff folds a long unchanged run behind a button that opens it in place", (
   const middle = Array.from({ length: 20 }, (_, index) => `<li>${index + 1}</li>`).join("\n");
   rememberArtifactCode(list[0].id, list[0].updatedAt, `<h1>Old</h1>\n${middle}\n<p>End</p>\n`);
   const markup = paint(<ArtifactDiff current={{ id: list[1].id, code: `<h1>New</h1>\n${middle}\n<p>Finish</p>\n` }} versions={list} />);
-  const fold = /<button[^>]*aria-expanded="false"[^>]*>([\s\S]*?)<\/button>/.exec(markup);
+  // The version picker is a combobox, which also reports aria-expanded.
+  const fold = [...markup.matchAll(/<button([^>]*)>([\s\S]*?)<\/button>/g)].find(([, attributes]) => /aria-expanded="false"/.test(attributes) && !/role="combobox"/.test(attributes));
   assert.ok(fold, "the unchanged run is a collapsed button");
-  assert.match(decode(fold[1]), /14\s*unchanged lines/);
+  assert.match(decode(fold[2]), /14\s*unchanged lines/);
   assert.doesNotMatch(decode(markup), /<li>10<\/li>/, "folded lines stay out of view");
   assert.match(decode(markup), /<li>3<\/li>/, "three context lines stay after a change");
 });

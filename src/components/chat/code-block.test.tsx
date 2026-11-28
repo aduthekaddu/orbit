@@ -113,6 +113,7 @@ function renderArtifact(value: CodeEditContextValue, language = "html", code = F
     hasLive: () => false,
     applyRename: () => {},
     refresh: () => {},
+    refreshFailed: false,
   };
   return renderToStaticMarkup(
     <ArtifactContext.Provider value={artifacts}>

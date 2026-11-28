@@ -6,12 +6,16 @@ import { ARTIFACT_KIND_LABEL } from "@/lib/artifacts/title";
 import { OrbitMark } from "@/components/orbit-mark";
 import { Button } from "@/components/ui/button";
 
-const KIND_ICON: Record<ArtifactKind, Icon> = { html: BrowserIcon, svg: FileSvgIcon, react: AtomIcon };
+export const KIND_ICON: Record<ArtifactKind, Icon> = { html: BrowserIcon, svg: FileSvgIcon, react: AtomIcon };
 
-/** An artifact in the thread: its kind, title, and type, with Open, and Edit when the reply can be edited. */
-export function ArtifactCard({ kind, title, streaming, onOpen, onEdit }: {
+/**
+ * An artifact in the thread: its kind, title, and type, with Open, and Edit when the reply can be edited.
+ * `version` is its place in a lineage of several versions.
+ */
+export function ArtifactCard({ kind, title, version, streaming, onOpen, onEdit }: {
   kind: ArtifactKind;
   title: string;
+  version?: number;
   streaming: boolean;
   onOpen: () => void;
   onEdit?: () => void;
@@ -28,7 +32,10 @@ export function ArtifactCard({ kind, title, streaming, onOpen, onEdit }: {
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-foreground">{title}</p>
-        <p className="text-meta text-muted-foreground">{ARTIFACT_KIND_LABEL[kind]}</p>
+        <p className="text-meta text-muted-foreground">
+          {ARTIFACT_KIND_LABEL[kind]}
+          {version === undefined ? null : <> · <span className="num">{`v${version}`}</span></>}
+        </p>
       </div>
       <div className="flex shrink-0 items-center gap-1">
         {onEdit ? (
