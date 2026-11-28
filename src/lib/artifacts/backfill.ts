@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { getDb, type OrbitDb } from "../db";
-import { withMigrationLock } from "../db/migration-lock";
+import { LockTimeout, withMigrationLock } from "../db/migration-lock";
 import { instanceSettings } from "../db/schema";
 import { dataDirectory } from "../paths";
 import type { UserId } from "../policy";
@@ -15,10 +15,11 @@ export type BackfillResult = {
 };
 
 const BATCH_SIZE = 200;
-// A pass over tens of thousands of messages holds the lock for seconds. Another process booting meanwhile waits this
+// The pass holds its own lock file, not the migration lock, so a process opening the database never waits for it.
+export const BACKFILL_LOCK = ".artifacts-backfill.lock.db";
+// A pass over tens of thousands of messages holds its lock for seconds. Another process booting meanwhile waits this
 // long, then leaves the pass to the holder instead of failing its own start.
 const LOCK_WAIT_MS = 5_000;
-const LOCK_TIMEOUT = /^Timed out after \d+ms waiting for the database migration lock/;
 
 const skipped = (): BackfillResult => ({ skipped: true, scannedMessages: 0, insertedRows: 0, skippedCorrupt: 0, durationMs: 0 });
 
@@ -76,11 +77,11 @@ export function backfillArtifacts(options: { batchSize?: number; lockDir?: strin
   try {
     return withMigrationLock(
       () => (stamped(db) ? skipped() : backfill(db, options.batchSize ?? BATCH_SIZE)),
-      { dir: options.lockDir ?? dataDirectory(), timeoutMs: options.lockTimeoutMs ?? LOCK_WAIT_MS },
+      { dir: options.lockDir ?? dataDirectory(), name: BACKFILL_LOCK, timeoutMs: options.lockTimeoutMs ?? LOCK_WAIT_MS },
     );
   } catch (error) {
-    if (!(error instanceof Error && LOCK_TIMEOUT.test(error.message))) throw error;
-    console.info("[artifacts] backfill left to the process that holds the database lock");
+    if (!(error instanceof LockTimeout)) throw error;
+    console.info("[artifacts] backfill left to the process that holds its lock");
     return skipped();
   }
 }

@@ -9,7 +9,12 @@ const DEFAULT_TIMEOUT_MS = 60_000;
 export type MigrationLockOptions = {
   dir?: string;
   timeoutMs?: number;
+  /** The lock file in `dir`. Work that must not block migrations, such as the artifact backfill, takes its own. */
+  name?: string;
 };
+
+/** The waiter gave up after `timeoutMs` while another process held the lock. */
+export class LockTimeout extends Error {}
 
 /**
  * Runs `run` while holding SQLite's exclusive transaction lock on a dedicated
@@ -20,7 +25,7 @@ export type MigrationLockOptions = {
 export function withMigrationLock<T>(run: () => T, options: MigrationLockOptions = {}): T {
   const dir = options.dir ?? dataDirectory();
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const lockPath = path.join(dir, LOCK_NAME);
+  const lockPath = path.join(dir, options.name ?? LOCK_NAME);
   const sqlite = openLockDatabase(lockPath);
   try {
     restrict(lockPath);
@@ -64,7 +69,7 @@ function isBusy(error: unknown): boolean {
 }
 
 function timeoutError(timeoutMs: number, lockPath: string, cause: unknown): Error {
-  return new Error(`Timed out after ${timeoutMs}ms waiting for the database migration lock at ${lockPath}`, {
+  return new LockTimeout(`Timed out after ${timeoutMs}ms waiting for the database migration lock at ${lockPath}`, {
     cause,
   });
 }
